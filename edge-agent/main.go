@@ -309,6 +309,7 @@ type edgeTask struct {
 		OverlaySequence    uint64            `json:"overlay_sequence"`
 		OverlayState       string            `json:"state"`
 		OverlayLimits      map[string]int64  `json:"limits"`
+		OverlayIncident    *securityIncident `json:"incident"`
 		Origin             struct {
 			Host              string `json:"host"`
 			Scheme            string `json:"scheme"`

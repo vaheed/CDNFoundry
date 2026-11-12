@@ -139,3 +139,67 @@ func TestARestartedCellGetsTheStoredOverlaysBack(t *testing.T) {
 		t.Fatalf("a restored cell must not be sent anything again: %#v", cell.commands)
 	}
 }
+
+func TestAnIncidentProfileTravelsWithItsOverlayAndSurvivesARestart(t *testing.T) {
+	cell := &overlayCell{}
+	server := httptest.NewServer(cell.handler())
+	defer server.Close()
+	c := &client{http: server.Client(), statusToken: "status-secret", statusURLs: []string{server.URL + "/passive-failures"}, dir: t.TempDir()}
+	task := overlayTask("incident-1", 42, 4, "restricted", map[string]int64{"requests_per_second": 20})
+	incident := &securityIncident{ExpiresAt: 4102444800, MaxBodyBytes: 1048576, Challenge: true, Methods: []string{"GET", "HEAD", "OPTIONS", "POST"}, BypassPrefixes: []string{"/api/"}}
+	incident.WAF.Mode, incident.WAF.Sensitivity = "block", "high"
+	task.Payload.OverlayIncident = incident
+
+	if result, status := c.runSecurityOverlay(task); status != "succeeded" {
+		t.Fatalf("overlay with an incident was not applied: %s %#v", status, result)
+	}
+	sent, _ := cell.commands[0]["incident"].(map[string]any)
+	if sent == nil || sent["challenge"] != true || sent["max_body_bytes"] != float64(1048576) || sent["expires_at"] != float64(4102444800) {
+		t.Fatalf("the cell did not receive the incident: %#v", cell.commands)
+	}
+	if waf, _ := sent["waf"].(map[string]any); waf["mode"] != "block" {
+		t.Fatalf("the firewall mode was lost: %#v", sent)
+	}
+	stored, _ := c.loadOverlays()
+	if stored[42].Incident == nil || !stored[42].Incident.Challenge || stored[42].Incident.BypassPrefixes[0] != "/api/" {
+		t.Fatalf("the incident was not persisted for a restarted cell: %#v", stored)
+	}
+	// A restarted cell is given the same overlay again, incident included.
+	restarted := &overlayCell{}
+	again := httptest.NewServer(restarted.handler())
+	defer again.Close()
+	c.http, c.statusURLs = again.Client(), []string{again.URL + "/passive-failures"}
+	c.restoreOverlays(again.URL + "/passive-failures")
+	if len(restarted.commands) == 0 || restarted.commands[0]["incident"] == nil {
+		t.Fatalf("the replay dropped the incident: %#v", restarted.commands)
+	}
+}
+
+func TestAnInvalidIncidentIsRefusedBeforeAnyCellSeesIt(t *testing.T) {
+	cell := &overlayCell{}
+	server := httptest.NewServer(cell.handler())
+	defer server.Close()
+	c := &client{http: server.Client(), statusToken: "status-secret", statusURLs: []string{server.URL + "/passive-failures"}, dir: t.TempDir()}
+	for name, mutate := range map[string]func(*securityIncident){
+		"monitor mode":    func(i *securityIncident) { i.WAF.Mode = "monitor" },
+		"unknown method":  func(i *securityIncident) { i.Methods = []string{"GET", "TRACE"} },
+		"no expiry":       func(i *securityIncident) { i.ExpiresAt = 0 },
+		"negative body":   func(i *securityIncident) { i.MaxBodyBytes = -1 },
+		"relative bypass": func(i *securityIncident) { i.BypassPrefixes = []string{"api/"} },
+		"too many methods": func(i *securityIncident) {
+			i.Methods = []string{"GET", "GET", "GET", "GET", "GET", "GET", "GET", "GET", "GET"}
+		},
+	} {
+		incident := &securityIncident{ExpiresAt: 4102444800, MaxBodyBytes: 1024, Methods: []string{"GET"}}
+		incident.WAF.Mode = "block"
+		mutate(incident)
+		task := overlayTask("bad-"+name, 43, 1, "restricted", nil)
+		task.Payload.OverlayIncident = incident
+		if _, status := c.runSecurityOverlay(task); status != "failed" {
+			t.Fatalf("%s was accepted", name)
+		}
+	}
+	if len(cell.commands) != 0 {
+		t.Fatalf("a cell received an invalid incident: %#v", cell.commands)
+	}
+}
