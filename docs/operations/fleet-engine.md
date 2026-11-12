@@ -227,7 +227,7 @@ log line by line, and a step with no output for 30 seconds is reported with its 
 
 `cdnfoundry-fleet alert-webhook [--url https://...]` shows or sets where Alertmanager sends alerts. It is optional: with no
 webhook Alertmanager starts with receivers that send nothing, and `--url ""` turns notifications off again. A change
-reaches the hosts with the next `apply-config`.
+reaches the hosts with the next `apply-config`. `doctor` reports "Alerts have a receiver" as a failed check while no webhook is set, because alerts that fire into nothing (a stale backup, dropped telemetry) reach nobody. The administrator panel's health page reports the same through Alertmanager (component **Alert receiver**).
 
 `cdnfoundry-fleet management-networks [--networks "CIDR ..."]` shows or sets the networks allowed to reach the administrator panel, the
 administrator API, Horizon, and Grafana. Every other client gets a bare `403` there; the customer panel, the customer API, and the status page stay open. The fleet's own node addresses are added to

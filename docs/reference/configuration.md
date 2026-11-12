@@ -123,6 +123,7 @@ object storage; other Restic backends need their own credential/mount wiring.
 | `EDGE_GATEWAY_ADDRESS_MAP` | production edge agent | Optional JSON object translating advertised service IPv4/IPv6 addresses to private local listeners for NAT/load-balancer hosts. Directly assigned public addresses bind without a map. Both sides use the same family; wildcard, public-to-different-public, and duplicate local values fail closed. Default `{}`. |
 | `EDGE_GATEWAY_REQUIRE_ADDRESS_MAP` | production edge agent | Set `true` only when local policy requires every fetched endpoint to have an explicit translation before activation. Default `false`. |
 | `EDGE_GATEWAY_STATUS_URL` | edge agent | Gateway metrics URL used for heartbeat readiness |
+| `EDGE_TELEMETRY_URL` | edge agent | Local Vector HTTP source (`http://vector:8686`) that receives failed-handshake events from the gateway counters. Empty turns the report off; a failure never affects serving or heartbeats |
 | `EDGE_GATEWAY_METRICS_ADDRESS` | edge gateway | Restricted metrics listener; production default `0.0.0.0:9105` |
 | `GATEWAY_METRICS_ADDRESS` | edge gateway container | The listener address the container receives from `EDGE_GATEWAY_METRICS_ADDRESS`; the Compose health check calls its `/healthz` |
 | `EDGE_GATEWAY_MAX_CONNECTIONS` | edge gateway | Global accepted-connection bound, `128`–`65536` (default `8192`) |
@@ -145,6 +146,7 @@ object storage; other Restic backends need their own credential/mount wiring.
 | `CLICKHOUSE_DATABASE` | internal/default | Database queried by Laravel; Compose fixes `cdnf` |
 | `GEOIP_DATABASE` | edge runtime | MMDB file path; Compose fixes `/mmdb/GeoLite2-City.mmdb` |
 | `PROMETHEUS_URL` | optional control | Default `http://prometheus:9090` |
+| `ALERTMANAGER_URL` | optional control | Default `http://alertmanager:9093`. The health page reads the running configuration from it to report whether alerts have a receiver |
 | `VECTOR_METRICS_URL` | optional control | Vector metrics probe URL when overridden |
 | `MMDB_STALE_HOURS` | optional control | Health threshold; default `48` |
 | `MMDB_PROVIDER` | updater | `dbip-npm` (default, verified against the registry's SHA-512), `dbip-jsdelivr`, `dbip-official`, `ip66`, or `generic`. Production accepts a download only when it is verified: `dbip-npm` verifies itself, and every other provider needs `MMDB_EXPECTED_SHA256` or `MMDB_CHECKSUM_URL`. `generic` needs `MMDB_DOWNLOAD_URL`. The autonomous-system database has no verified default source: set `MMDB_ASN_DOWNLOAD_URL` and a checksum for it, or events carry ASN 0 |

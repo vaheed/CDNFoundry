@@ -95,7 +95,7 @@ There are 77 alerts.
 | `TelemetryBufferNearLimit` | warning | 5m | A Vector telemetry buffer is above 80 percent of its 1 GiB limit | [Runbook](../operations/runbooks.md#clickhouse-or-vector-outage) | Telemetry pipeline |
 | `TelemetryCollectorUnavailable` | warning | 2m | Prometheus cannot scrape the Vector telemetry collector | [Runbook](../operations/runbooks.md#clickhouse-or-vector-outage) | Telemetry pipeline |
 | `TelemetryDeliveryFailures` | warning | 2m | Vector is failing to deliver telemetry | [Runbook](../operations/runbooks.md#clickhouse-or-vector-outage) | Telemetry pipeline |
-| `TelemetryEventsDropped` | warning | 1m | Vector dropped telemetry after a bounded buffer or transform limit | [Runbook](../operations/runbooks.md#clickhouse-or-vector-outage) | Telemetry pipeline |
+| `TelemetryEventsDropped` | warning | 1m | Vector dropped telemetry it was not told to drop (a bounded buffer, a limit, or a line it could not convert) | [Runbook](../operations/runbooks.md#clickhouse-or-vector-outage) | Telemetry pipeline |
 | `Watchdog` | none | Immediately | Alerting pipeline heartbeat; it must always be firing | [Runbook](../operations/runbooks.md#alerting-heartbeat) | Now |
 
 ## Team: soc
