@@ -28,6 +28,7 @@ their documented bounds.
 | Asynchronous import threshold | over 64 KiB or over 100 physical lines |
 | URL purge | 100 URLs, 2,048 characters each, 128 KiB payload |
 | Cache key | 128 query arguments; none is cached beyond that |
+| Cache path rules | 16 per domain; ignored cookie names 32 |
 | Persisted URL purges per PoP | 50,000 keys, kept one year |
 | Outstanding purges (pending or running) | 1,000 per domain |
 | Security rules | 1,000 per domain, 500 per import |
