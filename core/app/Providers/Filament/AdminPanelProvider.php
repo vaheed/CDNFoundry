@@ -5,6 +5,7 @@ namespace App\Providers\Filament;
 use App\Filament\Admin\Pages\AdminDashboard;
 use App\Filament\Domain\Resources\Domains\DomainResource;
 use App\Filament\Shared\Pages\ApiTokens;
+use App\Filament\Shared\Pages\NotificationChannels;
 use App\Filament\Shared\Pages\EditProfile;
 use App\Support\GrafanaExploreUrl;
 use Filament\Auth\MultiFactor\App\AppAuthentication;
@@ -49,7 +50,7 @@ class AdminPanelProvider extends PanelProvider
             ->discoverResources(in: app_path('Filament/Admin/Resources'), for: 'App\\Filament\\Admin\\Resources')
             ->resources([DomainResource::class])
             ->discoverPages(in: app_path('Filament/Admin/Pages'), for: 'App\\Filament\\Admin\\Pages')
-            ->pages([AdminDashboard::class, ApiTokens::class])
+            ->pages([AdminDashboard::class, ApiTokens::class, NotificationChannels::class])
             ->widgets([AccountWidget::class])
             ->middleware([
                 EncryptCookies::class,

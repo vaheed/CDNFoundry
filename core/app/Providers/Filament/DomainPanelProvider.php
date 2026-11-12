@@ -4,6 +4,7 @@ namespace App\Providers\Filament;
 
 use App\Filament\Domain\Pages\DomainDashboard;
 use App\Filament\Shared\Pages\ApiTokens;
+use App\Filament\Shared\Pages\NotificationChannels;
 use App\Filament\Shared\Pages\EditProfile;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
@@ -35,7 +36,7 @@ class DomainPanelProvider extends PanelProvider
             ->navigationGroups(['Domains', 'Observe', 'Account'])
             ->discoverResources(in: app_path('Filament/Domain/Resources'), for: 'App\\Filament\\Domain\\Resources')
             ->discoverPages(in: app_path('Filament/Domain/Pages'), for: 'App\\Filament\\Domain\\Pages')
-            ->pages([DomainDashboard::class, ApiTokens::class])
+            ->pages([DomainDashboard::class, ApiTokens::class, NotificationChannels::class])
             ->widgets([AccountWidget::class])
             ->middleware([
                 EncryptCookies::class,

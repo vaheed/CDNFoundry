@@ -11,7 +11,9 @@ use App\Models\Edge;
 use App\Models\EdgePool;
 use App\Models\EdgeProbeResult;
 use App\Models\EdgeRevision;
+use App\Models\NotificationChannel;
 use App\Models\Operation;
+use App\Models\SystemSetting;
 use App\Models\SecurityEvent;
 use App\Models\User;
 use App\Support\DnsRecordData;
@@ -146,4 +148,20 @@ AuditLog::record(null, 'security.automatic_state_changed', $showcase, ['from' =>
     ->forceFill(['created_at' => now()->subMinutes(2)])->save();
 AuditLog::record(null, 'security.automatic_state_changed', $showcase, ['from' => 'suspected', 'to' => 'normal', 'cause' => 'quiet_period', 'quiet_minutes' => 10, 'overlay_sequence' => 2])
     ->forceFill(['created_at' => now()->subMinute()])->save();
+
+// Notifications: the switch for domain users is on, with an administrator channel, a user channel, and a paused channel whose reason is long.
+$notifications = SystemSetting::query()->findOrFail('notifications');
+$notifications->update(['values' => [...$notifications->values, 'domain_user_channels' => true]]);
+foreach ([
+    [null, 'telegram', 'Operations chat for the whole platform on call rotation', 'Telegram chat -1001234567890', null, 'active', null],
+    [null, 'webhook', 'Pager bridge', 'Webhook to alerts.example.com', null, 'active', null],
+    [$user->id, 'slack', 'Team channel', 'Slack webhook on hooks.slack.com, ending wxyz', ['certificate.failed', 'dns.deployment_failed'], 'active', null],
+    [$user->id, 'discord', 'Weekend alerts with a deliberately long channel name to check truncation', 'Discord webhook on discord.com, ending 6789', ['certificate.expiring'], 'paused',
+        'Paused after 10 failed deliveries in a row. Last error: Discord answered HTTP 404, so the webhook was probably deleted on the Discord side.'],
+] as [$owner, $type, $name, $hint, $events, $status, $reason]) {
+    $channel = new NotificationChannel(['user_id' => $owner, 'type' => $type, 'name' => $name, 'destination_hint' => $hint, 'events' => $events, 'status' => $status,
+        'consecutive_failures' => $status === 'paused' ? 10 : 0, 'paused_reason' => $reason, 'last_error' => $reason === null ? null : 'Discord answered HTTP 404.']);
+    $channel->storeSecrets(['webhook_url' => 'https://example.invalid/never-used', 'bot_token' => 'x', 'chat_id' => '1']);
+    $channel->save();
+}
 echo "browser seed complete\n";
