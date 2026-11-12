@@ -17,6 +17,9 @@ class EvaluateEndpointPublication
     /** Reasons that mean an operator removed the PoP on purpose. */
     private const OPERATOR_REASONS = ['edge_unavailable', 'withdrawn', 'pool_disabled'];
 
+    /** A new revision has not been acknowledged yet. That is a change in progress, not a PoP that cannot serve. */
+    private const CONVERGING_REASONS = ['gateway_not_ready', 'gateway_not_acknowledged'];
+
     public static function execute(): void
     {
         EdgePool::query()->where('enabled', true)->where('withdrawn', false)->orderBy('id')->get()->each(function (EdgePool $pool): void {
@@ -25,9 +28,14 @@ class EvaluateEndpointPublication
             $anyHealthy = $evaluated->contains(fn (array $pair): bool => $pair[1] === 'ready');
             $failStatic = false;
             foreach ($evaluated as [$endpoint, $reason]) {
+                // The gateway still serves its previous valid map while it takes a new revision. An endpoint that is
+                // published stays published through that window; one that never was waits for its acknowledgement.
+                $converging = in_array($reason, self::CONVERGING_REASONS, true)
+                    && ($endpoint->edge->capacity['gateway']['ready'] ?? false) === true;
                 $published = match (true) {
                     $reason === 'ready' => true,
                     in_array($reason, self::OPERATOR_REASONS, true) => false,
+                    $converging => $endpoint->dns_published,
                     $anyHealthy => false,
                     // Every automatic signal says unhealthy: keep what was published.
                     default => $endpoint->dns_published,

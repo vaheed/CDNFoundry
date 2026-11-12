@@ -348,15 +348,16 @@ class EdgeAgentController extends Controller
         }
         $isRoutable = $edge->enabled && ! $edge->drained && $listenerReady;
         $newCellRouting = $edge->cells()->orderBy('id')->get(['id', 'status', 'drained'])->toJson();
-        if ($wasRoutable !== $isRoutable || $oldCellRouting !== $newCellRouting || $endpointRoutingChanged) {
-            if ($oldCellRouting !== $newCellRouting) {
-                $edge->poolEndpoints()->update([
-                    'revision' => DB::raw('revision + 1'),
-                    'gateway_state' => 'pending',
-                    'readiness_reason' => 'gateway_not_acknowledged',
-                ]);
-            }
+        if ($oldCellRouting !== $newCellRouting) {
+            $edge->poolEndpoints()->update([
+                'revision' => DB::raw('revision + 1'),
+                'gateway_state' => 'pending',
+                'readiness_reason' => 'gateway_not_acknowledged',
+            ]);
             ReconcilePlatformDnsIdentity::dispatchForRoutingChange();
+        } elseif ($wasRoutable !== $isRoutable || $endpointRoutingChanged) {
+            // Acknowledging a revision or a brief readiness change only re-renders the zone when the published set changes.
+            ReconcilePlatformDnsIdentity::dispatchForProbeChange();
         }
         foreach ($data['passive_origins'] as $failure) {
             DnsRecord::query()->where('name', $failure['hostname'])->whereHas('domain', fn ($query) => $query->where('name', $failure['domain'])->where('lifecycle_state', 'active')
