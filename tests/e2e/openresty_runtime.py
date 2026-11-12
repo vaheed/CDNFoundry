@@ -321,9 +321,18 @@ def main() -> None:
         for cache_host in (
             "admission.example", "admission-limit.example", "origin-policy.example",
             "small-object.example", "stale.example", "no-stale.example", "single-flight.example", "overlay.example",
+            "rules.example",
         ):
             initial["hosts"][cache_host] = state({cache_host: "cache-origin.example"}, 1)["hosts"][cache_host]
         initial["hosts"]["overlay.example"]["domain_id"] = 7701
+        initial["hosts"]["rules.example"]["cache"].update({
+            "ignore_cookie_names": ["_ga", "_ga_*"],
+            "path_rules": [
+                {"match": "prefix", "value": "/live/", "action": "bypass"},
+                {"match": "suffix", "value": ".php", "action": "bypass"},
+                {"match": "prefix", "value": "/origin-ttl", "action": "ttl", "ttl_seconds": 600},
+            ],
+        })
         initial["hosts"]["admission-limit.example"]["security"] = {
             "limits": {"cache_admissions_per_second": 1},
         }
@@ -502,6 +511,25 @@ def main() -> None:
             assert "X-CDNF-Cache: BYPASS" in mixed_cookie.stderr, mixed_cookie.stderr
             ignored_cookie = request_with("runtime.example", headers=("Cookie: session_id=present",))
             assert "X-CDNF-Cache: BYPASS" not in ignored_cookie.stderr, ignored_cookie.stderr
+            # Analytics cookies on the ignore list, including a prefix entry, never make a request personal.
+            for _ in range(2):
+                analytics = request_with("rules.example", "/analytics", headers=("Cookie: _ga=1; _ga_ABC123=2",))
+            assert "X-CDNF-Cache: HIT" in analytics.stderr, analytics.stderr
+            prefix_miss = request_with("rules.example", "/analytics", headers=("Cookie: _ga=1; _gax=2",))
+            assert "X-CDNF-Cache: BYPASS" in prefix_miss.stderr, prefix_miss.stderr
+            # Path rules: a bypass prefix and suffix are never stored; an unmatched path caches normally.
+            for path in ("/live/feed", "/index.php"):
+                for _ in range(2):
+                    bypassed = request_with("rules.example", path)
+                assert "X-CDNF-Cache: BYPASS" in bypassed.stderr, (path, bypassed.stderr)
+            for _ in range(2):
+                unmatched = request_with("rules.example", "/plain")
+            assert "X-CDNF-Cache: HIT" in unmatched.stderr, unmatched.stderr
+            # A TTL rule replaces the origin's one-second lifetime for its path.
+            request_with("rules.example", "/origin-ttl")
+            time.sleep(2.5)
+            ttl_rule = request_with("rules.example", "/origin-ttl")
+            assert "X-CDNF-Cache: HIT" in ttl_rule.stderr and "s-maxage=600" in ttl_rule.stderr, ttl_rule.stderr
             # A bypassed response keeps the origin's cache headers; the edge never adds "public".
             assert "s-maxage" not in cookie_bypass.stderr and "public" not in cookie_bypass.stderr, cookie_bypass.stderr
             # Two sessions alternate on one URL: no response may carry the other session's cookie value.

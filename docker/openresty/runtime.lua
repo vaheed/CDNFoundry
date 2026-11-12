@@ -648,6 +648,23 @@ end
 
 local PURGE_TTL_SECONDS = 31536000
 
+-- The first path rule whose prefix or suffix matches the raw request path wins.
+-- The list is bounded to 16 rules by the control plane; a longer list is cut here.
+local function matching_path_rule(cache)
+    local rules = cache.path_rules
+    if type(rules) ~= "table" then return nil end
+    local path = (ngx.var.request_uri or ""):match("^[^?]*") or ""
+    for index, rule in ipairs(rules) do
+        if index > 16 then break end
+        local value = type(rule) == "table" and rule.value
+        if type(value) == "string" and value ~= "" then
+            if rule.match == "prefix" and path:sub(1, #value) == value then return rule end
+            if rule.match == "suffix" and #path >= #value and path:sub(-#value) == value then return rule end
+        end
+    end
+    return nil
+end
+
 -- Returns the cache key, its edge TTL, and the resource base. A request whose
 -- target has no canonical form returns an unusable key with a zero TTL and a
 -- reason, so it is never cached.
@@ -662,6 +679,9 @@ local function request_cache_key(domain, host, cache)
     local epoch = math.max(configured_epoch, runtime_epoch)
     local generation = ngx.shared.cache_purges:get("u:" .. ngx.md5(base)) or 0
     local ttl = math.max(0, math.min(31536000, tonumber(cache.edge_ttl_seconds) or 0))
+    local path_rule = matching_path_rule(cache)
+    if path_rule and path_rule.action == "bypass" then ttl = 0 end
+    if path_rule and path_rule.action == "ttl" then ttl = math.max(0, math.min(31536000, tonumber(path_rule.ttl_seconds) or 0)) end
     local policy_query_parameters = {}
     for _, name in ipairs(cache.query_parameters or {}) do policy_query_parameters[#policy_query_parameters + 1] = name end
     table.sort(policy_query_parameters)
@@ -679,6 +699,7 @@ local function request_cache_key(domain, host, cache)
         cache.mode or "normal", tostring(tonumber(cache.admission_requests) or 1),
         tostring(tonumber(cache.maximum_variants_per_resource) or 32),
         table.concat(policy_status_ttls, ","),
+        path_rule and (path_rule.action .. "=" .. tostring(path_rule.ttl_seconds or 0)) or "-",
     }, ":")
     return base .. "|e" .. epoch .. "|g" .. generation .. "|p" .. ngx.md5(policy), ttl, base
 end
@@ -688,12 +709,20 @@ end
 local function cookie_bypassed(ignored_names)
     local raw = ngx.var.http_cookie or ""
     if raw == "" then return false end
-    local ignored = {}
-    for _, name in ipairs(ignored_names or {}) do ignored[name] = true end
+    local ignored, prefixes = {}, {}
+    for _, name in ipairs(ignored_names or {}) do
+        if name:sub(-1) == "*" then prefixes[#prefixes + 1] = name:sub(1, -2) else ignored[name] = true end
+    end
     local found = false
     for name in raw:gmatch("%s*([^=;%s]+)%s*=") do
         found = true
-        if not ignored[name] then return true end
+        if not ignored[name] then
+            local matched = false
+            for _, prefix in ipairs(prefixes) do
+                if name:sub(1, #prefix) == prefix then matched = true; break end
+            end
+            if not matched then return true end
+        end
     end
     -- A Cookie header with no parsable name is still a cookie.
     return not found
@@ -1106,7 +1135,12 @@ function M.prepare_cache_response()
         return
     end
     local edge_ttl = math.max(0, math.min(31536000, status_ttl or tonumber(cache.edge_ttl_seconds) or 0))
-    if cache.respect_origin_headers ~= false then
+    local path_rule = matching_path_rule(cache)
+    if path_rule and path_rule.action == "ttl" then
+        -- An explicit path TTL replaces the origin's lifetime for the statuses the domain already allows.
+        edge_ttl = math.max(0, math.min(31536000, tonumber(path_rule.ttl_seconds) or 0))
+        headers["Expires"] = nil
+    elseif cache.respect_origin_headers ~= false then
         local origin_ttl = tonumber(cache_control["s-maxage"] or cache_control["max-age"])
         if not origin_ttl and headers["Expires"] then
             local expires = ngx.parse_http_time(tostring(headers["Expires"]))
