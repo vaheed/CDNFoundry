@@ -82,7 +82,8 @@ final class CacheKey
                 $pairs[] = [$name, $value];
             }
         }
-        usort($pairs, fn (array $left, array $right): int => strcmp($left[0], $right[0]) ?: strcmp($left[1], $right[1]));
+        // usort is stable since PHP 8.0, so repeated names keep the order the client sent.
+        usort($pairs, fn (array $left, array $right): int => strcmp($left[0], $right[0]));
         if ($pairs === []) {
             return $normalized;
         }

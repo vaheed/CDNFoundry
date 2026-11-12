@@ -93,6 +93,7 @@ local function encode_component(value)
     end))
 end
 
+-- Pairs sort by name only; repeated names keep the order the client sent.
 -- policy: include_all | ignore_all | include_selected | ignore_selected.
 -- Returns "<path>[?<query>]", or nil and a reason.
 function M.target(raw_target, policy, parameters)
@@ -115,11 +116,11 @@ function M.target(raw_target, policy, parameters)
         local include = policy == "include_all" or policy == nil
             or (policy == "include_selected" and selected[name])
             or (policy == "ignore_selected" and not selected[name])
-        if include then pairs_[#pairs_ + 1] = {name, value} end
+        if include then pairs_[#pairs_ + 1] = {name, value, #pairs_ + 1} end
     end
     table.sort(pairs_, function(left, right)
         if left[1] ~= right[1] then return left[1] < right[1] end
-        return left[2] < right[2]
+        return left[3] < right[3]
     end)
     local encoded = {}
     for _, pair in ipairs(pairs_) do
