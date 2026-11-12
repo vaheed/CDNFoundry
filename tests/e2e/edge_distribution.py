@@ -542,7 +542,7 @@ def exercise_cache(token: str, domain_id: int, edges: list[dict], sequences: dic
         "maximum_object_bytes": 1048576,
         "respect_origin_headers": True,
         "include_query_string": True,
-        "bypass_cookie_names": ["session_id"],
+        "ignore_cookie_names": ["session_id"],
         "stale_if_error_seconds": 30,
     }
     status, changed = call("PATCH", f"/api/domains/{domain_id}/cache", settings, token)
@@ -551,7 +551,7 @@ def exercise_cache(token: str, domain_id: int, edges: list[dict], sequences: dic
 
     def check_changed_cache(payload: dict) -> None:
         assert payload["cache"]["edge_ttl_seconds"] == 120, payload["cache"]
-        assert payload["cache"]["bypass_cookie_names"] == ["session_id"], payload["cache"]
+        assert payload["cache"]["ignore_cookie_names"] == ["session_id"], payload["cache"]
 
     _, placement = call("GET", f"/api/admin/domains/{domain_id}/isolation", token=token)
     converge_placement_artifacts(

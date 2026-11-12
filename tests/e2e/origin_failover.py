@@ -70,7 +70,7 @@ def host_config(domain: str, origin: dict, cache: bool = False) -> dict:
         "cache": {
             "enabled": cache, "edge_ttl_seconds": CACHE_TTL_SECONDS, "browser_ttl_seconds": 0,
             "maximum_object_bytes": 1048576, "respect_origin_headers": True,
-            "include_query_string": True, "bypass_cookie_names": [],
+            "include_query_string": True, "ignore_cookie_names": [],
             "stale_if_error_seconds": STALE_IF_ERROR_SECONDS, "stale_while_revalidate_seconds": 0,
             "status_ttl_seconds": {"200": CACHE_TTL_SECONDS}, "epoch": 1,
         },

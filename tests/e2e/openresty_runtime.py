@@ -36,7 +36,7 @@ def state(hosts: dict[str, str], sequence: int) -> dict:
         hostname: {"domain": hostname, "revision": sequence, "settings": {"enabled": True}, "cache": {
             "enabled": True, "edge_ttl_seconds": 3600, "browser_ttl_seconds": 300,
             "maximum_object_bytes": 104857600, "respect_origin_headers": True,
-            "include_query_string": True, "bypass_cookie_names": ["session_id"],
+            "include_query_string": True, "ignore_cookie_names": ["session_id"],
             "stale_if_error_seconds": 60, "epoch": 1, "development_mode_until": None,
         }, "compression": {
             "profile_name": "standard", "gzip": True, "brotli": False,
@@ -372,8 +372,32 @@ def main() -> None:
             assert "X-CDNF-Cache: HIT" in persisted.stderr, persisted.stderr
             authorized = request_with("runtime.example", headers=("Authorization: Bearer cache-bypass",))
             assert "X-CDNF-Cache: BYPASS" in authorized.stderr, authorized.stderr
-            cookie_bypass = request_with("runtime.example", headers=("Cookie: session_id=present",))
+            # Any cookie not on the domain's ignore list makes the request personal: it bypasses the cache.
+            cookie_bypass = request_with("runtime.example", headers=("Cookie: tracking=present",))
             assert "X-CDNF-Cache: BYPASS" in cookie_bypass.stderr, cookie_bypass.stderr
+            mixed_cookie = request_with("runtime.example", headers=("Cookie: session_id=present; tracking=present",))
+            assert "X-CDNF-Cache: BYPASS" in mixed_cookie.stderr, mixed_cookie.stderr
+            ignored_cookie = request_with("runtime.example", headers=("Cookie: session_id=present",))
+            assert "X-CDNF-Cache: BYPASS" not in ignored_cookie.stderr, ignored_cookie.stderr
+            # A bypassed response keeps the origin's cache headers; the edge never adds "public".
+            assert "s-maxage" not in cookie_bypass.stderr and "public" not in cookie_bypass.stderr, cookie_bypass.stderr
+            # Two sessions alternate on one URL: no response may carry the other session's cookie value.
+            session_loop = (
+                "for i in $(seq 1 250); do "
+                "curl -sS -H 'Host: runtime.example' -H 'Cookie: sid=alpha' http://127.0.0.1:8080/echo-cookie; "
+                "curl -sS -H 'Host: runtime.example' -H 'Cookie: sid=bravo' http://127.0.0.1:8080/echo-cookie; done"
+            )
+            sessions = run("docker", "run", "--rm", "--network", f"container:{NAME}", "--entrypoint", "sh", "curlimages/curl:8.16.0", "-c", session_loop).stdout.split("\n")
+            bodies = [line for line in sessions if line]
+            assert len(bodies) == 500 and all(bodies[index] == ("cookie=sid=alpha" if index % 2 == 0 else "cookie=sid=bravo") for index in range(500)), bodies[:6]
+            # Repeated parameters keep the order the client sent: two objects, never one shared entry.
+            for _ in range(3):
+                first_order = request_with("runtime.example", "/echo-query?page=first&page=second")
+            assert "query=page=first&page=second" in first_order.stdout, first_order.stdout
+            assert "X-CDNF-Cache: HIT" in first_order.stderr, first_order.stderr
+            second_order = request_with("runtime.example", "/echo-query?page=second&page=first")
+            assert "query=page=second&page=first" in second_order.stdout, (second_order.stdout, second_order.stderr)
+            assert "X-CDNF-Cache: MISS" in second_order.stderr, second_order.stderr
             development = request("development.example")
             assert "X-CDNF-Cache: BYPASS" in development.stderr, development.stderr
             query_a = request_with("runtime.example", "/asset.css?ignored=1&page=2")
