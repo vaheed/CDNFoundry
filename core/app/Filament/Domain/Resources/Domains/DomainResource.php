@@ -7,6 +7,7 @@ use App\Filament\Domain\Resources\Domains\Pages\ListDomains;
 use App\Filament\Domain\Resources\Domains\Pages\ViewDomain;
 use App\Filament\Domain\Resources\Domains\RelationManagers\DnsRecordsRelationManager;
 use App\Filament\Domain\Resources\Domains\RelationManagers\HistoryRelationManager;
+use App\Filament\Domain\Resources\Domains\RelationManagers\LogPushRelationManager;
 use App\Filament\Domain\Resources\Domains\RelationManagers\SecurityRulesRelationManager;
 use App\Filament\Domain\Resources\Domains\RelationManagers\UsersRelationManager;
 use App\Filament\Domain\Resources\Domains\RelationManagers\WafExclusionsRelationManager;
@@ -96,7 +97,7 @@ class DomainResource extends Resource
 
     public static function getRelations(): array
     {
-        return [DnsRecordsRelationManager::class, SecurityRulesRelationManager::class, WafExclusionsRelationManager::class, HistoryRelationManager::class, UsersRelationManager::class];
+        return [DnsRecordsRelationManager::class, SecurityRulesRelationManager::class, WafExclusionsRelationManager::class, HistoryRelationManager::class, LogPushRelationManager::class, UsersRelationManager::class];
     }
 
     public static function getPages(): array

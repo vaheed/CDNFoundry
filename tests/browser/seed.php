@@ -11,6 +11,7 @@ use App\Models\Edge;
 use App\Models\EdgePool;
 use App\Models\EdgeProbeResult;
 use App\Models\EdgeRevision;
+use App\Models\LogPushDestination;
 use App\Models\NotificationChannel;
 use App\Models\Operation;
 use App\Models\SystemSetting;
@@ -163,5 +164,20 @@ foreach ([
         'consecutive_failures' => $status === 'paused' ? 10 : 0, 'paused_reason' => $reason, 'last_error' => $reason === null ? null : 'Discord answered HTTP 404.']);
     $channel->storeSecrets(['webhook_url' => 'https://example.invalid/never-used', 'bot_token' => 'x', 'chat_id' => '1']);
     $channel->save();
+}
+
+// Log push: the switch is on, and the first assigned domain has a healthy destination and a failing one with a long error.
+$logPush = SystemSetting::query()->findOrFail('log_push');
+$logPush->update(['values' => [...$logPush->values, 'domain_user_log_push' => true]]);
+$pushDomain = Domain::query()->whereHas('users', fn ($users) => $users->whereKey($user->id))->orderBy('id')->firstOrFail();
+foreach ([
+    ['SIEM at the security team with a long descriptive name to check truncation', 'https', 'HTTPS to logs.security-team.example-company.co.uk', ['http_requests', 'security_events'], 0, null, 48210, 12_400_000, 41],
+    ['Archive bucket', 's3', 'S3 bucket cdn-logs on s3.eu-west-1.amazonaws.com', ['dns_queries'], 6, 'The destination answered HTTP 503. The receiver at logs.example.com is overloaded, so batches are retried with a growing delay and nothing is skipped.', 912, 220_000, 3600],
+] as [$name, $kind, $hint, $datasets, $failures, $error, $rows, $bytes, $lag]) {
+    $destination = new LogPushDestination(['domain_id' => $pushDomain->id, 'kind' => $kind, 'name' => $name, 'datasets' => $datasets, 'destination_hint' => $hint, 'status' => 'active', 'cursors' => [],
+        'consecutive_failures' => $failures, 'failures_total' => $failures, 'rows_pushed' => $rows, 'bytes_pushed' => $bytes, 'lag_seconds' => $lag, 'last_error' => $error,
+        'last_delivery_at' => now()->subMinutes($failures > 0 ? 40 : 1), 'next_run_at' => $failures > 0 ? now()->addMinutes(20) : null]);
+    $destination->storeSecrets(['url' => 'https://example.invalid/never-used', 'auth' => 'bearer', 'bearer_token' => 'never-used-token']);
+    $destination->save();
 }
 echo "browser seed complete\n";
