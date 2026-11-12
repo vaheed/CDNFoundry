@@ -34,7 +34,7 @@ start maintenance for their own domain.
 ### Incident profile on a domain
 
 The incident profile is one temporary bundle of protections for one domain, and a domain user can turn it on for their own
-domains. Open the domain, choose **Domain actions, Security, Start incident profile**, and pick how long it stays on (15
+domains. Open the domain, choose **Security, Start incident profile**, and pick how long it stays on (15
 minutes to 24 hours).
 
 For that time the domain gets:
