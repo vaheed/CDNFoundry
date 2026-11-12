@@ -302,6 +302,10 @@ type edgeTask struct {
 		EmergencyActions   []string          `json:"actions"`
 		EmergencyExpiresAt *int64            `json:"expires_at"`
 		Versions           map[string]string `json:"versions"`
+		DomainID           int64             `json:"domain_id"`
+		OverlaySequence    uint64            `json:"overlay_sequence"`
+		OverlayState       string            `json:"state"`
+		OverlayLimits      map[string]int64  `json:"limits"`
 		Origin             struct {
 			Host              string `json:"host"`
 			Scheme            string `json:"scheme"`
@@ -352,6 +356,8 @@ func (c *client) processTasks() error {
 			result, status = c.runCachePurge(task)
 		} else if task.Type == "emergency_mode" {
 			result, status = c.runEmergencyMode(task)
+		} else if task.Type == "security_overlay" {
+			result, status = c.runSecurityOverlay(task)
 		} else if task.Type == "dns_probe" {
 			result, status = runDNSProbe(task)
 		}
@@ -1826,6 +1832,9 @@ func (c *client) runtimeStatus() ([]map[string]any, []map[string]any, []map[stri
 		}
 		if restored, reported := decoded.Cell["purges_restored"].(bool); reported && !restored {
 			c.restorePurges(endpoint)
+		}
+		if restored, reported := decoded.Cell["overlays_restored"].(bool); reported && !restored {
+			c.restoreOverlays(endpoint)
 		}
 		if decoded.Cell != nil && len(cells) < 32 {
 			name, _ := decoded.Cell["name"].(string)
