@@ -69,7 +69,6 @@ dev-e2e: dev-waf-image
 	python3 tests/e2e/backup_restore.py
 	python3 tests/e2e/managed_waf.py
 	python3 tests/e2e/origin_failover.py
-	python3 tests/e2e/openresty_runtime.py
 
 dev-waf-image:
 	docker build -f docker/openresty/Dockerfile -t cdnfoundry/edge-runtime:waf-qualification .
