@@ -9,6 +9,7 @@ use App\Models\DomainEdgeCell;
 use App\Models\DomainEdgePlacement;
 use App\Models\Edge;
 use App\Models\EdgePool;
+use App\Models\EdgeProbeResult;
 use App\Models\EdgeRevision;
 use App\Models\Operation;
 use App\Models\SecurityEvent;
@@ -62,6 +63,12 @@ foreach (['edge-tehran-a', 'edge-tehran-b', 'edge-frankfurt-a', 'edge-with-a-ver
         'registered_at' => now(), 'last_heartbeat_at' => $i === 3 ? now()->subDays(2) : now(),
     ]);
     $edges[] = [$edge, $edge->cells()->create(['slot' => 1, 'edge_pool_id' => $shared->id, 'status' => 'assigned'])];
+}
+// The fourth edge has not reported for two days but the other PoPs still reach it: stale control link, serving edge.
+// The third edge is reached by nobody: fresh heartbeat, not serving.
+foreach ([0, 1] as $observer) {
+    EdgeProbeResult::query()->create(['observer_edge_id' => $edges[$observer][0]->id, 'target_edge_id' => $edges[3][0]->id, 'address' => '192.0.2.44', 'ok' => true, 'checked_at' => now()]);
+    EdgeProbeResult::query()->create(['observer_edge_id' => $edges[$observer][0]->id, 'target_edge_id' => $edges[2][0]->id, 'address' => '192.0.2.43', 'ok' => false, 'checked_at' => now()]);
 }
 
 $showcase = $domains['alpha-browser.example'];
