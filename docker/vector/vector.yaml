@@ -57,8 +57,16 @@ transforms:
       .domain_id = to_int!(.domain_id)
       .hostname = slice!(replace(to_string(.hostname) ?? "", r'[\x00-\x1f\x7f]', ""), 0, 253)
       .method = slice!(upcase(to_string(.method) ?? "GET"), 0, 16)
-      raw_path = split(to_string(.path) ?? "/", "?")[0]
+      # The path is the raw request path as sent (still percent-encoded). The query is never
+      # stored; a bounded hash tells cache variants apart without keeping tokens.
+      request_target = slice!(to_string(.path) ?? "/", 0, 8192)
+      target_parts = split(request_target, "?", limit: 2)
+      raw_path = target_parts[0]
       .path = slice!(replace!(raw_path, r'[\x00-\x1f\x7f]', ""), 0, 2048)
+      .query_hash = ""
+      if length(target_parts) == 2 && target_parts[1] != "" {
+        .query_hash = slice!(sha2!(target_parts[1], variant: "SHA-256"), 0, 16)
+      }
       .status = to_int(.status) ?? 0
       .bytes_in = to_int(.bytes_in) ?? 0
       .bytes_out = to_int(.bytes_out) ?? 0
@@ -392,6 +400,7 @@ tests:
           - type: vrl
             source: |-
               assert_eq!(.path, "/item")
+              assert_eq!(length(string!(.query_hash)), 16)
               assert_eq!(.referrer, "https://example.test/cart")
   - name: keep_customer_dns_events_and_drop_the_synthetic_probe
     inputs:

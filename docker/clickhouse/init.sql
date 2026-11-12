@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS cdnf.edge_events
     ip_version LowCardinality(String) DEFAULT '',
     scheme LowCardinality(String) DEFAULT '',
     request_id String DEFAULT '',
+    query_hash String DEFAULT '',
     bytes_sent UInt64 DEFAULT 0,
     asn UInt32 DEFAULT 0,
     pop LowCardinality(String) DEFAULT '',

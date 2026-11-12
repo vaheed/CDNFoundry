@@ -25,7 +25,8 @@ from the collector's own settings and never reads them from the event.
 | `domain_id` | unsigned integer |
 | `hostname` | string, 253 characters |
 | `method` | upper-case string, 16 characters |
-| `path` | query removed, 2,048 characters |
+| `path` | raw request path as sent (percent-encoded), query removed, 2,048 characters |
+| `query_hash` | first 16 hex characters of the SHA-256 of the raw query, empty when there is none |
 | `status` | unsigned 16-bit integer |
 | `bytes_in`, `bytes_out` | unsigned integers |
 | `cache_status` | low-cardinality string, 24 characters |
