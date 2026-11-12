@@ -104,9 +104,39 @@ separate, higher ceiling for the whole domain, 20 times that budget.
 ## Security state
 
 A domain's security state is `normal`, `suspected`, `restricted`, `quarantined`,
-or `recovering`. Agent heartbeats carry a bounded set of noisy-domain summaries
-and reason codes. Automatic policy can restrict or quarantine a domain. Scheduled
-reconciliation expires controls and moves quiet domains through recovery.
+or `recovering`. Two sources set it, and the domain shows the stricter of the two.
+
+- **Operator state.** Administrator actions (Under Attack mode, quarantine, return to
+  normal) are desired configuration. Each one is a configuration revision with an
+  author, and it is delivered in the signed domain snapshot.
+- **Automatic state.** Agent heartbeats carry a bounded set of noisy-domain summaries
+  and reason codes. When the rate of events crosses a threshold, the platform moves
+  the domain to `suspected` or `restricted` on its own. This is not a configuration
+  revision and never changes the snapshot. It travels to the edges as a small
+  per-domain overlay with its own increasing sequence, the way purge epochs travel.
+  A cell enforces the stricter value of the snapshot and the overlay for every limit,
+  keeps the overlay across a restart because the agent replays it, and ignores an
+  overlay with an older sequence.
+
+The rate is the number of events in the last five minutes: `suspected` at 50 or more,
+and `restricted` at 100 or more when the domain's quarantine policy is automatic. It
+is measured as the increase since the previous report, not as the cell's lifetime
+counter, so a counter that keeps growing or restarts does not trigger a change. A
+domain moves back one step (`restricted` to `recovering` to `normal`, or `suspected`
+to `normal`) after ten minutes without a new event. A domain an operator has
+restricted or quarantined is never changed automatically.
+
+A domain's own protections never count against it. A request refused by a customer
+block rule (`domain_restricted`), a method restriction (`invalid_method`), an
+emergency mode (`edge_emergency_mode`), or an unknown host or SNI is still recorded as
+an event, but it does not raise the rate.
+
+Edge-reported security events keep one row per domain, edge, reason, and hour, and a
+daily job deletes events beyond `security_event_retention_days`. Every automatic
+change is written to the audit log with its cause, and the domain's **History** tab
+lists operator actions and automatic changes separately, with a filter. A returned
+state shows in the API as `automatic_state`, `configured_state`, and the stricter
+`state`.
 
 Quarantine uses the normal placement protocol: CDNFoundry delivers the domain to
 the quarantine pool, publishes its addresses, then drains the shared source.

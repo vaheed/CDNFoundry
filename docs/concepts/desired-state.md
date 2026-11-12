@@ -73,6 +73,12 @@ job. Horizon runs the `interactive`, `dns`, `edge`, `verification`, `tls`, `purg
 and `bulk_maintenance` queues separately, each with its own worker limit. A slow
 DNS host, a nameserver check, or a large import cannot stall edge deployment.
 
+Only desired configuration is a revision. A domain's revisions list who made each
+one and a line naming which sections changed (for example `Changed security`). State
+the platform derives from observation, such as the automatic security state, is not
+configuration: it reaches the edges as an operational overlay with its own sequence
+and is recorded as an audit event, so the revision list stays a list of real changes.
+
 The database transaction never waits on an external network. The desired state, the
 new revision, the audit entry, and the operation are committed first. If a newer
 revision arrives while a job runs, one more job follows.

@@ -62,6 +62,17 @@ endpoint of a pool looks unhealthy, DNS keeps the last published set, the pool
 is flagged `dns_fail_static`, and the `PoolServingLastPublishedSet` alert fires.
 Operator actions still win: draining the last PoP removes it.
 
+### A new revision never withdraws a PoP
+
+A configuration change gives the gateway a new revision to take. While it does, the
+agent may report the listener as not yet matching, but the gateway still serves its
+previous valid map. An endpoint that is already published stays published through
+that window, as long as the gateway reports ready. An endpoint that was never
+published waits for its first acknowledgement. A gateway that cannot serve at all is
+a real signal and still leaves DNS while another PoP is healthy. Acknowledging a
+revision re-renders the platform zone only when the set of published addresses
+changes, so an ordinary domain change does not move the zone serial.
+
 ### External probes
 
 Every PoP's agent probes the HTTP (80) and TLS (443) listeners of every other

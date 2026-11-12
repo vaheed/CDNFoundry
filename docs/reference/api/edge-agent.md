@@ -117,6 +117,14 @@ failure reasons such as `cell_not_found`, `control_request_failed`,
 `cache_purge_capacity_exceeded`. Cache purge tasks carry a `purge_id`, which the
 cells store as the URL generation.
 
+A `security_overlay` task carries `domain_id`, `domain`, `overlay_sequence`, `state`
+(`normal`, `suspected`, `restricted`, or `recovering`), and `limits` (stricter limit
+values, or `null`). The agent stores the newest sequence per domain, removes the
+overlay on `normal`, refuses a new domain beyond 256 overlays with
+`overlay_capacity_exceeded`, and tells every cell. A cell that restarts reports
+`overlays_restored: false` until the agent replays the stored overlays to it. Only
+the newest pending overlay per domain and edge is kept.
+
 Task receipts are scoped to the authenticated edge and committed transactionally
 with their database effects. Concurrent reports serialize on the task and its
 operation or purge aggregate. A terminal task is immutable; later reports return
