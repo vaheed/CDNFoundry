@@ -40,8 +40,14 @@ transforms:
     inputs: [edge_syslog]
     drop_on_error: true
     source: |
-      envelope = parse_regex!(to_string!(.message), r'(?P<payload>\{.*\})$')
-      . = parse_json!(envelope.payload)
+      # A line that is not a complete JSON object (an older runtime logging an internal hop with
+      # empty numeric fields, or a datagram cut short) is dropped as a known shape, not counted as
+      # a conversion failure. Only an unexpected failure raises the unintentional drop alert.
+      envelope = parse_regex(to_string(.message) ?? "", r'(?P<payload>\{.*\})$') ?? null
+      if envelope == null { abort }
+      decoded = parse_json(string!(envelope.payload)) ?? null
+      if decoded == null { abort }
+      . = decoded
       # Only this node's cells hold the node secret; drop lines other containers forge.
       expected_proof = sha2!("cdnf-telemetry-v1|" + get_env_var!("EDGE_STATUS_TOKEN"), variant: "SHA-256")
       presented_proof = string(.telemetry_proof) ?? ""
@@ -378,6 +384,13 @@ sinks:
     buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
 
 tests:
+  - name: drop_a_line_with_empty_numeric_fields_without_a_conversion_failure
+    inputs:
+      - insert_at: decoded_edge_syslog
+        type: log
+        log_fields:
+          message: '<190>cdnfoundry_edge: {"domain_id":,"status":200,"asn":,"waf_rule_id":,"telemetry_proof":""}'
+    no_outputs_from: [decoded_edge_syslog]
   - name: drop_syslog_events_without_the_node_proof
     inputs:
       - insert_at: decoded_edge_syslog

@@ -1044,7 +1044,35 @@ function M.record_passive_failure()
     M.origin_done()
 end
 
+-- ModSecurity runs inside the cache locations and does not hand its verdict
+-- back to NGINX variables. A 403 that no origin produced (no upstream status,
+-- no cache lookup) in a request that was inspected can only be the engine's
+-- deny, because every other local rejection already names its own reason.
+-- CRS 949110 is the inbound blocking evaluation that issues that deny, and the
+-- score recorded is the configured threshold the request reached or exceeded.
+local function record_waf_outcome()
+    local action = ngx.var.cdn_waf_action
+    if action ~= "inspect" then return end
+    local denied = tonumber(ngx.status) == 403
+        and (ngx.var.upstream_status or "") == ""
+        and (ngx.var.upstream_cache_status or "") == ""
+        and (ngx.var.cdn_security_reason or "") == ""
+    if not denied then
+        ngx.var.cdn_waf_action = "pass"
+        return
+    end
+    local host = (ngx.var.host or ""):lower():gsub("%.$", "")
+    local config = state.hosts[host]
+    local waf = config and config.waf or {}
+    ngx.var.cdn_waf_action = "block"
+    ngx.var.cdn_waf_rule_id = "949110"
+    ngx.var.cdn_waf_score = tostring(math.max(1, math.min(100, tonumber(waf.inbound_threshold) or 5)))
+    ngx.var.cdn_security_action = "block"
+    ngx.var.cdn_security_reason = "waf_block"
+end
+
 function M.finish()
+    record_waf_outcome()
     local client_key = ngx.var.cdn_security_client_connection_key
     if client_key and client_key ~= "" then
         local current = ngx.shared.traffic_limits:incr(client_key, -1, 0)
