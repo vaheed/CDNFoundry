@@ -10,7 +10,7 @@ test('start, read, and end the incident profile', async ({ page }) => {
     await expect(page.getByTestId('incident-banner')).toHaveCount(0);
 
     await page.getByRole('button', { name: 'Domain actions' }).click();
-    await page.getByRole('menuitem', { name: 'Start incident profile' }).click();
+    await page.getByTestId('incident-start-action').click();
     const modal = page.locator('.fi-modal-window:visible');
     await expect(modal.getByRole('heading', { name: 'Start the incident profile?' })).toBeVisible();
     // The copy states what it protects and what it cannot.
@@ -26,7 +26,7 @@ test('start, read, and end the incident profile', async ({ page }) => {
     await expectAccessible(page);
 
     await page.getByRole('button', { name: 'Domain actions' }).click();
-    await page.getByRole('menuitem', { name: 'End incident profile' }).click();
+    await page.getByTestId('incident-end-action').click();
     await page.locator('.fi-modal-window:visible').getByRole('button', { name: /Confirm|Submit|End/ }).last().click();
     await expect(page.getByTestId('incident-banner')).toHaveCount(0);
 });

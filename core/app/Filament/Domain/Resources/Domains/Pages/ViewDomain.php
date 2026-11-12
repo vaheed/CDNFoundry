@@ -428,7 +428,7 @@ class ViewDomain extends ViewRecord
                         'strict' => 'High-sensitivity protection will block more aggressively; watch for false positives.',
                     })->send();
                 }),
-            Action::make('startIncident')->icon('phosphor-shield-warning')->label('Start incident profile')->color('danger')
+            Action::make('startIncident')->icon('phosphor-shield-warning')->label('Start incident profile')->color('danger')->extraAttributes(['data-testid' => 'incident-start-action'])
                 ->modalHeading('Start the incident profile?')
                 ->modalDescription('For the time you choose, the domain gets tighter request limits, the web application firewall in blocking mode, restricted methods and body size, and a browser challenge. It protects your origin and the cells from request floods; it cannot absorb traffic that saturates a host or link.')
                 ->schema([Select::make('duration_minutes')->label(FilamentHelp::label('Duration', 'How long the protections stay on. They turn off by themselves at the end; you can end them sooner.'))
@@ -439,7 +439,7 @@ class ViewDomain extends ViewRecord
                     $this->refreshDomain(includeTabs: true);
                     Notification::make()->warning()->title('Incident profile started')->body('The protections are on their way to the cells and end on their own.')->send();
                 }),
-            Action::make('endIncident')->icon('phosphor-shield-check')->label('End incident profile')->color('success')->requiresConfirmation()
+            Action::make('endIncident')->icon('phosphor-shield-check')->label('End incident profile')->color('success')->requiresConfirmation()->extraAttributes(['data-testid' => 'incident-end-action'])
                 ->modalHeading('End the incident profile now?')
                 ->visible(fn (): bool => \App\Support\IncidentProfile::active($this->record))
                 ->action(function (): void {

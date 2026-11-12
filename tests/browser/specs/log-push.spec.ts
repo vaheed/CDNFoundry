@@ -18,8 +18,8 @@ test('the log push tab shows each destination with its state', async ({ page }) 
     await openLogPush(page);
     const rows = page.locator('table tbody tr');
     await expect(rows).toHaveCount(2);
-    await expect(page.getByText('Failing')).toBeVisible();
-    await expect(page.getByText('Active')).toBeVisible();
+    await expect(rows.getByText('Failing', { exact: true })).toBeVisible();
+    await expect(rows.getByText('Active', { exact: true })).toBeVisible();
     // Long names are cut, never widen the table, and nothing hides the row actions.
     await expect(rows.first().getByRole('button', { name: /Send test/ })).toBeVisible();
     await expectAccessible(page);
