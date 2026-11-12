@@ -156,7 +156,6 @@ parameters:
 			count: 1
 			path: app/Filament/Admin/Pages/AdminDashboard.php
 
-
 		-
 			message: '#^Access to an undefined property App\\Models\\Operation\:\:\$pending\.$#'
 			identifier: property.notFound
@@ -410,12 +409,6 @@ parameters:
 			path: app/Filament/Admin/Widgets/EdgeHealthTable.php
 
 		-
-			message: '#^Method App\\Filament\\Domain\\Pages\\Analytics\:\:selectedDomain\(\) should return App\\Models\\Domain\|null but returns Illuminate\\Database\\Eloquent\\Model\|null\.$#'
-			identifier: return.type
-			count: 1
-			path: app/Filament/Domain/Pages/Analytics.php
-
-		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$active\.$#'
 			identifier: property.notFound
 			count: 1
@@ -488,6 +481,12 @@ parameters:
 			path: app/Filament/Domain/Resources/Domains/DomainDetailSections.php
 
 		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Filament/Domain/Resources/Domains/DomainDetailSections.php
+
+		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$names\.$#'
 			identifier: property.notFound
 			count: 2
@@ -527,6 +526,12 @@ parameters:
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$targetPool\.$#'
 			identifier: property.notFound
 			count: 2
+			path: app/Filament/Domain/Resources/Domains/DomainDetailSections.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>name" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
 			path: app/Filament/Domain/Resources/Domains/DomainDetailSections.php
 
 		-
@@ -698,6 +703,12 @@ parameters:
 			path: app/Filament/Domain/Resources/Domains/Pages/ViewDomain.php
 
 		-
+			message: '#^Parameter \#1 \$domain of static method App\\Actions\\ChangeAutomaticSecurityState\:\:execute\(\) expects App\\Models\\Domain, Illuminate\\Database\\Eloquent\\Collection\<int, Illuminate\\Database\\Eloquent\\Model\>\|Illuminate\\Database\\Eloquent\\Model given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Filament/Domain/Resources/Domains/Pages/ViewDomain.php
+
+		-
 			message: '#^Parameter \#1 \$domain of static method App\\Actions\\DispatchCachePurge\:\:execute\(\) expects App\\Models\\Domain, Illuminate\\Database\\Eloquent\\Model\|int\|string\|null given\.$#'
 			identifier: argument.type
 			count: 1
@@ -850,7 +861,7 @@ parameters:
 		-
 			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:wafExclusions\(\)\.$#'
 			identifier: method.notFound
-			count: 1
+			count: 2
 			path: app/Filament/Domain/Resources/Domains/RelationManagers/WafExclusionsRelationManager.php
 
 		-
@@ -876,6 +887,18 @@ parameters:
 			identifier: nullsafe.neverNull
 			count: 1
 			path: app/Filament/Domain/Resources/Domains/Widgets/DomainNeedsAttention.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Filament/Domain/Widgets/AnalyticsUsage.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Models\\UsageRollup\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Filament/Domain/Widgets/AnalyticsUsage.php
 
 		-
 			message: '#^Access to an undefined property App\\Filament\\Shared\\Pages\\ApiTokens\:\:\$domainChoices\.$#'
@@ -1520,6 +1543,12 @@ parameters:
 			path: app/Http/Resources/DomainResource.php
 
 		-
+			message: '#^Access to an undefined property App\\Http\\Resources\\EdgeRevisionResource\:\:\$change_summary\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Resources/EdgeRevisionResource.php
+
+		-
 			message: '#^Access to an undefined property App\\Http\\Resources\\EdgeRevisionResource\:\:\$checksum\.$#'
 			identifier: property.notFound
 			count: 1
@@ -1527,6 +1556,12 @@ parameters:
 
 		-
 			message: '#^Access to an undefined property App\\Http\\Resources\\EdgeRevisionResource\:\:\$created_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Resources/EdgeRevisionResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Http\\Resources\\EdgeRevisionResource\:\:\$created_by\.$#'
 			identifier: property.notFound
 			count: 1
 			path: app/Http/Resources/EdgeRevisionResource.php
