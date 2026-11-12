@@ -248,6 +248,26 @@ services:
       retries: 3
       start_period: 30s
 
+  # Pushes each opted-in domain's own logs to the endpoint its owner configured. It is the only container that connects to those
+  # endpoints, and it consumes one `log-push` lane, so a slow customer endpoint never delays alerts or the platform's own work.
+  # It reuses the notifier image so a development stack builds the core image once.
+  log-pusher:
+    logging: *bounded-logging
+    <<: *core
+    image: cdnfoundry-dev-notifier
+    command: [php, artisan, queue:work, redis, --queue=log-push, --sleep=3, --max-time=3600, --memory=192]
+    mem_limit: 384m
+    environment:
+      <<: *core-env
+      LOG_PUSH_TEST_CA_FILE: ${LOG_PUSH_TEST_CA_FILE:-}
+    networks: [control, telemetry, dns]
+    healthcheck:
+      test: [CMD-SHELL, "pgrep -f 'queue:work redis --queue=log-push' >/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
   migrate:
     logging: *bounded-logging
     <<: *core

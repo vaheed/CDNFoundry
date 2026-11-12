@@ -317,6 +317,26 @@ services:
       timeout: 5s
       retries: 3
       start_period: 60s
+
+  # Pushes each opted-in domain's own logs to the endpoint its owner configured, reading only that domain's rows from ClickHouse.
+  # It is the only container that connects to those endpoints and has its own `log-push` lane, so a slow endpoint never delays
+  # alerts or the platform's work. Nothing here runs per domain: one worker serves every destination.
+  log-pusher:
+    logging: *bounded-logging
+    <<: *core
+    profiles: [control]
+    command: [sh, -c, "php artisan cdnf:control:guard && exec php artisan queue:work redis --queue=log-push --sleep=3 --max-time=3600 --memory=192"]
+    mem_limit: 384m
+    cpus: 0.5
+    pids_limit: 128
+    stop_grace_period: 130s
+    healthcheck:
+      test: [CMD-SHELL, "pgrep -f 'queue:work redis --queue=log-push' >/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
   scheduler:
     logging: *bounded-logging
     <<: *core

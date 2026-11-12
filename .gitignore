@@ -16,3 +16,4 @@ __pycache__/
 storage
 .stage/
 .prod/
+tests/e2e/.log-push-ca/

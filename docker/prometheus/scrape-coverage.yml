@@ -19,6 +19,7 @@ scraped:
   grafana: grafana
   horizon: cdnfoundry-control
   notifier: cdnfoundry-control
+  log-pusher: cdnfoundry-control
   log-collector: operational-log-collector
   loki: loki
   node-exporter: node
