@@ -273,7 +273,7 @@ above left open and proves the finished system end to end.
 | 11.4 | **Audit Phase 5: telemetry.** | Run the Grafana and panel browser suites against staging, read-only. Replay the scripted test attack. | Suites pass with one screenshot per dashboard; the attack is found by domain, edge, reason, and rule, and its request, download, and upload counts match. |
 | 11.5 | **Full test run for Phases 1 to 10.** | On one fresh Compose stack: the Laravel suite, Go tests, contract and observability tests, every `tests/e2e` file added by these phases, and the full browser suite with visual snapshots and accessibility checks. Then each phase's own gate re-run on staging. | One record listing every suite, its result, and the commit it ran on. No unexecuted test is reported as passed. |
 | 11.6 | **Documentation check.** | Every page touched by Phases 1 to 10 matches the running system. | Each page reviewed against the record in 11.5. |
-| 11.7 | **Tooltip and placeholder check.** | Walk every screen added or changed by Phases 1 to 10 against the frontend rules. | A browser test lists zero inputs without an example placeholder and zero complex items without a tooltip. |
+| 11.7 | **Tooltip and placeholder check.** | Walk every screen of the platform, in both Filament panels and the Fleet web, not only those added or changed by Phases 1 to 10, against the frontend rules. | A browser test crawls every screen of both panels and the Fleet web and lists zero inputs without an example placeholder and zero complex items without a tooltip. |
 
 **Gate:** one record per audit phase (11.1 to 11.4) and one full
 qualification record (11.5), all on the same release.
