@@ -233,7 +233,7 @@ class AdminDashboard extends Dashboard
             'vector' => 'Check Vector health, sources, disk buffers, and ClickHouse delivery.',
             'host_clock' => 'Check Prometheus node time metrics and synchronize hosts with NTP.',
             'mmdb' => 'Run the MMDB updater and verify the database file is readable and current.',
-            'edges', 'edge_listeners', 'edge_cells', 'service_pools' => 'Open Edge network, inspect the named edge/pool, then verify heartbeat, gateway, and assigned cell readiness.',
+            'edges', 'edge_control', 'edge_listeners', 'edge_cells', 'service_pools' => 'Open Edge network, inspect the named edge/pool, then verify heartbeat, gateway, and assigned cell readiness.',
             'edge_configuration', 'edge_placements' => 'Inspect failed operations and deployment rejections, then reconcile only the affected domain or edge.',
             'edge_capacity' => 'Add capacity or drain/move workloads from cells at or above 80% of a reported limit.',
             'emergency_modes' => 'Review active emergency controls and intentionally withdrawn pools; remove them only after the incident is resolved.',

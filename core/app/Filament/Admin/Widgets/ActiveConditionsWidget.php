@@ -26,7 +26,7 @@ class ActiveConditionsWidget extends Widget
         return [
             'state' => app(OpsDashboardService::class)->system($this->opsContext()),
             'conditionUrl' => fn (string $condition): string => match ($condition) {
-                'edge_capacity', 'edges', 'edge_listeners', 'edge_cells', 'service_pools' => EdgeResource::getUrl(panel: 'admin'),
+                'edge_capacity', 'edges', 'edge_control', 'edge_listeners', 'edge_cells', 'service_pools' => EdgeResource::getUrl(panel: 'admin'),
                 'authoritative_dns', 'dns_deployments' => DnsClusterResource::getUrl(panel: 'admin'),
                 default => OperationResource::failedUrl(),
             },
