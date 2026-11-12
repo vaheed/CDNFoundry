@@ -57,14 +57,21 @@ server.serve_forever()
 
 
 def run(*args: str, check: bool = True, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
-    result = subprocess.run(args, cwd=ROOT, text=True, capture_output=True, env={**os.environ, **(env or {})}, timeout=600)
+    result = subprocess.run(args, cwd=ROOT, text=True, capture_output=True, env={**os.environ, **(env or {})}, timeout=300, stdin=subprocess.DEVNULL)
     if check and result.returncode:
         raise RuntimeError(f"{' '.join(args[:5])} failed: {result.stderr[-1500:]}")
     return result
 
 
 def clickhouse(query: str) -> str:
-    return run(*COMPOSE, "exec", "-T", "clickhouse", "clickhouse-client", "--query", query).stdout.strip()
+    # stdin is closed so clickhouse-client never waits for more data, and a stuck client is retried instead of holding the run.
+    for attempt in range(3):
+        try:
+            return subprocess.run([*COMPOSE, "exec", "-T", "clickhouse", "clickhouse-client", "--query", query], cwd=ROOT, text=True, capture_output=True, check=True, timeout=60, stdin=subprocess.DEVNULL).stdout.strip()
+        except subprocess.TimeoutExpired:
+            if attempt == 2:
+                raise
+    raise AssertionError("unreachable")
 
 
 def fetch(address: str, path: str = "/", body: dict | None = None):
@@ -89,12 +96,12 @@ def wait_for(predicate, what: str, timeout: float = 240, tick=None):
 
 def insert(domain_id: int, hostname: str, count: int, offset_seconds: int, security: bool = False, edge: str = "edge-secret-a") -> list[str]:
     ids = [str(uuid.uuid4()) for _ in range(count)]
-    for index, event_id in enumerate(ids):
-        clickhouse(
-            "INSERT INTO cdnf.edge_events (occurred_at,event_id,domain_id,hostname,method,path,status,bytes_in,bytes_out,cache_status,origin_error,tls_error,security_action,security_reason,edge_id,client_ip,country,continent,user_agent,referrer,event_type,request_id,query_hash,cell) VALUES "
-            f"(now64(3) - INTERVAL {offset_seconds - index} SECOND, toUUID('{event_id}'), {domain_id}, '{hostname}', 'GET', '/p{index}', {403 if security else 200}, 10, 20, 'MISS', 'refused 10.0.0.5', '', "
-            f"'{'block' if security else ''}', '{'rate' if security else ''}', '{edge}', '203.0.113.{70 + index}', 'DE', 'EU', 'ua', '', 'request', 'req-{event_id[:8]}', 'qh', 'cell-internal')"
-        )
+    values = ", ".join(
+        f"(now64(3) + INTERVAL {offset_seconds * 100 + index * 10} MILLISECOND, toUUID('{event_id}'), {domain_id}, '{hostname}', 'GET', '/p{index}', {403 if security else 200}, 10, 20, 'MISS', 'refused 10.0.0.5', '', "
+        f"'{'block' if security else ''}', '{'rate' if security else ''}', '{edge}', '203.0.113.{70 + index}', 'DE', 'EU', 'ua', '', 'request', 'req-{event_id[:8]}', 'qh', 'cell-internal')"
+        for index, event_id in enumerate(ids)
+    )
+    clickhouse("INSERT INTO cdnf.edge_events (occurred_at,event_id,domain_id,hostname,method,path,status,bytes_in,bytes_out,cache_status,origin_error,tls_error,security_action,security_reason,edge_id,client_ip,country,continent,user_agent,referrer,event_type,request_id,query_hash,cell) VALUES " + values)
     return ids
 
 
@@ -158,14 +165,26 @@ def main() -> None:
         _, test_op = request("POST", f"/api/domains/{a['id']}/log-push/{made_a['data']['id']}/test", token=a["token"])
         e2e.wait_operation(a["token"], test_op["data"]["operation_id"], 60)
 
+        # Delivery starts at the destination's creation, so every row is stamped at or after the insert; the 30-second ingest margin holds them back briefly.
         # Rows after the destinations exist: five requests for A (three blocked), three for B, one DNS query for A, and a row of another domain id 0.
         time.sleep(2)
-        a_ids = insert(a["id"], a["name"], 5, 90)
-        blocked_ids = insert(a["id"], a["name"], 3, 80, security=True)
-        b_ids = insert(b["id"], b["name"], 3, 90, edge="edge-secret-b")
-        clickhouse(f"INSERT INTO cdnf.dns_events (occurred_at,event_id,domain_id,zone,qname,qtype,rcode,client_ip,dns_cluster,country,continent,outcome,pop) VALUES (now64(3) - INTERVAL 70 SECOND, generateUUIDv4(), {a['id']}, '{a['name']}', 'www.{a['name']}', 'A', 'NOERROR', '198.51.100.9', 'dns-internal', 'DE', 'EU', 'answered', 'pop-internal')")
+        a_ids = insert(a["id"], a["name"], 5, 0)
+        blocked_ids = insert(a["id"], a["name"], 3, 1, security=True)
+        b_ids = insert(b["id"], b["name"], 3, 0, edge="edge-secret-b")
+        clickhouse(f"INSERT INTO cdnf.dns_events (occurred_at,event_id,domain_id,zone,qname,qtype,rcode,client_ip,dns_cluster,country,continent,outcome,pop) VALUES (now64(3) - INTERVAL 150 MILLISECOND, generateUUIDv4(), {a['id']}, '{a['name']}', 'www.{a['name']}', 'A', 'NOERROR', '198.51.100.9', 'dns-internal', 'DE', 'EU', 'answered', 'pop-internal')")
 
-        wait_for(lambda: len(lines_for(address, "/ingest/a", "http_requests")) >= 8 and len(lines_for(address, "/ingest/b", "http_requests")) >= 3 and len(lines_for(address, "/ingest/a", "dns_queries")) >= 1, "both receivers to have their rows", 200, dispatch)
+        def diagnose() -> str:
+            states = [request("GET", f"/api/domains/{d['id']}/log-push", token=d["token"])[1]["data"] for d in (a, b)]
+            counts = {p: len([1 for r in fetch(address) if r["path"] == p]) for p in ("/ingest/a", "/ingest/b")}
+            per = {f"{path}:{ds}": len(lines_for(address, path, ds)) for path in ("/ingest/a", "/ingest/b") for ds in ("http_requests", "security_events", "dns_queries")}
+            source = {"edge_events_a": clickhouse(f"SELECT count() FROM cdnf.edge_events WHERE domain_id={a['id']}"), "security_a": clickhouse(f"SELECT count() FROM cdnf.edge_events WHERE domain_id={a['id']} AND security_action != ''"),
+                      "dns_a": clickhouse(f"SELECT count() FROM cdnf.dns_events WHERE domain_id={a['id']}"), "edge_events_b": clickhouse(f"SELECT count() FROM cdnf.edge_events WHERE domain_id={b['id']}")}
+            logs = run("docker", "logs", "--tail", "30", "cdnfoundry-dev-log-pusher-1", check=False)
+            return json.dumps({"delivered_lines": per, "in_clickhouse": source, "destinations": states, "receiver_posts": counts, "pusher_log": (logs.stdout + logs.stderr)[-1500:]}, indent=1)
+        try:
+            wait_for(lambda: len(lines_for(address, "/ingest/a", "http_requests")) >= 8 and len(lines_for(address, "/ingest/b", "http_requests")) >= 3 and len(lines_for(address, "/ingest/a", "dns_queries")) >= 1, "both receivers to have their rows", 200, dispatch)
+        except AssertionError as failure:
+            raise AssertionError(f"{failure}\n{diagnose()}") from None
         got_a = lines_for(address, "/ingest/a", "http_requests")
         got_b = lines_for(address, "/ingest/b", "http_requests")
         assert {x["event_id"] for x in got_a} == set(a_ids + blocked_ids), "receiver A did not get exactly its own requests"
@@ -184,7 +203,7 @@ def main() -> None:
 
         # A receiver that is down keeps its cursor, backs off, and catches up with no gap and no duplicate.
         fetch(address, "/mode", {"down": True})
-        down_ids = insert(a["id"], a["name"], 4, 60)
+        down_ids = insert(a["id"], a["name"], 4, 0)
         _, state = request("GET", f"/api/domains/{a['id']}/log-push", token=a["token"])
         wait_for(lambda: request("GET", f"/api/domains/{a['id']}/log-push", token=a["token"])[1]["data"][0]["consecutive_failures"] >= 1, "the failure to be recorded", 200, dispatch)
         fetch(address, "/mode", {"down": False})
@@ -202,7 +221,7 @@ def main() -> None:
         # The switch off stops delivery within a minute and keeps the destination.
         request("PATCH", "/api/admin/system/settings/log_push", {"values": {**settings_before, "domain_user_log_push": False}}, admin_token)
         sent_before = len(lines_for(address, "/ingest/a", "http_requests"))
-        insert(a["id"], a["name"], 2, 60)
+        insert(a["id"], a["name"], 2, 0)
         time.sleep(100)
         dispatch()
         time.sleep(15)
@@ -212,7 +231,7 @@ def main() -> None:
         print("log push qualification passed")
     finally:
         for email in users:
-            artisan("$u=App\\Models\\User::query()->where('email'," + php_string(email) + ")->first(); if($u){foreach($u->domains as $d){$d->delete();} $u->delete();}")
+            artisan("$u=App\\Models\\User::query()->where('email'," + php_string(email) + ")->first(); if($u){foreach($u->domains as $d){$d->forceDelete();} $u->delete();}")
         if admin_token is not None and settings_before:
             for group, values in (("log_push", settings_before),):
                 try:

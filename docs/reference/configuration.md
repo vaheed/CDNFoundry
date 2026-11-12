@@ -386,5 +386,6 @@ this fixture at a staging or production cell. These are not deployment settings.
 | `REDIS_QUEUE_RETRY_AFTER` | control | Seconds before a queued job that is still reserved is delivered again; default `3900`. It must stay above every Horizon worker timeout and every job `$timeout`. The longest is the control backup at 3700 seconds. A lower value delivers a running job a second time. `make config-check` runs `QueueTimingContractTest` to enforce this. When a worker dies without cleanup, the job is redelivered after this interval, and the scheduled repair jobs cover the gap |
 | `ALERT_RECEIVER_URL` | host running Alertmanager | Optional. Where Alertmanager posts alerts; default `http://web:8080/internal/alertmanager` on the control network. Set it only for a dedicated monitoring host |
 | `NOTIFIER_TEST_PROVIDER_URL` | development only | Replaces the Telegram, Discord, and Slack hosts with a fake receiver. It is ignored in production |
+| `LOG_PUSH_TEST_CA_FILE` | development only | A CA file that lets the log pusher trust a fake receiver's private certificate in qualification. It is ignored in production |
 | `EDGE_NETWORK_SUBNET` | edge | Subnet of the private edge network. Compose requires it |
 | `EDGE_PROXY_PROTOCOL_TRUSTED_CIDRS` | cells | Networks whose PROXY protocol headers a cell honors. Production Compose sets it from `EDGE_NETWORK_SUBNET` |
