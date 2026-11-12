@@ -58,7 +58,7 @@
             @endif
             <fieldset class="cdn-token-field cdn-token-field--wide" data-testid="notification-events">
                 <legend class="cdn-field-label">{{ $help('Events', $admin ? 'Administrator channels receive every platform alert and every domain event. Narrow the list to send fewer.' : 'Only events for your own domains are sent, never another customer\'s.') }}</legend>
-                <ul class="cdn-token-domain-list">
+                <ul class="cdn-token-domain-list cdn-token-domain-list--all">
                     @foreach ($this->eventChoices as $key => $label)
                         <li>
                             <label class="cdn-token-domain">

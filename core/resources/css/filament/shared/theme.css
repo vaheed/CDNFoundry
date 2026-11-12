@@ -2103,6 +2103,12 @@ a.cdn-stat-card:hover {
     overflow-y: auto;
 }
 
+/* A short fixed list of choices, such as notification events, shows every option instead of scrolling inside a box. */
+.cdn-token-domain-list--all {
+    max-height: none;
+    overflow-y: visible;
+}
+
 .cdn-token-domain {
     display: flex;
     min-width: 0;
