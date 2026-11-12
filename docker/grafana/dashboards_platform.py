@@ -210,7 +210,7 @@ def request_trace() -> dict:
          stat("Origin time", "Time the origin took to answer.", [ch("SELECT origin_latency_ms AS ms FROM cdnf.edge_events WHERE request_id = '${request_id}' AND request_id != '' LIMIT 1", table=True)], "ms", "latency_ms", w=6),
          stat("Status", "The response status the client received.", [ch("SELECT status FROM cdnf.edge_events WHERE request_id = '${request_id}' AND request_id != '' LIMIT 1", table=True)], "none", w=6),
          stat("Cache", "The cache status of the request.", [ch("SELECT cache_status FROM cdnf.edge_events WHERE request_id = '${request_id}' AND request_id != '' LIMIT 1", table=True)], "none", w=6)],
-        [logs("Operational logs for the request", "Operational log lines that mention the request ID.", [loki('{service=~".+"} | request_id="${request_id}"')], h=10)],
+        [logs("Operational logs for the request", "Operational log lines that mention the request ID.", [loki('{service=~".+"} |= "${request_id}" | json | request_id="${request_id}"')], h=10)],
     ]
     return dashboard("cdnf-request-trace", "Request trace", "cdnf-oncall", "One request ID from the edge log to the origin result to operational logs.", rows, runbook="operational-error-logs", extra_variables=[request])
 

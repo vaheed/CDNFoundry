@@ -579,7 +579,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{service=~\".+\"} | request_id=\"${request_id}\"",
+          "expr": "{service=~\".+\"} |= \"${request_id}\" | json | request_id=\"${request_id}\"",
           "queryType": "range",
           "refId": "A"
         }
