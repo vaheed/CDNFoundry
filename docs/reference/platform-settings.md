@@ -52,12 +52,16 @@ queues no edge operation. It does not change the timezone of an external Grafana
 | Field | Default | Allowed |
 | --- | --- | --- |
 | `audit_retention_days` | 365 | 30–3,650 |
+| `security_event_retention_days` | 30 | 7–365 |
+| `operation_retention_days` | 90 | 7–3,650 |
 | `scheduler_stale_seconds` | 180 | 60–3,600 |
 | `clock_drift_warning_seconds` | 5 | 1–300 |
 | `backup_stale_hours` | 26 | 1–168 |
 | `failed_operations_window_minutes` | 60 | 5–1,440 |
 
 - `audit_retention_days`: a daily job deletes audit events older than this, in small batches.
+- `security_event_retention_days`: a daily job deletes edge-reported security events older than this. The control plane keeps one row per domain, edge, reason, and hour, so a flood of reports cannot grow the table faster than that.
+- `operation_retention_days`: a daily job deletes finished operations older than this. Pending and running operations, and failed operations nobody has acknowledged, are kept.
 - `scheduler_stale_seconds`: health turns degraded when the scheduler heartbeat is older than this.
 - `clock_drift_warning_seconds`: the largest host clock offset that monitoring and qualification accept.
 - `backup_stale_hours`: the largest accepted age of the newest verified off-host control database backup.
