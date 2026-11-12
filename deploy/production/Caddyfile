@@ -3,6 +3,30 @@
 	email {$ACME_CONTACT_EMAIL}
 }
 
+# Only the management networks reach the administrator panel, the administrator API, Horizon, the metrics
+# endpoint, and Grafana. Every other client gets a bare 403: no redirect, no login form, no cookie. The customer
+# panel (/app), the customer API, the status page, and the health probes stay open to everyone. An empty
+# MANAGEMENT_NETWORKS renders as "0.0.0.0/0 ::/0" in Compose, which restricts nothing.
+(management_only) {
+	@outside {
+		path /admin /admin/* /api/admin /api/admin/* /horizon /horizon/* /metrics /control-state
+		not remote_ip {$MANAGEMENT_NETWORKS}
+	}
+	handle @outside {
+		header Cache-Control "no-store"
+		respond "Forbidden" 403
+	}
+}
+
+# Grafana has no public path at all, not even its health and metrics endpoints.
+(management_only_strict) {
+	@outside not remote_ip {$MANAGEMENT_NETWORKS}
+	handle @outside {
+		header Cache-Control "no-store"
+		respond "Forbidden" 403
+	}
+}
+
 {$CONTROL_HOSTNAME} {
 	# A two-node control plane serves an operator-supplied certificate (the standby cannot obtain one while
 	# idle). Without the HA bundle this directory does not exist and Caddy issues its own.
@@ -10,6 +34,7 @@
 	# An operator-supplied certificate (Fleet web or `management-tls`) replaces automatic issuance for this name.
 	import /etc/caddy/own-tls/control-*.caddy
 
+	import management_only
 	encode zstd gzip
 	reverse_proxy web:8080 {
 		# Replace caller-supplied forwarding chains at the public trust boundary.
@@ -21,11 +46,11 @@
 	}
 
 	header {
-		Strict-Transport-Security "max-age=31536000"
+		# The application sends the Content-Security-Policy; a second one here would replace it.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "SAMEORIGIN"
 		Referrer-Policy "strict-origin-when-cross-origin"
-		Content-Security-Policy "upgrade-insecure-requests"
 		-Server
 	}
 }
@@ -53,9 +78,10 @@ https://{$TELEMETRY_HOSTNAME}:8444 {
 
 {$GRAFANA_HOSTNAME} {
 	import /etc/caddy/own-tls/grafana-*.caddy
+	import management_only_strict
 	reverse_proxy grafana:3000
 	header {
-		Strict-Transport-Security "max-age=31536000"
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options "nosniff"
 		-Server
 	}

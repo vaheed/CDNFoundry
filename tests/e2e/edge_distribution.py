@@ -383,7 +383,7 @@ def provision_edge(token: str, name: str, country: str, continent: str, ipv4: st
     }}
 
 
-def heartbeat(edge: dict, active_sequence: int, quarantine_ready: bool = False) -> None:
+def heartbeat(edge: dict, active_sequence: int, quarantine_ready: bool = False, extra: dict | None = None) -> None:
     cells = [{
         "name": name,
         "status": "ready",
@@ -401,6 +401,7 @@ def heartbeat(edge: dict, active_sequence: int, quarantine_ready: bool = False) 
         "active_sequence": active_sequence,
         "cells": cells,
         "gateway": {"ready": True, "active_revision": max(1000, active_sequence), "routes": 1, "listeners": 2},
+        **(extra or {}),
     }, context=edge["context"])
 
 
@@ -542,7 +543,7 @@ def exercise_cache(token: str, domain_id: int, edges: list[dict], sequences: dic
         "maximum_object_bytes": 1048576,
         "respect_origin_headers": True,
         "include_query_string": True,
-        "bypass_cookie_names": ["session_id"],
+        "ignore_cookie_names": ["session_id"],
         "stale_if_error_seconds": 30,
     }
     status, changed = call("PATCH", f"/api/domains/{domain_id}/cache", settings, token)
@@ -551,7 +552,7 @@ def exercise_cache(token: str, domain_id: int, edges: list[dict], sequences: dic
 
     def check_changed_cache(payload: dict) -> None:
         assert payload["cache"]["edge_ttl_seconds"] == 120, payload["cache"]
-        assert payload["cache"]["bypass_cookie_names"] == ["session_id"], payload["cache"]
+        assert payload["cache"]["ignore_cookie_names"] == ["session_id"], payload["cache"]
 
     _, placement = call("GET", f"/api/admin/domains/{domain_id}/isolation", token=token)
     converge_placement_artifacts(
@@ -616,6 +617,26 @@ def exercise_cache(token: str, domain_id: int, edges: list[dict], sequences: dic
     _, persisted = call("GET", f"/api/domains/{domain_id}/cache", token=token)
     assert persisted["data"]["cache_epoch"] == first["data"]["cache_epoch"], persisted
     print("e2e_cache_control_plane_e2e=passed propagation=acked rollback=acked purge_retry=2 idempotency=replayed")
+
+
+def exercise_advisory_heartbeat(edge: dict) -> None:
+    """One bad advisory entry never fails a heartbeat or stops liveness from advancing."""
+    edge_id = quote(edge["id"])
+    sql_value(f"UPDATE edges SET last_heartbeat_at = now() - interval '2 hours' WHERE id = {edge_id}")
+    now = int(time.time())
+    heartbeat(edge, 0, extra={
+        "noisy_domains": [
+            {"domain_id": 2147483000, "hostname": ZONE, "reason_code": "a_reason_nobody_listed", "count": 3, "occurred_at": now},
+            {"domain_id": 2147483000, "reason_code": "malformed_request_body", "count": 3, "occurred_at": now},
+            {"domain_id": 2147483000, "hostname": ZONE, "reason_code": "client_connections_exceeded", "count": 3, "occurred_at": now},
+        ],
+        "passive_origins": [{"domain": ZONE, "hostname": ZONE, "failure_count": 0, "last_status": 502, "last_failed_at": now}],
+    })
+    age = int(sql_value(f"SELECT extract(epoch FROM now() - last_heartbeat_at)::int FROM edges WHERE id = {edge_id}"))
+    assert age < 30, f"the heartbeat did not advance liveness (age {age}s)"
+    dropped = int(sql_value(f"SELECT capacity->>'advisory_entries_dropped' FROM edges WHERE id = {edge_id}"))
+    assert dropped == 2, dropped  # the unknown reason and the passive origin with a zero failure count
+    print("e2e_advisory_heartbeat=passed unknown_reason=dropped liveness=advanced")
 
 
 def exercise_simple_anycast(token: str, edges: list[dict]) -> None:
@@ -684,6 +705,7 @@ def main() -> None:
         ]
         for edge in edges:
             heartbeat(edge, 0)
+        exercise_advisory_heartbeat(edges[1])
         wait_platform_deployment(token)
 
         _, pools_response = call("GET", "/api/admin/edge-pools", token=token)

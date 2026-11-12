@@ -15,7 +15,7 @@ import uuid
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 COMPOSE = os.environ.get('CDNF_COMPOSE_FILE', 'compose.dev.yml')
 NGINX = 'nginx:1.31.3-alpine@sha256:4a73073bd557c65b759505da037898b61f1be6cbcc3c2c3aeac22d2a470c1752'
-PHP_IMAGE = 'php:8.5-fpm-alpine@sha256:9dc81f4086ea5402227a6bcc489b04b4baba12394624d9621faa92ed812fb8ee'
+PHP_IMAGE = 'php:8.5-fpm-alpine@sha256:951fb5b1780219b81d5daffa4cebef8e0077c537f3893d9790a5dfcd66ca334d'
 
 
 def run(*args: str, check: bool = True, **kwargs) -> subprocess.CompletedProcess[str]:

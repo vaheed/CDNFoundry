@@ -152,14 +152,9 @@ sinks:
       role: "{{ role }}"
       service: "{{ service }}"
       level: "{{ level }}"
-      stream: "{{ stream }}"
-      collector_id: "{{ collector_id }}"
-    structured_metadata:
-      domain_id: "{{ domain_id }}"
-      operation_id: "{{ operation_id }}"
-      request_id: "{{ request_id }}"
-      task_id: "{{ task_id }}"
-      revision_id: "{{ revision_id }}"
+    # Identifiers (request, operation, domain, task, revision, collector, stream) stay in the JSON
+    # body. Loki lists structured metadata names beside labels and renders an absent value as the
+    # text "<null>", so none is configured: the label set is fixed and queries filter with | json.
     healthcheck:
       enabled: false
     request:

@@ -20,6 +20,8 @@ class EdgeRevisionResource extends JsonResource
                 'tls_mode' => $snapshot['tls']['mode'] ?? null,
                 'pools' => array_values($snapshot['pools'] ?? []),
             ],
+            'change_summary' => $this->change_summary,
+            'created_by' => $this->created_by,
             'created_at' => $this->created_at?->toIso8601String(),
         ];
     }

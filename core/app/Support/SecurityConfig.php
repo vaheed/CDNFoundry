@@ -11,13 +11,32 @@ final class SecurityConfig
 {
     public const MANUAL_PROFILE = 'manual';
 
-    public const REASON_CODES = [
-        'unknown_host', 'unknown_sni', 'sni_host_mismatch', 'invalid_method', 'malformed_request', 'header_too_large',
-        'body_too_large', 'header_timeout', 'body_timeout', 'client_rate_exceeded',
-        'domain_rate_exceeded', 'client_connections_exceeded', 'domain_connections_exceeded',
-        'tls_handshake_rate_exceeded', 'origin_capacity_exceeded', 'origin_circuit_open',
-        'cache_abuse_detected', 'domain_restricted', 'domain_quarantined', 'edge_emergency_mode',
+    /**
+     * Reasons that show a domain's own protections working or traffic that never reached the domain. They stay visible as
+     * security events but never push the domain toward a stricter automatic state.
+     */
+    public const NON_ESCALATING_REASONS = [
+        'domain_restricted', 'domain_quarantined', 'edge_emergency_mode', 'invalid_method',
+        'unknown_host', 'unknown_sni', 'sni_host_mismatch',
     ];
+
+    /** Automatic escalation looks at the rate over a short window, never at a lifetime counter. */
+    public const RATE_WINDOW_MINUTES = 5;
+
+    public const SUSPECT_EVENTS_PER_WINDOW = 50;
+
+    public const RESTRICT_EVENTS_PER_WINDOW = 100;
+
+    /** A domain moves back one step after this many minutes without an escalating event. */
+    public const QUIET_MINUTES = 10;
+
+    /** The reason codes an edge cell may report; the same file is checked against the Lua runtime in tests/contract. */
+    public static function reasonCodes(): array
+    {
+        static $codes = null;
+
+        return $codes ??= json_decode((string) file_get_contents(resource_path('contracts/security-event-reasons.json')), true, 8, JSON_THROW_ON_ERROR)['reasons'];
+    }
 
     public static function defaults(string $profile = 'standard'): array
     {
@@ -127,6 +146,25 @@ final class SecurityConfig
             'rules' => $domain->securityRules()->where('enabled', true)->orderBy('priority')->orderBy('id')
                 ->get(['id', 'match_type', 'value', 'action', 'priority'])->toArray(),
         ];
+    }
+
+    /**
+     * The operational overlay a cell applies on top of the signed snapshot for one domain. It carries the automatic state
+     * and, while the state tightens limits, the limits that apply. A cell takes the stricter of snapshot and overlay.
+     */
+    public static function overlay(Domain $domain): array
+    {
+        $state = (string) $domain->automatic_security_state;
+        $limits = null;
+        if (in_array($state, ['suspected', 'restricted'], true)) {
+            $configured = is_array($domain->security_settings) ? $domain->security_settings : self::defaults();
+            $limits = [];
+            foreach (self::ceilingLimits('protected') as $name => $maximum) {
+                $limits[$name] = min((int) ($configured['limits'][$name] ?? $maximum), (int) $maximum);
+            }
+        }
+
+        return ['state' => $state, 'limits' => $limits];
     }
 
     public static function validateRule(array $input): array

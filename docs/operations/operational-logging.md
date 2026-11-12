@@ -65,9 +65,11 @@ IDs, revision and cell identifiers, duration, and error code. Plain text is
 retained with `parse_error=true`; messages are capped at 16 KiB and stack traces
 at 64 KiB. Multiline exceptions are merged before normalization.
 
-Only `environment`, `host`, `role`, `service`, `level`, `stream`, and
-`collector_id` are Loki labels. Domain, request, operation, job, task, edge,
-cell, revision, path, and error values stay in JSON or structured metadata.
+Only `environment`, `host`, `role`, `service`, and `level` are Loki labels, and
+no structured metadata is configured, so the label list is exactly that set.
+Domain, request, operation, job, task, edge, cell, revision, collector, stream,
+path, and error values stay in the JSON body. Filter them with `| json`, for
+example `{service="core"} |= "<request id>" | json | request_id="<request id>"`.
 
 The final shared Vector transform masks authorization, cookies, passwords,
 secrets, access/refresh/bootstrap tokens, API keys, sessions, PEM content,

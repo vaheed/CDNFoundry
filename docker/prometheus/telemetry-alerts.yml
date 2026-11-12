@@ -232,11 +232,11 @@ groups:
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#host-filesystem-pressure
           dashboard_url: /d/cdnf-hosts-containers
       - alert: TelemetryEventsDropped
-        expr: increase(vector_component_discarded_events_total[5m]) > 0
+        expr: increase(vector_component_discarded_events_total{intentional!="true"}[5m]) > 0
         for: 1m
         labels: { team: platform, severity: warning, dashboard: cdnf-telemetry-pipeline }
         annotations:
-          summary: Vector dropped telemetry after a bounded buffer or transform limit
+          summary: Vector dropped telemetry it was not told to drop (a bounded buffer, a limit, or a line it could not convert)
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#clickhouse-or-vector-outage
           dashboard_url: /d/cdnf-telemetry-pipeline
       - alert: TelemetryDeliveryFailures

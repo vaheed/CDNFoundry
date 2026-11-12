@@ -36,7 +36,7 @@ def state(hosts: dict[str, str], sequence: int) -> dict:
         hostname: {"domain": hostname, "revision": sequence, "settings": {"enabled": True}, "cache": {
             "enabled": True, "edge_ttl_seconds": 3600, "browser_ttl_seconds": 300,
             "maximum_object_bytes": 104857600, "respect_origin_headers": True,
-            "include_query_string": True, "bypass_cookie_names": ["session_id"],
+            "include_query_string": True, "ignore_cookie_names": ["session_id"],
             "stale_if_error_seconds": 60, "epoch": 1, "development_mode_until": None,
         }, "compression": {
             "profile_name": "standard", "gzip": True, "brotli": False,
@@ -156,6 +156,19 @@ def compression_emergency(task_id: str, active: bool) -> dict:
     return json.loads(response.stdout)["data"]
 
 
+def security_overlay(task_id: str, sequence: int, state_name: str, limits: dict | None, container: str = NAME) -> subprocess.CompletedProcess[str]:
+    payload = {"task_id": task_id, "action": "security_overlay", "domain_id": 7701, "sequence": sequence, "state": state_name}
+    if limits is not None:
+        payload["limits"] = limits
+    return run(
+        "docker", "exec", container, "wget", "-q", "-O-",
+        "--header=X-Edge-Status-Token: runtime-test-token",
+        "--header=Content-Type: application/json",
+        f"--post-data={json.dumps(payload, separators=(',', ':'))}",
+        "http://127.0.0.1:9080/control", check=False,
+    )
+
+
 def worker_children(container: str, master: str) -> str:
     return run("docker", "exec", container, "cat", f"/proc/{master}/task/{master}/children").stdout.strip()
 
@@ -203,9 +216,10 @@ def main() -> None:
         initial["hosts"]["development.example"]["cache"]["development_mode_until"] = int(time.time()) + 3600
         for cache_host in (
             "admission.example", "admission-limit.example", "origin-policy.example",
-            "small-object.example", "stale.example", "no-stale.example", "single-flight.example",
+            "small-object.example", "stale.example", "no-stale.example", "single-flight.example", "overlay.example",
         ):
             initial["hosts"][cache_host] = state({cache_host: "cache-origin.example"}, 1)["hosts"][cache_host]
+        initial["hosts"]["overlay.example"]["domain_id"] = 7701
         initial["hosts"]["admission-limit.example"]["security"] = {
             "limits": {"cache_admissions_per_second": 1},
         }
@@ -372,8 +386,32 @@ def main() -> None:
             assert "X-CDNF-Cache: HIT" in persisted.stderr, persisted.stderr
             authorized = request_with("runtime.example", headers=("Authorization: Bearer cache-bypass",))
             assert "X-CDNF-Cache: BYPASS" in authorized.stderr, authorized.stderr
-            cookie_bypass = request_with("runtime.example", headers=("Cookie: session_id=present",))
+            # Any cookie not on the domain's ignore list makes the request personal: it bypasses the cache.
+            cookie_bypass = request_with("runtime.example", headers=("Cookie: tracking=present",))
             assert "X-CDNF-Cache: BYPASS" in cookie_bypass.stderr, cookie_bypass.stderr
+            mixed_cookie = request_with("runtime.example", headers=("Cookie: session_id=present; tracking=present",))
+            assert "X-CDNF-Cache: BYPASS" in mixed_cookie.stderr, mixed_cookie.stderr
+            ignored_cookie = request_with("runtime.example", headers=("Cookie: session_id=present",))
+            assert "X-CDNF-Cache: BYPASS" not in ignored_cookie.stderr, ignored_cookie.stderr
+            # A bypassed response keeps the origin's cache headers; the edge never adds "public".
+            assert "s-maxage" not in cookie_bypass.stderr and "public" not in cookie_bypass.stderr, cookie_bypass.stderr
+            # Two sessions alternate on one URL: no response may carry the other session's cookie value.
+            session_loop = (
+                "for i in $(seq 1 250); do "
+                "curl -sS -H 'Host: runtime.example' -H 'Cookie: sid=alpha' http://127.0.0.1:8080/echo-cookie; "
+                "curl -sS -H 'Host: runtime.example' -H 'Cookie: sid=bravo' http://127.0.0.1:8080/echo-cookie; done"
+            )
+            sessions = run("docker", "run", "--rm", "--network", f"container:{NAME}", "--entrypoint", "sh", "curlimages/curl:8.16.0", "-c", session_loop).stdout.split("\n")
+            bodies = [line for line in sessions if line]
+            assert len(bodies) == 500 and all(bodies[index] == ("cookie=sid=alpha" if index % 2 == 0 else "cookie=sid=bravo") for index in range(500)), bodies[:6]
+            # Repeated parameters keep the order the client sent: two objects, never one shared entry.
+            for _ in range(3):
+                first_order = request_with("runtime.example", "/echo-query?page=first&page=second")
+            assert "query=page=first&page=second" in first_order.stdout, first_order.stdout
+            assert "X-CDNF-Cache: HIT" in first_order.stderr, first_order.stderr
+            second_order = request_with("runtime.example", "/echo-query?page=second&page=first")
+            assert "query=page=second&page=first" in second_order.stdout, (second_order.stdout, second_order.stderr)
+            assert "X-CDNF-Cache: MISS" in second_order.stderr, second_order.stderr
             development = request("development.example")
             assert "X-CDNF-Cache: BYPASS" in development.stderr, development.stderr
             query_a = request_with("runtime.example", "/asset.css?ignored=1&page=2")
@@ -492,6 +530,28 @@ def main() -> None:
             after_url_purge = request("runtime.example")
             assert "X-CDNF-Cache: MISS" in after_url_purge.stderr, after_url_purge.stderr
             assert cache_purge("runtime-purge-url-1", "urls", ["http|runtime.example|/"])["replayed"] is True
+            # The state automation sets travels as an overlay: the cell enforces the stricter limit, ignores an older
+            # sequence, and returns to the snapshot's limits when the overlay is removed.
+            before_overlay = run("docker", "exec", NAME, "wget", "-q", "-O-", "--header=X-Edge-Status-Token: runtime-test-token", "http://127.0.0.1:9080/passive-failures")
+            assert json.loads(before_overlay.stdout)["cell"]["overlays_restored"] is False, before_overlay.stdout
+            assert "200 OK" in request("overlay.example").stderr
+            tightened = security_overlay("overlay-1", 5, "restricted", {"requests_per_second": 0, "request_burst": 0})
+            assert tightened.returncode == 0, tightened.stderr
+            assert "429" in request("overlay.example").stderr
+            assert "200 OK" in request("runtime.example").stderr, "an overlay is scoped to its own domain"
+            assert security_overlay("overlay-old", 4, "suspected", {"requests_per_second": 1000, "request_burst": 1000}).returncode == 0
+            assert "429" in request("overlay.example").stderr, "an older sequence must not loosen the limit"
+            assert security_overlay("overlay-bad", 6, "banished", None).returncode != 0
+            assert security_overlay("overlay-negative", 6, "restricted", {"requests_per_second": -1}).returncode != 0
+            assert security_overlay("overlay-normal", 6, "normal", None).returncode == 0
+            assert "200 OK" in request("overlay.example").stderr, "a normal overlay restores the snapshot limits"
+            control_response = run(
+                "docker", "exec", NAME, "wget", "-q", "-O-", "--header=X-Edge-Status-Token: runtime-test-token",
+                "--header=Content-Type: application/json",
+                f"--post-data={json.dumps({'task_id': 'overlays-restored-1', 'action': 'security_overlays_restored'}, separators=(',', ':'))}",
+                "http://127.0.0.1:9080/control",
+            )
+            assert json.loads(control_response.stdout)["data"]["accepted"] is True
             # Encoded path characters never share a cache entry with their decoded form,
             # and a purge of the canonical key reaches only that entry.
             for suffix in ("/durable%3Fv=1", "/durable?v=1"):

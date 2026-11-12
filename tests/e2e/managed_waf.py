@@ -106,6 +106,7 @@ def main() -> None:
             assert crs.returncode == 0
             attack = "/?q=%3Cscript%3Ealert(1)%3C/script%3E"
             assert "200 OK" in request("off.waf.test", attack)
+            assert "200 OK" in request("balanced.waf.test", "/?clean=1")
             monitor = request("monitor.waf.test", attack)
             assert "200 OK" in monitor, monitor
             blocked = request("balanced.waf.test", attack)
@@ -125,10 +126,17 @@ def main() -> None:
 
             logs = run("docker", "logs", CELL).stdout + run("docker", "logs", CELL).stderr
             assert '"waf_profile":"monitor"' in logs and '"waf_action":"monitor"' in logs
-            assert '"waf_profile":"balanced"' in logs and '"waf_action":"inspect"' in logs
+            assert '"domain_id":,' not in logs and '"asn":,' not in logs, "an internal hop logged a line that is not valid JSON"
+            balanced = [json.loads(line) for line in logs.splitlines() if line.startswith("{") and '"waf_profile":"balanced"' in line]
+            blocks = [row for row in balanced if row["waf_action"] == "block"]
+            assert blocks and all(row["status"] == 403 and row["waf_rule_id"] != 0 and row["waf_score"] > 0
+                                  and row["security_action"] == "block" and row["security_reason"] == "waf_block" for row in blocks), balanced[:3]
+            passed = [row for row in balanced if row["status"] == 200]
+            assert passed and all(row["waf_action"] == "pass" and row["waf_rule_id"] == 0 for row in passed), balanced[:3]
+            assert not any(row["waf_action"] == "inspect" for row in balanced)
             assert "---A--" in logs and "---H--" in logs and "---Z--" in logs
             assert '"waf_exclusion_id":0' in logs and '"waf_exclusion_id":7' not in logs and '"waf_body_limit":"exceeded"' in logs
-            leaked = [line for line in logs.splitlines() if "alert(1)" in line or '{"broken":' in line]
+            leaked = [line for line in logs.splitlines() if not line.startswith("{") and ("alert(1)" in line or '{"broken":' in line)]
             assert not leaked, "\n".join(leaked[:5])
         finally:
             run("docker", "rm", "-f", CELL, ORIGIN, check=False)

@@ -55,7 +55,7 @@ Open the domain and choose **Cache settings**, or use `GET` and `PATCH` on `/api
 | respect origin headers (**Respect origin cache headers**) | boolean |
 | query policy | include all, ignore all, include selected, or ignore selected |
 | selected query names | up to 32 distinct safe names |
-| bypass cookie names | up to 32 distinct names, each 1–64 safe characters |
+| ignored cookie names | up to 32 distinct names, each 1–64 safe characters; a request whose cookies are all on this list can still be cached |
 | status TTLs | approved 200, 203, 204, 206, 301, 302, and 404 map; 0 disables admission |
 | admission requests | 1–10 requests before a new object is admitted |
 | stale if error | 0–86,400 seconds |
@@ -64,7 +64,7 @@ Open the domain and choose **Cache settings**, or use `GET` and `PATCH` on `/api
 | variants | 1–128 distinct variants per resource/minute |
 
 Defaults are enabled, 3,600-second edge TTL, 300-second browser TTL, 100 MiB
-maximum object, origin-header respect, query inclusion, no bypass cookies,
+maximum object, origin-header respect, query inclusion, no ignored cookies (every request with a cookie bypasses the cache),
 approved status TTLs, two-request admission, 60 seconds of stale-if-error,
 30 seconds of stale-while-revalidate, normal serving, and 32 variants.
 
@@ -75,17 +75,26 @@ the same as the outer origin read deadline. A full purge changes the domain epoc
 so the edge never selects a stale object from an earlier epoch.
 
 These requests and responses skip the cache or are not stored: requests with
-authorization, unsafe methods, or a configured bypass cookie; responses with
+authorization, unsafe methods, or any `Cookie` header that carries a name not on the domain's ignored-cookie list; responses with
 `Set-Cookie`, `private`, `no-store`, or an unsupported `Vary`; range requests;
 and disallowed status codes. Cache keys and URL purge use one key definition:
 scheme, lowercase hostname, the raw request path, and the sorted query pairs,
 then policy generation, epoch, and URL generation.
 
+A request with a cookie is treated as personal. It is never stored, never served
+from the cache, and the edge leaves the origin's own `Cache-Control` untouched on
+its response; it never adds `public`. Name only cookies that do not change the
+response (for example an analytics cookie) in **Ignored cookie names**. Settings
+saved before this rule that listed `bypass_cookie_names` lose that list, since
+it meant the opposite.
+
 The path is taken as the client sent it and stays percent-encoded. Only the case
 of escapes and escapes of unreserved characters change (`%7e` becomes `~`), so
 `%2F` never merges with `/` and `/x%3Fv=1` never shares an entry with `/x?v=1`.
 Query names and values are decoded (`+` is a space), sorted as strings by name
-and then value, and encoded again. A request has **no cache key**, and is never
+only, and encoded again. Repeated names keep the order the client sent, so
+`?item=first&item=second` and `?item=second&item=first` are two objects, as an
+order-sensitive origin expects, while `?b=1&a=2` and `?a=2&b=1` still share one. A request has **no cache key**, and is never
 cached, when the origin could read it differently from the cache: dot segments
 (`/a/../b`, including `%2e%2e`), empty segments (`//`), malformed percent
 escapes, raw spaces or non-ASCII bytes in the path, or more than 128 query

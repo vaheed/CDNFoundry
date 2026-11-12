@@ -4,6 +4,9 @@ namespace Tests\Feature;
 
 use App\Enums\DomainLifecycleState;
 use App\Filament\Admin\Pages\Telemetry;
+use App\Filament\Domain\Widgets\AnalyticsRecentLogs;
+use App\Filament\Domain\Widgets\AnalyticsSummary;
+use App\Filament\Domain\Widgets\AnalyticsUsage;
 use App\Jobs\BuildUsageRollups;
 use App\Models\Domain;
 use App\Models\Operation;
@@ -132,6 +135,26 @@ class AnalyticsApiTest extends TestCase
         $this->assertSame($revision, $domain->refresh()->revision);
     }
 
+    public function test_volume_reports_download_and_upload_by_edge_cell_domain_and_country_inside_the_scope(): void
+    {
+        [$user, $domain] = $this->ownedDomain();
+        $admin = User::factory()->admin()->create();
+        $row = json_encode(['edge_id' => 'edge-1', 'cell' => 'cell-01', 'domain_id' => 7, 'country' => 'DE', 'requests' => 2, 'upload_bytes' => 150, 'download_bytes' => 1300]);
+        Http::fake(['*' => Http::response($row)]);
+
+        foreach (['edges', 'cells', 'countries'] as $dimension) {
+            $this->actingAs($user)->getJson("/api/domains/{$domain->id}/analytics/volume/{$dimension}")->assertOk()
+                ->assertJsonPath('data.0.upload_bytes', 150)->assertJsonPath('data.0.download_bytes', 1300);
+        }
+        Http::assertSent(fn ($request): bool => str_contains($request->body(), 'FROM cdnf.edge_volume_hourly') && str_contains($request->body(), 'domain_id = {domain_id:UInt64}') && str_contains($request->body(), 'GROUP BY cell, edge_id'));
+
+        $this->actingAs($user)->getJson('/api/admin/analytics/volume/domains')->assertForbidden();
+        foreach (['edges', 'cells', 'domains', 'countries'] as $dimension) {
+            $this->actingAs($admin)->getJson("/api/admin/analytics/volume/{$dimension}")->assertOk()->assertJsonPath('data.0.download_bytes', 1300);
+        }
+        Http::assertSent(fn ($request): bool => str_contains($request->body(), 'GROUP BY domain_id') && str_contains($request->body(), 'WHERE 1 AND'));
+    }
+
     public function test_admin_global_scope_is_separate_from_domain_scope(): void
     {
         [$user] = $this->ownedDomain();
@@ -203,9 +226,12 @@ class AnalyticsApiTest extends TestCase
         ]);
 
         $this->actingAs($user)->get("/app/analytics?domain={$domain->id}")->assertOk()
-            ->assertSee($domain->name)->assertSee('Live window included')
-            ->assertSee('Request and bandwidth timeseries')->assertSee('Compression savings (last hour)')->assertSee('DNS activity')->assertSee('Recent logs')->assertSee('Usage CSV export')
+            ->assertSee($domain->name)
             ->assertDontSee("/api/domains/{$domain->id}/logs", false);
+        $filters = ['pageFilters' => ['range' => '24h', 'domains' => [(string) $domain->id]]];
+        Livewire::actingAs($user)->test(AnalyticsSummary::class, $filters)->assertSee($domain->name)->assertSee('Requests')->assertSee('provisional');
+        Livewire::actingAs($user)->test(AnalyticsUsage::class, $filters)->assertSee('Finalized usage');
+        Livewire::actingAs($user)->test(AnalyticsRecentLogs::class, $filters)->assertSee('Recent events');
         $this->actingAs($admin)->get('/admin/telemetry')->assertOk()
             ->assertSee('Apply filters')->assertSee('All domains')->assertSee('All edges')->assertSee('24 hours')->assertDontSee('15 minutes (hourly source)')
             ->assertSeeHtml('class="cdn-filter-select"')

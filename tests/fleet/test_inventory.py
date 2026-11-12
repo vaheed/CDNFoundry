@@ -332,3 +332,30 @@ def test_a_finished_one_shot_container_is_not_reported_as_down():
     finished = {"state": "exited", "status": "Exited (0) 5 minutes ago", "healthy": None}
     failed = {"state": "exited", "status": "Exited (1) 5 minutes ago", "healthy": None}
     assert not inv.container_down(finished) and inv.container_down(failed)
+
+
+def test_cli_management_networks_take_many_cidrs_and_change_one_entry_at_a_time(vault, capsys):
+    base = ["--vault", str(vault.path)]
+
+    def shown() -> list[str]:
+        capsys.readouterr()
+        assert main(["management-networks", *base]) == 0
+        return json.loads(capsys.readouterr().out)["management_networks"]
+
+    assert shown() == []
+    # Several CIDRs, both families, in one value or across repeated options.
+    assert main(["management-networks", *base, "--add", "198.51.100.0/24, 2001:db8::/32", "--add", "203.0.113.7"]) == 0
+    assert shown() == ["198.51.100.0/24", "2001:db8::/32", "203.0.113.7/32"]
+    # Adding again is idempotent; one entry can be removed without retyping the others.
+    assert main(["management-networks", *base, "--add", "198.51.100.0/24", "--remove", "203.0.113.7"]) == 0
+    assert shown() == ["198.51.100.0/24", "2001:db8::/32"]
+    # A typo is refused and changes nothing.
+    assert main(["management-networks", *base, "--remove", "198.51.100.0/25"]) == 3
+    assert shown() == ["198.51.100.0/24", "2001:db8::/32"]
+    assert main(["management-networks", *base, "--add", "0.0.0.0/0"]) == 3
+    assert main(["management-networks", *base, "--add", "10.0.0.0/8", "--networks", "10.1.0.0/16"]) == 3
+    # Replace the whole list, then lift the restriction by removing the rest.
+    assert main(["management-networks", *base, "--networks", "192.0.2.0/24 2001:db8:1::/48"]) == 0
+    assert shown() == ["192.0.2.0/24", "2001:db8:1::/48"]
+    assert main(["management-networks", *base, "--remove", "192.0.2.0/24 2001:db8:1::/48"]) == 0
+    assert shown() == []

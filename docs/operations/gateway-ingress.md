@@ -170,6 +170,26 @@ false when the gateway is unavailable or its active map revision differs from
 the latest desired gateway revision. A revision-only change is activated even
 when the rendered routes are otherwise identical.
 
+`cdnfoundry_gateway_connections_rejected_total` counts every refused connection.
+`cdnfoundry_gateway_connections_rejected_by_reason_total{reason}` splits the same
+count by one fixed reason, so each refusal is in exactly one series:
+
+| Reason | Meaning |
+| --- | --- |
+| `no_slot` | Every global connection slot was in use. |
+| `per_source_limit` | One client address (an IPv6 /64 counts once) held its share of slots. |
+| `invalid_hello` | The first bytes were not a valid ClientHello or HTTP request. |
+| `unknown_route` | No route for this address and Host or SNI. |
+| `handshake_budget` | The client exceeded the TLS handshake budget for that hostname. |
+| `gateway_unavailable` | No routing map was active yet. |
+
+The thirty-second summary log line names the reasons that grew in that window.
+
+A ClientHello may be split across several TLS records, as large hellos with
+post-quantum key shares are. The gateway reassembles them within the fifteen
+second handshake deadline, accepting records of at most 16 KiB and 64 KiB in
+total, and replays every byte it read to the cell unchanged.
+
 The active configuration sequence and gateway map revision are monotonic
 identities, not retained configurations or allocated resources. They can safely
 grow to millions; do not reset them daily or weekly. Resetting would remove the

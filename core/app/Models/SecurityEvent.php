@@ -11,7 +11,7 @@ class SecurityEvent extends Model
 
     protected function casts(): array
     {
-        return ['details' => 'array', 'occurred_at' => 'immutable_datetime'];
+        return ['details' => 'array', 'occurred_at' => 'immutable_datetime', 'bucket_at' => 'immutable_datetime'];
     }
 
     public function domain(): BelongsTo

@@ -118,10 +118,14 @@ class EdgeProxyTest extends TestCase
         $this->assertNull($reports['unassigned'][1]->refresh()->origin_health);
         $this->assertDatabaseHas('security_events', ['domain_id' => $reports['assigned'][0]->id]);
         $this->assertDatabaseMissing('security_events', ['domain_id' => $reports['unassigned'][0]->id]);
-        $payload['noisy_domains'] = [[...$payload['noisy_domains'][0], 'count' => 50]];
+        $payload['noisy_domains'] = [[...$payload['noisy_domains'][0], 'count' => 51]];
         $this->postJson('/edge/v1/heartbeat', $payload)->assertOk();
-        $this->assertSame('suspected', $reports['assigned'][0]->refresh()->security_state);
-        Queue::assertPushed(ReconcileEdgeDomain::class);
+        $assigned = $reports['assigned'][0]->refresh();
+        $this->assertSame('suspected', $assigned->automatic_security_state);
+        $this->assertSame('normal', $assigned->security_state);
+        $this->assertSame(1, $assigned->revision, 'an automatic state change is not a configuration revision');
+        Queue::assertNotPushed(ReconcileEdgeDomain::class);
+        $this->assertDatabaseHas('edge_tasks', ['edge_id' => $edge->id, 'type' => 'security_overlay']);
     }
 
     public function test_pool_move_publishes_latest_state_when_its_requested_revision_is_superseded(): void

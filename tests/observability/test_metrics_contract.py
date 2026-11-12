@@ -259,7 +259,7 @@ class SecurityClassContractTest(unittest.TestCase):
         known = {
             "body_too_large", "client_connections_exceeded", "client_rate_exceeded", "domain_connections_exceeded", "domain_quarantined", "domain_rate_exceeded",
             "domain_restricted", "edge_emergency_mode", "header_too_large", "invalid_method", "malformed_request_body", "origin_capacity_exceeded",
-            "origin_circuit_open", "sni_host_mismatch", "unknown_host", "waf_body_limit", "cache_abuse_detected",
+            "origin_circuit_open", "sni_host_mismatch", "unknown_host", "waf_body_limit", "waf_block", "cache_abuse_detected",
         }
         self.assertEqual(set(), reasons - known, "a new security reason must be classified here and in Vector before it ships")
 

@@ -357,12 +357,15 @@ CDNFoundry publishes no throughput numbers, because capacity depends on your har
 | --- | --- | --- |
 | DNSdist on DNS hosts | UDP and TCP 53 | Internet |
 | Edge HTTP and HTTPS | TCP 80 and 443 | Internet or your customer networks |
-| Control panel and API | TCP 80 and 443 | Your operators and the public sources you choose |
+| Customer panel, customer API, and status page | TCP 80 and 443 | Internet |
+| Administrator panel and API, Horizon, metrics, and Grafana | TCP 80 and 443 | Your operators: the fleet's `management_networks` |
 | Edge control (mTLS) | TCP 8443 | Edge node addresses only |
 | DNS primary transfers | TCP and UDP 5300 | DNS node addresses only |
-| Node exporter | TCP 9100 | Monitoring host or private monitoring network only |
+| Node exporter, DNSdist statistics, gateway and Vector metrics | TCP 9100, 8083, 9105, 9598, 9599 | Fleet node addresses only |
 | PostgreSQL, Valkey, ClickHouse, Loki ports | service-specific | Local Docker network or exact private peers only, never the Internet |
 | SSH | TCP 22 or your port | Administrative bastions or VPN only |
+
+The Fleet tool enforces the internal rows of this table on every host with a generated `firewall.sh`, which `start.sh` runs before the containers. See [Deployment hardening](../security/hardening.md#internal-listener-firewall). Keep your provider firewall as a second layer.
 
 Publish NS and glue records for every unicast DNS host, and allow both UDP and TCP on port 53. The full listener list is in [Services and ports](../reference/services-and-ports.md).
 

@@ -122,3 +122,42 @@ def test_rolling_back_twice_counts_a_node_that_already_runs_the_previous_release
     assert json.loads((e.work / "releases" / "current.json").read_text())["release"] == "v2"
     node = e.state()["nodes"]["control-1"]
     assert node["release"] == "v2" and node["extra_env"]["CDNF_CORE_IMAGE"].endswith("2" * 64)
+
+
+def test_first_backup_is_taken_and_verified_before_an_install_is_ready(tmp_path: Path) -> None:
+    class Backups(T):
+        def __init__(self) -> None:
+            super().__init__()
+            self.verified = 0
+
+        def run(self, target, command, **_):
+            self.ran.append(command)
+            if "backups:create" in command:
+                self.verified = 1
+                return R(0, "backup done")
+            if "tinker" in command and "backups" in command:
+                return R(0, f"{self.verified}\n")
+            return R(0, "ok")
+
+    t = Backups()
+    c = ControlActions(engine(tmp_path, t))
+    assert c.ensure_recovery_point() is True
+    assert sum("backups:create" in cmd for cmd in t.ran) == 1
+    assert c.ensure_recovery_point() is True  # already verified: no second backup
+    assert sum("backups:create" in cmd for cmd in t.ran) == 1
+
+
+def test_an_install_is_not_ready_when_the_first_backup_does_not_verify(tmp_path: Path) -> None:
+    class Unverified(T):
+        def run(self, target, command, **_):
+            self.ran.append(command)
+            if "tinker" in command and "backups" in command:
+                return R(0, "0\n")
+            return R(0, "ok")
+
+    with pytest.raises(ValidationError, match="not recorded as verified"):
+        ControlActions(engine(tmp_path, Unverified())).ensure_recovery_point()
+
+
+def test_disabled_backups_are_reported_as_no_recovery_point_not_as_success(tmp_path: Path) -> None:
+    assert ControlActions(engine(tmp_path, T(), backups="disabled")).ensure_recovery_point() is False

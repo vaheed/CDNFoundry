@@ -5,7 +5,6 @@ namespace App\Filament\Admin\Widgets;
 use App\Filament\Admin\Resources\Edges\EdgeResource;
 use App\Filament\Admin\Widgets\Concerns\UsesOpsDashboardContext;
 use App\Models\Edge;
-use App\Support\PlatformSettings;
 use Filament\Actions\Action;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
@@ -18,7 +17,7 @@ class EdgeHealthTable extends TableWidget
 
     protected static ?int $sort = 8;
 
-    protected int|string|array $columnSpan = ['default' => 12, 'xl' => 7];
+    protected int|string|array $columnSpan = ['default' => 1, 'xl' => 7];
 
     public function table(Table $table): Table
     {
@@ -43,7 +42,12 @@ class EdgeHealthTable extends TableWidget
                 TextColumn::make('operational_state')->label('State')->state(fn (Edge $record): string => $this->edgeState($record))->badge()
                     ->tooltip(fn (Edge $record): ?string => data_get($record->capacity, 'last_rejection.reason'))
                     ->color(fn (string $state): string => match ($state) {
-                        'Healthy' => 'success', 'Drained', 'Disabled' => 'gray', 'Stale' => 'warning', default => 'danger',
+                        'Healthy' => 'success', 'Drained', 'Disabled' => 'gray', 'Not reporting' => 'warning', default => 'danger',
+                    }),
+                TextColumn::make('serving')->label('Serving')->state(fn (Edge $record): string => $record->servingLabel())->badge()
+                    ->tooltip('From the probes other PoPs run against this edge, independent of its heartbeat.')
+                    ->color(fn (string $state): string => match ($state) {
+                        'Serving' => 'success', 'Not serving' => 'danger', default => 'gray',
                     }),
                 TextColumn::make('capacity_percent')->label('Peak resource')->state(fn (Edge $record): string => $this->capacitySummary($record)['label'])->badge()
                     ->tooltip(fn (Edge $record): string => $this->capacitySummary($record)['detail'])
@@ -64,8 +68,8 @@ class EdgeHealthTable extends TableWidget
         if ($edge->drained) {
             return 'Drained';
         }
-        if ($edge->last_heartbeat_at === null || $edge->last_heartbeat_at->lt(now()->subSeconds(app(PlatformSettings::class)->integer('edge_runtime', 'heartbeat_fresh_seconds')))) {
-            return 'Stale';
+        if (! $edge->controlLinkFresh()) {
+            return 'Not reporting';
         }
 
         return data_get($edge->capacity, 'listener_ready') === true ? 'Healthy' : 'Degraded';

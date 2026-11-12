@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Actions\ChangeAutomaticSecurityState;
 use App\Actions\PlanDomainEdgeCells;
 use App\Actions\PromoteReadyEdgePlacements;
 use App\Enums\DomainLifecycleState;
@@ -224,6 +225,10 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
             }
             EdgeRevision::query()->firstOrCreate(['domain_id' => $domain->id, 'revision' => $revision], [
                 'snapshot' => $snapshot, 'checksum' => $checksum, 'status' => 'validated', 'created_by' => $operation?->actor_id,
+                'change_summary' => EdgeRevision::describeChange(
+                    EdgeRevision::query()->where('domain_id', $domain->id)->where('revision', '<', $revision)->latest('revision')->value('snapshot'),
+                    $snapshot,
+                ),
             ]);
             foreach ($candidates as $candidate) {
                 $payload = $candidate['payload'];
@@ -245,6 +250,10 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
             'finished_at' => $records->isEmpty() && $activeEdges->isEmpty() ? now() : null,
         ]);
         PromoteReadyEdgePlacements::execute();
+        // An edge that just received the domain must learn the state automation set, which the signed snapshot never carries.
+        if ($domain->refresh()->automatic_security_state !== 'normal') {
+            ChangeAutomaticSecurityState::dispatchOverlay($domain);
+        }
     }
 
     public static function defaults(): array

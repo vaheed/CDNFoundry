@@ -2,6 +2,7 @@
 
 namespace App\Filament\Domain\Resources\Domains\Pages;
 
+use App\Actions\ChangeAutomaticSecurityState;
 use App\Actions\DispatchCachePurge;
 use App\Enums\DomainLifecycleState;
 use App\Filament\Domain\Resources\Domains\DomainResource;
@@ -48,11 +49,13 @@ use Filament\Schemas\Components\Utilities\Set;
 use Filament\Support\Enums\Width;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\HtmlString;
 use Illuminate\Validation\ValidationException;
+use Livewire\Attributes\On;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ViewDomain extends ViewRecord
@@ -74,6 +77,27 @@ class ViewDomain extends ViewRecord
         Gate::authorize('view', $domain);
 
         return $domain;
+    }
+
+    /** Every action re-reads the domain and tells the header widgets and the open tab, so no change needs a reload. */
+    public function callMountedAction(array $arguments = []): mixed
+    {
+        $result = parent::callMountedAction($arguments);
+        $this->refreshDomain(includeTabs: true);
+
+        return $result;
+    }
+
+    /** A tab or the polling KPI strip saw the domain change: re-read it and refresh the other views. */
+    #[On('domain-updated')]
+    public function refreshDomain(bool $includeTabs = false): void
+    {
+        try {
+            $this->record->refresh();
+        } catch (ModelNotFoundException) {
+            return;
+        }
+        $this->dispatch('domain-refreshed', tabs: $includeTabs);
     }
 
     public function getTitle(): string
@@ -245,7 +269,7 @@ class ViewDomain extends ViewRecord
                     'include_selected' => 'Include selected', 'ignore_selected' => 'Ignore selected',
                 ])->required(),
                 TagsInput::make('query_parameters')->label('Selected query parameter names')->rules(['array', 'max:32']),
-                TagsInput::make('bypass_cookie_names')->label('Bypass cookie names')->rules(['array', 'max:32']),
+                TagsInput::make('ignore_cookie_names')->label('Ignored cookie names')->helperText('A request with any other cookie bypasses the cache.')->rules(['array', 'max:32']),
                 KeyValue::make('status_ttl_seconds')->label('Status TTLs')->keyLabel('Approved status')->valueLabel('TTL seconds')->reorderable(false),
                 TextInput::make('admission_requests')->label('Requests before admission')->numeric()->minValue(1)->maxValue(10)->required(),
                 TextInput::make('stale_if_error_seconds')->label('Stale-if-error (seconds)')->numeric()->minValue(0)->maxValue(86400)->required(),
@@ -259,7 +283,7 @@ class ViewDomain extends ViewRecord
                         'browser_ttl_seconds' => (int) $data['browser_ttl_seconds'], 'maximum_object_bytes' => (int) $data['maximum_object_bytes'],
                         'respect_origin_headers' => (bool) $data['respect_origin_headers'], 'query_policy' => $data['query_policy'],
                         'query_parameters' => array_values($data['query_parameters'] ?? []),
-                        'bypass_cookie_names' => array_values($data['bypass_cookie_names'] ?? []),
+                        'ignore_cookie_names' => array_values($data['ignore_cookie_names'] ?? []),
                         'status_ttl_seconds' => $data['status_ttl_seconds'], 'admission_requests' => (int) $data['admission_requests'],
                         'stale_if_error_seconds' => (int) $data['stale_if_error_seconds'],
                         'stale_while_revalidate_seconds' => (int) $data['stale_while_revalidate_seconds'],
@@ -632,6 +656,9 @@ class ViewDomain extends ViewRecord
                 'details' => ['actor_id' => auth()->id(), 'target_pool_id' => $pool?->id], 'occurred_at' => now(),
             ]);
             AuditLog::record(auth()->user(), "security.domain_$state", $domain, ['revision' => $domain->revision, 'target_pool_id' => $pool?->id], request()->ip());
+            if (in_array($state, ['recovering', 'normal'], true)) {
+                ChangeAutomaticSecurityState::execute($domain, 'normal', 'operator_return_to_normal', ['actor_id' => auth()->id()]);
+            }
         });
         $operation = Operation::coalesceDomain('edge.domain_reconcile', $this->record->id, auth()->id());
         ReconcileEdgeDomain::dispatch($this->record->id)->afterCommit();

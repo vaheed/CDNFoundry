@@ -5,6 +5,56 @@ All notable changes are recorded here. The format follows
 [Semantic Versioning](https://semver.org/). The root `VERSION` file is the
 single source of truth; `make version-check` enforces it.
 
+## [Unreleased]
+
+## [2.0.8] - 2026-11-12
+
+Locks the control surfaces down by default, separates automatic security state from configuration revisions, shows
+download and upload volume, and adds history and liveness detail to the domain and edge screens. See the
+[release notes](docs/operations/releases/v2.0.8.md).
+
+### Added
+
+- A default-deny host firewall in front of every internal listener, and management networks that limit who reaches the
+  admin panel and admin API (added and removed one entry at a time). The customer panel, customer API, and status page
+  stay open.
+- A strict Content-Security-Policy; wildcard CORS is refused.
+- Automatic security state is delivered to cells as an overlay instead of a configuration revision. Each cell enforces the
+  stricter of the snapshot and the overlay.
+- A domain History tab of operator and automatic events, and a one-line summary on each configuration revision.
+- Download and upload volume by edge, cell, domain, and country, in the API and the usage dashboard.
+- Edge screens show when control last heard from an edge and whether it is serving, as two separate facts.
+- Gateway handshake failures are reported to telemetry by reason, and ModSecurity verdicts and the raw request path are
+  logged.
+- Fleet doctor and the panel health page report alerts that have no receiver as a failed check, and a control install
+  takes and verifies its first backup before it reports ready.
+- Analytics for all of a user's domains, with range and domain filters.
+
+### Changed
+
+- Requests that carry a cookie bypass the cache unless the cookie name is ignored, and repeated query parameters keep the
+  client's order in the cache key.
+- Security events keep one record per domain, edge, reason, and hour; old events and operations are pruned.
+
+### Security
+
+- The core image is rebuilt on PHP 8.5.12 and ships `docker/php/cdnfoundry.ini`: `expose_php`, `display_errors`, and
+  `session.upload_progress.enabled` are off, so no response carries `X-Powered-By` or an inline PHP error. Errors go to
+  the container log.
+- Public listeners no longer name nginx or PowerDNS versions, every core process runs as `www-data`, and the default
+  avatar is drawn locally instead of calling a third-party service.
+- The OpenResty and production nginx images upgrade `libxslt` to 1.1.43-r4, and the Go agents and gateway build on
+  Go 1.26.11.
+
+### Fixed
+
+- A ClientHello split across TLS records is reassembled, and gateway refusals are counted by reason.
+- Edge liveness is recorded before advisory heartbeat entries are checked, so an invalid entry no longer rejects a
+  heartbeat.
+- A published endpoint stays in DNS while its gateway takes a new revision.
+- A domain's own protections no longer count toward an automatic security state change.
+- Loki labels keep to a fixed set, and the admin overview no longer overflows phones.
+
 ## [2.0.7] - 2026-11-10
 
 Hides edge diagnostic headers by default, lets administrators acknowledge reviewed failures, fixes managed WAF on a

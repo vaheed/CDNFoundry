@@ -54,7 +54,8 @@ Open **Analytics and logs** in the domain panel, or call the endpoints under `/a
 - countries, hostnames, and top URL paths;
 - origin health and edge distribution;
 - compression: encoding, delivered and identity bytes, savings ratio, profile, and fallback;
-- DNS query aggregates.
+- DNS query aggregates;
+- download and upload by edge, cell, and country (`/analytics/volume/edges`, `/cells`, `/countries`). The administrator API adds `/api/admin/analytics/volume/domains`. Download is the response sent to the client and upload is the request received, both counted at the cell. Origin-side traffic is not measured.
 
 **Expected result:** the page starts empty. Choose **Select domain** (it reads **Switch domain** afterwards), search, and pick a domain. Queries start only after you pick one, and the search lists only domains you may see.
 
@@ -126,6 +127,52 @@ Use `GET /api/domains/{domain}/usage` for a cursor-paginated list and
 endpoints under `/api/admin/usage`. Exports hold at most 10,000 rows and
 include the contract version and range in their metadata. This is data for an external billing system.
 CDNFoundry does not do billing.
+
+## Find an attack: the reusable filters
+
+Three log kinds stay separate. **Request logs** are in ClickHouse
+(`cdnf.edge_events`, 7 days). **Host and container logs** are in Loki. **Application
+audit** is `audit_logs` in PostgreSQL, shown in the panel. Filter request logs by
+`hostname`, `domain_id`, `pop`, `edge_id`, `cell`, `country`, `status`,
+`cache_status`, `origin_error`, `security_action`, `security_reason`,
+`waf_profile`, `waf_action`, `waf_rule_id`, `request_id`, `user_agent`, and
+`client_ip`. Examples that work as written (replace the values):
+
+```sql
+-- every request one WAF rule blocked, newest first
+SELECT occurred_at, hostname, path, status, cell, request_id
+FROM cdnf.edge_events
+WHERE domain_id = 42 AND waf_action = 'block' AND waf_rule_id = 949110
+  AND occurred_at > now() - INTERVAL 1 HOUR
+ORDER BY occurred_at DESC LIMIT 100;
+
+-- why a domain was refused, by reason, per edge
+SELECT edge_id, security_reason, count() AS requests
+FROM cdnf.edge_events
+WHERE domain_id = 42 AND security_action = 'block' AND occurred_at > now() - INTERVAL 1 HOUR
+GROUP BY edge_id, security_reason ORDER BY requests DESC;
+
+-- download and upload by cell
+SELECT cell, sum(bytes_sent) AS download, sum(bytes_in) AS upload
+FROM cdnf.edge_volume_1m WHERE domain_id = 42 AND interval_start > now() - INTERVAL 1 HOUR
+GROUP BY cell;
+```
+
+Loki: `{service="edge-agent"} |= "edge_sync_failed"`, `{service="edge-gateway"}`,
+and `{host="<node>", service=~"cell-.+"}`. Identifiers are not labels: filter
+them from the JSON body, for example `{service=~".+"} |= "<request id>" | json | request_id="<request id>"`.
+
+## Failed TLS handshakes
+
+A handshake refused by a cell (`unknown_sni`, `handshake_rate_exceeded`,
+`tls_disabled`, an unusable certificate) is reported by the cell. One refused at
+the gateway (`gateway_invalid_hello`, `gateway_unknown_route`,
+`gateway_handshake_budget`) is reported by the edge agent, which reads the
+gateway's counters about every heartbeat and sends up to 50 events per reason
+per report. Both feed `tls_failures_hourly`, so a refusal shows in the rollup
+within one heartbeat interval plus the two-second Vector batch. Under a flood
+the rollup is a bounded sample; the exact count is the Prometheus series
+`cdnfoundry_gateway_tls_handshakes_rejected_by_reason_total` on the gateway.
 
 ## Telemetry loss
 

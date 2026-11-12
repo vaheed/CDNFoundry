@@ -3,6 +3,9 @@
 namespace Tests\Feature;
 
 use App\Actions\EvaluateEndpointPublication;
+use App\Http\Controllers\EdgeAgentController;
+use App\Jobs\ReconcilePlatformDnsIdentity;
+use App\Models\AuditLog;
 use App\Models\Edge;
 use App\Models\EdgePool;
 use App\Models\EdgePoolEndpoint;
@@ -10,7 +13,10 @@ use App\Models\EdgeProbeResult;
 use App\Models\PlatformDnsSetting;
 use App\Support\EdgeCertificateAuthority;
 use App\Support\PlatformDnsZone;
+use App\Support\SystemHealth;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -72,6 +78,68 @@ class PopFailStaticTest extends TestCase
 
         EdgeProbeResult::query()->where('observer_edge_id', $observers[1]->id)->update(['ok' => true]);
         $this->assertContains('198.51.100.31', $this->published($pool), 'recovery republishes the PoP');
+    }
+
+    public function test_a_stale_heartbeat_and_a_passing_probe_quorum_are_two_separate_facts(): void
+    {
+        $pool = $this->pool();
+        [$target] = $this->endpoint($pool, 'quiet-but-serving', '198.51.100.51');
+        $edge = $target->edge;
+        $edge->update(['last_heartbeat_at' => now()->subHours(2)]);
+        $this->assertNull($edge->servingByProbes(), 'no probe evidence yet');
+        $this->assertSame('Unknown', $edge->servingLabel());
+
+        foreach ([$this->observer(), $this->observer()] as $observer) {
+            $this->probe($observer, $edge, '198.51.100.51', true);
+        }
+        $edge->refresh();
+        $this->assertFalse($edge->controlLinkFresh());
+        $this->assertTrue($edge->servingByProbes());
+        $this->assertSame('Serving', $edge->servingLabel());
+
+        $health = app(SystemHealth::class)->components();
+        $this->assertSame('degraded', $health['edge_control']['status']);
+        $this->assertSame(0, $health['edges']['details']['stale_not_serving']);
+        $this->assertSame(1, $health['edges']['details']['stale']);
+
+        EdgeProbeResult::query()->update(['ok' => false]);
+        $this->assertSame('Not serving', $edge->refresh()->servingLabel());
+        $this->assertSame(1, app(SystemHealth::class)->components()['edges']['details']['stale_not_serving']);
+    }
+
+    public function test_a_revision_the_gateway_has_not_taken_yet_never_withdraws_a_published_endpoint(): void
+    {
+        Queue::fake();
+        PlatformDnsSetting::query()->updateOrCreate(['id' => 1], [
+            'platform_domain' => 'platform.test', 'proxy_hostname' => 'edge.platform.test', 'soa_primary' => 'ns1.platform.test',
+            'soa_mailbox' => 'hostmaster.platform.test', 'default_ttl' => 60, 'soa_refresh' => 3600, 'soa_retry' => 600,
+            'soa_expire' => 86400, 'soa_minimum_ttl' => 60, 'nameservers' => [['hostname' => 'ns1.platform.test', 'ipv4' => '203.0.113.1', 'ipv6' => null]], 'revision' => 1,
+        ]);
+        $pool = $this->pool();
+        [$first] = $this->endpoint($pool, 'taking-a-revision', '198.51.100.61');
+        $this->endpoint($pool, 'steady', '198.51.100.62');
+        $this->assertSame(['198.51.100.61', '198.51.100.62'], $this->published($pool));
+        $first->update(['revision' => 2, 'gateway_state' => 'pending']);
+
+        // A domain revision moves the agent's sequence ahead of the gateway map for a moment: the gateway still
+        // serves its previous valid map, but the agent reports the listener as not yet matching.
+        $request = Request::create('/edge/v1/heartbeat', 'POST', [
+            'agent_version' => '1.2.0', 'listener_ready' => false, 'active_sequence' => 0,
+            'cells' => [['name' => 'cell-01', 'status' => 'ready', 'capacity' => ['active_connections' => 0]]],
+            'gateway' => ['ready' => true, 'active_revision' => 1],
+        ]);
+        $request->attributes->set('edge', $first->edge);
+        app(EdgeAgentController::class)->heartbeat($request);
+
+        $this->assertContains($first->refresh()->dns_reason, ['gateway_not_ready', 'gateway_not_acknowledged'], 'the endpoint is reported as converging');
+        $this->assertSame(['198.51.100.61', '198.51.100.62'], $this->published($pool), 'the address set did not change');
+        $this->assertSame(0, AuditLog::query()->where('action', 'edge.endpoint_withdrawn')->count());
+        $this->assertSame(1, PlatformDnsSetting::query()->findOrFail(1)->revision, 'the zone serial did not move');
+        Queue::assertNotPushed(ReconcilePlatformDnsIdentity::class);
+
+        // A gateway that cannot serve at all is a real signal and still leaves DNS while another PoP is healthy.
+        $first->edge->update(['capacity' => ['listener_ready' => false, 'gateway' => ['ready' => false]]]);
+        $this->assertSame(['198.51.100.62'], $this->published($pool));
     }
 
     public function test_expired_probe_results_do_not_count(): void

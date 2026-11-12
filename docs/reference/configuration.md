@@ -33,6 +33,9 @@ Limits that the software enforces are listed in the [limits reference](limits.md
 | `SESSION_SECURE_COOKIE` | HTTPS control | Secure-cookie flag; production default `true` |
 | `CONTROL_BIND` | control | Host publication for web; default `127.0.0.1:8080` |
 | `CONTROL_HOSTNAME` | control | Public browser/API hostname in independent management DNS |
+| `MANAGEMENT_NETWORKS` | control | Space-separated CIDRs allowed to reach the administrator panel, the administrator API, Horizon, the metrics endpoint, and Grafana. Everyone else gets a bare `403`; `/app`, the customer API, and the status page stay open. Empty restricts nothing. Fleet writes it from `management_networks` plus the fleet's node addresses |
+| `CORS_ALLOWED_ORIGINS` | control | Space-separated browser origins allowed to call the API. Empty allows none; there is no wildcard |
+| `CONTENT_SECURITY_POLICY` | control | `enforce` (default), `report-only`, or `off` for the panels' and API's `Content-Security-Policy` |
 | `TELEMETRY_HOSTNAME` | control/telemetry | Public telemetry-ingest hostname in independent management DNS |
 | `CONTROL_PUBLIC_IPV4_ALLOWLIST` | gateways | Exact control/worker sources allowed through the control and telemetry gateways |
 | `CONTROL_PUBLIC_IPV6_ALLOWLIST` | gateways | Optional IPv6 control/worker sources for the same gateways |
@@ -120,6 +123,7 @@ object storage; other Restic backends need their own credential/mount wiring.
 | `EDGE_GATEWAY_ADDRESS_MAP` | production edge agent | Optional JSON object translating advertised service IPv4/IPv6 addresses to private local listeners for NAT/load-balancer hosts. Directly assigned public addresses bind without a map. Both sides use the same family; wildcard, public-to-different-public, and duplicate local values fail closed. Default `{}`. |
 | `EDGE_GATEWAY_REQUIRE_ADDRESS_MAP` | production edge agent | Set `true` only when local policy requires every fetched endpoint to have an explicit translation before activation. Default `false`. |
 | `EDGE_GATEWAY_STATUS_URL` | edge agent | Gateway metrics URL used for heartbeat readiness |
+| `EDGE_TELEMETRY_URL` | edge agent | Local Vector HTTP source (`http://vector:8686`) that receives failed-handshake events from the gateway counters. Empty turns the report off; a failure never affects serving or heartbeats |
 | `EDGE_GATEWAY_METRICS_ADDRESS` | edge gateway | Restricted metrics listener; production default `0.0.0.0:9105` |
 | `GATEWAY_METRICS_ADDRESS` | edge gateway container | The listener address the container receives from `EDGE_GATEWAY_METRICS_ADDRESS`; the Compose health check calls its `/healthz` |
 | `EDGE_GATEWAY_MAX_CONNECTIONS` | edge gateway | Global accepted-connection bound, `128`–`65536` (default `8192`) |
@@ -142,6 +146,7 @@ object storage; other Restic backends need their own credential/mount wiring.
 | `CLICKHOUSE_DATABASE` | internal/default | Database queried by Laravel; Compose fixes `cdnf` |
 | `GEOIP_DATABASE` | edge runtime | MMDB file path; Compose fixes `/mmdb/GeoLite2-City.mmdb` |
 | `PROMETHEUS_URL` | optional control | Default `http://prometheus:9090` |
+| `ALERTMANAGER_URL` | optional control | Default `http://alertmanager:9093`. The health page reads the running configuration from it to report whether alerts have a receiver |
 | `VECTOR_METRICS_URL` | optional control | Vector metrics probe URL when overridden |
 | `MMDB_STALE_HOURS` | optional control | Health threshold; default `48` |
 | `MMDB_PROVIDER` | updater | `dbip-npm` (default, verified against the registry's SHA-512), `dbip-jsdelivr`, `dbip-official`, `ip66`, or `generic`. Production accepts a download only when it is verified: `dbip-npm` verifies itself, and every other provider needs `MMDB_EXPECTED_SHA256` or `MMDB_CHECKSUM_URL`. `generic` needs `MMDB_DOWNLOAD_URL`. The autonomous-system database has no verified default source: set `MMDB_ASN_DOWNLOAD_URL` and a checksum for it, or events carry ASN 0 |

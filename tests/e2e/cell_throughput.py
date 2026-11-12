@@ -129,7 +129,7 @@ def main() -> None:
                     "cache": {
                         "enabled": True, "edge_ttl_seconds": 3600, "browser_ttl_seconds": 300,
                         "maximum_object_bytes": 1048576, "respect_origin_headers": False,
-                        "include_query_string": True, "bypass_cookie_names": [], "stale_if_error_seconds": 60,
+                        "include_query_string": True, "ignore_cookie_names": [], "stale_if_error_seconds": 60,
                         "epoch": 1, "development_mode_until": None,
                     },
                     "origin": {

@@ -227,7 +227,16 @@ log line by line, and a step with no output for 30 seconds is reported with its 
 
 `cdnfoundry-fleet alert-webhook [--url https://...]` shows or sets where Alertmanager sends alerts. It is optional: with no
 webhook Alertmanager starts with receivers that send nothing, and `--url ""` turns notifications off again. A change
-reaches the hosts with the next `apply-config`.
+reaches the hosts with the next `apply-config`. `doctor` reports "Alerts have a receiver" as a failed check while no webhook is set, because alerts that fire into nothing (a stale backup, dropped telemetry) reach nobody. The administrator panel's health page reports the same through Alertmanager (component **Alert receiver**).
+
+`cdnfoundry-fleet management-networks [--networks "CIDR ..."]` shows or sets the networks allowed to reach the administrator panel, the
+administrator API, Horizon, and Grafana. Every other client gets a bare `403` there; the customer panel, the customer API, and the status page stay open. The fleet's own node addresses are added to
+the list automatically, `0.0.0.0/0` and `::/0` are refused, and `--networks ""` removes the restriction. A change reaches
+the hosts with the next `apply-config`.
+
+Every node bundle also holds `firewall.sh`. `start.sh` runs it before any container starts. It puts a default-deny rule in
+front of the exporter, DNSdist statistics, gateway metrics, and PowerDNS transfer ports and admits only the fleet's node
+addresses; on a systemd host it installs `cdnfoundry-firewall.service` so the rules survive a reboot.
 
 ## Inventory, live watch, and progress
 

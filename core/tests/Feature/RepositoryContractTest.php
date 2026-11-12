@@ -39,6 +39,17 @@ class RepositoryContractTest extends TestCase
         $this->assertFileDoesNotExist(base_path('../tests/e2e/phase1.mjs'));
     }
 
+    public function test_core_image_ships_hardened_php_settings_on_a_patched_base(): void
+    {
+        $ini = (string) file_get_contents(base_path('docker/php/cdnfoundry.ini'));
+        foreach (['expose_php = Off', 'display_errors = Off', 'session.upload_progress.enabled = Off'] as $setting) {
+            $this->assertStringContainsString($setting, $ini);
+        }
+        $dockerfile = (string) file_get_contents(base_path('Dockerfile'));
+        $this->assertStringContainsString('docker/php/cdnfoundry.ini /usr/local/etc/php/conf.d/', $dockerfile);
+        $this->assertMatchesRegularExpression('/^FROM php:8\.5-fpm-alpine@sha256:[0-9a-f]{64} /m', $dockerfile);
+    }
+
     public function test_every_makefile_target_is_declared_phony(): void
     {
         $makefile = file_get_contents(base_path('../Makefile'));

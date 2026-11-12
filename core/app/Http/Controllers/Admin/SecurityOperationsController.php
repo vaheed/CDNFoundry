@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Actions\ChangeAutomaticSecurityState;
 use App\Actions\DispatchEmergencyMode;
 use App\Http\Controllers\Controller;
 use App\Jobs\ReconcileEdgeDomain;
@@ -116,6 +117,9 @@ class SecurityOperationsController extends Controller
                 'occurred_at' => now(),
             ]);
             AuditLog::record($request->user(), "security.domain_$state", $locked, ['revision' => $locked->revision, 'target_pool_id' => $pool?->id], $request->ip());
+            if (in_array($state, ['recovering', 'normal'], true)) {
+                ChangeAutomaticSecurityState::execute($locked, 'normal', 'operator_return_to_normal', ['actor_id' => $request->user()->id]);
+            }
 
             return Operation::coalesceDomain('edge.domain_reconcile', $locked->id, $request->user()->id);
         });

@@ -42,6 +42,30 @@ local function diagnostic_headers_enabled()
     return not (config and config.settings and config.settings.diagnostic_headers == false)
 end
 
+-- The control plane sends the state it sets from edge reports as a small overlay per domain, apart from the signed
+-- snapshot. A cell enforces the stricter value of snapshot and overlay for every limit.
+local overlay_cache = {}
+local function effective_limits(config, security)
+    local limits = security.limits or {}
+    local raw = ngx.shared.runtime_limits:get("overlay:" .. tostring(config.domain_id or config.domain))
+    if not raw then return limits end
+    local cached = overlay_cache[raw]
+    if cached and cached.base == limits then return cached.merged end
+    local overlay = cjson.decode(raw)
+    if type(overlay) ~= "table" or type(overlay.limits) ~= "table" then return limits end
+    local merged = {}
+    for name, value in pairs(limits) do merged[name] = value end
+    for name, value in pairs(overlay.limits) do
+        local current = tonumber(merged[name])
+        if tonumber(value) and (current == nil or tonumber(value) < current) then merged[name] = value end
+    end
+    local count = 0
+    for _ in pairs(overlay_cache) do count = count + 1 end
+    if count >= 256 then overlay_cache = {} end
+    overlay_cache[raw] = { base = limits, merged = merged }
+    return merged
+end
+
 local function security_reject(status, reason)
     local dictionary = ngx.shared.runtime_limits
     dictionary:incr("capacity:rejected_requests", 1, 0)
@@ -49,7 +73,9 @@ local function security_reject(status, reason)
     if ngx.ctx.security_domain then
         local events = ngx.shared.security_limits
         local key = "event:" .. tostring(ngx.ctx.security_domain) .. ":" .. reason
-        events:incr(key, 1, 0)
+        -- Every key of one event expires together, so a reason that stops occurring
+        -- leaves the next heartbeat instead of repeating forever.
+        events:incr(key, 1, 0, 3600)
         events:set("host:" .. tostring(ngx.ctx.security_domain), ngx.ctx.security_hostname or "", 3600)
         events:set("time:" .. tostring(ngx.ctx.security_domain) .. ":" .. reason, ngx.time(), 3600)
     end
@@ -281,7 +307,7 @@ function M.select_certificate()
         error("unknown TLS SNI")
     end
     local security = config.security or {}
-    local limits = security.limits or {}
+    local limits = effective_limits(config, security)
     local second = ngx.time()
     local budget = tonumber(limits.tls_handshakes_per_second) or 50
     local handshakes = ngx.shared.domain_limits:incr("security:tls:domain:" .. tostring(config.domain) .. ":" .. second, 1, 0, 2)
@@ -500,13 +526,20 @@ local function request_cache_key(domain, host, cache)
     return base .. "|e" .. epoch .. "|g" .. generation .. "|p" .. ngx.md5(policy), ttl, base
 end
 
-local function cookie_bypassed(names)
+-- A request that carries any cookie is personal until the domain says otherwise:
+-- it bypasses the cache unless every cookie name is on the ignore list.
+local function cookie_bypassed(ignored_names)
     local raw = ngx.var.http_cookie or ""
     if raw == "" then return false end
-    local present = {}
-    for name in raw:gmatch("%s*([^=;%s]+)%s*=") do present[name] = true end
-    for _, name in ipairs(names or {}) do if present[name] then return true end end
-    return false
+    local ignored = {}
+    for _, name in ipairs(ignored_names or {}) do ignored[name] = true end
+    local found = false
+    for name in raw:gmatch("%s*([^=;%s]+)%s*=") do
+        found = true
+        if not ignored[name] then return true end
+    end
+    -- A Cookie header with no parsable name is still a cookie.
+    return not found
 end
 
 local function accepts_encoding(raw, encoding)
@@ -617,6 +650,7 @@ end
 
 function M.access()
     ngx.req.clear_header("X-CDN-Client-Address")
+    ngx.req.clear_header("X-CDN-Cache-Bypass")
     ngx.var.cdn_telemetry_proof = telemetry_proof_value()
     local dictionary = ngx.shared.runtime_limits
     dictionary:incr("capacity:requests:" .. ngx.time(), 1, 0, 2)
@@ -635,7 +669,7 @@ function M.access()
     local body_result = request_body_safety(config)
     if body_result then return body_result end
     local security = config.security or {}
-    local limits = security.limits or {}
+    local limits = effective_limits(config, security)
     local emergency = emergency_actions(dictionary)
     if emergency.return_maintenance_response then return security_reject(503, "edge_emergency_mode") end
     if security.state == "quarantined" then return security_reject(429, "domain_quarantined") end
@@ -723,7 +757,7 @@ function M.access()
     local cacheable = cache.enabled == true and cache_ttl > 0
         and (ngx.req.get_method() == "GET" or ngx.req.get_method() == "HEAD")
         and not ngx.var.http_authorization and not ngx.var.http_range
-        and not cookie_bypassed(cache.bypass_cookie_names)
+        and not cookie_bypassed(cache.ignore_cookie_names)
         and development_until <= ngx.time()
         and #cache_key <= (tonumber(limits.maximum_cache_key_length) or 4096)
     local profile = cache.profile or {}
@@ -778,7 +812,7 @@ function M.origin_access()
     ngx.ctx.security_domain = config.domain_id or config.domain
     ngx.ctx.security_hostname = host
     local security = config.security or {}
-    local limits = security.limits or {}
+    local limits = effective_limits(config, security)
     local emergency = emergency_actions(dictionary)
     local cache_mode = config.cache and config.cache.mode or "normal"
     if emergency.serve_cache_only or emergency.serve_stale_only or cache_mode == "cache_only" or cache_mode == "stale_only" then
@@ -865,6 +899,13 @@ function M.prepare_cache_response()
     local cache = config.cache or {}
     local status = tonumber(ngx.status) or 0
     local headers = ngx.header
+    -- A request the cache bypassed (a cookie, Authorization, a range) is never
+    -- stored, so its response keeps exactly the origin's cache headers. Adding
+    -- "public" here would let a downstream cache keep a personal response.
+    if ngx.var.http_x_cdn_cache_bypass == "1" then
+        headers["X-CDNF-No-Store"] = "1"
+        return
+    end
     local cache_control = cache_control_directives(headers["Cache-Control"])
     local status_ttls = cache.status_ttl_seconds or {["200"] = cache.edge_ttl_seconds or 0}
     local status_ttl = tonumber(status_ttls[tostring(status)])
@@ -1003,7 +1044,35 @@ function M.record_passive_failure()
     M.origin_done()
 end
 
+-- ModSecurity runs inside the cache locations and does not hand its verdict
+-- back to NGINX variables. A 403 that no origin produced (no upstream status,
+-- no cache lookup) in a request that was inspected can only be the engine's
+-- deny, because every other local rejection already names its own reason.
+-- CRS 949110 is the inbound blocking evaluation that issues that deny, and the
+-- score recorded is the configured threshold the request reached or exceeded.
+local function record_waf_outcome()
+    local action = ngx.var.cdn_waf_action
+    if action ~= "inspect" then return end
+    local denied = tonumber(ngx.status) == 403
+        and (ngx.var.upstream_status or "") == ""
+        and (ngx.var.upstream_cache_status or "") == ""
+        and (ngx.var.cdn_security_reason or "") == ""
+    if not denied then
+        ngx.var.cdn_waf_action = "pass"
+        return
+    end
+    local host = (ngx.var.host or ""):lower():gsub("%.$", "")
+    local config = state.hosts[host]
+    local waf = config and config.waf or {}
+    ngx.var.cdn_waf_action = "block"
+    ngx.var.cdn_waf_rule_id = "949110"
+    ngx.var.cdn_waf_score = tostring(math.max(1, math.min(100, tonumber(waf.inbound_threshold) or 5)))
+    ngx.var.cdn_security_action = "block"
+    ngx.var.cdn_security_reason = "waf_block"
+end
+
 function M.finish()
+    record_waf_outcome()
     local client_key = ngx.var.cdn_security_client_connection_key
     if client_key and client_key ~= "" then
         local current = ngx.shared.traffic_limits:incr(client_key, -1, 0)
@@ -1179,6 +1248,7 @@ function M.passive_failures()
             name = os.getenv("EDGE_CELL_NAME") or "unknown",
             status = drained and "drained" or "ready",
             purges_restored = ngx.shared.cache_purges:get("purge:restored") == true,
+            overlays_restored = ngx.shared.runtime_limits:get("overlay:restored") == true,
 			capacity = {
 				assigned_domain_count = assigned,
 				active_revision = state.sequence,
@@ -1213,7 +1283,8 @@ function M.control()
     if #raw == 0 or #raw > 128 * 1024 then return ngx.exit(400) end
     local command = cjson.decode(raw)
     if type(command) ~= "table" or type(command.task_id) ~= "string" or #command.task_id > 64
-        or (command.action ~= "drain" and command.action ~= "undrain" and command.action ~= "restart" and command.action ~= "cache_purge" and command.action ~= "cache_purges_restored" and command.action ~= "emergency_mode") then
+        or (command.action ~= "drain" and command.action ~= "undrain" and command.action ~= "restart" and command.action ~= "cache_purge" and command.action ~= "cache_purges_restored" and command.action ~= "emergency_mode"
+            and command.action ~= "security_overlay" and command.action ~= "security_overlays_restored") then
         return ngx.exit(400)
     end
     if command.action == "emergency_mode" then
@@ -1223,6 +1294,20 @@ function M.control()
         local supported = {disable_request_bodies=true,allow_get_head_only=true,disable_origin_retries=true,
             serve_cache_only=true,serve_stale_only=true,return_maintenance_response=true,disable_compression=true}
         for _, action in ipairs(command.actions) do if not supported[action] then return ngx.exit(400) end end
+    end
+    if command.action == "security_overlay" then
+        local states = { normal = true, suspected = true, restricted = true, recovering = true }
+        if type(command.domain_id) ~= "number" or command.domain_id < 1 or command.domain_id % 1 ~= 0
+            or type(command.sequence) ~= "number" or command.sequence < 1 or command.sequence % 1 ~= 0
+            or not states[command.state] then return ngx.exit(400) end
+        if command.limits ~= nil and command.limits ~= cjson.null then
+            if type(command.limits) ~= "table" then return ngx.exit(400) end
+            local count = 0
+            for name, value in pairs(command.limits) do
+                count = count + 1
+                if type(name) ~= "string" or #name > 64 or type(value) ~= "number" or value < 0 or count > 64 then return ngx.exit(400) end
+            end
+        end
     end
     if command.action == "cache_purge" then
         if type(command.domain) ~= "string" or #command.domain == 0 or #command.domain > 253
@@ -1254,6 +1339,21 @@ function M.control()
             dictionary:incr("control:restart_generation", 1, 0)
         elseif command.action == "cache_purges_restored" then
             ngx.shared.cache_purges:set("purge:restored", true)
+        elseif command.action == "security_overlays_restored" then
+            dictionary:set("overlay:restored", true)
+        elseif command.action == "security_overlay" then
+            -- A lower sequence is an obsolete message; a normal state removes the overlay.
+            local key = "overlay:" .. tostring(command.domain_id)
+            local current = cjson.decode(dictionary:get(key) or "null")
+            if type(current) ~= "table" or command.sequence >= (tonumber(current.sequence) or 0) then
+                if command.state == "normal" then
+                    dictionary:delete(key)
+                else
+                    local limits = (type(command.limits) == "table") and command.limits or nil
+                    local ok, err = dictionary:safe_set(key, cjson.encode({ sequence = command.sequence, state = command.state, limits = limits }))
+                    if not ok then ngx.log(ngx.ERR, "security overlay not stored: ", err); return ngx.exit(507) end
+                end
+            end
         elseif command.action == "emergency_mode" then
             if command.active then
                 dictionary:set("emergency:active", cjson.encode(command.actions))

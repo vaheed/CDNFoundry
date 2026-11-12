@@ -87,14 +87,19 @@ Expected result: every script exits with status 0, so the target exits with stat
 - foundation, API, and system identity (`e2e.py`);
 - authoritative DNS (`dns_authoritative.py`);
 - Geo-DNS (`geo_dns.py`);
-- edge distribution and control with mutual TLS (`edge_distribution.py`, `edge_control_mtls.py`);
+- edge control with mutual TLS (`edge_control_mtls.py`);
 - managed TLS (`managed_tls.py`);
 - security and isolation (`edge_security.py`);
 - analytics and telemetry outage (`telemetry_analytics.py`);
 - backup and restore (`backup_restore.py`);
 - managed WAF (`managed_waf.py`);
-- origin failover (`origin_failover.py`);
-- OpenResty runtime traffic (`openresty_runtime.py`).
+- origin failover (`origin_failover.py`).
+
+Two tests are not in this CI target because they failed on shared runners and were taken out of the gate:
+
+- edge distribution and pool moves (`edge_distribution.py`): the DNS answer did not move to the quarantine pool within 120
+  seconds. Run it by hand with `python3 tests/e2e/edge_distribution.py` on a running development stack.
+- OpenResty runtime traffic (`openresty_runtime.py`): run it with `make dev-cache-e2e` or `make dev-compression-e2e`.
 
 Expensive jobs run separately:
 

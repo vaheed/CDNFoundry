@@ -12,6 +12,9 @@ use Throwable;
 
 final class AnalyticsStore
 {
+    /** Upper bound for one domain-set query (a user's portfolio), keeping the generated DNS scope small. */
+    public const MAX_SCOPE_DOMAINS = 100;
+
     private const AGGREGATE_MAX_DAYS = 90;
 
     private const RAW_MAX_HOURS = 24;
@@ -32,21 +35,21 @@ final class AnalyticsStore
         return ['from' => $from, 'to' => $to, 'raw' => $raw];
     }
 
-    public function summary(?Domain $domain, array $range): array
+    public function summary(Domain|array|null $domain, array $range): array
     {
-        $scope = $domain === null ? '1' : 'domain_id = {domain_id:UInt64}';
+        $scope = $this->edgeScope($domain);
         $parameters = $this->parameters($range, $domain);
         $edge = $this->query("SELECT sum(requests) AS requests, sum(bytes_in) AS bytes_in, sum(bytes_out) AS bytes_out, sumIf(requests, cache_status = 'HIT') AS cache_hits, sum(origin_errors) AS origin_errors, sum(tls_failures) AS tls_failures, sum(security_blocks) AS security_blocks FROM cdnf.edge_hourly WHERE {$scope} AND interval_start >= {from:DateTime64} AND interval_start < {to:DateTime64}", $parameters)[0] ?? [];
-        $dnsScope = $domain === null ? '1' : $this->dnsScope('interval_start', true);
+        $dnsScope = $this->dnsScopeFor($domain, 'interval_start', true);
         $dns = $this->query("SELECT sum(queries) AS dns_queries FROM cdnf.dns_hourly WHERE {$dnsScope} AND interval_start >= {from:DateTime64} AND interval_start < {to:DateTime64}", $parameters)[0] ?? [];
         $requests = (int) ($edge['requests'] ?? 0);
 
         return [...$edge, ...$dns, 'cache_ratio' => $requests === 0 ? 0 : round(((int) ($edge['cache_hits'] ?? 0)) / $requests, 6)];
     }
 
-    public function aggregate(?Domain $domain, array $range, string $view): array
+    public function aggregate(Domain|array|null $domain, array $range, string $view): array
     {
-        $scope = $domain === null ? '1' : 'domain_id = {domain_id:UInt64}';
+        $scope = $this->edgeScope($domain);
         $parameters = $this->parameters($range, $domain);
         [$select, $group, $order, $table] = match ($view) {
             'timeseries', 'traffic' => ['toStartOfHour(interval_start) AS bucket, sum(requests) AS requests, sum(bytes_in) AS bytes_in, sum(bytes_out) AS bytes_out', 'bucket', 'bucket', 'edge_hourly'],
@@ -56,12 +59,17 @@ final class AnalyticsStore
             'hostnames' => ['hostname, sum(requests) AS requests, sum(bytes_out) AS bytes_out', 'hostname', 'sum(requests) DESC, hostname', 'edge_hourly'],
             'origin' => ['sum(origin_errors) AS errors, sum(origin_latency_sum) AS latency_sum_ms, sum(origin_latency_samples) AS latency_samples, if(latency_samples = 0, 0, latency_sum_ms / latency_samples) AS average_latency_ms', '', 'errors DESC', 'edge_hourly'],
             'edges' => ['edge_id, sum(requests) AS requests, sum(bytes_out) AS bytes_out', 'edge_id', 'sum(requests) DESC, edge_id', 'edge_hourly'],
+            'domains' => ["domain_id, sum(requests) AS requests, sum(bytes_in) AS bytes_in, sum(bytes_out) AS bytes_out, sumIf(requests, cache_status = 'HIT') AS cache_hits, sum(origin_errors) AS origin_errors, sum(security_blocks) AS security_blocks", 'domain_id', 'sum(requests) DESC, domain_id', 'edge_hourly'],
             'compression' => ['compression_encoding AS encoding, compression_profile AS profile, compression_fallback AS fallback, count() AS requests, sum(bytes_out) AS delivered_bytes, round(sum(bytes_out * compression_ratio)) AS identity_bytes, greatest(identity_bytes - delivered_bytes, 0) AS bytes_saved, if(identity_bytes = 0, 0, round(bytes_saved / identity_bytes, 6)) AS savings_ratio', 'encoding, profile, fallback', 'bytes_saved DESC, encoding, profile, fallback', 'edge_events'],
+            'volume-edges' => ['edge_id, sum(requests) AS requests, sum(bytes_in) AS upload_bytes, sum(bytes_sent) AS download_bytes', 'edge_id', 'download_bytes DESC, edge_id', 'edge_volume_hourly'],
+            'volume-cells' => ['cell, edge_id, sum(requests) AS requests, sum(bytes_in) AS upload_bytes, sum(bytes_sent) AS download_bytes', 'cell, edge_id', 'download_bytes DESC, cell, edge_id', 'edge_volume_hourly'],
+            'volume-domains' => ['domain_id, sum(requests) AS requests, sum(bytes_in) AS upload_bytes, sum(bytes_sent) AS download_bytes', 'domain_id', 'download_bytes DESC, domain_id', 'edge_volume_hourly'],
+            'volume-countries' => ['country, sum(requests) AS requests, sum(bytes_in) AS upload_bytes, sum(bytes_sent) AS download_bytes', 'country', 'download_bytes DESC, country', 'edge_volume_hourly'],
             'dns' => ['qtype, rcode, sum(queries) AS queries', 'qtype, rcode', 'sum(queries) DESC, qtype, rcode', 'dns_hourly'],
             default => throw ValidationException::withMessages(['view' => 'The analytics view is invalid.']),
         };
-        if ($view === 'dns' && $domain !== null) {
-            $scope = $this->dnsScope('interval_start', true);
+        if ($view === 'dns') {
+            $scope = $this->dnsScopeFor($domain, 'interval_start', true);
         }
         $groupSql = $group === '' ? '' : " GROUP BY {$group}";
 
@@ -77,15 +85,16 @@ final class AnalyticsStore
      *
      * @return array<int, array<string, mixed>>
      */
-    public function operationalTrafficSeries(?Domain $domain, array $range, ?string $edgeId = null): array
+    public function operationalTrafficSeries(Domain|array|null $domain, array $range, ?string $edgeId = null, string $bucket = 'hour'): array
     {
-        $scope = $domain === null ? '1' : 'domain_id = {domain_id:UInt64}';
+        [$bucketSql, $limit] = $bucket === 'day' ? ['toStartOfDay(interval_start)', 100] : ['toStartOfHour(interval_start)', 169];
+        $scope = $this->edgeScope($domain);
         if ($edgeId !== null) {
             $scope .= ' AND edge_id = {edge_id:String}';
         }
 
         return $this->query(
-            "SELECT toStartOfHour(interval_start) AS bucket,
+            "SELECT {$bucketSql} AS bucket,
                 sum(requests) AS requests,
                 sum(bytes_in) AS bytes_in,
                 sum(bytes_out) AS bytes_out,
@@ -101,17 +110,15 @@ final class AnalyticsStore
                 sum(origin_latency_samples) AS origin_latency_samples
             FROM cdnf.edge_hourly
             WHERE {$scope} AND interval_start >= {from:DateTime64} AND interval_start < {to:DateTime64}
-            GROUP BY bucket ORDER BY bucket LIMIT 169",
+            GROUP BY bucket ORDER BY bucket LIMIT {$limit}",
             array_filter([...$this->parameters($range, $domain), 'edge_id' => $edgeId], fn ($value): bool => $value !== null),
         );
     }
 
     /** @return array<int, array<string, mixed>> */
-    public function operationalDnsSeries(?Domain $domain, array $range): array
+    public function operationalDnsSeries(Domain|array|null $domain, array $range): array
     {
-        $scope = $domain === null
-            ? '1'
-            : $this->dnsScope('interval_start', true);
+        $scope = $this->dnsScopeFor($domain, 'interval_start', true);
 
         return $this->query(
             "SELECT toStartOfHour(interval_start) AS bucket,
@@ -133,9 +140,9 @@ final class AnalyticsStore
      *
      * @return list<array{title: string, description: string, columns: array<string, string>, rows: list<array<string, mixed>>}>
      */
-    public function investigation(?Domain $domain, array $range, array $rawRange, string $view, ?string $statusFamily = null): array
+    public function investigation(Domain|array|null $domain, array $range, array $rawRange, string $view, ?string $statusFamily = null): array
     {
-        $scope = $domain === null ? '1' : 'domain_id = {domain_id:UInt64}';
+        $scope = $this->edgeScope($domain);
         $aggregate = fn (string $select, string $group, string $order, string $extra = '1'): array => $this->query(
             "SELECT {$select} FROM cdnf.edge_hourly WHERE {$scope} AND ({$extra}) AND interval_start >= {from:DateTime64} AND interval_start < {to:DateTime64} GROUP BY {$group} ORDER BY {$order} LIMIT 15",
             $this->parameters($range, $domain),
@@ -185,33 +192,31 @@ final class AnalyticsStore
             ],
             'dns' => [
                 ['title' => 'Query types and responses', 'description' => "DNS answers by type and response code over {$window}.", 'columns' => ['qtype' => 'Type', 'rcode' => 'Response', 'queries' => 'Queries'],
-                    'rows' => $this->query('SELECT qtype, rcode, sum(queries) AS queries FROM cdnf.dns_hourly WHERE '.($domain === null ? '1' : $this->dnsScope('interval_start', true)).' AND interval_start >= {from:DateTime64} AND interval_start < {to:DateTime64} GROUP BY qtype, rcode ORDER BY queries DESC LIMIT 15', $this->parameters($range, $domain))],
+                    'rows' => $this->query('SELECT qtype, rcode, sum(queries) AS queries FROM cdnf.dns_hourly WHERE '.$this->dnsScopeFor($domain, 'interval_start', true).' AND interval_start >= {from:DateTime64} AND interval_start < {to:DateTime64} GROUP BY qtype, rcode ORDER BY queries DESC LIMIT 15', $this->parameters($range, $domain))],
                 ['title' => 'Most queried names', 'description' => "Names queried most in {$rawWindow}.", 'columns' => ['qname' => 'Name', 'qtype' => 'Type', 'queries' => 'Queries'],
-                    'rows' => $raw('qname, qtype, count() AS queries', 'qname, qtype', 'queries DESC', '1', 'dns_events', $domain === null ? '1' : $this->dnsScope('occurred_at', false))],
+                    'rows' => $raw('qname, qtype, count() AS queries', 'qname, qtype', 'queries DESC', '1', 'dns_events', $this->dnsScopeFor($domain, 'occurred_at', false))],
                 ['title' => 'Failing names', 'description' => "Names answered with SERVFAIL or REFUSED in {$rawWindow}.", 'columns' => ['qname' => 'Name', 'rcode' => 'Response', 'queries' => 'Queries'],
-                    'rows' => $raw('qname, rcode, count() AS queries', 'qname, rcode', 'queries DESC', "upper(rcode) IN ('SERVFAIL', 'REFUSED')", 'dns_events', $domain === null ? '1' : $this->dnsScope('occurred_at', false))],
+                    'rows' => $raw('qname, rcode, count() AS queries', 'qname, rcode', 'queries DESC', "upper(rcode) IN ('SERVFAIL', 'REFUSED')", 'dns_events', $this->dnsScopeFor($domain, 'occurred_at', false))],
                 ['title' => 'Resolver networks', 'description' => "Countries the queries came from in {$rawWindow}.", 'columns' => ['country' => 'Country', 'queries' => 'Queries'],
-                    'rows' => $raw('country, count() AS queries', 'country', 'queries DESC', '1', 'dns_events', $domain === null ? '1' : $this->dnsScope('occurred_at', false))],
+                    'rows' => $raw('country, count() AS queries', 'country', 'queries DESC', '1', 'dns_events', $this->dnsScopeFor($domain, 'occurred_at', false))],
             ],
             default => throw ValidationException::withMessages(['view' => 'The analytics view is invalid.']),
         };
     }
 
-    public function topUrls(Domain $domain, array $range): array
+    public function topUrls(Domain|array $domain, array $range): array
     {
-        return $this->query('SELECT path, count() AS requests, sum(bytes_out) AS bytes_out FROM cdnf.edge_events WHERE domain_id = {domain_id:UInt64} AND occurred_at >= {from:DateTime64} AND occurred_at < {to:DateTime64} GROUP BY path ORDER BY requests DESC, path LIMIT 100', $this->parameters($range, $domain));
+        return $this->query('SELECT path, count() AS requests, sum(bytes_out) AS bytes_out FROM cdnf.edge_events WHERE '.$this->edgeScope($domain).' AND occurred_at >= {from:DateTime64} AND occurred_at < {to:DateTime64} GROUP BY path ORDER BY requests DESC, path LIMIT 100', $this->parameters($range, $domain));
     }
 
-    public function logs(?Domain $domain, array $range, string $stream, ?string $cursor, ?string $statusFamily = null): array
+    public function logs(Domain|array|null $domain, array $range, string $stream, ?string $cursor, ?string $statusFamily = null): array
     {
         $decoded = $this->decodeCursor($cursor);
         $parameters = [...$this->parameters($range, $domain), 'cursor_time' => $decoded['occurred_at'] ?? '9999-12-31 23:59:59.999', 'cursor_id' => $decoded['event_id'] ?? 'ffffffff-ffff-ffff-ffff-ffffffffffff'];
-        $scope = $domain === null ? '1' : 'domain_id = {domain_id:UInt64}';
+        $scope = $this->edgeScope($domain);
         $cursorSql = '(occurred_at, event_id) < ({cursor_time:DateTime64}, {cursor_id:UUID})';
         if ($stream === 'dns') {
-            if ($domain !== null) {
-                $scope = $this->dnsScope('occurred_at', false);
-            }
+            $scope = $this->dnsScopeFor($domain, 'occurred_at', false);
             $rows = $this->query("SELECT occurred_at, event_id, domain_id, zone, qname, qtype, rcode, client_ip, dns_cluster, country, continent, outcome FROM cdnf.dns_events WHERE {$scope} AND occurred_at >= {from:DateTime64} AND occurred_at < {to:DateTime64} AND {$cursorSql} ORDER BY occurred_at DESC, event_id DESC LIMIT 101", $parameters);
         } else {
             $filter = match ($stream) {
@@ -346,17 +351,68 @@ final class AnalyticsStore
      * another registered domain (current or deleted) and anything logged before
      * the current owner's domain row existed.
      */
-    private function dnsScope(string $timeColumn, bool $hourly): string
+    private function dnsScope(string $timeColumn, bool $hourly, string $suffix = ''): string
     {
-        $since = $hourly ? 'toStartOfHour({owned_since:DateTime64})' : '{owned_since:DateTime64}';
+        $since = $hourly ? "toStartOfHour({owned_since{$suffix}:DateTime64})" : "{owned_since{$suffix}:DateTime64}";
 
-        return "((zone = {domain_name:String} OR endsWith(zone, concat('.', {domain_name:String}))) "
-            ."AND NOT arrayExists(child -> zone = child OR endsWith(zone, concat('.', child)), {excluded_zones:Array(String)}) "
+        return "((zone = {domain_name{$suffix}:String} OR endsWith(zone, concat('.', {domain_name{$suffix}:String}))) "
+            ."AND NOT arrayExists(child -> zone = child OR endsWith(zone, concat('.', child)), {excluded_zones{$suffix}:Array(String)}) "
             ."AND {$timeColumn} >= {$since})";
     }
 
-    private function parameters(array $range, ?Domain $domain): array
+    /**
+     * Edge events carry the domain id. A domain set (a user's domains) is bounded by MAX_SCOPE_DOMAINS.
+     *
+     * @param  Domain|array<int, Domain>|null  $domain
+     */
+    private function edgeScope(Domain|array|null $domain): string
     {
+        return match (true) {
+            $domain === null => '1',
+            $domain instanceof Domain => 'domain_id = {domain_id:UInt64}',
+            $this->domainSet($domain) === [] => '0',
+            default => 'domain_id IN {domain_ids:Array(UInt64)}',
+        };
+    }
+
+    /**
+     * DNS scope for one domain or a domain set: each domain keeps its own zone, nested-domain exclusions, and
+     * ownership start, so a set never widens what any single domain would show.
+     *
+     * @param  Domain|array<int, Domain>|null  $domain
+     */
+    private function dnsScopeFor(Domain|array|null $domain, string $timeColumn, bool $hourly): string
+    {
+        if ($domain === null) {
+            return '1';
+        }
+        if ($domain instanceof Domain) {
+            return $this->dnsScope($timeColumn, $hourly);
+        }
+        $set = $this->domainSet($domain);
+
+        return $set === [] ? '0' : '('.implode(' OR ', array_map(fn (int $index): string => $this->dnsScope($timeColumn, $hourly, "_{$index}"), array_keys($set))).')';
+    }
+
+    /**
+     * @param  array<int, Domain>  $domains
+     * @return list<Domain>
+     */
+    private function domainSet(array $domains): array
+    {
+        $set = array_values(array_filter($domains, fn (mixed $domain): bool => $domain instanceof Domain));
+        if (count($set) > self::MAX_SCOPE_DOMAINS) {
+            throw ValidationException::withMessages(['domain_id' => 'Select at most '.self::MAX_SCOPE_DOMAINS.' domains.']);
+        }
+
+        return $set;
+    }
+
+    private function parameters(array $range, Domain|array|null $domain): array
+    {
+        if (is_array($domain)) {
+            return $this->setParameters($range, $this->domainSet($domain));
+        }
         $dns = [];
         if ($domain !== null) {
             $children = Domain::withTrashed()->where('name', 'like', '%.'.addcslashes($domain->name, '%_\\'))->limit(1000)->pluck('name');
@@ -367,6 +423,32 @@ final class AnalyticsStore
         }
 
         return [...$dns, ...$this->baseParameters($range, $domain)];
+    }
+
+    /** @param list<Domain> $domains */
+    private function setParameters(array $range, array $domains): array
+    {
+        $parameters = $this->baseParameters($range, null);
+        if ($domains === []) {
+            return $parameters;
+        }
+        $names = array_map(fn (Domain $domain): string => $domain->name, $domains);
+        $children = Domain::withTrashed()
+            ->where(function ($query) use ($names): void {
+                foreach ($names as $name) {
+                    $query->orWhere('name', 'like', '%.'.addcslashes($name, '%_\\'));
+                }
+            })
+            ->limit(5000)->pluck('name');
+        $parameters['domain_ids'] = '['.implode(',', array_map(fn (Domain $domain): int => (int) $domain->getKey(), $domains)).']';
+        foreach ($domains as $index => $domain) {
+            $nested = $children->filter(fn (string $child): bool => str_ends_with($child, '.'.$domain->name));
+            $parameters["domain_name_{$index}"] = $domain->name;
+            $parameters["excluded_zones_{$index}"] = '['.$nested->map(fn (string $name): string => "'".str_replace(['\\', "'"], ['\\\\', "\\'"], $name)."'")->implode(',').']';
+            $parameters["owned_since_{$index}"] = ($domain->created_at ?? now())->clone()->utc()->format('Y-m-d H:i:s.u');
+        }
+
+        return $parameters;
     }
 
     private function baseParameters(array $range, ?Domain $domain): array

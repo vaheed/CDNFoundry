@@ -9,7 +9,7 @@ test.describe('administrator overview', () => {
         await expect(page.getByTestId('overview-status')).toBeVisible();
         await expect(page.getByTestId('overview-live')).toHaveText('Polling active');
         await expect(page.getByText('Healthy PoPs')).toBeVisible({ timeout: 20_000 });
-        await expect(page.getByText('DNS success')).toBeVisible();
+        await expect(page.getByText('DNS success', { exact: true })).toBeVisible();
         await expect(page.getByTestId('overview-recent')).toBeVisible({ timeout: 20_000 });
         await expect(page.getByTestId('sidebar-version')).toHaveText(/^v\d+\.\d+\.\d+/);
         await expectAccessible(page);

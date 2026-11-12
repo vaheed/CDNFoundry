@@ -9,6 +9,7 @@ use App\Models\DomainEdgeCell;
 use App\Models\DomainEdgePlacement;
 use App\Models\Edge;
 use App\Models\EdgePool;
+use App\Models\EdgeProbeResult;
 use App\Models\EdgeRevision;
 use App\Models\Operation;
 use App\Models\SecurityEvent;
@@ -62,6 +63,13 @@ foreach (['edge-tehran-a', 'edge-tehran-b', 'edge-frankfurt-a', 'edge-with-a-ver
         'registered_at' => now(), 'last_heartbeat_at' => $i === 3 ? now()->subDays(2) : now(),
     ]);
     $edges[] = [$edge, $edge->cells()->create(['slot' => 1, 'edge_pool_id' => $shared->id, 'status' => 'assigned'])];
+}
+// The fourth edge has not reported for two days but the other PoPs still reach it: stale control link, serving edge.
+// The third edge is reached by nobody: fresh heartbeat, not serving.
+// Probe results count only while recent, and the suite runs for many minutes, so the fixture is dated ahead.
+foreach ([0, 1] as $observer) {
+    EdgeProbeResult::query()->create(['observer_edge_id' => $edges[$observer][0]->id, 'target_edge_id' => $edges[3][0]->id, 'address' => '192.0.2.44', 'ok' => true, 'checked_at' => now()->addYear()]);
+    EdgeProbeResult::query()->create(['observer_edge_id' => $edges[$observer][0]->id, 'target_edge_id' => $edges[2][0]->id, 'address' => '192.0.2.43', 'ok' => false, 'checked_at' => now()->addYear()]);
 }
 
 $showcase = $domains['alpha-browser.example'];
@@ -129,6 +137,13 @@ foreach (range(1, 45) as $n) {
     ]);
 }
 foreach (range(1, 40) as $n) {
-    AuditLog::record($admin, ['domain.updated', 'tls.mode_updated', 'user.created', 'cache.purged'][$n % 4], $showcase, ['revision' => $n], '127.0.0.1');
+    AuditLog::record($admin, ['domain.updated', 'tls.mode_updated', 'user.created', 'cache.purged'][$n % 4], $showcase, ['revision' => $n], '127.0.0.1')
+        ->forceFill(['created_at' => now()->subMinutes($n + 5)])->save();
 }
+
+// Changes the platform made on its own: events in the history, never configuration revisions.
+AuditLog::record(null, 'security.automatic_state_changed', $showcase, ['from' => 'normal', 'to' => 'suspected', 'cause' => 'event_rate', 'events_in_window' => 64, 'window_minutes' => 5, 'overlay_sequence' => 1])
+    ->forceFill(['created_at' => now()->subMinutes(2)])->save();
+AuditLog::record(null, 'security.automatic_state_changed', $showcase, ['from' => 'suspected', 'to' => 'normal', 'cause' => 'quiet_period', 'quiet_minutes' => 10, 'overlay_sequence' => 2])
+    ->forceFill(['created_at' => now()->subMinute()])->save();
 echo "browser seed complete\n";

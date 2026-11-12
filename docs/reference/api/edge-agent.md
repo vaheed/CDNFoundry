@@ -99,6 +99,14 @@ rejected connections, errors, and rejected candidates. Values are bounded
 integers and carry no hostnames or customer data. `listener_ready` is true only
 when the gateway is ready and its revision equals the agent's active sequence.
 
+The control plane records `last_heartbeat_at` for any heartbeat whose required
+fields are valid. `noisy_domains` entries (`domain_id`, optional `hostname`,
+`reason_code`, `count`, `occurred_at`) and `passive_origins` entries are advisory:
+an invalid entry, such as an unknown reason code, is dropped and counted rather than
+failing the request. The accepted reason codes are the list in
+`core/resources/contracts/security-event-reasons.json`, which `tests/contract`
+checks against every reason the cell runtime can raise.
+
 ## Task contract
 
 Current tasks cover origin tests, DNS probes, cache purge, cell
@@ -108,6 +116,14 @@ failure reasons such as `cell_not_found`, `control_request_failed`,
 `invalid_cache_purge_task`, `cache_purge_persist_failed`, and
 `cache_purge_capacity_exceeded`. Cache purge tasks carry a `purge_id`, which the
 cells store as the URL generation.
+
+A `security_overlay` task carries `domain_id`, `domain`, `overlay_sequence`, `state`
+(`normal`, `suspected`, `restricted`, or `recovering`), and `limits` (stricter limit
+values, or `null`). The agent stores the newest sequence per domain, removes the
+overlay on `normal`, refuses a new domain beyond 256 overlays with
+`overlay_capacity_exceeded`, and tells every cell. A cell that restarts reports
+`overlays_restored: false` until the agent replays the stored overlays to it. Only
+the newest pending overlay per domain and edge is kept.
 
 Task receipts are scoped to the authenticated edge and committed transactionally
 with their database effects. Concurrent reports serialize on the task and its

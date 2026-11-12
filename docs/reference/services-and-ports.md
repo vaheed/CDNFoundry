@@ -40,14 +40,14 @@ endpoints.
 | DNSdist | `${DNS_BIND_V4}:53` TCP and UDP | Dual-homed on `ingress` and `dns-private`; public authoritative DNS with a private PowerDNS backend |
 | Cell host diagnostics | loopback `18081` to `18088` (HTTP), `18444` to `18451` (HTTPS), `19081` to `19088` (status) | Never public |
 | Edge gateway | The service IPv4 and IPv6 addresses, TCP `80` and `443` | The gateway runs on the host network. Public or NAT addresses map one-to-one to local listeners. TLS passes through. A plain-HTTP request for a host that is not routed here gets a `421` from the gateway, so synthetic probes can tell a serving PoP from a dead one. An unrouted TLS name is dropped |
-| Gateway metrics | `${EDGE_GATEWAY_METRICS_ADDRESS}`, default `0.0.0.0:9105` | Restrict to the edge agent and monitoring |
+| Gateway metrics | `${EDGE_GATEWAY_METRICS_ADDRESS}`, default `0.0.0.0:9105` | Fleet firewall admits fleet node addresses and local containers only |
 | Cell listeners inside the cell | TCP `8081` (HTTP), `8444` (HTTPS) | Private gateway-to-cell network. PROXY protocol version 2 is required |
-| DNS primary transfers | `${HOST_BIND_IPV4}:5300` (TCP and UDP) | Control host only; transfers are refused unless TSIG-signed. Restrict it to the node addresses |
+| DNS primary transfers | `${HOST_BIND_IPV4}:5300` (TCP and UDP) | Control host only; transfers are refused unless TSIG-signed. The Fleet firewall admits node addresses only |
 | Telemetry gateway (Caddy) | `${HOST_BIND_IPV4}` ports 80, 443, and 8444 | Joins the `ingress` and `telemetry` networks. Uses an exact-source allowlist and TLS. Routes Loki push and ClickHouse ingestion privately |
 | Grafana | `${GRAFANA_BIND}`, default `127.0.0.1:3000` | Operator UI. Publish it only through an authenticated HTTPS reverse proxy |
 | Loki (development only) | `127.0.0.1:3100` | Direct diagnostics; production has no host publication |
-| Operational collector metrics | `${LOG_METRICS_BIND}` port `9599` | Bind to a private monitoring address for remote scraping |
-| Vector traffic metrics | `${VECTOR_METRICS_BIND}` port `9598` | Bind to a private monitoring address |
+| Operational collector metrics | `${LOG_METRICS_BIND}` port `9599` | Bind to a private monitoring address; the Fleet firewall admits fleet node addresses only |
+| Vector traffic metrics | `${VECTOR_METRICS_BIND}` port `9598` | Bind to a private monitoring address; the Fleet firewall admits fleet node addresses only |
 
 A host bind is separate from the public, routed, or NAT address that DNS
 advertises. The default IPv4 wildcard works when the public address exists only

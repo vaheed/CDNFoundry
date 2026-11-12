@@ -3,9 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Actions\PromoteReadyEdgePlacements;
+use App\Actions\RecordSecurityReport;
 use App\Jobs\AdvanceFleetRollout;
 use App\Jobs\ReconcileAllEdgeDomains;
-use App\Jobs\ReconcileEdgeDomain;
 use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\CachePurge;
 use App\Models\DnsCluster;
@@ -22,7 +22,6 @@ use App\Models\EdgeTask;
 use App\Models\FleetRolloutEdge;
 use App\Models\NameserverAddressProbe;
 use App\Models\Operation;
-use App\Models\SecurityEvent;
 use App\Models\TlsCertificate;
 use App\Support\ArtifactSigner;
 use App\Support\ControlPlane;
@@ -37,7 +36,11 @@ use App\Support\SecurityConfig;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
 
@@ -207,6 +210,24 @@ class EdgeAgentController extends Controller
         return response()->json(['data' => $identity], 201);
     }
 
+    /**
+     * @param  array<string, array<int, mixed>>  $rules
+     * @return array<int, array<string, mixed>>
+     */
+    private function advisoryEntries(mixed $entries, array $rules, int &$dropped): array
+    {
+        $valid = [];
+        foreach (is_array($entries) ? $entries : [] as $entry) {
+            if (is_array($entry) && ! Validator::make($entry, $rules)->fails()) {
+                $valid[] = Arr::only($entry, array_keys($rules));
+            } else {
+                $dropped++;
+            }
+        }
+
+        return $valid;
+    }
+
     public function heartbeat(Request $request): JsonResponse
     {
         $edge = $request->attributes->get('edge');
@@ -238,19 +259,29 @@ class EdgeAgentController extends Controller
             'gateway.errors' => ['sometimes', 'integer', 'min:0'],
             'gateway.candidate_rejections' => ['sometimes', 'integer', 'min:0'],
             'cells.*.name' => ['required', 'regex:/^cell-(0[1-9]|[12][0-9]|3[0-2])$/', 'distinct'], 'cells.*.status' => ['required', 'in:ready,degraded,drained,stopped'],
-            'cells.*.capacity' => ['required', 'array', 'max:20'], 'noisy_domains' => ['sometimes', 'array', 'max:20'],
-            'noisy_domains.*.domain_id' => ['required', 'integer', 'exists:domains,id'],
-            'noisy_domains.*.hostname' => ['nullable', 'string', 'max:253'],
-            'noisy_domains.*.reason_code' => ['required', 'string', 'in:'.implode(',', SecurityConfig::REASON_CODES)],
-            'noisy_domains.*.count' => ['required', 'integer', 'between:1,2147483647'],
-            'noisy_domains.*.occurred_at' => ['required', 'integer', 'min:0'],
-            'passive_origins' => ['sometimes', 'array', 'max:100'],
-            'passive_origins.*.domain' => ['required', 'string', 'max:253'],
-            'passive_origins.*.hostname' => ['required', 'string', 'max:253'],
-            'passive_origins.*.failure_count' => ['required', 'integer', 'between:1,2147483647'],
-            'passive_origins.*.last_status' => ['required', 'integer', 'between:0,599'],
-            'passive_origins.*.last_failed_at' => ['required', 'integer', 'min:0'],
+            'cells.*.capacity' => ['required', 'array', 'max:20'],
+            'noisy_domains' => ['sometimes', 'array', 'max:20'], 'passive_origins' => ['sometimes', 'array', 'max:100'],
         ]);
+        // Liveness comes from the authenticated request alone. The two event lists are advisory:
+        // an entry that fails validation is dropped and counted, never allowed to fail the heartbeat.
+        $advisoryDropped = 0;
+        $data['noisy_domains'] = $this->advisoryEntries($request->input('noisy_domains', []), [
+            'domain_id' => ['required', 'integer'],
+            'hostname' => ['nullable', 'string', 'max:253'],
+            'reason_code' => ['required', 'string', Rule::in(SecurityConfig::reasonCodes())],
+            'count' => ['required', 'integer', 'between:1,2147483647'],
+            'occurred_at' => ['required', 'integer', 'min:0'],
+        ], $advisoryDropped);
+        $data['passive_origins'] = $this->advisoryEntries($request->input('passive_origins', []), [
+            'domain' => ['required', 'string', 'max:253'],
+            'hostname' => ['required', 'string', 'max:253'],
+            'failure_count' => ['required', 'integer', 'between:1,2147483647'],
+            'last_status' => ['required', 'integer', 'between:0,599'],
+            'last_failed_at' => ['required', 'integer', 'min:0'],
+        ], $advisoryDropped);
+        if ($advisoryDropped > 0) {
+            Log::warning('edge heartbeat dropped invalid advisory entries', ['edge_id' => $edge->id, 'dropped' => $advisoryDropped]);
+        }
         $knownCells = $edge->cells()->pluck('id', 'name');
         if (isset($data['runtime_versions'])) {
             RuntimeVersions::validate($data['runtime_versions']);
@@ -288,7 +319,8 @@ class EdgeAgentController extends Controller
                 'listener_ready' => $listenerReady, 'gateway' => $data['gateway'] ?? null,
                 // Zone-transfer progress of this node's DNS service: the last change it has pulled.
                 ...(isset($data['dns']) ? ['dns' => [...$data['dns'], 'reported_at' => now()->toIso8601String()]] : []),
-                'cells' => $data['cells'], 'noisy_domains' => $data['noisy_domains'] ?? [],
+                'cells' => $data['cells'], 'noisy_domains' => $data['noisy_domains'],
+                'advisory_entries_dropped' => $advisoryDropped,
                 'control_addresses_checksum' => $data['control_addresses_checksum'] ?? null,
             ]),
             ...(isset($data['runtime_versions']) ? ['runtime_versions' => $data['runtime_versions'], 'runtime_versions_reported_at' => now()] : []),
@@ -314,17 +346,18 @@ class EdgeAgentController extends Controller
         }
         $isRoutable = $edge->enabled && ! $edge->drained && $listenerReady;
         $newCellRouting = $edge->cells()->orderBy('id')->get(['id', 'status', 'drained'])->toJson();
-        if ($wasRoutable !== $isRoutable || $oldCellRouting !== $newCellRouting || $endpointRoutingChanged) {
-            if ($oldCellRouting !== $newCellRouting) {
-                $edge->poolEndpoints()->update([
-                    'revision' => DB::raw('revision + 1'),
-                    'gateway_state' => 'pending',
-                    'readiness_reason' => 'gateway_not_acknowledged',
-                ]);
-            }
+        if ($oldCellRouting !== $newCellRouting) {
+            $edge->poolEndpoints()->update([
+                'revision' => DB::raw('revision + 1'),
+                'gateway_state' => 'pending',
+                'readiness_reason' => 'gateway_not_acknowledged',
+            ]);
             ReconcilePlatformDnsIdentity::dispatchForRoutingChange();
+        } elseif ($wasRoutable !== $isRoutable || $endpointRoutingChanged) {
+            // Acknowledging a revision or a brief readiness change only re-renders the zone when the published set changes.
+            ReconcilePlatformDnsIdentity::dispatchForProbeChange();
         }
-        foreach ($data['passive_origins'] ?? [] as $failure) {
+        foreach ($data['passive_origins'] as $failure) {
             DnsRecord::query()->where('name', $failure['hostname'])->whereHas('domain', fn ($query) => $query->where('name', $failure['domain'])->where('lifecycle_state', 'active')
                 ->whereHas('edgeCells', fn ($cells) => $cells->where('edge_id', $edge->id)
                     ->where(fn ($assigned) => $assigned->whereNotNull('active_cell_id')->orWhereNotNull('target_cell_id'))))
@@ -334,33 +367,8 @@ class EdgeAgentController extends Controller
                     'reported_at' => now()->toIso8601String(),
                 ]]);
         }
-        foreach ($data['noisy_domains'] ?? [] as $event) {
-            DB::transaction(function () use ($event, $edge): void {
-                $domain = Domain::query()->where('lifecycle_state', 'active')
-                    ->whereHas('edgeCells', fn ($cells) => $cells->where('edge_id', $edge->id)
-                        ->where(fn ($assigned) => $assigned->whereNotNull('active_cell_id')->orWhereNotNull('target_cell_id')))
-                    ->lockForUpdate()->find($event['domain_id']);
-                if ($domain === null || ! $domain->dnsRecords()->where('mode', 'proxied')->where('name', $event['hostname'])->exists()) {
-                    return;
-                }
-                SecurityEvent::query()->create([
-                    'domain_id' => $domain->id, 'edge_id' => $edge->id, 'hostname' => $event['hostname'],
-                    'state' => $domain->security_state, 'reason_code' => $event['reason_code'],
-                    'details' => ['count' => $event['count']], 'occurred_at' => CarbonImmutable::createFromTimestamp($event['occurred_at']),
-                ]);
-                $settings = $domain->security_settings ?? SecurityConfig::defaults();
-                if ($event['count'] >= 50 && $domain->security_state === 'normal') {
-                    $domain->update(['security_state' => 'suspected', 'security_state_changed_at' => now(), 'revision' => $domain->revision + 1]);
-                    Operation::coalesceDomain('edge.domain_reconcile', $domain->id);
-                    ReconcileEdgeDomain::dispatch($domain->id)->afterCommit();
-                }
-                if ($event['count'] >= 100 && str_starts_with($settings['quarantine_policy'], 'automatic')
-                    && in_array($domain->refresh()->security_state, ['normal', 'suspected'], true)) {
-                    $domain->update(['security_state' => 'restricted', 'security_state_changed_at' => now(), 'revision' => $domain->revision + 1]);
-                    Operation::coalesceDomain('edge.domain_reconcile', $domain->id);
-                    ReconcileEdgeDomain::dispatch($domain->id)->afterCommit();
-                }
-            });
+        foreach ($data['noisy_domains'] as $event) {
+            RecordSecurityReport::execute($edge, $event);
         }
         PromoteReadyEdgePlacements::execute();
         $this->completeAcknowledgedTombstones();

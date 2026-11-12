@@ -47,6 +47,56 @@ derived, retention-bounded incident data and are not required to recover
 serving. When policy requires preservation, use a separately tested crash-safe
 volume snapshot or supported object storage; remember that the control backup does not contain Loki.
 
+## First backup before an install is ready
+
+`cdnfoundry-fleet deploy` does not report success for a control node until the
+control database records one backup as succeeded and verified against the
+repository. If none exists it takes the first one, and if that backup does not
+verify the install stops with an error naming `backup-now`. With backups
+disabled by choice, deploy says the install has **no recovery point** instead
+of reporting success. `doctor` fails **A verified backup exists** while the
+count is zero.
+
+This proves a backup was written and read back. It is not a restore drill:
+the documented restore has not been timed, so this guide publishes **no RTO and
+no RPO figure**. Treat the recovery point as "the age of the newest verified
+backup" (the backup interval) and the recovery time as unmeasured until a drill
+is recorded.
+
+## What works while the control plane is down
+
+This table states what each part does when the control host is unreachable.
+Rows marked *by design* come from reading the code and the runtime contracts;
+only rows marked *tested* have an automated run behind them, and the test is
+named. Nothing here is a measured duration.
+
+| Capability | During a control outage | Basis |
+| --- | --- | --- |
+| DNS answers | Keep working from the last zones loaded in PowerDNS; the zone SOA expire is 14 days | by design |
+| HTTP and HTTPS serving | Keep working from the last valid signed bundle on each edge | tested: `control_plane_faults.py` (silent control plane), `cell_generation_reload.py` |
+| Cached content | Keeps being served until it expires | by design |
+| Certificates already on the edges | Keep being served; they expire on their own dates | by design |
+| An edge that restarts | Restarts from its stored last valid state | tested: `control_plane_faults.py` (killed agent restarted) |
+| Telemetry | Vector keeps buffering to disk up to its bound, then drops the newest events | by design |
+| Enrolling a replacement edge | Stops | by design |
+| Revoking a compromised edge | Stops. A compromised edge keeps a valid identity for the whole outage | by design |
+| Issuing or renewing a certificate | Stops | by design |
+| Any DNS, domain, cache, WAF, or user change | Stops (the panel and API are the control plane) | by design |
+| Rolling back a deployment through the API | Stops. Fleet can still act on hosts directly | by design |
+| Automatic security state and the security overlay | Stops changing; the last overlay stays until it expires on the cell | by design |
+
+A compromised edge during an outage cannot be revoked. If you must take a PoP
+out of service while control is unavailable, remove that PoP's addresses at the
+registrar or at the upstream network provider. That needs no CDNFoundry
+component. Add them back after control returns and the edge has been re-enrolled.
+
+The control host is a single point of management availability on a one-node
+install. The data plane keeps serving the last valid configuration; management
+availability equals that of one host; and recovery takes the restore time that
+has not yet been measured. The two-node control option in
+[Control-plane high availability](control-plane-high-availability.md) shortens
+that, and its switchover is likewise unmeasured until drilled.
+
 ## Backup creation
 
 When the repository and a readable password file are configured, the scheduler queues `cdnf:backups:create` daily at 01:30. You can also start a backup yourself. The admin panel has no backup screen.

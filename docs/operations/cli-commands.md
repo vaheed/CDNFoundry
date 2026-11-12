@@ -54,6 +54,8 @@ docker compose -f compose.dev.yml run --rm core php artisan cdnf:api:openapi --c
 
 | Command and syntax | Purpose and effects | Scheduled |
 | --- | --- | --- |
+| `cdnf:operations:prune {--batch=5000}` | Permanently deletes one bounded batch of finished operations older than `operation_retention_days`. Pending, running, and unacknowledged failed operations are kept. | Daily at 03:30 |
+| `cdnf:security-events:prune {--batch=5000}` | Permanently deletes one bounded batch of security events older than `security_event_retention_days`. | Daily at 03:20 |
 | `cdnf:audit:prune {--batch=1000}` | Permanently deletes one bounded batch of audit events beyond configured retention. Increase the batch cautiously because deletion load grows with it. | Daily at 03:10 |
 
 ## Backups
@@ -179,6 +181,8 @@ or internal non-command work, which is intentionally not renamed here.
 | `cdnf:reports:build usage` | Monthly on the 2nd at 03:40 | Build last month's usage report |
 | `cdnf:reports:build operations` | Mondays at 06:00 | Build last week's operations report |
 | `cdnf:audit:prune` | Daily at 03:10 | Delete one expired audit batch |
+| `cdnf:security-events:prune` | Daily at 03:20 | Delete one expired security event batch |
+| `cdnf:operations:prune` | Daily at 03:30 | Delete one batch of expired finished operations |
 | `cdnf:backups:create` | Daily at 01:30 when configured | Queue the control-plane backup |
 | `cdnf:backups:maintain prune` | Daily at 04:10 when configured | Apply backup retention |
 | `cdnf:backups:maintain check` | Sundays at 05:00 when configured | Verify the backup repository |

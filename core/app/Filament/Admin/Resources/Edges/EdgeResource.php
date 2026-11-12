@@ -55,7 +55,14 @@ class EdgeResource extends Resource
                 ->columns(['default' => 1, 'md' => 2, 'xl' => 4])
                 ->schema([
                     TextEntry::make('registered_at')->label(FilamentHelp::label('Enrolled at', 'When this edge agent completed its first authenticated enrollment.'))->dateTime()->placeholder('Awaiting agent enrollment'),
-                    TextEntry::make('last_heartbeat_at')->label(FilamentHelp::label('Last heartbeat', 'Expected every 5 seconds. The value refreshes automatically and becomes stale after the configured threshold.'))->since()->placeholder('No heartbeat received'),
+                    TextEntry::make('last_heartbeat_at')->label(FilamentHelp::label('Control last heard', 'Expected every 5 seconds. The value refreshes automatically and becomes stale after the configured threshold.'))->since()->placeholder('No heartbeat received'),
+                    TextEntry::make('serving')->label(FilamentHelp::label('Serving', 'Whether other PoPs can reach this edge, from their recent probes. It does not depend on the heartbeat, so an edge that serves traffic while the control plane has not heard from it shows Serving here and a stale heartbeat above.'))->badge()
+                        ->state(fn (Edge $record): string => $record->servingLabel())
+                        ->color(fn (string $state): string => match ($state) {
+                            'Serving' => 'success',
+                            'Not serving' => 'danger',
+                            default => 'gray',
+                        }),
                     TextEntry::make('agent_version')->label(FilamentHelp::label('Agent version', 'Software version reported by the running edge agent.'))->placeholder('Available after enrollment'),
                     TextEntry::make('runtime_versions')->label(FilamentHelp::label('Current runtime versions', 'Immutable gateway, agent, normal-cell, and WAF-cell image digests reported by the edge.'))
                         ->state(fn (Edge $record): string => self::formatRuntimeVersions($record->runtime_versions, 'Not reported'))
@@ -104,16 +111,25 @@ class EdgeResource extends Resource
                 ->state(fn (Edge $record): string => match (true) {
                     ! $record->enabled => 'Disabled',
                     $record->drained => 'Drained',
-                    default => 'Serving',
+                    default => 'Enabled',
                 })
                 ->badge()
                 ->color(fn (string $state): string => match ($state) {
-                    'Serving' => 'success',
+                    'Enabled' => 'success',
                     'Drained' => 'warning',
                     default => 'gray',
                 }),
+            TextColumn::make('serving')->label('Serving')
+                ->state(fn (Edge $record): string => $record->servingLabel())
+                ->badge()
+                ->color(fn (string $state): string => match ($state) {
+                    'Serving' => 'success',
+                    'Not serving' => 'danger',
+                    default => 'gray',
+                }),
             TextColumn::make('country_code')->label('Location')->formatStateUsing(fn (string $state, Edge $record): string => $state.' / '.$record->continent_code),
-            TextColumn::make('last_heartbeat_at')->label('Heartbeat')->since()->placeholder('Never')->sortable(),
+            TextColumn::make('last_heartbeat_at')->label('Control last heard')->since()->placeholder('Never')->sortable()
+                ->color(fn (Edge $record): string => $record->controlLinkFresh() ? 'gray' : 'warning'),
             TextColumn::make('agent_version')->label('Agent'),
             TextColumn::make('cells_count')->counts('cells')->label('Cells')->alignEnd(),
             TextColumn::make('desired_runtime_versions')->label('Version drift')->badge()

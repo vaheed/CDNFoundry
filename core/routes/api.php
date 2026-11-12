@@ -129,6 +129,9 @@ Route::middleware(['auth:sanctum', 'account.active', 'token.scope', 'throttle:ac
     Route::get('/domains/{domain}/analytics/top-urls', [AnalyticsController::class, 'view'])->defaults('view', 'top-urls');
     Route::get('/domains/{domain}/analytics/origin', [AnalyticsController::class, 'view'])->defaults('view', 'origin');
     Route::get('/domains/{domain}/analytics/edges', [AnalyticsController::class, 'view'])->defaults('view', 'edges');
+    Route::get('/domains/{domain}/analytics/volume/edges', [AnalyticsController::class, 'view'])->defaults('view', 'volume-edges');
+    Route::get('/domains/{domain}/analytics/volume/cells', [AnalyticsController::class, 'view'])->defaults('view', 'volume-cells');
+    Route::get('/domains/{domain}/analytics/volume/countries', [AnalyticsController::class, 'view'])->defaults('view', 'volume-countries');
     Route::get('/domains/{domain}/analytics/compression', [AnalyticsController::class, 'compression']);
     Route::get('/domains/{domain}/analytics/dns', [AnalyticsController::class, 'view'])->defaults('view', 'dns');
     Route::get('/domains/{domain}/logs/requests', [DomainLogController::class, 'index'])->defaults('stream', 'requests');
@@ -141,6 +144,10 @@ Route::middleware(['auth:sanctum', 'account.active', 'token.scope', 'throttle:ac
     Route::prefix('admin')->middleware('admin')->group(function (): void {
         Route::get('/analytics/summary', [AdminAnalyticsController::class, 'summary']);
         Route::get('/analytics/traffic', [AdminAnalyticsController::class, 'view'])->defaults('view', 'traffic');
+        Route::get('/analytics/volume/edges', [AdminAnalyticsController::class, 'view'])->defaults('view', 'volume-edges');
+        Route::get('/analytics/volume/cells', [AdminAnalyticsController::class, 'view'])->defaults('view', 'volume-cells');
+        Route::get('/analytics/volume/domains', [AdminAnalyticsController::class, 'view'])->defaults('view', 'volume-domains');
+        Route::get('/analytics/volume/countries', [AdminAnalyticsController::class, 'view'])->defaults('view', 'volume-countries');
         Route::get('/analytics/compression', [AdminAnalyticsController::class, 'compression']);
         Route::get('/analytics/dns', [AdminAnalyticsController::class, 'view'])->defaults('view', 'dns');
         Route::get('/logs/errors', [AdminLogController::class, 'index'])->defaults('stream', 'errors');

@@ -43,6 +43,8 @@ class Telemetry extends Page
 
     public int $trafficLimit = 12;
 
+    public int $dnsLimit = 12;
+
     protected static string|\BackedEnum|null $navigationIcon = 'phosphor-chart-line';
 
     protected static ?string $navigationLabel = 'Traffic and telemetry';
@@ -128,7 +130,7 @@ class Telemetry extends Page
             ],
             'summary' => [],
             'traffic' => ['items' => [], 'has_more' => false, 'expanded' => false],
-            'dns' => [],
+            'dns' => ['items' => [], 'has_more' => false, 'expanded' => false],
             'investigation' => [],
             'compression' => ['items' => [], 'has_more' => false, 'expanded' => false],
             'logs' => ['errors' => [], 'security' => [], 'requests' => []],
@@ -165,7 +167,12 @@ class Telemetry extends Page
                 'has_more' => count($traffic) > $this->trafficLimit,
                 'expanded' => $this->trafficLimit > 12,
             ];
-            $state['dns'] = $store->aggregate($domain, $range, 'dns');
+            $dns = $store->aggregate($domain, $range, 'dns');
+            $state['dns'] = [
+                'items' => array_slice($dns, 0, $this->dnsLimit),
+                'has_more' => count($dns) > $this->dnsLimit,
+                'expanded' => $this->dnsLimit > 12,
+            ];
             $compression = $store->aggregate($domain, $rawRange, 'compression');
             $state['compression'] = [
                 'items' => array_slice($compression, 0, $this->compressionLimit),
@@ -211,6 +218,16 @@ class Telemetry extends Page
     public function showFewerTraffic(): void
     {
         $this->trafficLimit = 12;
+    }
+
+    public function showMoreDns(): void
+    {
+        $this->dnsLimit = min(1000, $this->dnsLimit + 24);
+    }
+
+    public function showFewerDns(): void
+    {
+        $this->dnsLimit = 12;
     }
 
     public function showFewerCompression(): void

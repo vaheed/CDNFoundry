@@ -18,6 +18,8 @@ services:
       - ./docker/openresty:/docker/openresty:ro
       - ./edge-agent:/edge-agent:ro
       - ./AGENTS.md:/AGENTS.md:ro
+      - ./Makefile:/Makefile:ro
+      - ./docker/grafana:/docker/grafana:ro
       - ./.agents:/.agents:ro
       - core-vendor:/app/vendor:ro
       - mmdb:/mmdb:ro

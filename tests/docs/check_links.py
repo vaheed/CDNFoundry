@@ -42,7 +42,6 @@ REQUIRED_PAGES = {
     "troubleshooting/index.md",
     "development/index.md",
     "contributing/index.md",
-    "roadmap.md",
 }
 LINK = re.compile(
     r"(?<!!)\[[^\]]*\]\((?:<([^>]+)>|([^\s)]+))(?:\s+['\"][^'\"]*['\"])?\)"

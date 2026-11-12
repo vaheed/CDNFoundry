@@ -14,6 +14,12 @@ type Problem = string;
 
 function watch(page: Page, problems: Problem[]): void {
     page.on('pageerror', (error) => problems.push(`${page.url()} script error: ${error.message}`));
+    // The panels run under an enforced Content-Security-Policy; a blocked script, style, image, or request is a failure.
+    page.on('console', (message) => {
+        if (/content security policy/i.test(message.text())) {
+            problems.push(`${page.url()} policy violation: ${message.text().slice(0, 200)}`);
+        }
+    });
     page.on('response', (response) => {
         if (response.status() >= 500) {
             problems.push(`${page.url()} ${response.request().method()} ${new URL(response.url()).pathname} returned ${response.status()}`);

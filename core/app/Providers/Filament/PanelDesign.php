@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\InitialsAvatarProvider;
 use Filament\Panel;
 use Filament\Support\Colors\Color;
 use Filament\View\PanelsRenderHook;
@@ -33,6 +34,7 @@ class PanelDesign
         PhosphorIcons::register();
 
         return $panel
+            ->defaultAvatarProvider(InitialsAvatarProvider::class)
             ->viteTheme('resources/css/filament/shared/theme.css')
             ->colors([
                 'primary' => array_replace(Color::Blue, [600 => self::BRAND]),

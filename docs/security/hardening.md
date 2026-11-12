@@ -10,9 +10,12 @@ keeps secrets private, and limits what a stolen credential can do. Work through
 the sections in order. Each one names the setting to check.
 
 ::: danger Private services must stay private
-Docker publishes ports around simple host firewall rules. A provider security
-group alone is not enough. Add an equivalent `DOCKER-USER` rule on the host,
-then test from a network you do not trust.
+Docker publishes ports around simple host firewall rules, so a host firewall such
+as `ufw` and a provider security group alone are not enough. The Fleet tool writes
+`firewall.sh` into every node bundle. It puts a default-deny rule in front of every
+internal listener (see [Internal listener firewall](#internal-listener-firewall)).
+On a manual Compose install, add equivalent `DOCKER-USER` rules yourself. Then test
+from a network you do not trust.
 :::
 
 ## Public surface
@@ -32,6 +35,67 @@ any container API. For the full port list see
 
 **Check it worked:** from a host outside your network, scan the control and edge
 addresses. Only the ports above answer.
+
+## Internal listener firewall
+
+Exporters, the DNSdist statistics listener, the edge gateway metrics, and the
+PowerDNS transfer listener are reachable only by the fleet. Each bundle holds a
+generated `firewall.sh`, and `start.sh` runs it before any container starts.
+
+- It admits those ports only from the addresses of the enabled nodes in the fleet
+  (public, bind, monitor, and log addresses). Everything else is dropped.
+- Docker-published ports are judged in the `DOCKER-USER` chain on their original
+  destination port. The edge gateway runs on the host network, so its metrics port
+  is judged in `INPUT`. Traffic between containers on the same host is not touched.
+- Public listeners (DNS, HTTP, HTTPS, edge control) are never filtered by it.
+- On a host with systemd it installs `cdnfoundry-firewall.service`, so the rules return
+  after a reboot before containers restart. It uses `ip6tables` too when present.
+
+**Check it worked:** from a host outside the fleet, connect to each internal port.
+Every connection times out. From a fleet host, Prometheus targets stay `up`.
+
+## Management networks
+
+Two surfaces share the control hostname, and they are treated differently.
+
+- **Open to everyone:** the customer panel (`/app`), the customer API, the status
+  page, and the health probes. Customers sign in from anywhere. Their sign-in is
+  throttled, and the policies scope them to their own domains.
+- **Management networks only:** the administrator panel (`/admin`), the administrator
+  API (`/api/admin`), Horizon, the metrics endpoint, the control-state page, and
+  Grafana. One stolen credential there controls the platform.
+
+Set the networks with
+`cdnfoundry-fleet management-networks --add "203.0.113.0/24 2001:db8::/32"`, and
+change one entry at a time later with `--add` and `--remove`. Deploy the
+configuration to apply it. The fleet's own node addresses are added for you.
+
+- Everyone else gets a bare `403` on the restricted paths: no redirect, no login
+  form, no cookie. Grafana has no open path at all.
+- Add only the networks where administrators work. Do not add customer ranges.
+- The control plane checks the same list again (`MANAGEMENT_NETWORKS`), so a
+  misconfigured proxy cannot reopen the administrator panel.
+- An empty list restricts nothing. Set it on every production install, from a
+  network you can still reach after the change.
+- An administrator account can still sign in at `/app` and use the customer API
+  from anywhere. Keep administrator API tokens short-lived and rotate them.
+
+**Check it worked:** from a network outside the list, `/admin`, `/api/admin/edges`,
+`/horizon`, `/metrics`, and Grafana each return `403` with no `Set-Cookie` header,
+while `/app` and `/health` still load.
+
+## Browser security
+
+- Every panel and API response carries one `Content-Security-Policy`: scripts run only
+  from this origin or with the request's nonce, and nothing loads from another origin.
+  `CONTENT_SECURITY_POLICY` selects `enforce` (default), `report-only`, or `off`.
+- The API allows no cross-origin browser by default. List origins in
+  `CORS_ALLOWED_ORIGINS`; there is no wildcard.
+- HSTS covers subdomains.
+- No response names a software version: PHP's `X-Powered-By`, nginx's version, and
+  PowerDNS's `version.bind` are off. PHP errors go to the container log, never to a page.
+- Every process of the control-plane image, including the PHP-FPM master, runs as
+  `www-data`. The container starts as root only to prepare its storage.
 
 ## Secrets
 

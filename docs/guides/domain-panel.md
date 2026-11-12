@@ -37,7 +37,7 @@ Open a domain to see its page. It has an **Overview** and tabs for the work:
 | **Overview** | Cards for Delegation, DNS, Delivery, TLS, Cache, and Security | This page |
 | **DNS records** | Your records, with proxy, origin, health-check, backup-origin, and Geo-DNS settings | [DNS](dns.md), [Proxy and origins](proxy-and-origins.md), [Geo-DNS](geo-dns.md) |
 | **Security rules** | Allow and block rules by network, country, or continent | [Security](security.md) |
-| **WAF exclusions** | Rules you turn off for a path, with an owner | [Managed WAF](managed-waf.md) |
+| **WAF exclusions** | Shown only when the domain still has exclusions saved before they were disabled. They have no effect; delete them | [Managed WAF](managed-waf.md) |
 
 The **Overview** cards answer the common questions at a glance:
 
@@ -47,6 +47,10 @@ The **Overview** cards answer the common questions at a glance:
 - **TLS:** the certificate mode and expiry.
 - **Cache:** whether caching is on and its limits.
 - **Security:** the current security state.
+
+The page updates itself after every change you make. While a change is still
+deploying, it checks again every 5 seconds until the deployment finishes, so you
+never need to reload it.
 
 ### What you can do from a domain page
 

@@ -12,7 +12,7 @@ class ErrorLatencyChart extends ChartWidget
 
     protected static ?int $sort = 5;
 
-    protected int|string|array $columnSpan = ['default' => 12, 'xl' => 6];
+    protected int|string|array $columnSpan = ['default' => 1, 'xl' => 6];
 
     protected ?string $heading = 'Errors and origin latency';
 

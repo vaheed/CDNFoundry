@@ -922,6 +922,17 @@ body,
     width: 6.5rem;
 }
 
+/* A name in a table that opens its page: ink text, link color on hover, no permanent underline. */
+.cdn-table-link {
+    color: var(--cdn-text-strong);
+    font-weight: 500;
+}
+
+.cdn-table-link:hover,
+.cdn-table-link:focus-visible {
+    color: var(--cdn-link);
+}
+
 .cdn-fact-grid {
     display: grid;
     gap: 0 var(--cdn-space-6);
@@ -1093,6 +1104,15 @@ body,
     background: var(--cdn-overlay);
     box-shadow: var(--cdn-shadow-popover);
     --tw-ring-shadow: 0 0 #0000;
+}
+
+/* Menus fit their longest label instead of Filament's fixed 14rem, so no action label is cut off. */
+@layer components {
+    .fi-dropdown-panel.fi-dropdown-panel:not([class*='fi-width-']) {
+        width: max-content;
+        min-width: 12rem;
+        max-width: min(24rem, calc(100vw - 2rem)) !important;
+    }
 }
 
 .fi-dropdown-list-item {

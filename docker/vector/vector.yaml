@@ -40,8 +40,14 @@ transforms:
     inputs: [edge_syslog]
     drop_on_error: true
     source: |
-      envelope = parse_regex!(to_string!(.message), r'(?P<payload>\{.*\})$')
-      . = parse_json!(envelope.payload)
+      # A line that is not a complete JSON object (an older runtime logging an internal hop with
+      # empty numeric fields, or a datagram cut short) is dropped as a known shape, not counted as
+      # a conversion failure. Only an unexpected failure raises the unintentional drop alert.
+      envelope = parse_regex(to_string(.message) ?? "", r'(?P<payload>\{.*\})$') ?? null
+      if envelope == null { abort }
+      decoded = parse_json(string!(envelope.payload)) ?? null
+      if decoded == null { abort }
+      . = decoded
       # Only this node's cells hold the node secret; drop lines other containers forge.
       expected_proof = sha2!("cdnf-telemetry-v1|" + get_env_var!("EDGE_STATUS_TOKEN"), variant: "SHA-256")
       presented_proof = string(.telemetry_proof) ?? ""
@@ -57,8 +63,16 @@ transforms:
       .domain_id = to_int!(.domain_id)
       .hostname = slice!(replace(to_string(.hostname) ?? "", r'[\x00-\x1f\x7f]', ""), 0, 253)
       .method = slice!(upcase(to_string(.method) ?? "GET"), 0, 16)
-      raw_path = split(to_string(.path) ?? "/", "?")[0]
+      # The path is the raw request path as sent (still percent-encoded). The query is never
+      # stored; a bounded hash tells cache variants apart without keeping tokens.
+      request_target = slice!(to_string(.path) ?? "/", 0, 8192)
+      target_parts = split(request_target, "?", limit: 2)
+      raw_path = target_parts[0]
       .path = slice!(replace!(raw_path, r'[\x00-\x1f\x7f]', ""), 0, 2048)
+      .query_hash = ""
+      if length(target_parts) == 2 && target_parts[1] != "" {
+        .query_hash = slice!(sha2!(target_parts[1], variant: "SHA-256"), 0, 16)
+      }
       .status = to_int(.status) ?? 0
       .bytes_in = to_int(.bytes_in) ?? 0
       .bytes_out = to_int(.bytes_out) ?? 0
@@ -92,6 +106,8 @@ transforms:
       .security_action = slice!(to_string(.security_action) ?? "allow", 0, 24)
       .security_reason = slice!(to_string(.security_reason) ?? "", 0, 64)
       # A PoP collector knows its enrolled edge; local cell names are not global IDs.
+      # The cell is the name the runtime logged; the collector then replaces edge_id with the edge host.
+      .cell = slice!(replace(to_string(.edge_id) ?? "", r'[^A-Za-z0-9._-]', ""), 0, 64)
       collector_edge_id = get_env_var("CDNF_TELEMETRY_EDGE_ID") ?? ""
       if collector_edge_id != "" { .edge_id = collector_edge_id }
       .edge_id = slice!(to_string(.edge_id) ?? "unknown", 0, 64)
@@ -258,6 +274,7 @@ transforms:
         "security_class": .security_class,
         "tls_reason": .tls_error,
         "bytes_sent": to_int(.bytes_sent) ?? 0,
+        "bytes_received": to_int(.bytes_in) ?? 0,
         "request_seconds": seconds / 1000.0,
         "origin_seconds": origin_seconds,
         "origin_failed": .origin_error != ""
@@ -288,6 +305,7 @@ transforms:
     metrics:
       - { type: counter, field: kind, name: cdnf_edge_requests_total, tags: { pop: "{{pop}}", region: "{{region}}", edge: "{{edge}}", status_class: "{{status_class}}", cache_status: "{{cache_status}}" } }
       - { type: counter, field: bytes_sent, increment_by_value: true, name: cdnf_edge_bytes_sent_total, tags: { pop: "{{pop}}", region: "{{region}}", edge: "{{edge}}" } }
+      - { type: counter, field: bytes_received, increment_by_value: true, name: cdnf_edge_bytes_received_total, tags: { pop: "{{pop}}", region: "{{region}}", edge: "{{edge}}" } }
       - { type: histogram, field: request_seconds, name: cdnf_edge_request_duration_seconds, tags: { pop: "{{pop}}", region: "{{region}}", edge: "{{edge}}" } }
   edge_origin_metrics:
     type: log_to_metric
@@ -370,6 +388,13 @@ sinks:
     buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
 
 tests:
+  - name: drop_a_line_with_empty_numeric_fields_without_a_conversion_failure
+    inputs:
+      - insert_at: decoded_edge_syslog
+        type: log
+        log_fields:
+          message: '<190>cdnfoundry_edge: {"domain_id":,"status":200,"asn":,"waf_rule_id":,"telemetry_proof":""}'
+    no_outputs_from: [decoded_edge_syslog]
   - name: drop_syslog_events_without_the_node_proof
     inputs:
       - insert_at: decoded_edge_syslog
@@ -392,6 +417,7 @@ tests:
           - type: vrl
             source: |-
               assert_eq!(.path, "/item")
+              assert_eq!(length(string!(.query_hash)), 16)
               assert_eq!(.referrer, "https://example.test/cart")
   - name: keep_customer_dns_events_and_drop_the_synthetic_probe
     inputs:
@@ -464,6 +490,7 @@ tests:
           upstream_header_time: "-"
           server_protocol: HTTP/2.0
           pop: forged-pop
+          edge_id: cell-07
           bytes_sent: 1234
     outputs:
       - extract_from: billing_edge_events
@@ -476,6 +503,7 @@ tests:
               assert_eq!(.server_protocol, "h2")
               assert_eq!(.ip_version, "6")
               assert_eq!(.bytes_sent, 1234)
+              assert_eq!(.cell, "cell-07")
               assert!(.pop != "forged-pop")
   - name: derive_bounded_live_metrics_from_an_edge_request
     inputs:
@@ -488,6 +516,7 @@ tests:
           status: 503
           cache_status: miss
           bytes_sent: 900
+          bytes_in: 340
           request_time_ms: 120
           origin_error: "502"
           security_class: ""
@@ -497,6 +526,7 @@ tests:
         conditions:
           - type: vrl
             source: |-
+              assert_eq!(.bytes_received, 340)
               assert_eq!(.status_class, "5xx")
               assert_eq!(.cache_status, "MISS")
               assert_eq!(.origin_failed, true)

@@ -43,6 +43,7 @@ x-core-env: &core-env
   CLICKHOUSE_PASSWORD: cdnf-reader-dev-only
   CLICKHOUSE_ZONES_PASSWORD: cdnf-zones-dev-only
   PROMETHEUS_URL: http://prometheus:9090
+  ALERTMANAGER_URL: http://alertmanager:9093
   METRICS_TOKEN_FILE: /run/dev-metrics/metrics-token
   RESTIC_REPOSITORY: /app/storage/app/restic
   RESTIC_PASSWORD_FILE: /run/dev-backup/restic-password
@@ -931,6 +932,7 @@ services:
       EDGE_STATE_DIR: /var/lib/cdnfoundry/agent
       EDGE_RUNTIME_DIR: /var/lib/cdnfoundry/runtime
       EDGE_GATEWAY_STATUS_URL: http://edge-gateway-a:9105/metrics
+      EDGE_TELEMETRY_URL: http://vector:8686
       EDGE_GATEWAY_ADDRESSES: '["172.28.10.10","fd00:cd0f:10::10"]'
       EDGE_CELL_TARGETS: '{"cell-01":{"http":"edge-a:8081","https":"edge-a:8444"},"cell-02":{"http":"edge-a-quarantine:8081","https":"edge-a-quarantine:8444"},"cell-03":{"http":"edge-a-cell-03:8081","https":"edge-a-cell-03:8444"},"cell-04":{"http":"edge-a-cell-04:8081","https":"edge-a-cell-04:8444"},"cell-05":{"http":"edge-a-cell-05:8081","https":"edge-a-cell-05:8444"},"cell-06":{"http":"edge-a-cell-06:8081","https":"edge-a-cell-06:8444"},"cell-07":{"http":"edge-a-cell-07:8081","https":"edge-a-cell-07:8444"},"cell-08":{"http":"edge-a-cell-08:8081","https":"edge-a-cell-08:8444"}}'
       EDGE_CELL_ASSIGNMENTS: '{"cell-01":"shared-default","cell-02":"quarantine-default","cell-03":"","cell-04":"","cell-05":"","cell-06":"","cell-07":"","cell-08":""}'
@@ -1127,6 +1129,7 @@ services:
       EDGE_STATE_DIR: /var/lib/cdnfoundry/agent
       EDGE_RUNTIME_DIR: /var/lib/cdnfoundry/runtime
       EDGE_GATEWAY_STATUS_URL: http://edge-gateway-b:9105/metrics
+      EDGE_TELEMETRY_URL: http://vector:8686
       EDGE_GATEWAY_ADDRESSES: '["172.28.20.10"]'
       EDGE_CELL_TARGETS: '{"cell-01":{"http":"edge-b:8081","https":"edge-b:8444"},"cell-02":{"http":"edge-b-quarantine:8081","https":"edge-b-quarantine:8444"},"cell-03":{"http":"edge-b-cell-03:8081","https":"edge-b-cell-03:8444"},"cell-04":{"http":"edge-b-cell-04:8081","https":"edge-b-cell-04:8444"},"cell-05":{"http":"edge-b-cell-05:8081","https":"edge-b-cell-05:8444"},"cell-06":{"http":"edge-b-cell-06:8081","https":"edge-b-cell-06:8444"},"cell-07":{"http":"edge-b-cell-07:8081","https":"edge-b-cell-07:8444"},"cell-08":{"http":"edge-b-cell-08:8081","https":"edge-b-cell-08:8444"}}'
       EDGE_CELL_ASSIGNMENTS: '{"cell-01":"shared-default","cell-02":"quarantine-default","cell-03":"","cell-04":"","cell-05":"","cell-06":"","cell-07":"","cell-08":""}'

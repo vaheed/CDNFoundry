@@ -664,6 +664,15 @@ Refreshes every 30s.
 | Bandwidth by PoP | Bits per second sent, per PoP, at 5-minute resolution. |
 | Monthly bandwidth | Bytes sent per month. |
 | Billing rollups | Hourly usage rollups kept in the control database, which the monthly report uses. |
+| Download by edge | Bytes sent to clients, headers included, per edge host. SQL: SELECT edge_id, sum(bytes_sent) FROM cdnf.edge_volume_hourly WHERE $__timeFilter(interval_start) GROUP BY edge_id |
+| Download by cell | Bytes sent to clients per serving cell. SQL: SELECT cell, sum(bytes_sent) FROM cdnf.edge_volume_hourly WHERE $__timeFilter(interval_start) GROUP BY cell |
+| Download by domain | Bytes sent to clients per domain. |
+| Download by country | Bytes sent to clients per client country. |
+| Upload by edge | Request bytes received from clients (the request length, headers included) per edge host. |
+| Upload by cell | Request bytes received from clients per serving cell. |
+| Upload by domain | Request bytes received from clients per domain. |
+| Upload by country | Request bytes received from clients per client country. |
+| Bandwidth by edge: download and upload | Bits per second per edge host, live from Prometheus. Origin-side traffic is not measured. |
 
 ## Samples
 

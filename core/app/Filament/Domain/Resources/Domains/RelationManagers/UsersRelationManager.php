@@ -3,6 +3,7 @@
 namespace App\Filament\Domain\Resources\Domains\RelationManagers;
 
 use App\Enums\UserType;
+use App\Filament\Domain\Resources\Domains\RelationManagers\Concerns\SyncsDomainPage;
 use App\Models\AuditLog;
 use App\Models\User;
 use Filament\Actions\AttachAction;
@@ -16,6 +17,8 @@ use Illuminate\Validation\ValidationException;
 
 class UsersRelationManager extends RelationManager
 {
+    use SyncsDomainPage;
+
     protected static string $relationship = 'users';
 
     public static function getBadge(Model $ownerRecord, string $pageClass): ?string

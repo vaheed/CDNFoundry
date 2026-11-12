@@ -52,6 +52,44 @@ class Edge extends Model
         return $this->hasMany(FleetRolloutEdge::class);
     }
 
+    public function probeResults(): HasMany
+    {
+        return $this->hasMany(EdgeProbeResult::class, 'target_edge_id');
+    }
+
+    /** Whether the control plane has heard from this edge recently. Says nothing about whether it serves traffic. */
+    public function controlLinkFresh(): bool
+    {
+        return $this->last_heartbeat_at?->gte(now()->subSeconds(app(PlatformSettings::class)->integer('edge_runtime', 'heartbeat_fresh_seconds'))) ?? false;
+    }
+
+    /**
+     * Whether other PoPs can reach this edge's listeners, from their recent probes: true when most succeed, false when
+     * most fail, null when too few vantage points have reported to say. Independent of the heartbeat.
+     */
+    public function servingByProbes(): ?bool
+    {
+        $settings = app(PlatformSettings::class);
+        $results = $this->probeResults()
+            ->where('checked_at', '>=', now()->subSeconds($settings->integer('edge_runtime', 'probe_result_max_age_seconds')))
+            ->whereHas('observer', fn ($query) => $query->where('enabled', true)->whereNull('identity_revoked_at'))
+            ->get(['ok']);
+        if ($results->count() < $settings->integer('edge_runtime', 'probe_min_vantage_points')) {
+            return null;
+        }
+
+        return $results->where('ok', true)->count() * 2 > $results->count();
+    }
+
+    public function servingLabel(): string
+    {
+        return match ($this->servingByProbes()) {
+            true => 'Serving',
+            false => 'Not serving',
+            null => 'Unknown',
+        };
+    }
+
     public function scopeReadyForTraffic(Builder $query): Builder
     {
         return $query->where('enabled', true)->where('drained', false)

@@ -210,7 +210,7 @@ def request_trace() -> dict:
          stat("Origin time", "Time the origin took to answer.", [ch("SELECT origin_latency_ms AS ms FROM cdnf.edge_events WHERE request_id = '${request_id}' AND request_id != '' LIMIT 1", table=True)], "ms", "latency_ms", w=6),
          stat("Status", "The response status the client received.", [ch("SELECT status FROM cdnf.edge_events WHERE request_id = '${request_id}' AND request_id != '' LIMIT 1", table=True)], "none", w=6),
          stat("Cache", "The cache status of the request.", [ch("SELECT cache_status FROM cdnf.edge_events WHERE request_id = '${request_id}' AND request_id != '' LIMIT 1", table=True)], "none", w=6)],
-        [logs("Operational logs for the request", "Operational log lines that mention the request ID.", [loki('{service=~".+"} | request_id="${request_id}"')], h=10)],
+        [logs("Operational logs for the request", "Operational log lines that mention the request ID.", [loki('{service=~".+"} |= "${request_id}" | json | request_id="${request_id}"')], h=10)],
     ]
     return dashboard("cdnf-request-trace", "Request trace", "cdnf-oncall", "One request ID from the edge log to the origin result to operational logs.", rows, runbook="operational-error-logs", extra_variables=[request])
 
@@ -253,6 +253,11 @@ def domain_comparison() -> dict:
     return dashboard("cdnf-domain-comparison", "Domain comparison", "cdnf-domains", "Several domains side by side, for support.", rows, runbook="domain-5xx-ratio-high")
 
 
+def volume(dimension: str, column: str) -> str:
+    return (f"SELECT {dimension}, sum({column}) AS bytes FROM cdnf.edge_volume_hourly WHERE $__timeFilter(interval_start) "
+            f"AND $__conditionalAll(domain_id IN (${{domain:csv}}), $domain) GROUP BY {dimension} ORDER BY bytes DESC LIMIT 10")
+
+
 def usage_billing() -> dict:
     month = "toStartOfMonth(interval_start)"
     rows = [
@@ -272,6 +277,16 @@ def usage_billing() -> dict:
          timeseries("Monthly bandwidth", "Bytes sent per month.", [ch(f"SELECT {month} AS time, sum(bytes_sent) AS bytes FROM cdnf.edge_traffic_daily WHERE interval_start > now() - INTERVAL 12 MONTH AND " + SCOPE + " GROUP BY time ORDER BY time")], "bytes")],
         [table("Billing rollups", "Hourly usage rollups kept in the control database, which the monthly report uses.", [pg("SELECT date_trunc('day', interval_start) AS day, sum(requests) AS requests, sum(bytes_out) AS bytes_out, sum(cache_hits) AS cache_hits, sum(dns_queries) AS dns_queries FROM grafana_usage_rollups WHERE interval_start > now() - interval '62 days' GROUP BY 1 ORDER BY 1 DESC LIMIT 62")], w=24,
                overrides=[{"matcher": {"id": "byName", "options": "bytes_out"}, "properties": [{"id": "unit", "value": "bytes"}]}])],
+        row("Download and upload"),
+        [bargauge("Download by edge", "Bytes sent to clients, headers included, per edge host. SQL: SELECT edge_id, sum(bytes_sent) FROM cdnf.edge_volume_hourly WHERE $__timeFilter(interval_start) GROUP BY edge_id", [ch(volume("edge_id", "bytes_sent"), table=True)], "bytes", w=6),
+         bargauge("Download by cell", "Bytes sent to clients per serving cell. SQL: SELECT cell, sum(bytes_sent) FROM cdnf.edge_volume_hourly WHERE $__timeFilter(interval_start) GROUP BY cell", [ch(volume("cell", "bytes_sent"), table=True)], "bytes", w=6),
+         bargauge("Download by domain", "Bytes sent to clients per domain.", [ch(volume("domain_id", "bytes_sent"), table=True)], "bytes", w=6),
+         bargauge("Download by country", "Bytes sent to clients per client country.", [ch(volume("country", "bytes_sent"), table=True)], "bytes", w=6)],
+        [bargauge("Upload by edge", "Request bytes received from clients (the request length, headers included) per edge host.", [ch(volume("edge_id", "bytes_in"), table=True)], "bytes", w=6),
+         bargauge("Upload by cell", "Request bytes received from clients per serving cell.", [ch(volume("cell", "bytes_in"), table=True)], "bytes", w=6),
+         bargauge("Upload by domain", "Request bytes received from clients per domain.", [ch(volume("domain_id", "bytes_in"), table=True)], "bytes", w=6),
+         bargauge("Upload by country", "Request bytes received from clients per client country.", [ch(volume("country", "bytes_in"), table=True)], "bytes", w=6)],
+        [timeseries("Bandwidth by edge: download and upload", "Bits per second per edge host, live from Prometheus. Origin-side traffic is not measured.", [prom("8 * sum by (edge) (rate(cdnf_edge_bytes_sent_total[5m]))", "download {{edge}}"), prom("8 * sum by (edge) (rate(cdnf_edge_bytes_received_total[5m]))", "upload {{edge}}")], "bps", w=24)],
     ]
     return dashboard("cdnf-usage-billing", "Usage and billing", "cdnf-business", "Monthly bandwidth, 95th-percentile bandwidth, requests, and DNS queries per domain, pool, and region, from rollups only.", rows, runbook="egress-anomaly")
 

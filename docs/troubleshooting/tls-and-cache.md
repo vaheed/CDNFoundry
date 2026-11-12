@@ -62,7 +62,7 @@ Never replace the bootstrap pair with a customer key.
 Check each of these:
 
 - cache is enabled for the domain, and development mode has not expired;
-- the request method, `Authorization` header, and bypass cookies;
+- the request method, `Authorization` header, and cookies (any cookie not on the ignored list bypasses the cache);
 - the query-key policy;
 - the response status, `Set-Cookie`, `Cache-Control`, and `Vary`;
 - range handling and object size;

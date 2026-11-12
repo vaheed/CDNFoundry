@@ -111,13 +111,25 @@ design switched the whole request to monitor mode, and an attacker could add a
 literal parameter name to bypass CRS.
 
 Exclusions saved earlier stay visible and can be deleted, but the edge artifact
-always carries an empty list. To handle a false positive, choose **Observe** for
+always carries an empty list. The domain page shows the **WAF exclusions** tab
+only while such exclusions exist. To handle a false positive, choose **Observe** for
 the domain, or ask an administrator to adjust the platform ruleset.
 
 ## Telemetry
 
-The Nginx request event records the selected level, the transaction action, the
-body-limit outcome, and a numeric exclusion ID. A separate minimal ModSecurity
+The Nginx request event records the selected level, the transaction outcome, the
+body-limit outcome, and a numeric exclusion ID. `waf_action` is `monitor` for
+detection-only domains, `pass` for an inspected request that was allowed, and
+`block` when the engine denied it. A blocked request also records
+`security_action=block`, `security_reason=waf_block`, rule ID `949110` (the CRS
+blocking evaluation), and the inbound threshold it reached as `waf_score`.
+The engine does not return the individual matching rules to the cell, so the
+ID names the deciding rule and the cell's audit log lists the rest. Blocks
+appear in the domain's security log and in the **Security** view of analytics,
+and count as `waf` in security-class panels. A domain's own WAF blocks do not
+move it toward a restricted state; see [Security](security.md).
+
+ A separate minimal ModSecurity
 audit record uses parts `A`, `H`, and `Z` only. It leaves out request headers,
 cookies, authorization values, bodies, and query strings. CRS rule logging is
 suppressed, and only bounded anomaly and intervention evidence is kept.

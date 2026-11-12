@@ -80,9 +80,10 @@ class OperationalLoggingContractTest(unittest.TestCase):
             self.assertIn(f'values["{variable}"]', generator)
 
     def test_only_low_cardinality_labels_are_configured(self) -> None:
-        label_block = self.vector.split("    labels:\n", 1)[1].split("    structured_metadata:\n", 1)[0]
+        label_block = self.vector.split("    labels:\n", 1)[1].split("    # Identifiers", 1)[0]
         labels = {line.strip().split(":", 1)[0] for line in label_block.splitlines() if line.strip()}
-        self.assertEqual({"environment", "host", "role", "service", "level", "stream", "collector_id"}, labels)
+        self.assertEqual({"environment", "host", "role", "service", "level"}, labels)
+        self.assertNotIn("structured_metadata", self.vector, "Loki lists structured metadata names beside labels")
         for field in ("domain_id", "operation_id", "request_id", "task_id", "revision_id"):
             self.assertNotIn(field, labels)
 

@@ -24,7 +24,7 @@ import (
 	"time"
 )
 
-var version = "2.0.7"
+var version = "2.0.8"
 
 var logger = slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
@@ -52,6 +52,43 @@ type routingTable struct {
 	tlsBudgets   map[string]int
 }
 
+// Why the gateway refused a connection. The set is fixed so the metric has bounded cardinality.
+type rejectionReason int
+
+const (
+	rejectedNoSlot rejectionReason = iota
+	rejectedPerSource
+	rejectedInvalidHello
+	rejectedUnknownRoute
+	rejectedHandshakeBudget
+	rejectedUnavailable
+	rejectionReasonCount
+)
+
+var rejectionReasonNames = [rejectionReasonCount]string{"no_slot", "per_source_limit", "invalid_hello", "unknown_route", "handshake_budget", "gateway_unavailable"}
+
+// reject counts one refused connection in the total and in its own reason series.
+func (g *gateway) reject(reason rejectionReason) {
+	g.rejected.Add(1)
+	g.rejectedByReason[reason].Add(1)
+}
+
+// rejectHandshake is reject for a connection on the TLS port that never completed a handshake the
+// gateway could route. The same refusal is also counted separately here so the edge agent can report
+// failed handshakes (never visible to a cell) to telemetry without counting refused plain HTTP.
+func (g *gateway) rejectFor(protocol string, reason rejectionReason) {
+	if protocol == "https" {
+		g.rejectHandshake(reason)
+		return
+	}
+	g.reject(reason)
+}
+
+func (g *gateway) rejectHandshake(reason rejectionReason) {
+	g.reject(reason)
+	g.tlsRejectedByReason[reason].Add(1)
+}
+
 type gateway struct {
 	configPath                  string
 	stateDir                    string
@@ -60,6 +97,8 @@ type gateway struct {
 	ready                       atomic.Bool
 	accepted                    atomic.Uint64
 	rejected                    atomic.Uint64
+	rejectedByReason            [rejectionReasonCount]atomic.Uint64
+	tlsRejectedByReason         [rejectionReasonCount]atomic.Uint64
 	errors                      atomic.Uint64
 	active                      atomic.Int64
 	reloads                     atomic.Uint64
@@ -221,6 +260,7 @@ func (g *gateway) logRejectionSummaries(ctx context.Context) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 	var previousRejected, previousErrors uint64
+	var previousReasons [rejectionReasonCount]uint64
 	for {
 		select {
 		case <-ctx.Done():
@@ -228,7 +268,15 @@ func (g *gateway) logRejectionSummaries(ctx context.Context) {
 		case <-ticker.C:
 			rejected, failures := g.rejected.Load(), g.errors.Load()
 			if rejected > previousRejected || failures > previousErrors {
-				logger.Warn("bounded gateway connection failures", "event", "gateway_connection_rejection_summary", "rejected", rejected-previousRejected, "errors", failures-previousErrors)
+				attributes := []any{"event", "gateway_connection_rejection_summary", "rejected", rejected - previousRejected, "errors", failures - previousErrors}
+				for reason, name := range rejectionReasonNames {
+					current := g.rejectedByReason[reason].Load()
+					if current > previousReasons[reason] {
+						attributes = append(attributes, name, current-previousReasons[reason])
+					}
+					previousReasons[reason] = current
+				}
+				logger.Warn("bounded gateway connection failures", attributes...)
 			}
 			previousRejected, previousErrors = rejected, failures
 		}
@@ -358,7 +406,7 @@ func (g *gateway) accept(address string, listener net.Listener) {
 			select {
 			case g.slots <- struct{}{}:
 			default:
-				g.rejected.Add(1)
+				g.reject(rejectedNoSlot)
 				_ = connection.Close()
 				continue
 			}
@@ -367,7 +415,7 @@ func (g *gateway) accept(address string, listener net.Listener) {
 		if g.perSource != nil {
 			source = sourceKey(connection.RemoteAddr())
 			if !g.perSource.acquire(source) {
-				g.rejected.Add(1)
+				g.reject(rejectedPerSource)
 				if g.slots != nil {
 					<-g.slots
 				}
@@ -406,19 +454,19 @@ func (g *gateway) handle(listener string, client net.Conn) error {
 		name, prefix, err = readHTTP(client)
 	}
 	if err != nil {
-		g.rejected.Add(1)
+		g.rejectFor(protocol, rejectedInvalidHello)
 		return err
 	}
 	localHost, _, _ := net.SplitHostPort(client.LocalAddr().String())
 	ip := net.ParseIP(localHost)
 	table := g.table.Load()
 	if table == nil || ip == nil {
-		g.rejected.Add(1)
+		g.rejectFor(protocol, rejectedUnavailable)
 		return errors.New("gateway unavailable")
 	}
 	target := table.routes[protocol+"|"+ip.String()+"|"+name]
 	if target == "" {
-		g.rejected.Add(1)
+		g.rejectFor(protocol, rejectedUnknownRoute)
 		if protocol == "http" {
 			// Answer a plain-HTTP request for a host that is not routed here, so a health probe can tell a serving
 			// PoP from a dead one. The answer is a fixed 421; TLS clients still get a closed connection.
@@ -436,7 +484,7 @@ func (g *gateway) handle(listener string, client net.Conn) error {
 			now = g.clock
 		}
 		if !g.handshakes.allow(sourceKey(client.RemoteAddr())+"|"+name, budget, now()) {
-			g.rejected.Add(1)
+			g.rejectHandshake(rejectedHandshakeBudget)
 			return errors.New("TLS handshake budget exceeded")
 		}
 	}
@@ -517,21 +565,46 @@ func readHTTP(connection net.Conn) (string, []byte, error) {
 	return "", nil, errors.New("too many HTTP headers")
 }
 
+const (
+	maxTLSRecordPayload   = 16 << 10
+	maxClientHelloMessage = 64 << 10
+)
+
+// readClientHello reassembles a ClientHello that the client split across several TLS records. Each record is
+// bounded by the TLS maximum and the whole message by maxClientHelloMessage; the caller's deadline bounds the time.
+// The returned prefix holds every byte read so it can be replayed to the cell unchanged.
 func readClientHello(connection net.Conn) (string, []byte, error) {
-	header := make([]byte, 5)
-	if _, err := io.ReadFull(connection, header); err != nil || header[0] != 22 {
-		return "", nil, errors.New("invalid TLS record")
+	var raw, handshake []byte
+	for {
+		header := make([]byte, 5)
+		if _, err := io.ReadFull(connection, header); err != nil || header[0] != 22 {
+			return "", nil, errors.New("invalid TLS record")
+		}
+		size := int(binary.BigEndian.Uint16(header[3:5]))
+		if size < 1 || size > maxTLSRecordPayload {
+			return "", nil, errors.New("invalid TLS ClientHello size")
+		}
+		body := make([]byte, size)
+		if _, err := io.ReadFull(connection, body); err != nil {
+			return "", nil, errors.New("truncated TLS ClientHello")
+		}
+		raw = append(append(raw, header...), body...)
+		handshake = append(handshake, body...)
+		if len(handshake) < 4 {
+			continue
+		}
+		if handshake[0] != 1 {
+			return "", nil, errors.New("not a TLS ClientHello")
+		}
+		total := 4 + int(handshake[1])<<16 + int(handshake[2])<<8 + int(handshake[3])
+		if total > maxClientHelloMessage {
+			return "", nil, errors.New("invalid TLS ClientHello size")
+		}
+		if len(handshake) >= total {
+			name, err := clientHelloSNI(handshake[:total])
+			return name, raw, err
+		}
 	}
-	size := int(binary.BigEndian.Uint16(header[3:5]))
-	if size < 4 || size > 64<<10 {
-		return "", nil, errors.New("invalid TLS ClientHello size")
-	}
-	body := make([]byte, size)
-	if _, err := io.ReadFull(connection, body); err != nil {
-		return "", nil, errors.New("truncated TLS ClientHello")
-	}
-	name, err := clientHelloSNI(body)
-	return name, append(header, body...), err
 }
 
 func clientHelloSNI(data []byte) (string, error) {
@@ -661,6 +734,10 @@ func (g *gateway) serveMetrics(ctx context.Context) {
 		sort.Strings(keys)
 		for _, key := range keys {
 			fmt.Fprintf(writer, "%s %d\n", key, values[key])
+		}
+		for reason, name := range rejectionReasonNames {
+			fmt.Fprintf(writer, "cdnfoundry_gateway_connections_rejected_by_reason_total{reason=%q} %d\n", name, g.rejectedByReason[reason].Load())
+			fmt.Fprintf(writer, "cdnfoundry_gateway_tls_handshakes_rejected_by_reason_total{reason=%q} %d\n", name, g.tlsRejectedByReason[reason].Load())
 		}
 		if table != nil {
 			fmt.Fprintf(writer, "cdnfoundry_gateway_generation_info{generation_id=%q} 1\n", table.generationID)
