@@ -20,8 +20,7 @@ NODES = [("control-1", "control", "93.184.216.10"), ("pop-1", "dns-edge", "93.18
 
 def build(tmp_path: Path) -> tuple[FleetState, dict]:
     store = FleetState(tmp_path / "state")
-    state = store.init({"operator_domain": "ops.example.test", "platform_domain": "cdn.example.test", "release": "v2.0.0", "acme_email": "acme@example.test",
-                        "alert_webhook_url": "https://alerts.example.test/hook"})
+    state = store.init({"operator_domain": "ops.example.test", "platform_domain": "cdn.example.test", "release": "v2.0.0", "acme_email": "acme@example.test"})
     for name, role, ip in NODES:
         state = store.add_node(state, {"name": name, "role": role, "public_ipv4": ip, "monitor_ipv4": "10.20.0." + ip.rsplit(".", 1)[1]})
     return store, store.load()

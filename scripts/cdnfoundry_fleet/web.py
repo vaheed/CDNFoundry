@@ -614,25 +614,6 @@ class FleetWeb:
             "The key gives full control of the host, so keep the Fleet vault passphrase safe.</p></details>"
         )
 
-    def _alert_section(self, back: str) -> str:
-        """The notifier Alertmanager needs. Without it every host's configuration check fails, so Deploy asks for it before the review."""
-        url = self.read(lambda e: e.alert_webhook())
-        status = state_word("ok", "Set") + f" <b>{esc(url)}</b>" if url else state_word("", "Not set") + " Optional. Alerts still fire and show in Prometheus, but nobody is notified. You can set it at any time."
-        form = self.action_form("/alert-webhook", "Save alert webhook" if not url else "Change alert webhook", fields=(
-            f'<label>Alert webhook URL<input name="url" type="url" pattern="https://.+" value="{esc(url)}" placeholder="https://alerts.example.com/cdnfoundry" autocomplete="off">'
-            '<span class="hint">An https:// address that receives every alert Alertmanager sends. Leave it empty and save to turn notifications off.</span></label>'
-            f'<input type="hidden" name="next" value="{esc(back)}">'))
-        about = ('<details class="help"><summary>What is this, and where do I get one?</summary>'
-                 "<p>Alertmanager is the part of CDNFoundry that sends you a message when something breaks: a host is down, a certificate is close to expiring, a disk is filling up. "
-                 "It sends each message to one web address, called a webhook. You do not need one to install: without it, alerts still fire and show in Prometheus, but nobody is notified. "
-                 "A change reaches your hosts when you deploy it from <a href=\"/config\">Config</a>.</p>"
-                 "<p>To get an address, use any https address that accepts a JSON POST:</p><ul>"
-                 "<li><b>To try it out:</b> open webhook.site and copy &quot;Your unique URL&quot;. It only shows the messages in your browser and notifies nobody.</li>"
-                 "<li><b>To be notified:</b> create a catch-hook or webhook trigger in a tool you already use (Zapier, Make, or n8n) and send it on to email, Slack, or Telegram. Paste that trigger's URL here.</li>"
-                 "<li><b>Not directly:</b> a Slack or Discord incoming-webhook address. They expect their own message format, and Alertmanager sends JSON in its own format.</li></ul>"
-                 "<p>A test message called Watchdog arrives every minute on purpose. If it stops arriving, alerting is broken, so have your notifier warn you when it goes quiet. You can change the address later on <a href=\"/config\">Config</a>.</p></details>")
-        return f"{about}<p>{status}</p>{form}"
-
     def _management_networks_section(self) -> str:
         """Who may open the administrator panel, the administrator API, Horizon, and Grafana. Entries are added and removed one at a time, at any time."""
         networks = self.read(lambda e: e.management_networks())
@@ -699,7 +680,6 @@ class FleetWeb:
         out.append('<h3 id="dns">b. DNS names and certificates</h3><p>Caddy gets Let\'s Encrypt certificates for <b>control</b>, <b>grafana</b>, and <b>telemetry</b> when the control node starts. '
                    'That works only if 1.1.1.1 sees those names pointing at the host. See <a href="/dns">DNS names</a> for the exact records and a check, or '
                    'put your own certificates on the <a href="/tls">Certificates</a> page to skip it.</p>')
-        out.append('<h3 id="alerts">c. Alert webhook (optional)</h3>' + self._alert_section("/deploy"))
         out.append('<h3 id="release">d. Release</h3>')
         if current is None:
             target = self.read(lambda e: e.target_release())
@@ -849,7 +829,7 @@ class FleetWeb:
                 form_html = self.action_form("/upgrade/plan", f"Show the plan for {target}", primary=True)
             return 200, self.layout(path, "Upgrade", head + form_html + self._manual_release("/upgrade/plan" if current else "/upgrade/first", "/upgrade"), flash)
         if path == "/config":
-            body = ("<h2>Features</h2>" + self._features_section(state) + "<h2>Management networks</h2>" + self._management_networks_section() + "<h2>Alert webhook</h2>" + self._alert_section("/config") + "<h2>Deploy changes</h2>"
+            body = ("<h2>Features</h2>" + self._features_section(state) + "<h2>Management networks</h2>" + self._management_networks_section() + "<h2>Deploy changes</h2>"
                     "<p>Compares the bundles Fleet would render now with what each node runs, validates them on the node, and swaps them in one node at a time.</p>"
                     + self.action_form("/config/apply", "Show changes and deploy", primary=True))
             return 200, self.layout(path, "Config", body, flash)
@@ -909,8 +889,6 @@ class FleetWeb:
         def job(title: str, fn: Callable[[FleetEngine], Any], kind: str) -> tuple[str, str]:
             return f"/jobs/{self.run_job(title, fn, kind).id}", ""
 
-        if path == "/alert-webhook":
-            return self._sync("alert-webhook", lambda e: e.set_alert_webhook(form.get("url", "")), form.get("next", "/deploy") if form.get("next") in {"/deploy", "/config"} else "/deploy", "Alert webhook saved")
         if path == "/management-networks/add":
             return self._sync("management-networks", lambda e: e.change_management_networks(add=form.get("networks", "")), "/config", "Management networks updated")
         if path == "/management-networks/remove":

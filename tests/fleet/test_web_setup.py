@@ -135,7 +135,7 @@ def test_review_then_confirm_installs_in_start_order(gate, monkeypatch):
     monkeypatch.setattr(FleetEngine, "test_connection", lambda self, name: None)
     g, port = _created(gate)
     body = request(port, "GET", "/deploy")[1]
-    assert "Run <b>Test connections</b>" in body and "Alert webhook" in body
+    assert "Run <b>Test connections</b>" in body
     assert request(port, "POST", "/deploy/review", {"csrf": g.csrf})[0] == 400
     _, _, r = request(port, "POST", "/deploy/test", {"csrf": g.csrf})
     _wait_job(port, r.getheader("Location"))
@@ -298,7 +298,7 @@ def test_ha_page_guides_dns_then_host_then_deploy(gate, monkeypatch):
     assert status == 400 and "Point these names first" in body and "control-2.ops.example.test" in body
 
 
-def test_review_works_without_an_alert_webhook(gate, monkeypatch):
+def test_review_works_for_a_minimal_setup(gate, monkeypatch):
     from cdnfoundry_fleet.engine import FleetEngine
 
     monkeypatch.setattr(FleetEngine, "release_manifest", lambda self, which="current": {"release": "v2.0.0", "roles": {}, "images": {}} if which == "current" else None)

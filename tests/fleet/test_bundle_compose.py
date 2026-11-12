@@ -26,8 +26,7 @@ def images() -> dict[str, str]:
 
 def test_every_role_bundle_passes_docker_compose_config(tmp_path: Path) -> None:
     store = FleetState(tmp_path / "state")
-    state = store.init({"operator_domain": "ops.example.test", "platform_domain": "cdn.example.test", "release": "v2.0.0", "acme_email": "acme@example.test",
-                        "alert_webhook_url": "https://alerts.example.test/hook"})
+    state = store.init({"operator_domain": "ops.example.test", "platform_domain": "cdn.example.test", "release": "v2.0.0", "acme_email": "acme@example.test"})
     nodes = [("control-1", "control", "93.184.216.10"), ("dns-1", "dns", "93.184.216.11"), ("pop-1", "dns-edge", "93.184.216.12"),
              ("pop-2", "edge", "93.184.216.13")]
     for name, role, ip in nodes:
@@ -46,8 +45,7 @@ def test_every_service_a_start_script_runs_exists_in_its_own_bundle(tmp_path: Pa
     import yaml
 
     store = FleetState(tmp_path / "state")
-    state = store.init({"operator_domain": "ops.example.test", "platform_domain": "cdn.example.test", "release": "v2.0.0", "acme_email": "acme@example.test",
-                        "alert_webhook_url": "https://alerts.example.test/hook"})
+    state = store.init({"operator_domain": "ops.example.test", "platform_domain": "cdn.example.test", "release": "v2.0.0", "acme_email": "acme@example.test"})
     for name, role, ip in [("control-1", "control", "93.184.216.10"), ("dns-1", "dns", "93.184.216.11"), ("pop-1", "dns-edge", "93.184.216.12"),
                            ("pop-2", "edge", "93.184.216.13")]:
         state = store.add_node(state, {"name": name, "role": role, "public_ipv4": ip, "extra_env": images()})

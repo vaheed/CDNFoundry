@@ -350,7 +350,6 @@ class Renderer:
             "REDIS_CACHE_URL": "",
             "EDGE_IDENTITY_CA_PRIVATE_KEY_PASSPHRASE": "",
             "GRAFANA_EXPLORE_URL": f"https://grafana.{operator_domain}/explore?left=%7B%22datasource%22:%22loki%22%7D",
-            "ALERT_WEBHOOK_URL": state["global"].get("alert_webhook_url", ""),
             "EDGE_CONTROL_BIND": "0.0.0.0:8443",
             "EDGE_RUNTIME_VERSIONS": "{}",
             "EDGE_GATEWAY_METRICS_ADDRESS": "0.0.0.0:9105",
