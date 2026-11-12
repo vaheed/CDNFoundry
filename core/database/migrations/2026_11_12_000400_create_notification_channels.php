@@ -36,7 +36,7 @@ return new class extends Migration
             DB::statement("alter table notification_channels add constraint notification_channels_status_check check (status in ('active', 'paused'))");
             // The generic webhook is an administrator-only channel, so a domain user can never point the platform at an arbitrary URL.
             DB::statement("alter table notification_channels add constraint notification_channels_webhook_platform_check check (type <> 'webhook' or user_id is null)");
-            DB::statement("alter table notification_channels add constraint notification_channels_user_events_check check (user_id is null or events is not null)");
+            DB::statement('alter table notification_channels add constraint notification_channels_user_events_check check (user_id is null or events is not null)');
         }
 
         DB::table('system_settings')->insert([

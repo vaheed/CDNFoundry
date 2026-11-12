@@ -4,8 +4,8 @@ namespace App\Providers\Filament;
 
 use App\Filament\Domain\Pages\DomainDashboard;
 use App\Filament\Shared\Pages\ApiTokens;
-use App\Filament\Shared\Pages\NotificationChannels;
 use App\Filament\Shared\Pages\EditProfile;
+use App\Filament\Shared\Pages\NotificationChannels;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;

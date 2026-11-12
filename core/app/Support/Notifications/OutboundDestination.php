@@ -91,6 +91,7 @@ final class OutboundDestination
         if (! NetworkAddress::isUnsafe($address)) {
             return false;
         }
+
         // Only a narrow private allow-list can admit an ordinary private address; loopback and the like never pass.
         return ! (NetworkAddress::isPrivate($address)
             && collect($settings->get('origin_safety', 'private_origin_allowlist'))->contains(fn (string $cidr): bool => NetworkAddress::inCidr($address, $cidr))

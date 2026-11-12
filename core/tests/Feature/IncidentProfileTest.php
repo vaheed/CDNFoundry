@@ -7,8 +7,12 @@ use App\Jobs\DeliverNotification;
 use App\Models\AuditLog;
 use App\Models\Domain;
 use App\Models\DomainEdgeCell;
+use App\Models\Edge;
 use App\Models\EdgeTask;
+use App\Models\NotificationChannel;
+use App\Models\SystemSetting;
 use App\Models\User;
+use App\Support\PlatformSettings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
@@ -31,7 +35,7 @@ class IncidentProfileTest extends TestCase
     {
         Queue::fake();
         [$user, $domain] = $this->owner();
-        $edge = \App\Models\Edge::query()->create(['name' => 'incident-pop', 'country_code' => 'DE', 'continent_code' => 'EU']);
+        $edge = Edge::query()->create(['name' => 'incident-pop', 'country_code' => 'DE', 'continent_code' => 'EU']);
         $cell = $edge->cells()->create(['slot' => 1, 'status' => 'ready']);
         DomainEdgeCell::query()->create(['domain_id' => $domain->id, 'edge_id' => $edge->id, 'replica' => 1, 'active_cell_id' => $cell->id, 'desired_revision' => 1, 'state' => 'active']);
         $revisionBefore = $domain->revision;
@@ -121,11 +125,11 @@ class IncidentProfileTest extends TestCase
     public function test_start_and_end_notify_assigned_users_and_administrators_once(): void
     {
         Queue::fake();
-        $row = \App\Models\SystemSetting::query()->findOrFail('notifications');
+        $row = SystemSetting::query()->findOrFail('notifications');
         $row->update(['values' => [...$row->values, 'domain_user_channels' => true]]);
-        app()->forgetInstance(\App\Support\PlatformSettings::class);
+        app()->forgetInstance(PlatformSettings::class);
         [$user, $domain] = $this->owner();
-        $channel = new \App\Models\NotificationChannel(['user_id' => $user->id, 'type' => 'telegram', 'name' => 'mine', 'destination_hint' => 'x', 'events' => ['incident.started', 'incident.ended'], 'status' => 'active']);
+        $channel = new NotificationChannel(['user_id' => $user->id, 'type' => 'telegram', 'name' => 'mine', 'destination_hint' => 'x', 'events' => ['incident.started', 'incident.ended'], 'status' => 'active']);
         $channel->storeSecrets(['bot_token' => 'x', 'chat_id' => '1']);
         $channel->save();
 

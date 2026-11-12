@@ -5,6 +5,7 @@ namespace App\Filament\Domain\Resources\Domains\RelationManagers;
 use App\Filament\Domain\Resources\Domains\RelationManagers\Concerns\SyncsDomainPage;
 use App\Jobs\TestLogPushDestination;
 use App\Models\AuditLog;
+use App\Models\Domain;
 use App\Models\LogPushDestination;
 use App\Models\Operation;
 use App\Support\FilamentHelp;
@@ -20,9 +21,13 @@ use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Components\Utilities\Get;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Number;
+use Illuminate\Validation\ValidationException;
 
 /** Where this domain's own logs are pushed, with the state of each destination. The tab exists while the administrator switch is on or a destination is kept. */
 class LogPushRelationManager extends RelationManager
@@ -48,9 +53,9 @@ class LogPushRelationManager extends RelationManager
         return app(PlatformSettings::class)->get('log_push', 'domain_user_log_push') === true;
     }
 
-    public function table(\Filament\Tables\Table $table): \Filament\Tables\Table
+    public function table(Table $table): Table
     {
-        $columns = \Filament\Tables\Columns\TextColumn::class;
+        $columns = TextColumn::class;
 
         return $table->columns([
             $columns::make('name')->limit(40)->tooltip(fn ($record): ?string => mb_strlen($record->name) > 40 ? $record->name : null),
@@ -98,18 +103,18 @@ class LogPushRelationManager extends RelationManager
         try {
             $validated = DestinationData::validate($data);
             $domain = $this->getOwnerRecord();
-            \Illuminate\Support\Facades\DB::transaction(function () use ($domain, $validated): void {
-                \App\Models\Domain::query()->lockForUpdate()->findOrFail($domain->id);
+            DB::transaction(function () use ($domain, $validated): void {
+                Domain::query()->lockForUpdate()->findOrFail($domain->id);
                 DestinationData::assertRoom($domain);
-            $destination = new LogPushDestination(['domain_id' => $domain->id, 'kind' => $validated['kind'], 'name' => $validated['name'], 'datasets' => $validated['datasets'], 'destination_hint' => $validated['hint'],
-                'truncate_client_ip' => $validated['truncate'], 'status' => 'active', 'cursors' => [], 'consecutive_failures' => 0, 'failures_total' => 0, 'rows_pushed' => 0, 'bytes_pushed' => 0]);
-            $destination->storeSecrets($validated['secrets']);
-            $destination->save();
-            AuditLog::record(auth()->user(), 'log_push.created', $domain, ['destination_id' => $destination->id, 'kind' => $destination->kind, 'datasets' => $destination->datasets], request()->ip());
+                $destination = new LogPushDestination(['domain_id' => $domain->id, 'kind' => $validated['kind'], 'name' => $validated['name'], 'datasets' => $validated['datasets'], 'destination_hint' => $validated['hint'],
+                    'truncate_client_ip' => $validated['truncate'], 'status' => 'active', 'cursors' => [], 'consecutive_failures' => 0, 'failures_total' => 0, 'rows_pushed' => 0, 'bytes_pushed' => 0]);
+                $destination->storeSecrets($validated['secrets']);
+                $destination->save();
+                AuditLog::record(auth()->user(), 'log_push.created', $domain, ['destination_id' => $destination->id, 'kind' => $destination->kind, 'datasets' => $destination->datasets], request()->ip());
             });
-        } catch (\Illuminate\Validation\ValidationException $exception) {
+        } catch (ValidationException $exception) {
             // The modal's fields live under the action's state path, so a server-side refusal appears beside the field that caused it.
-            throw \Illuminate\Validation\ValidationException::withMessages(collect($exception->errors())->mapWithKeys(fn (array $messages, string $key): array => ["mountedActions.0.data.{$key}" => $messages])->all());
+            throw ValidationException::withMessages(collect($exception->errors())->mapWithKeys(fn (array $messages, string $key): array => ["mountedActions.0.data.{$key}" => $messages])->all());
         }
         $notice = Notification::make()->success()->title('Destination added');
         if ($validated['signing_secret'] !== null) {

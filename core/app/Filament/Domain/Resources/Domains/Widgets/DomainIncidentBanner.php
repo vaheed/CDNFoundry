@@ -3,6 +3,7 @@
 namespace App\Filament\Domain\Resources\Domains\Widgets;
 
 use App\Models\Domain;
+use App\Models\User;
 use App\Support\IncidentProfile;
 use Filament\Widgets\Widget;
 use Illuminate\Database\Eloquent\Model;
@@ -26,6 +27,6 @@ class DomainIncidentBanner extends Widget
         $domain = $this->record?->refresh();
 
         return ['active' => IncidentProfile::active($domain), 'domain' => $domain, 'protections' => IncidentProfile::protections(),
-            'starter' => $domain->incident_started_by === null ? null : \App\Models\User::query()->whereKey($domain->incident_started_by)->value('name')];
+            'starter' => $domain->incident_started_by === null ? null : User::query()->whereKey($domain->incident_started_by)->value('name')];
     }
 }

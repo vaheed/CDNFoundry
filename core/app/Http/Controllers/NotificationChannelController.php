@@ -7,6 +7,7 @@ use App\Jobs\TestNotificationChannel;
 use App\Models\AuditLog;
 use App\Models\NotificationChannel;
 use App\Models\Operation;
+use App\Models\User;
 use App\Support\Notifications\ChannelData;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,7 +21,7 @@ use Illuminate\Support\Facades\Gate;
  */
 class NotificationChannelController extends Controller
 {
-    private function owner(Request $request): ?\App\Models\User
+    private function owner(Request $request): ?User
     {
         return $request->routeIs('admin.*') ? null : $request->user();
     }

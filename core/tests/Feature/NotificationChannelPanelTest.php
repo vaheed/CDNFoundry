@@ -3,11 +3,14 @@
 namespace Tests\Feature;
 
 use App\Filament\Shared\Pages\NotificationChannels;
+use App\Jobs\TestNotificationChannel;
 use App\Models\NotificationChannel;
 use App\Models\SystemSetting;
 use App\Models\User;
+use App\Support\PlatformSettings;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -19,12 +22,12 @@ class NotificationChannelPanelTest extends TestCase
     {
         $row = SystemSetting::query()->findOrFail('notifications');
         $row->update(['values' => [...$row->values, 'domain_user_channels' => $on]]);
-        app()->forgetInstance(\App\Support\PlatformSettings::class);
+        app()->forgetInstance(PlatformSettings::class);
     }
 
     public function test_an_administrator_adds_tests_and_removes_a_platform_channel(): void
     {
-        \Illuminate\Support\Facades\Queue::fake();
+        Queue::fake();
         Filament::setCurrentPanel(Filament::getPanel('admin'));
         $this->actingAs(User::factory()->admin()->create());
 
@@ -36,7 +39,7 @@ class NotificationChannelPanelTest extends TestCase
         $this->assertNull($channel->events, 'all events selected stores no list');
 
         Livewire::test(NotificationChannels::class)->call('testChannel', $channel->id);
-        \Illuminate\Support\Facades\Queue::assertPushed(\App\Jobs\TestNotificationChannel::class);
+        Queue::assertPushed(TestNotificationChannel::class);
         Livewire::test(NotificationChannels::class)->call('removeChannel', $channel->id);
         $this->assertSame(0, NotificationChannel::query()->count());
     }

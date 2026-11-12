@@ -8,6 +8,7 @@ use App\Models\Domain;
 use App\Models\LogPushDestination;
 use App\Models\SystemSetting;
 use App\Models\User;
+use App\Support\PlatformSettings;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -21,7 +22,7 @@ class LogPushPanelTest extends TestCase
     {
         $row = SystemSetting::query()->findOrFail('log_push');
         $row->update(['values' => [...$row->values, 'domain_user_log_push' => $on]]);
-        app()->forgetInstance(\App\Support\PlatformSettings::class);
+        app()->forgetInstance(PlatformSettings::class);
     }
 
     public function test_the_tab_follows_the_switch_and_a_user_adds_and_removes_a_destination(): void

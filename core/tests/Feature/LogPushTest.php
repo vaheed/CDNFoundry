@@ -2,16 +2,21 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\DeliverNotification;
 use App\Jobs\PushDomainLogs;
 use App\Jobs\TestLogPushDestination;
+use App\Models\AuditLog;
 use App\Models\Domain;
 use App\Models\LogPushDestination;
+use App\Models\NotificationChannel;
 use App\Models\Operation;
 use App\Models\SystemSetting;
 use App\Models\User;
 use App\Support\LogPush\LogDatasets;
+use App\Support\LogPush\LogPushSender;
 use App\Support\LogPush\LogRowReader;
 use App\Support\PlatformSettings;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -130,7 +135,7 @@ class LogPushTest extends TestCase
 
             public function __construct(private array $rowsByCall) {}
 
-            public function after(string $dataset, int $domainId, string $afterAt, string $afterId, \Carbon\CarbonImmutable $until, int $limit): array
+            public function after(string $dataset, int $domainId, string $afterAt, string $afterId, CarbonImmutable $until, int $limit): array
             {
                 $this->calls[] = compact('dataset', 'domainId', 'afterAt', 'afterId');
 
@@ -149,7 +154,7 @@ class LogPushTest extends TestCase
             ...array_fill_keys(LogDatasets::fields('http_requests'), 'v'), 'client_ip' => '203.0.113.77', 'status' => 200];
         $store = $this->fakeStore([[$row], []]);
 
-        (new PushDomainLogs($destination->id))->handle($store, app(\App\Support\LogPush\LogPushSender::class), app(PlatformSettings::class));
+        (new PushDomainLogs($destination->id))->handle($store, app(LogPushSender::class), app(PlatformSettings::class));
 
         Http::assertSent(function ($request) {
             $body = gzdecode($request->body());
@@ -177,19 +182,19 @@ class LogPushTest extends TestCase
         $cursor = ['at' => '2026-11-12 09:00:00.000', 'id' => '00000000-0000-0000-0000-000000000000'];
         $destination = $this->destination($domain, ['cursors' => ['http_requests' => $cursor]]);
         $row = ['occurred_at' => '2026-11-12 10:00:00.123', 'event_id' => '11111111-1111-4111-8111-111111111111', ...array_fill_keys(LogDatasets::fields('http_requests'), 'v')];
-        $channel = new \App\Models\NotificationChannel(['type' => 'telegram', 'name' => 'ops', 'destination_hint' => 'x', 'status' => 'active']);
+        $channel = new NotificationChannel(['type' => 'telegram', 'name' => 'ops', 'destination_hint' => 'x', 'status' => 'active']);
         $channel->storeSecrets(['bot_token' => 'x', 'chat_id' => '1']);
         $channel->save();
 
         for ($run = 0; $run < 3; $run++) {
-            (new PushDomainLogs($destination->id))->handle($this->fakeStore([[$row]]), app(\App\Support\LogPush\LogPushSender::class), app(PlatformSettings::class));
+            (new PushDomainLogs($destination->id))->handle($this->fakeStore([[$row]]), app(LogPushSender::class), app(PlatformSettings::class));
         }
         $destination->refresh();
         $this->assertSame($cursor, $destination->cursors['http_requests'], 'the cursor stays where the last accepted batch left it');
         $this->assertSame(3, $destination->consecutive_failures);
         $this->assertStringContainsString('HTTP 500', $destination->last_error);
         $this->assertTrue($destination->next_run_at->isFuture());
-        Queue::assertPushed(\App\Jobs\DeliverNotification::class, 1);
+        Queue::assertPushed(DeliverNotification::class, 1);
     }
 
     public function test_a_destination_behind_the_retention_window_skips_ahead_and_records_the_gap(): void
@@ -199,10 +204,10 @@ class LogPushTest extends TestCase
         [, $domain] = $this->owner();
         $destination = $this->destination($domain, ['cursors' => ['http_requests' => ['at' => now()->subDays(30)->format('Y-m-d H:i:s.v'), 'id' => '00000000-0000-0000-0000-000000000000']]]);
         $store = $this->fakeStore([[]]);
-        (new PushDomainLogs($destination->id))->handle($store, app(\App\Support\LogPush\LogPushSender::class), app(PlatformSettings::class));
+        (new PushDomainLogs($destination->id))->handle($store, app(LogPushSender::class), app(PlatformSettings::class));
         $destination->refresh();
         $this->assertNotNull($destination->last_gap_at);
-        $this->assertTrue(\Carbon\CarbonImmutable::parse($store->calls[0]['afterAt'], 'UTC')->gt(now()->subDays(8)), 'reading resumes inside the retention window');
+        $this->assertTrue(CarbonImmutable::parse($store->calls[0]['afterAt'], 'UTC')->gt(now()->subDays(8)), 'reading resumes inside the retention window');
     }
 
     public function test_the_switch_off_stops_a_queued_push_and_keeps_the_destination(): void
@@ -211,7 +216,7 @@ class LogPushTest extends TestCase
         [, $domain] = $this->owner();
         $destination = $this->destination($domain);
         $store = $this->fakeStore([[['occurred_at' => '2026-11-12 10:00:00.123', 'event_id' => '11111111-1111-4111-8111-111111111111']]]);
-        (new PushDomainLogs($destination->id))->handle($store, app(\App\Support\LogPush\LogPushSender::class), app(PlatformSettings::class));
+        (new PushDomainLogs($destination->id))->handle($store, app(LogPushSender::class), app(PlatformSettings::class));
         Http::assertNothingSent();
         $this->assertSame([], $store->calls);
         $this->assertDatabaseHas('log_push_destinations', ['id' => $destination->id]);
@@ -229,7 +234,7 @@ class LogPushTest extends TestCase
         $this->getJson("/api/operations/{$operationId}")->assertOk()->assertJsonPath('data.status', 'pending');
 
         Http::fake(['*' => Http::response('', 200)]);
-        (new TestLogPushDestination($operationId))->handle(app(\App\Support\LogPush\LogPushSender::class));
+        (new TestLogPushDestination($operationId))->handle(app(LogPushSender::class));
         $this->assertSame('succeeded', Operation::query()->findOrFail($operationId)->status);
         Http::assertSent(fn ($request): bool => $request->method() === 'PUT' && str_starts_with($request->url(), 'https://93.184.216.34:9000/cdn-logs/cdnf/'.$domain->id.'/test/')
             && str_contains($request->header('Authorization')[0], 'AWS4-HMAC-SHA256 Credential=AKIAEXAMPLE1/') && str_contains($request->header('Authorization')[0], 'Signature='));
@@ -243,6 +248,6 @@ class LogPushTest extends TestCase
         $this->patchJson("/api/domains/{$domain->id}/log-push/{$id}", ['status' => 'paused'])->assertOk()->assertJsonPath('data.status', 'paused');
         $this->patchJson("/api/domains/{$domain->id}/log-push/{$id}", ['status' => 'active'])->assertOk();
         $this->deleteJson("/api/domains/{$domain->id}/log-push/{$id}")->assertOk();
-        $this->assertSame(4, \App\Models\AuditLog::query()->where('action', 'like', 'log_push.%')->count());
+        $this->assertSame(4, AuditLog::query()->where('action', 'like', 'log_push.%')->count());
     }
 }

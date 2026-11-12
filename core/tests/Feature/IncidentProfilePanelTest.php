@@ -36,9 +36,9 @@ class IncidentProfilePanelTest extends TestCase
             ->assertSee('Incident profile is on')->assertSee('Responder One')
             ->assertSee('Protected request and connection limits')->assertDontSee('Not enforced yet')
             ->assertSee('cannot absorb traffic that saturates a host, a link, or an upstream');
-        Livewire::test(ViewDomain::class, ['record' => $domain->id])
-            ->assertActionHidden('startIncident')->assertActionVisible('endIncident')
-            ->callAction('endIncident')->assertHasNoActionErrors();
+        $page = Livewire::test(ViewDomain::class, ['record' => $domain->id]);
+        $page->assertActionHidden('startIncident')->assertActionVisible('endIncident')
+            ->callAction('endIncident')->assertHasNoActionErrors()->assertActionVisible('startIncident');
         $this->assertNull($domain->refresh()->incident_expires_at);
     }
 }

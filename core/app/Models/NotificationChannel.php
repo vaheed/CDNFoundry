@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Notifications\EventPublisher;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -22,7 +23,7 @@ class NotificationChannel extends Model
 
     protected static function booted(): void
     {
-        $forget = fn () => \App\Support\Notifications\EventPublisher::forgetPlatformChannels();
+        $forget = fn () => EventPublisher::forgetPlatformChannels();
         static::saved($forget);
         static::deleted($forget);
     }

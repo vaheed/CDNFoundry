@@ -11,6 +11,7 @@ use App\Models\Operation;
 use App\Models\SystemSetting;
 use App\Models\User;
 use App\Support\Notifications\EventPublisher;
+use App\Support\PlatformSettings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -32,7 +33,7 @@ class NotificationChannelTest extends TestCase
     {
         $row = SystemSetting::query()->findOrFail('notifications');
         $row->update(['values' => [...$row->values, 'domain_user_channels' => $on]]);
-        app()->forgetInstance(\App\Support\PlatformSettings::class);
+        app()->forgetInstance(PlatformSettings::class);
     }
 
     private function admin(): User
@@ -81,7 +82,7 @@ class NotificationChannelTest extends TestCase
         // A narrow private allow-list can admit an ordinary private address but never loopback.
         $row = SystemSetting::query()->findOrFail('origin_safety');
         $row->update(['values' => [...$row->values, 'private_origin_allowlist' => ['10.20.0.0/16']]]);
-        app()->forgetInstance(\App\Support\PlatformSettings::class);
+        app()->forgetInstance(PlatformSettings::class);
         $this->postJson('/api/admin/notification-channels', ['type' => 'webhook', 'name' => 'lab', 'webhook_url' => 'http://10.20.0.5/hook'])->assertCreated();
         $this->postJson('/api/admin/notification-channels', ['type' => 'webhook', 'name' => 'x', 'webhook_url' => 'http://127.0.0.1/hook'])->assertUnprocessable();
     }
@@ -121,7 +122,7 @@ class NotificationChannelTest extends TestCase
         $this->enableUserChannels();
         $row = SystemSetting::query()->findOrFail('notifications');
         $row->update(['values' => [...$row->values, 'max_channels_per_user' => 2]]);
-        app()->forgetInstance(\App\Support\PlatformSettings::class);
+        app()->forgetInstance(PlatformSettings::class);
         $user = User::factory()->create();
         $this->actingAs($user);
         for ($i = 0; $i < 2; $i++) {
@@ -180,7 +181,7 @@ class NotificationChannelTest extends TestCase
         Queue::fake();
         $this->assertSame(0, EventPublisher::publish('certificate.failed', $domain, 'Failed'));
         // A message queued before the switch changed is dropped when it runs.
-        (new DeliverNotification($id, ['event' => 'certificate.failed', 'title' => 'Failed', 'body' => '', 'domain' => 'off.example', 'occurred_at' => now()->toIso8601String()]))->handle(app(\App\Support\PlatformSettings::class));
+        (new DeliverNotification($id, ['event' => 'certificate.failed', 'title' => 'Failed', 'body' => '', 'domain' => 'off.example', 'occurred_at' => now()->toIso8601String()]))->handle(app(PlatformSettings::class));
         Http::assertNothingSent();
         $this->assertDatabaseHas('notification_channels', ['id' => $id, 'status' => 'active']);
     }
@@ -195,7 +196,7 @@ class NotificationChannelTest extends TestCase
             $ids[] = $this->postJson('/api/admin/notification-channels', $payload)->json('data.id');
         }
         foreach ($ids as $id) {
-            (new DeliverNotification($id, $message))->handle(app(\App\Support\PlatformSettings::class));
+            (new DeliverNotification($id, $message))->handle(app(PlatformSettings::class));
         }
         Http::assertSent(fn ($request): bool => str_starts_with($request->url(), 'https://api.telegram.org/bot123456789:') && $request['chat_id'] === '-1001234567890' && str_contains($request['text'], 'a.example'));
         Http::assertSent(fn ($request): bool => $request->url() === self::DISCORD_URL && $request['allowed_mentions'] === ['parse' => []]);
@@ -212,13 +213,13 @@ class NotificationChannelTest extends TestCase
         RateLimiter::clear('x');
         $row = SystemSetting::query()->findOrFail('notifications');
         $row->update(['values' => [...$row->values, 'channel_messages_per_minute' => 1]]);
-        app()->forgetInstance(\App\Support\PlatformSettings::class);
+        app()->forgetInstance(PlatformSettings::class);
         $this->actingAs($this->admin());
         $id = $this->postJson('/api/admin/notification-channels', self::TELEGRAM)->json('data.id');
         $message = fn (string $title): array => ['event' => 'certificate.failed', 'title' => $title, 'body' => '', 'domain' => null, 'occurred_at' => now()->toIso8601String()];
 
         foreach (['one', 'two', 'three'] as $title) {
-            (new DeliverNotification($id, $message($title)))->handle(app(\App\Support\PlatformSettings::class));
+            (new DeliverNotification($id, $message($title)))->handle(app(PlatformSettings::class));
         }
         Http::assertSentCount(1);
         Queue::assertPushed(DeliverNotification::class, 1);
@@ -228,7 +229,7 @@ class NotificationChannelTest extends TestCase
 
             return $job->message['event'] === 'digest';
         });
-        $digest->handle(app(\App\Support\PlatformSettings::class));
+        $digest->handle(app(PlatformSettings::class));
         Http::assertSentCount(2);
         Http::assertSent(fn ($request): bool => str_contains((string) ($request['text'] ?? ''), '2 more notifications') && str_contains($request['text'], 'two') && str_contains($request['text'], 'three'));
     }
@@ -239,14 +240,14 @@ class NotificationChannelTest extends TestCase
         Http::fake(['*' => Http::response('no', 500)]);
         $row = SystemSetting::query()->findOrFail('notifications');
         $row->update(['values' => [...$row->values, 'pause_after_failures' => 3]]);
-        app()->forgetInstance(\App\Support\PlatformSettings::class);
+        app()->forgetInstance(PlatformSettings::class);
         $this->actingAs($this->admin());
         $id = $this->postJson('/api/admin/notification-channels', self::TELEGRAM)->json('data.id');
         $job = new DeliverNotification($id, ['event' => 'certificate.failed', 'title' => 'x', 'body' => '', 'domain' => null, 'occurred_at' => now()->toIso8601String()]);
         $thrown = 0;
         for ($i = 0; $i < 3; $i++) {
             try {
-                $job->handle(app(\App\Support\PlatformSettings::class));
+                $job->handle(app(PlatformSettings::class));
             } catch (\Throwable $exception) {
                 $thrown++;
                 $job->failed($exception);

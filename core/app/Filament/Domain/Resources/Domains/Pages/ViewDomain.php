@@ -4,10 +4,12 @@ namespace App\Filament\Domain\Resources\Domains\Pages;
 
 use App\Actions\ChangeAutomaticSecurityState;
 use App\Actions\DispatchCachePurge;
+use App\Actions\EndIncidentProfile;
+use App\Actions\StartIncidentProfile;
 use App\Enums\DomainLifecycleState;
 use App\Filament\Domain\Resources\Domains\DomainResource;
-use App\Filament\Domain\Resources\Domains\Widgets\DomainKpiStrip;
 use App\Filament\Domain\Resources\Domains\Widgets\DomainIncidentBanner;
+use App\Filament\Domain\Resources\Domains\Widgets\DomainKpiStrip;
 use App\Filament\Domain\Resources\Domains\Widgets\DomainNeedsAttention;
 use App\Http\Controllers\DnsDeploymentController;
 use App\Http\Controllers\DomainController;
@@ -30,6 +32,7 @@ use App\Support\CachePolicy;
 use App\Support\DnsZoneImporter;
 use App\Support\DomainNameserverVerification;
 use App\Support\FilamentHelp;
+use App\Support\IncidentProfile;
 use App\Support\PlatformSettings;
 use App\Support\ProxyRevisionRollback;
 use App\Support\SecurityConfig;
@@ -433,17 +436,17 @@ class ViewDomain extends ViewRecord
                 ->modalDescription('For the time you choose, the domain gets tighter request limits, the web application firewall in blocking mode, restricted methods and body size, and a browser challenge. It protects your origin and the cells from request floods; it cannot absorb traffic that saturates a host or link.')
                 ->schema([Select::make('duration_minutes')->label(FilamentHelp::label('Duration', 'How long the protections stay on. They turn off by themselves at the end; you can end them sooner.'))
                     ->options([15 => '15 minutes', 30 => '30 minutes', 60 => '1 hour', 180 => '3 hours', 720 => '12 hours', 1440 => '24 hours'])->default(60)->required()])
-                ->visible(fn (): bool => ! \App\Support\IncidentProfile::active($this->record))
+                ->visible(fn (): bool => ! IncidentProfile::active($this->record))
                 ->action(function (array $data): void {
-                    \App\Actions\StartIncidentProfile::execute($this->record, auth()->user(), (int) $data['duration_minutes'], request()->ip());
+                    StartIncidentProfile::execute($this->record, auth()->user(), (int) $data['duration_minutes'], request()->ip());
                     $this->refreshDomain(includeTabs: true);
                     Notification::make()->warning()->title('Incident profile started')->body('The protections are on their way to the cells and end on their own.')->send();
                 }),
             Action::make('endIncident')->icon('phosphor-shield-check')->label('End incident profile')->color('success')->requiresConfirmation()->extraAttributes(['data-testid' => 'incident-end-action'])
                 ->modalHeading('End the incident profile now?')
-                ->visible(fn (): bool => \App\Support\IncidentProfile::active($this->record))
+                ->visible(fn (): bool => IncidentProfile::active($this->record))
                 ->action(function (): void {
-                    \App\Actions\EndIncidentProfile::execute($this->record, auth()->user(), 'manual', request()->ip());
+                    EndIncidentProfile::execute($this->record, auth()->user(), 'manual', request()->ip());
                     $this->refreshDomain(includeTabs: true);
                     Notification::make()->success()->title('Incident profile ended')->send();
                 }),
