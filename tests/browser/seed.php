@@ -154,8 +154,8 @@ AuditLog::record(null, 'security.automatic_state_changed', $showcase, ['from' =>
 $notifications = SystemSetting::query()->findOrFail('notifications');
 $notifications->update(['values' => [...$notifications->values, 'domain_user_channels' => true]]);
 foreach ([
-    [null, 'telegram', 'Operations chat for the whole platform on call rotation', 'Telegram chat -1001234567890', null, 'active', null],
-    [null, 'webhook', 'Pager bridge', 'Webhook to alerts.example.com', null, 'active', null],
+    [null, 'telegram', 'Operations chat for the whole platform on call rotation', 'Telegram chat -1001234567890', null, 'paused', 'Paused so the browser suite makes no outbound calls: the stack runs queues synchronously.'],
+    [null, 'webhook', 'Pager bridge', 'Webhook to alerts.example.com', null, 'paused', 'Paused so the browser suite makes no outbound calls: the stack runs queues synchronously.'],
     [$user->id, 'slack', 'Team channel', 'Slack webhook on hooks.slack.com, ending wxyz', ['certificate.failed', 'dns.deployment_failed'], 'active', null],
     [$user->id, 'discord', 'Weekend alerts with a deliberately long channel name to check truncation', 'Discord webhook on discord.com, ending 6789', ['certificate.expiring'], 'paused',
         'Paused after 10 failed deliveries in a row. Last error: Discord answered HTTP 404, so the webhook was probably deleted on the Discord side.'],
