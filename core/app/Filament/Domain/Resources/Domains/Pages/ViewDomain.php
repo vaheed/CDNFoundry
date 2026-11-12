@@ -2,6 +2,7 @@
 
 namespace App\Filament\Domain\Resources\Domains\Pages;
 
+use App\Actions\ChangeAutomaticSecurityState;
 use App\Actions\DispatchCachePurge;
 use App\Enums\DomainLifecycleState;
 use App\Filament\Domain\Resources\Domains\DomainResource;
@@ -655,6 +656,9 @@ class ViewDomain extends ViewRecord
                 'details' => ['actor_id' => auth()->id(), 'target_pool_id' => $pool?->id], 'occurred_at' => now(),
             ]);
             AuditLog::record(auth()->user(), "security.domain_$state", $domain, ['revision' => $domain->revision, 'target_pool_id' => $pool?->id], request()->ip());
+            if (in_array($state, ['recovering', 'normal'], true)) {
+                ChangeAutomaticSecurityState::execute($domain, 'normal', 'operator_return_to_normal', ['actor_id' => auth()->id()]);
+            }
         });
         $operation = Operation::coalesceDomain('edge.domain_reconcile', $this->record->id, auth()->id());
         ReconcileEdgeDomain::dispatch($this->record->id)->afterCommit();

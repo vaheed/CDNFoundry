@@ -270,7 +270,7 @@ class SimpleAnycastPoolTest extends TestCase
         $request = $report('client_rate_exceeded', 60);
         $request->attributes->set('edge', $edge);
         app(EdgeAgentController::class)->heartbeat($request);
-        $this->assertSame('suspected', $domain->refresh()->security_state);
+        $this->assertSame('suspected', $domain->refresh()->automatic_security_state);
     }
 
     public function test_stale_heartbeat_cannot_lower_a_newer_durable_sequence(): void

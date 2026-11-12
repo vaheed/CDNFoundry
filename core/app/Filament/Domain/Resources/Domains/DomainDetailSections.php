@@ -143,7 +143,7 @@ class DomainDetailSections
 
         return ['title' => 'Security', 'rows' => [
             self::row('Profile', ($domain->security_settings ?? SecurityConfig::defaults())['profile'], 'badge'),
-            self::row('State', $domain->security_state, 'badge'),
+            self::row('State', $domain->effectiveSecurityState(), 'badge'),
             self::row('WAF', match ($domain->waf_profile) {
                 'off' => 'Off',
                 'monitor' => 'Observe',

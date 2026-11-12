@@ -21,7 +21,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
-#[Fillable(['name', 'display_name', 'lifecycle_state', 'revision', 'nameservers_verified_at', 'nameservers_verified_by', 'disabled_at', 'deprovision_after', 'proxy_settings', 'active_edge_revision', 'cache_settings', 'cache_epoch', 'cache_development_mode_until', 'tls_mode', 'active_tls_certificate_id', 'security_settings', 'security_state', 'security_state_changed_at', 'waf_profile', 'delegation_token', 'delegation_nameservers', 'claim_expires_at'])]
+#[Fillable(['name', 'display_name', 'lifecycle_state', 'revision', 'nameservers_verified_at', 'nameservers_verified_by', 'disabled_at', 'deprovision_after', 'proxy_settings', 'active_edge_revision', 'cache_settings', 'cache_epoch', 'cache_development_mode_until', 'tls_mode', 'active_tls_certificate_id', 'security_settings', 'security_state', 'automatic_security_state', 'security_overlay_sequence', 'security_state_changed_at', 'waf_profile', 'delegation_token', 'delegation_nameservers', 'claim_expires_at'])]
 class Domain extends Model
 {
     use SoftDeletes;
@@ -295,6 +295,15 @@ class Domain extends Model
     public function securityRules(): HasMany
     {
         return $this->hasMany(SecurityRule::class);
+    }
+
+    /** The stricter of the operator's state and the state automation set from edge reports. */
+    public function effectiveSecurityState(): string
+    {
+        $rank = ['normal' => 0, 'recovering' => 1, 'suspected' => 2, 'restricted' => 3, 'quarantined' => 4];
+
+        return ($rank[$this->automatic_security_state] ?? 0) > ($rank[$this->security_state] ?? 0)
+            ? $this->automatic_security_state : $this->security_state;
     }
 
     public function securityEvents(): HasMany

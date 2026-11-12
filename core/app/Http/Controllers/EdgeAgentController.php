@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Actions\PromoteReadyEdgePlacements;
+use App\Actions\RecordSecurityReport;
 use App\Jobs\AdvanceFleetRollout;
 use App\Jobs\ReconcileAllEdgeDomains;
 use App\Jobs\ReconcileEdgeDomain;
@@ -368,39 +369,7 @@ class EdgeAgentController extends Controller
                 ]]);
         }
         foreach ($data['noisy_domains'] as $event) {
-            DB::transaction(function () use ($event, $edge): void {
-                $domain = Domain::query()->where('lifecycle_state', 'active')
-                    ->whereHas('edgeCells', fn ($cells) => $cells->where('edge_id', $edge->id)
-                        ->where(fn ($assigned) => $assigned->whereNotNull('active_cell_id')->orWhereNotNull('target_cell_id')))
-                    ->lockForUpdate()->find($event['domain_id']);
-                if ($domain === null || (($event['hostname'] ?? null) !== null && ! $domain->dnsRecords()->where('mode', 'proxied')->where('name', $event['hostname'])->exists())) {
-                    return;
-                }
-                // One row per domain, edge, reason, and hour: later reports in the hour raise the count, never add rows.
-                $occurredAt = CarbonImmutable::createFromTimestamp($event['occurred_at']);
-                $stored = SecurityEvent::query()->firstOrNew([
-                    'domain_id' => $domain->id, 'edge_id' => $edge->id, 'reason_code' => $event['reason_code'],
-                    'bucket_at' => $occurredAt->startOfHour(),
-                ]);
-                $stored->fill([
-                    'hostname' => $event['hostname'] ?? $stored->hostname, 'state' => $domain->security_state,
-                    'details' => ['count' => max((int) ($stored->details['count'] ?? 0), $event['count'])],
-                    'occurred_at' => $stored->occurred_at === null ? $occurredAt : $occurredAt->max($stored->occurred_at),
-                ])->save();
-                $settings = $domain->security_settings ?? SecurityConfig::defaults();
-                $escalates = ! in_array($event['reason_code'], SecurityConfig::NON_ESCALATING_REASONS, true);
-                if ($escalates && $event['count'] >= 50 && $domain->security_state === 'normal') {
-                    $domain->update(['security_state' => 'suspected', 'security_state_changed_at' => now(), 'revision' => $domain->revision + 1]);
-                    Operation::coalesceDomain('edge.domain_reconcile', $domain->id);
-                    ReconcileEdgeDomain::dispatch($domain->id)->afterCommit();
-                }
-                if ($escalates && $event['count'] >= 100 && str_starts_with($settings['quarantine_policy'], 'automatic')
-                    && in_array($domain->refresh()->security_state, ['normal', 'suspected'], true)) {
-                    $domain->update(['security_state' => 'restricted', 'security_state_changed_at' => now(), 'revision' => $domain->revision + 1]);
-                    Operation::coalesceDomain('edge.domain_reconcile', $domain->id);
-                    ReconcileEdgeDomain::dispatch($domain->id)->afterCommit();
-                }
-            });
+            RecordSecurityReport::execute($edge, $event);
         }
         PromoteReadyEdgePlacements::execute();
         $this->completeAcknowledgedTombstones();

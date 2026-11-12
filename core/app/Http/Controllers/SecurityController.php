@@ -134,7 +134,8 @@ class SecurityController extends Controller
         Gate::authorize('view', $domain);
 
         return response()->json(['data' => [
-            'profile' => $this->settings($domain)['profile'], 'state' => $domain->security_state,
+            'profile' => $this->settings($domain)['profile'], 'state' => $domain->effectiveSecurityState(),
+            'configured_state' => $domain->security_state, 'automatic_state' => $domain->automatic_security_state,
             'state_changed_at' => $domain->security_state_changed_at,
             'placement' => $domain->edgePlacement?->load(['activePool', 'targetPool']),
         ]]);
