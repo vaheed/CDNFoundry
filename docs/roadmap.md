@@ -133,6 +133,17 @@ Previously Phase 8.
 
 **Gate:** each shipped item has a before and after measurement.
 
+### Phase 4 completion gate (recorded 2026-11-13, branch `dev`)
+
+| Field | Status |
+| --- | --- |
+| Implementation | Done for 4.1 presets and 4.2 path rules (commits `6a68680`, `98fe0c2`, `9105081`). 4.3 purge by prefix is not built: it waits for purge-log numbers. |
+| Tests | `CacheApiTest` and `FilamentWorkflowTest` pass (40 tests): bounds, permissions, validation, the cross-field checks, and the form action. |
+| Runtime qualification | `tests/e2e/openresty_runtime.py` passes on a fresh image build (28 min): prefix cookie names, bypass prefix and suffix rules, an unmatched path, and a TTL rule that outlives a one-second origin TTL. |
+| Browser suite | Only `tests/browser/specs/cache-rules.spec.ts` was run, as the screen it covers is the only one changed: 12 of 12 pass (light and dark, desktop and phone), with placeholder, tooltip, and accessibility checks and a new form snapshot. The full suite is re-run in Phase 11. |
+| Documentation | `docs/guides/cache.md` and `docs/reference/limits.md` updated. |
+| Open | 4.1 hit ratio before and after on a recorded traffic sample, and the 4.3 decision from purge logs: neither has been measured yet. The gate stays open on these two items. |
+
 ---
 
 ## Phases 5 to 8: A simple WAF
