@@ -2,8 +2,8 @@
 
 namespace App\Filament\Domain\Resources\Domains\RelationManagers;
 
-use App\Filament\Domain\Resources\Domains\RelationManagers\Concerns\SyncsDomainPage;
 use App\Enums\DomainLifecycleState;
+use App\Filament\Domain\Resources\Domains\RelationManagers\Concerns\SyncsDomainPage;
 use App\Jobs\EnsureManagedCertificates;
 use App\Jobs\ReconcileDnsZone;
 use App\Jobs\ReconcileEdgeDomain;

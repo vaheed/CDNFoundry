@@ -2,8 +2,8 @@
 
 namespace App\Filament\Domain\Resources\Domains\RelationManagers;
 
-use App\Filament\Domain\Resources\Domains\RelationManagers\Concerns\SyncsDomainPage;
 use App\Enums\UserType;
+use App\Filament\Domain\Resources\Domains\RelationManagers\Concerns\SyncsDomainPage;
 use App\Models\AuditLog;
 use App\Models\User;
 use Filament\Actions\AttachAction;
