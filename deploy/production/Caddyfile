@@ -3,12 +3,13 @@
 	email {$ACME_CONTACT_EMAIL}
 }
 
-# Only the management networks reach the panels, the API, Horizon, Grafana, and the status page. Every other
-# client gets a bare 403: no redirect, no login form, no cookie. Health probes stay open. An empty
+# Only the management networks reach the administrator panel, the administrator API, Horizon, the metrics
+# endpoint, and Grafana. Every other client gets a bare 403: no redirect, no login form, no cookie. The customer
+# panel (/app), the customer API, the status page, and the health probes stay open to everyone. An empty
 # MANAGEMENT_NETWORKS renders as "0.0.0.0/0 ::/0" in Compose, which restricts nothing.
 (management_only) {
 	@outside {
-		not path /api/health /api/ready /up
+		path /admin /admin/* /api/admin /api/admin/* /horizon /horizon/* /metrics /control-state
 		not remote_ip {$MANAGEMENT_NETWORKS}
 	}
 	handle @outside {

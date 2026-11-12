@@ -2,7 +2,7 @@
 """Qualify the management-network allowlist in the real production Caddyfile.
 
 A disposable Caddy runs the control site of deploy/production/Caddyfile (HTTP only, for the test) in front of
-a stub web service. A client container on the same network is first outside the allowlist, then inside it.
+a stub web service. The stub answers 404 for every path, so a 404 means the request passed the allowlist. A client container on the same network is first outside the allowlist, then inside it.
 """
 import os
 import pathlib
@@ -46,8 +46,9 @@ http://:8081 {
         try:
             docker('run', '-d', '--rm', '--name', web, '--network', network, '--network-alias', 'web', STUB, 'python', '-m', 'http.server', '8080')
             for label, networks, expected in (
-                ('outside', '203.0.113.0/24 2001:db8::/32', {'/admin': '403', '/api/domains': '403', '/horizon': '403', '/api/health': '404', '/up': '404', '/': '403'}),
-                ('inside', '0.0.0.0/0 ::/0', {'/admin': '404', '/api/health': '404'}),
+                ('outside', '203.0.113.0/24 2001:db8::/32', {'/admin': '403', '/admin/login': '403', '/api/admin/edges': '403', '/horizon': '403', '/metrics': '403', '/control-state': '403',
+                              '/app': '404', '/api/domains': '404', '/health': '404', '/api/health': '404', '/up': '404', '/': '200'}),
+                ('inside', '0.0.0.0/0 ::/0', {'/admin': '404', '/api/admin/edges': '404', '/app': '404'}),
             ):
                 docker('rm', '-f', proxy, check=False)
                 docker('run', '-d', '--rm', '--name', proxy, '--network', network, '-e', f'MANAGEMENT_NETWORKS={networks}',

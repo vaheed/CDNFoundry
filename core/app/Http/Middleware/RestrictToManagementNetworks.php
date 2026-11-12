@@ -8,21 +8,22 @@ use Symfony\Component\HttpFoundation\IpUtils;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Defense in depth behind the Caddy allowlist: when management networks are configured, the panels, the API,
- * Horizon, and the status page answer only clients inside them. A refusal is a bare 403, decided before the
- * session starts, so it sets no cookie and shows no login form.
+ * Defense in depth behind the Caddy allowlist: when management networks are configured, the administrator panel,
+ * the administrator API, Horizon, the metrics endpoint, and the control-state page answer only clients inside them.
+ * The customer panel (/app), the customer API, the status page, the health probes, and the edge listener stay open
+ * to everyone. A refusal is a bare 403, decided before the session starts, so it sets no cookie and shows no login form.
  *
  * Callers that reach the application directly on the private container network carry no forwarded address and
  * are internal by construction. Everything that arrives through Caddy carries the client address Caddy saw.
  */
 class RestrictToManagementNetworks
 {
-    private const PUBLIC_PATHS = ['up', 'api/health', 'api/ready', 'edge/*'];
+    private const RESTRICTED_PATHS = ['admin', 'admin/*', 'api/admin', 'api/admin/*', 'horizon', 'horizon/*', 'metrics', 'control-state'];
 
     public function handle(Request $request, Closure $next): Response
     {
         $networks = self::networks();
-        if ($networks === [] || $request->is(...self::PUBLIC_PATHS) || ! $request->headers->has('X-Forwarded-For')) {
+        if ($networks === [] || ! $request->is(...self::RESTRICTED_PATHS) || ! $request->headers->has('X-Forwarded-For')) {
             return $next($request);
         }
         if (IpUtils::checkIp((string) $request->ip(), $networks)) {

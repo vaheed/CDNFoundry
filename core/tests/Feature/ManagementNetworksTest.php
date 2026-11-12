@@ -11,29 +11,28 @@ class ManagementNetworksTest extends TestCase
         return ['REMOTE_ADDR' => '172.20.0.5', 'HTTP_X_FORWARDED_FOR' => $client, 'HTTP_X_FORWARDED_PROTO' => 'https'];
     }
 
-    public function test_outside_clients_get_a_bare_403_without_cookie_or_redirect(): void
+    public function test_outside_clients_get_a_bare_403_on_the_administrator_surface(): void
     {
         config(['security.management_networks' => '198.51.100.0/24 2001:db8::/32']);
 
-        foreach (['/', '/admin', '/admin/login', '/app', '/horizon', '/health', '/metrics', '/control-state'] as $path) {
+        foreach (['/admin', '/admin/login', '/admin/domains', '/horizon', '/horizon/api/stats', '/metrics', '/control-state'] as $path) {
             $response = $this->call('GET', $path, [], [], [], $this->viaCaddy('203.0.113.9'));
             $response->assertForbidden();
             $this->assertSame('Forbidden', $response->getContent(), $path);
             $this->assertNull($response->headers->get('Location'), $path);
             $this->assertSame([], $response->headers->getCookies(), $path);
         }
-        $this->call('GET', '/api/domains', [], [], [], $this->viaCaddy('203.0.113.9'))
+        $this->call('GET', '/api/admin/edges', [], [], [], $this->viaCaddy('203.0.113.9'))
             ->assertForbidden()->assertJsonPath('code', 'network_not_allowed');
     }
 
-    public function test_health_probes_and_the_edge_listener_stay_reachable(): void
+    public function test_the_customer_panel_the_customer_api_the_status_page_and_probes_stay_open_to_everyone(): void
     {
         config(['security.management_networks' => '198.51.100.0/24']);
 
-        foreach (['/up', '/api/health', '/api/ready'] as $path) {
+        foreach (['/', '/app', '/app/login', '/health', '/api/domains', '/up', '/api/health', '/api/ready', '/edge/v1/config/manifest'] as $path) {
             $this->assertNotSame(403, $this->call('GET', $path, [], [], [], $this->viaCaddy('203.0.113.9'))->getStatusCode(), $path);
         }
-        $this->assertNotSame(403, $this->call('GET', '/edge/v1/config/manifest', [], [], [], $this->viaCaddy('203.0.113.9'))->getStatusCode());
     }
 
     public function test_inside_clients_and_direct_internal_callers_pass(): void
@@ -43,7 +42,7 @@ class ManagementNetworksTest extends TestCase
         $this->assertNotSame(403, $this->call('GET', '/admin/login', [], [], [], $this->viaCaddy('198.51.100.77'))->getStatusCode());
         $this->assertNotSame(403, $this->call('GET', '/admin/login', [], [], [], $this->viaCaddy('2001:db8::7'))->getStatusCode());
         // Prometheus and other containers reach the application directly, with no forwarded address.
-        $this->assertNotSame(403, $this->call('GET', '/api/domains', [], [], [], ['REMOTE_ADDR' => '172.20.0.9'])->getStatusCode());
+        $this->assertNotSame(403, $this->call('GET', '/api/admin/edges', [], [], [], ['REMOTE_ADDR' => '172.20.0.9'])->getStatusCode());
     }
 
     public function test_an_empty_list_restricts_nothing(): void
