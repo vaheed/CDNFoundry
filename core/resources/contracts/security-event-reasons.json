@@ -9,6 +9,7 @@
     "header_too_large",
     "body_too_large",
     "waf_body_limit",
+    "waf_block",
     "header_timeout",
     "body_timeout",
     "client_rate_exceeded",
@@ -23,6 +24,10 @@
     "too_many_query_arguments",
     "domain_restricted",
     "domain_quarantined",
-    "edge_emergency_mode"
+    "edge_emergency_mode",
+    "incident_method",
+    "incident_body_size",
+    "challenge_required",
+    "challenge_invalid"
   ]
 }

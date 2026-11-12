@@ -82,7 +82,164 @@ local function security_reject(status, reason)
     if diagnostic_headers_enabled() then ngx.header["X-CDNF-Security-Reason"] = reason else ngx.header["Server"] = nil end
     ngx.var.cdn_security_reason = reason
     ngx.var.cdn_security_action = "block"
+    local body = ngx.ctx.reject_body
+    if body then
+        -- A rejection that explains itself, such as the incident challenge page: the status is the rejection's own.
+        ngx.status = status
+        ngx.header["Content-Type"] = "text/html; charset=utf-8"
+        ngx.header["Cache-Control"] = "no-store"
+        ngx.header["Content-Security-Policy"] = ngx.ctx.reject_csp or "default-src 'none'"
+        ngx.print(body)
+        return ngx.exit(ngx.HTTP_OK)
+    end
     return ngx.exit(status)
+end
+
+
+-- The incident profile rides in the domain's overlay. The cell expires it by its own clock, so it ends even if the control plane or
+-- the agent is unreachable. Nothing here calls out: the challenge is stateless apart from a bounded single-use seed set.
+local incident_cache = {}
+local function incident_for(config)
+    local raw = ngx.shared.runtime_limits:get("overlay:" .. tostring(config.domain_id or config.domain))
+    if not raw then return nil end
+    local cached = incident_cache[raw]
+    if cached == nil then
+        local overlay = cjson.decode(raw)
+        cached = (type(overlay) == "table" and type(overlay.incident) == "table") and overlay.incident or false
+        local count = 0
+        for _ in pairs(incident_cache) do count = count + 1 end
+        if count >= 256 then incident_cache = {} end
+        incident_cache[raw] = cached
+    end
+    if cached and type(cached.expires_at) == "number" and cached.expires_at > ngx.time() then return cached end
+    return nil
+end
+
+local CHALLENGE_PATH = "/.cdnf/challenge"
+local CHALLENGE_BITS = 16
+local CHALLENGE_SEED_SECONDS = 300
+local CHALLENGE_ISSUES_PER_MINUTE = 30
+local CHALLENGE_TOKEN_SECONDS = 3600
+
+local challenge_key
+local function sha256_raw(data)
+    local digest = resty_sha256:new()
+    digest:update(data)
+    return digest:final()
+end
+
+-- HMAC-SHA256 with a per-cell key derived from the cell's own secret, so a token or seed from one cell means nothing on another.
+local function hmac_sha256_hex(message)
+    if not challenge_key then
+        challenge_key = sha256_raw("cdnf-challenge-v1|" .. (os.getenv("EDGE_STATUS_TOKEN") or "") .. "|" .. (os.getenv("EDGE_CELL_NAME") or ""))
+    end
+    local key = challenge_key .. string.rep("\0", 64 - #challenge_key)
+    local ipad, opad = {}, {}
+    for i = 1, 64 do
+        local byte = key:byte(i)
+        ipad[i] = string.char(bit.bxor(byte, 0x36))
+        opad[i] = string.char(bit.bxor(byte, 0x5c))
+    end
+    return resty_string.to_hex(sha256_raw(table.concat(opad) .. sha256_raw(table.concat(ipad) .. message)))
+end
+
+local function constant_time_equal(a, b)
+    if type(a) ~= "string" or type(b) ~= "string" or #a ~= #b then return false end
+    local difference = 0
+    for i = 1, #a do difference = bit.bor(difference, bit.bxor(a:byte(i), b:byte(i))) end
+    return difference == 0
+end
+
+-- A token and a seed are bound to one domain, one client address, and one user agent.
+local function client_binding(client)
+    return resty_string.to_hex(sha256_raw(tostring(client) .. "|" .. (ngx.var.http_user_agent or ""))):sub(1, 16)
+end
+
+local function valid_challenge_token(config, client)
+    local token = ngx.var.cookie_cdnf_chal
+    if type(token) ~= "string" or #token > 200 then return false end
+    local domain, expires, binding, mac = token:match("^(%d+)%.(%d+)%.(%x+)%.(%x+)$")
+    if not domain or tonumber(domain) ~= tonumber(config.domain_id or 0) or tonumber(expires) <= ngx.time() then return false end
+    if binding ~= client_binding(client) then return false end
+    return constant_time_equal(mac, hmac_sha256_hex("token|" .. domain .. "|" .. expires .. "|" .. binding))
+end
+
+local function leading_zero_bits(raw)
+    local bits = 0
+    for i = 1, #raw do
+        local byte = raw:byte(i)
+        if byte == 0 then bits = bits + 8 else
+            while byte < 128 do bits = bits + 1; byte = byte * 2 end
+            break
+        end
+    end
+    return bits
+end
+
+local function challenge_page(seed, nonce)
+    return table.concat({
+        '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">',
+        '<title>Checking your browser</title><meta name="robots" content="noindex">',
+        '<style nonce="', nonce, '">body{margin:0;font:16px/1.5 system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;background:#fff;color:#1a1a1a}',
+        'main{max-width:30rem;padding:1.5rem}h1{font-size:1.25rem;margin:0 0 .5rem}p{margin:.5rem 0}',
+        '@media (prefers-color-scheme:dark){body{background:#141414;color:#ececec}}</style></head><body><main>',
+        '<h1>Checking your browser</h1>',
+        '<p id="status" role="status" aria-live="polite">This takes a few seconds. The page continues on its own.</p>',
+        '<noscript><p>This site is handling a flood of requests and needs JavaScript to confirm that a person is visiting. ',
+        'Turn JavaScript on and reload, or contact the site owner.</p></noscript>',
+        '<script nonce="', nonce, '">(async()=>{const seed="', seed, '",bits=', tostring(CHALLENGE_BITS), ',status=document.getElementById("status");',
+        'try{const enc=new TextEncoder();const lead=h=>{let n=0;for(const b of h){if(b===0){n+=8;continue}n+=Math.clz32(b)-24;break}return n};',
+        'let c=0;for(;;c++){const h=new Uint8Array(await crypto.subtle.digest("SHA-256",enc.encode(seed+":"+c)));if(lead(h)>=bits)break}',
+        'const r=await fetch("', CHALLENGE_PATH, '",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},credentials:"same-origin",body:"seed="+encodeURIComponent(seed)+"&counter="+c});',
+        'if(r.ok){location.reload()}else{status.textContent="Verification failed. Reload the page to try again."}}',
+        'catch(e){status.textContent="This browser cannot complete the check. Try a current browser over HTTPS."}})();</script></main></body></html>',
+    })
+end
+
+-- Returns nil when the request may continue; otherwise it has answered and the caller returns the result.
+local function enforce_challenge(config, incident, client, trusted)
+    local method = ngx.req.get_method()
+    local uri = ngx.var.uri or "/"
+    if uri == CHALLENGE_PATH then
+        if method ~= "POST" then return security_reject(405, "invalid_method") end
+        ngx.req.read_body()
+        local raw = ngx.req.get_body_data() or ""
+        if #raw > 512 then return security_reject(413, "body_too_large") end
+        local seed, counter = raw:match("^seed=([%w%%%.%-_]+)&counter=(%d+)$")
+        seed = seed and ngx.unescape_uri(seed)
+        local domain, issued, bits, mac = (seed or ""):match("^(%d+)%.(%d+)%.(%d+)%.(%x+)$")
+        local valid = domain and tonumber(domain) == tonumber(config.domain_id or 0) and tonumber(issued) + CHALLENGE_SEED_SECONDS >= ngx.time()
+            and tonumber(issued) <= ngx.time() + 5 and tonumber(bits) == CHALLENGE_BITS and #counter <= 12
+            and constant_time_equal(mac, hmac_sha256_hex("seed|" .. domain .. "|" .. issued .. "|" .. bits .. "|" .. client_binding(client)))
+            and leading_zero_bits(sha256_raw(seed .. ":" .. counter)) >= CHALLENGE_BITS
+        if not valid then return security_reject(403, "challenge_invalid") end
+        -- A seed works once: replaying a solved seed, or a seed from another client, is refused.
+        local added = ngx.shared.runtime_limits:add("challenge:used:" .. ngx.md5(seed), true, CHALLENGE_SEED_SECONDS)
+        if not added then return security_reject(403, "challenge_invalid") end
+        local expires = math.min(tonumber(incident.expires_at), ngx.time() + CHALLENGE_TOKEN_SECONDS)
+        local binding = client_binding(client)
+        local token = tostring(config.domain_id or 0) .. "." .. tostring(expires) .. "." .. binding .. "." .. hmac_sha256_hex("token|" .. tostring(config.domain_id or 0) .. "|" .. tostring(expires) .. "|" .. binding)
+        ngx.header["Set-Cookie"] = "cdnf_chal=" .. token .. "; Path=/; Max-Age=" .. tostring(expires - ngx.time()) .. "; HttpOnly; SameSite=Lax" .. (ngx.var.https == "on" and "; Secure" or "")
+        ngx.header["Cache-Control"] = "no-store"
+        ngx.status = 204
+        return ngx.exit(ngx.HTTP_NO_CONTENT)
+    end
+    if trusted or valid_challenge_token(config, client) then return nil end
+    for _, prefix in ipairs(incident.challenge_bypass_prefixes or {}) do
+        if type(prefix) == "string" and prefix ~= "" and uri:sub(1, #prefix) == prefix then return nil end
+    end
+    -- Only a person's page load gets the challenge; every other request without a token is refused, so a script never reaches the origin.
+    local accepts_html = (method == "GET" or method == "HEAD") and (ngx.var.http_accept or ""):find("text/html", 1, true)
+    if not accepts_html then return security_reject(403, "challenge_required") end
+    local issues = ngx.shared.runtime_limits:incr("challenge:issue:" .. ngx.md5(client) .. ":" .. math.floor(ngx.time() / 60), 1, 0, 120)
+    if not issues or issues > CHALLENGE_ISSUES_PER_MINUTE then return security_reject(429, "client_rate_exceeded") end
+    local issued = tostring(ngx.time())
+    local binding = client_binding(client)
+    local seed = tostring(config.domain_id or 0) .. "." .. issued .. "." .. tostring(CHALLENGE_BITS) .. "." .. hmac_sha256_hex("seed|" .. tostring(config.domain_id or 0) .. "|" .. issued .. "|" .. tostring(CHALLENGE_BITS) .. "|" .. binding)
+    local nonce = ngx.var.request_id or ngx.md5(seed)
+    ngx.ctx.reject_body = challenge_page(seed, nonce)
+    ngx.ctx.reject_csp = "default-src 'none'; script-src 'nonce-" .. nonce .. "'; style-src 'nonce-" .. nonce .. "'; connect-src 'self'; base-uri 'none'; form-action 'none'"
+    return security_reject(403, "challenge_required")
 end
 
 local function ipv4_number(ip)
@@ -592,6 +749,13 @@ function M.prepare_waf()
         or ((profile == "balanced" or profile == "strict") and "block" or "off")
     local threshold = math.max(1, math.min(100, tonumber(waf.inbound_threshold) or 5))
     local paranoia = math.max(1, math.min(4, tonumber(waf.paranoia_level) or 1))
+    -- The incident profile forces blocking at the strict profile's sensitivity, whatever the domain's own profile.
+    local incident = config and incident_for(config)
+    if incident and type(incident.waf) == "table" and incident.waf.mode == "block" then
+        mode = "block"
+        threshold = math.min(threshold, 3)
+        paranoia = math.max(paranoia, 2)
+    end
     ngx.var.cdn_waf_profile = profile
     ngx.var.cdn_waf_action = mode == "monitor" and "monitor" or (mode == "block" and "inspect" or "off")
     -- These headers are overwritten before ModSecurity runs and removed again
@@ -675,6 +839,14 @@ function M.access()
     if security.state == "quarantined" then return security_reject(429, "domain_quarantined") end
     local method = ngx.req.get_method()
     if emergency.allow_get_head_only and method ~= "GET" and method ~= "HEAD" then return security_reject(405, "edge_emergency_mode") end
+    local incident = incident_for(config)
+    if incident then
+        local incident_allows = false
+        for _, allowed_method in ipairs(incident.methods or {}) do
+            if method == allowed_method then incident_allows = true; break end
+        end
+        if not incident_allows then return security_reject(405, "incident_method") end
+    end
     local method_allowed = false
     for _, allowed_method in ipairs(security.allowed_methods or {"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}) do
         if method == allowed_method then method_allowed = true; break end
@@ -684,6 +856,7 @@ function M.access()
     local size = body_size()
     if emergency.disable_request_bodies and size > 0 then return security_reject(413, "edge_emergency_mode") end
     if size > (tonumber(limits.maximum_request_body_size) or 8388608) then return security_reject(413, "body_too_large") end
+    if incident and size > (tonumber(incident.max_body_bytes) or 1048576) then return security_reject(413, "incident_body_size") end
     local client = client_address(security)
     local country, continent = geography(client)
     ngx.var.cdn_client_ip = client
@@ -693,11 +866,18 @@ function M.access()
     ngx.var.cdn_country = country or "ZZ"
     ngx.var.cdn_continent = continent or "ZZ"
     ngx.var.cdn_asn = tostring(autonomous_system(client))
+    local trusted = false
     for _, rule in ipairs(security.rules or {}) do
         if rule_matches(rule, client, country, continent) then
             if rule.action == "block" then return security_reject(403, "domain_restricted") end
+            -- A client the domain's own rules allow is trusted and is not challenged.
+            if rule.action == "allow" then trusted = true end
             break
         end
+    end
+    if incident and incident.challenge == true then
+        local challenged = enforce_challenge(config, incident, client, trusted)
+        if challenged then return challenged end
     end
     local second = ngx.time()
     local client_key = "security:req:client:" .. tostring(config.domain) .. ":" .. ngx.md5(client) .. ":" .. second
@@ -1308,6 +1488,20 @@ function M.control()
                 if type(name) ~= "string" or #name > 64 or type(value) ~= "number" or value < 0 or count > 64 then return ngx.exit(400) end
             end
         end
+        local incident = command.incident
+        if incident ~= nil and incident ~= cjson.null then
+            if type(incident) ~= "table" or type(incident.expires_at) ~= "number" or incident.expires_at % 1 ~= 0
+                or type(incident.waf) ~= "table" or incident.waf.mode ~= "block" or type(incident.methods) ~= "table" or #incident.methods > 8
+                or type(incident.max_body_bytes) ~= "number" or incident.max_body_bytes < 0 or type(incident.challenge) ~= "boolean" then return ngx.exit(400) end
+            local known = { GET = true, HEAD = true, OPTIONS = true, POST = true, PUT = true, PATCH = true, DELETE = true }
+            for _, name in ipairs(incident.methods) do if not known[name] then return ngx.exit(400) end end
+            if incident.challenge_bypass_prefixes ~= nil then
+                if type(incident.challenge_bypass_prefixes) ~= "table" or #incident.challenge_bypass_prefixes > 8 then return ngx.exit(400) end
+                for _, prefix in ipairs(incident.challenge_bypass_prefixes) do
+                    if type(prefix) ~= "string" or #prefix == 0 or #prefix > 128 or prefix:sub(1, 1) ~= "/" then return ngx.exit(400) end
+                end
+            end
+        end
     end
     if command.action == "cache_purge" then
         if type(command.domain) ~= "string" or #command.domain == 0 or #command.domain > 253
@@ -1350,7 +1544,8 @@ function M.control()
                     dictionary:delete(key)
                 else
                     local limits = (type(command.limits) == "table") and command.limits or nil
-                    local ok, err = dictionary:safe_set(key, cjson.encode({ sequence = command.sequence, state = command.state, limits = limits }))
+                    local incident = (type(command.incident) == "table") and command.incident or nil
+                    local ok, err = dictionary:safe_set(key, cjson.encode({ sequence = command.sequence, state = command.state, limits = limits, incident = incident }))
                     if not ok then ngx.log(ngx.ERR, "security overlay not stored: ", err); return ngx.exit(507) end
                 end
             end
