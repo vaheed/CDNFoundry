@@ -164,7 +164,7 @@ final class SecurityConfig
             }
         }
 
-        return ['state' => $state, 'limits' => $limits];
+        return ['state' => $state, 'limits' => $limits, 'incident' => IncidentProfile::payload($domain)];
     }
 
     public static function validateRule(array $input): array

@@ -340,6 +340,7 @@ class Domain extends Model
     protected function casts(): array
     {
         return [
+            'incident_started_at' => 'immutable_datetime', 'incident_expires_at' => 'immutable_datetime',
             'delegation_nameservers' => 'array',
             'claim_expires_at' => 'immutable_datetime',
             'lifecycle_state' => DomainLifecycleState::class,

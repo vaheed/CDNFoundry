@@ -33,6 +33,7 @@ use App\Http\Controllers\DomainLifecycleController;
 use App\Http\Controllers\DomainLogController;
 use App\Http\Controllers\GeoDnsController;
 use App\Http\Controllers\HealthController;
+use App\Http\Controllers\IncidentProfileController;
 use App\Http\Controllers\LogPushController;
 use App\Http\Controllers\NameserverController;
 use App\Http\Controllers\NotificationChannelController;
@@ -59,6 +60,9 @@ Route::middleware(['auth:sanctum', 'account.active', 'token.scope', 'throttle:ac
     Route::post('/me/tokens', [TokenController::class, 'store'])->middleware('idempotent');
     Route::delete('/me/tokens/{token}', [TokenController::class, 'destroy'])->middleware('idempotent');
     Route::get('/operations/{operation}', [OperationController::class, 'show']);
+    Route::get('/domains/{domain}/incident', [IncidentProfileController::class, 'show']);
+    Route::post('/domains/{domain}/incident', [IncidentProfileController::class, 'start'])->middleware('idempotent');
+    Route::delete('/domains/{domain}/incident', [IncidentProfileController::class, 'end'])->middleware('idempotent');
     Route::get('/domains/{domain}/log-push', [LogPushController::class, 'index']);
     Route::post('/domains/{domain}/log-push', [LogPushController::class, 'store'])->middleware('idempotent');
     Route::patch('/domains/{domain}/log-push/{destination}', [LogPushController::class, 'update'])->middleware('idempotent');

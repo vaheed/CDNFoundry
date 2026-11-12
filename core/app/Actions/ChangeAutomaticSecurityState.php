@@ -20,13 +20,14 @@ class ChangeAutomaticSecurityState
     public const STATES = ['normal', 'suspected', 'restricted', 'recovering'];
 
     /** @param array<string, mixed> $context */
-    public static function execute(Domain $domain, string $state, string $cause, array $context = []): void
+    public static function execute(Domain $domain, string $state, string $cause, array $context = [], bool $force = false): void
     {
         abort_unless(in_array($state, self::STATES, true), 500, 'Unknown automatic security state.');
-        DB::transaction(function () use ($domain, $state, $cause, $context): void {
+        DB::transaction(function () use ($domain, $state, $cause, $context, $force): void {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
             $previous = $locked->automatic_security_state;
-            if ($previous === $state) {
+            // A forced change sends a new overlay even when the state is the same, for a change that rides in the overlay beside it.
+            if ($previous === $state && ! $force) {
                 return;
             }
             $locked->update([
@@ -34,7 +35,10 @@ class ChangeAutomaticSecurityState
                 'security_overlay_sequence' => $locked->security_overlay_sequence + 1,
             ]);
             self::dispatchOverlay($locked);
-            EventPublisher::publish('security.state_changed', $locked, "Security state of {$locked->name} changed to {$state}", "It was {$previous}. Cause: {$cause}.");
+            // The incident profile sends its own start and end notifications.
+            if ($previous !== $state && ! str_starts_with($cause, 'incident_')) {
+                EventPublisher::publish('security.state_changed', $locked, "Security state of {$locked->name} changed to {$state}", "It was {$previous}. Cause: {$cause}.");
+            }
             AuditLog::record(null, 'security.automatic_state_changed', $locked, [
                 'from' => $previous, 'to' => $state, 'cause' => $cause, 'overlay_sequence' => $locked->security_overlay_sequence, ...$context,
             ]);
@@ -57,7 +61,7 @@ class ChangeAutomaticSecurityState
                 'id' => (string) Str::uuid(), 'edge_id' => $edgeId, 'type' => 'security_overlay', 'status' => 'pending',
                 'payload' => [
                     'domain_id' => $domain->id, 'domain' => $domain->name, 'overlay_sequence' => (int) $domain->security_overlay_sequence,
-                    'state' => $overlay['state'], 'limits' => $overlay['limits'],
+                    'state' => $overlay['state'], 'limits' => $overlay['limits'], 'incident' => $overlay['incident'],
                 ],
             ]);
         }
