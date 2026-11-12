@@ -156,6 +156,19 @@ def compression_emergency(task_id: str, active: bool) -> dict:
     return json.loads(response.stdout)["data"]
 
 
+def security_overlay(task_id: str, sequence: int, state_name: str, limits: dict | None, container: str = NAME) -> subprocess.CompletedProcess[str]:
+    payload = {"task_id": task_id, "action": "security_overlay", "domain_id": 7701, "sequence": sequence, "state": state_name}
+    if limits is not None:
+        payload["limits"] = limits
+    return run(
+        "docker", "exec", container, "wget", "-q", "-O-",
+        "--header=X-Edge-Status-Token: runtime-test-token",
+        "--header=Content-Type: application/json",
+        f"--post-data={json.dumps(payload, separators=(',', ':'))}",
+        "http://127.0.0.1:9080/control", check=False,
+    )
+
+
 def worker_children(container: str, master: str) -> str:
     return run("docker", "exec", container, "cat", f"/proc/{master}/task/{master}/children").stdout.strip()
 
@@ -203,9 +216,10 @@ def main() -> None:
         initial["hosts"]["development.example"]["cache"]["development_mode_until"] = int(time.time()) + 3600
         for cache_host in (
             "admission.example", "admission-limit.example", "origin-policy.example",
-            "small-object.example", "stale.example", "no-stale.example", "single-flight.example",
+            "small-object.example", "stale.example", "no-stale.example", "single-flight.example", "overlay.example",
         ):
             initial["hosts"][cache_host] = state({cache_host: "cache-origin.example"}, 1)["hosts"][cache_host]
+        initial["hosts"]["overlay.example"]["domain_id"] = 7701
         initial["hosts"]["admission-limit.example"]["security"] = {
             "limits": {"cache_admissions_per_second": 1},
         }
@@ -516,6 +530,28 @@ def main() -> None:
             after_url_purge = request("runtime.example")
             assert "X-CDNF-Cache: MISS" in after_url_purge.stderr, after_url_purge.stderr
             assert cache_purge("runtime-purge-url-1", "urls", ["http|runtime.example|/"])["replayed"] is True
+            # The state automation sets travels as an overlay: the cell enforces the stricter limit, ignores an older
+            # sequence, and returns to the snapshot's limits when the overlay is removed.
+            before_overlay = run("docker", "exec", NAME, "wget", "-q", "-O-", "--header=X-Edge-Status-Token: runtime-test-token", "http://127.0.0.1:9080/passive-failures")
+            assert json.loads(before_overlay.stdout)["cell"]["overlays_restored"] is False, before_overlay.stdout
+            assert "200 OK" in request("overlay.example").stderr
+            tightened = security_overlay("overlay-1", 5, "restricted", {"requests_per_second": 0, "request_burst": 0})
+            assert tightened.returncode == 0, tightened.stderr
+            assert "429" in request("overlay.example").stderr
+            assert "200 OK" in request("runtime.example").stderr, "an overlay is scoped to its own domain"
+            assert security_overlay("overlay-old", 4, "suspected", {"requests_per_second": 1000, "request_burst": 1000}).returncode == 0
+            assert "429" in request("overlay.example").stderr, "an older sequence must not loosen the limit"
+            assert security_overlay("overlay-bad", 6, "banished", None).returncode != 0
+            assert security_overlay("overlay-negative", 6, "restricted", {"requests_per_second": -1}).returncode != 0
+            assert security_overlay("overlay-normal", 6, "normal", None).returncode == 0
+            assert "200 OK" in request("overlay.example").stderr, "a normal overlay restores the snapshot limits"
+            control_response = run(
+                "docker", "exec", NAME, "wget", "-q", "-O-", "--header=X-Edge-Status-Token: runtime-test-token",
+                "--header=Content-Type: application/json",
+                f"--post-data={json.dumps({'task_id': 'overlays-restored-1', 'action': 'security_overlays_restored'}, separators=(',', ':'))}",
+                "http://127.0.0.1:9080/control",
+            )
+            assert json.loads(control_response.stdout)["data"]["accepted"] is True
             # Encoded path characters never share a cache entry with their decoded form,
             # and a purge of the canonical key reaches only that entry.
             for suffix in ("/durable%3Fv=1", "/durable?v=1"):
