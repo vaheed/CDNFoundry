@@ -382,12 +382,13 @@ class EdgeAgentController extends Controller
                     'details' => ['count' => $event['count']], 'occurred_at' => CarbonImmutable::createFromTimestamp($event['occurred_at']),
                 ]);
                 $settings = $domain->security_settings ?? SecurityConfig::defaults();
-                if ($event['count'] >= 50 && $domain->security_state === 'normal') {
+                $escalates = ! in_array($event['reason_code'], SecurityConfig::NON_ESCALATING_REASONS, true);
+                if ($escalates && $event['count'] >= 50 && $domain->security_state === 'normal') {
                     $domain->update(['security_state' => 'suspected', 'security_state_changed_at' => now(), 'revision' => $domain->revision + 1]);
                     Operation::coalesceDomain('edge.domain_reconcile', $domain->id);
                     ReconcileEdgeDomain::dispatch($domain->id)->afterCommit();
                 }
-                if ($event['count'] >= 100 && str_starts_with($settings['quarantine_policy'], 'automatic')
+                if ($escalates && $event['count'] >= 100 && str_starts_with($settings['quarantine_policy'], 'automatic')
                     && in_array($domain->refresh()->security_state, ['normal', 'suspected'], true)) {
                     $domain->update(['security_state' => 'restricted', 'security_state_changed_at' => now(), 'revision' => $domain->revision + 1]);
                     Operation::coalesceDomain('edge.domain_reconcile', $domain->id);

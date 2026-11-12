@@ -11,6 +11,15 @@ final class SecurityConfig
 {
     public const MANUAL_PROFILE = 'manual';
 
+    /**
+     * Reasons that show a domain's own protections working or traffic that never reached the domain. They stay visible as
+     * security events but never push the domain toward a stricter automatic state.
+     */
+    public const NON_ESCALATING_REASONS = [
+        'domain_restricted', 'domain_quarantined', 'edge_emergency_mode', 'invalid_method',
+        'unknown_host', 'unknown_sni', 'sni_host_mismatch',
+    ];
+
     /** The reason codes an edge cell may report; the same file is checked against the Lua runtime in tests/contract. */
     public static function reasonCodes(): array
     {

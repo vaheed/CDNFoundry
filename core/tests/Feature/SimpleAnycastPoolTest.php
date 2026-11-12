@@ -6,6 +6,8 @@ use App\Http\Controllers\EdgeAgentController;
 use App\Jobs\ProvisionEdgePoolCells;
 use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\Domain;
+use App\Models\DomainEdgeCell;
+use App\Support\SecurityConfig;
 use App\Models\Edge;
 use App\Models\EdgePool;
 use App\Models\Operation;
@@ -236,6 +238,39 @@ class SimpleAnycastPoolTest extends TestCase
         $this->assertTrue($edge->last_heartbeat_at->greaterThan(now()->subMinute()));
         $this->assertSame(3, $edge->capacity['advisory_entries_dropped']);
         $this->assertCount(2, $edge->capacity['noisy_domains']);
+    }
+
+    public function test_a_customer_block_rule_never_counts_toward_an_automatic_state_change(): void
+    {
+        Queue::fake();
+        $edge = $this->edge('own-rule-pop', 'IR', 'AS');
+        $cell = $edge->cells()->create(['slot' => 1, 'status' => 'ready']);
+        $domain = Domain::query()->create([
+            'name' => 'own-rule.test', 'display_name' => 'Own rule', 'lifecycle_state' => 'active', 'revision' => 3,
+            'security_settings' => ['quarantine_policy' => 'automatic'] + SecurityConfig::defaults(),
+        ]);
+        $domain->dnsRecords()->create(['name' => 'own-rule.test', 'type' => 'A', 'content' => '192.0.2.1', 'content_hash' => hash('sha256', '192.0.2.1'), 'ttl' => 60, 'mode' => 'proxied']);
+        DomainEdgeCell::query()->create(['domain_id' => $domain->id, 'edge_id' => $edge->id, 'replica' => 1, 'active_cell_id' => $cell->id, 'desired_revision' => 3, 'state' => 'active']);
+        $report = fn (string $reason, int $count) => Request::create('/edge/v1/heartbeat', 'POST', [
+            'agent_version' => '1.2.0', 'listener_ready' => true, 'active_sequence' => 0,
+            'cells' => [['name' => 'cell-01', 'status' => 'ready', 'capacity' => ['active_connections' => 0]]],
+            'noisy_domains' => [['domain_id' => $domain->id, 'hostname' => 'own-rule.test', 'reason_code' => $reason, 'count' => $count, 'occurred_at' => now()->timestamp]],
+        ]);
+
+        foreach (['domain_restricted', 'invalid_method', 'edge_emergency_mode'] as $reason) {
+            $request = $report($reason, 1000);
+            $request->attributes->set('edge', $edge);
+            app(EdgeAgentController::class)->heartbeat($request);
+        }
+        $domain->refresh();
+        $this->assertSame('normal', $domain->security_state);
+        $this->assertSame(3, $domain->revision);
+        $this->assertSame(3, $domain->securityEvents()->count(), 'the events stay visible');
+
+        $request = $report('client_rate_exceeded', 60);
+        $request->attributes->set('edge', $edge);
+        app(EdgeAgentController::class)->heartbeat($request);
+        $this->assertSame('suspected', $domain->refresh()->security_state);
     }
 
     public function test_stale_heartbeat_cannot_lower_a_newer_durable_sequence(): void
