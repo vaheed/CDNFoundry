@@ -383,7 +383,7 @@ def provision_edge(token: str, name: str, country: str, continent: str, ipv4: st
     }}
 
 
-def heartbeat(edge: dict, active_sequence: int, quarantine_ready: bool = False) -> None:
+def heartbeat(edge: dict, active_sequence: int, quarantine_ready: bool = False, extra: dict | None = None) -> None:
     cells = [{
         "name": name,
         "status": "ready",
@@ -401,6 +401,7 @@ def heartbeat(edge: dict, active_sequence: int, quarantine_ready: bool = False) 
         "active_sequence": active_sequence,
         "cells": cells,
         "gateway": {"ready": True, "active_revision": max(1000, active_sequence), "routes": 1, "listeners": 2},
+        **(extra or {}),
     }, context=edge["context"])
 
 
@@ -618,6 +619,26 @@ def exercise_cache(token: str, domain_id: int, edges: list[dict], sequences: dic
     print("e2e_cache_control_plane_e2e=passed propagation=acked rollback=acked purge_retry=2 idempotency=replayed")
 
 
+def exercise_advisory_heartbeat(domain_id: int, edge: dict) -> None:
+    """One bad advisory entry never fails a heartbeat or stops liveness from advancing."""
+    edge_id = quote(edge["id"])
+    sql_value(f"UPDATE edges SET last_heartbeat_at = now() - interval '2 hours' WHERE id = {edge_id}")
+    now = int(time.time())
+    heartbeat(edge, 0, extra={
+        "noisy_domains": [
+            {"domain_id": domain_id, "hostname": ZONE, "reason_code": "a_reason_nobody_listed", "count": 3, "occurred_at": now},
+            {"domain_id": domain_id, "reason_code": "malformed_request_body", "count": 3, "occurred_at": now},
+            {"domain_id": domain_id, "hostname": ZONE, "reason_code": "client_connections_exceeded", "count": 3, "occurred_at": now},
+        ],
+        "passive_origins": [{"domain": ZONE, "hostname": ZONE, "failure_count": 0, "last_status": 502, "last_failed_at": now}],
+    })
+    age = int(sql_value(f"SELECT extract(epoch FROM now() - last_heartbeat_at)::int FROM edges WHERE id = {edge_id}"))
+    assert age < 30, f"the heartbeat did not advance liveness (age {age}s)"
+    dropped = int(sql_value(f"SELECT capacity->>'advisory_entries_dropped' FROM edges WHERE id = {edge_id}"))
+    assert dropped == 1, dropped
+    print("e2e_advisory_heartbeat=passed unknown_reason=dropped liveness=advanced")
+
+
 def exercise_simple_anycast(token: str, edges: list[dict]) -> None:
     _, created = call("POST", "/api/admin/edge-pools", {
         "name": f"anycast-{RUN}", "kind": "reserved", "routing_mode": "simple_anycast",
@@ -758,6 +779,7 @@ def main() -> None:
         call("POST", f"/api/domains/{domain_id}/dns/records", {
             "type": "TXT", "name": "@", "content": "proxy-apex=qualified", "ttl": 60,
         }, token)
+        exercise_advisory_heartbeat(domain_id, edges[1])
         call("POST", f"/api/domains/{domain_id}/dns/records", {
             "type": "CAA", "name": "@", "content": "0 issue letsencrypt.org", "ttl": 60,
         }, token)
