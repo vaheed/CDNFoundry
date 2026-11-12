@@ -16,6 +16,19 @@ class EdgeRevisionHistoryTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_a_revision_describes_which_parts_of_the_configuration_changed(): void
+    {
+        $base = ['settings' => ['a' => 1], 'security' => ['limits' => ['requests_per_second' => 100]], 'waf' => ['profile' => 'off'], 'hostnames' => [['hostname' => 'a.test']]];
+
+        $this->assertSame('First configuration', EdgeRevision::describeChange(null, $base));
+        $this->assertSame('No configuration change', EdgeRevision::describeChange($base, [...$base, 'revision' => 9]));
+        $this->assertSame('Changed security', EdgeRevision::describeChange($base, [...$base, 'security' => ['limits' => ['requests_per_second' => 20]]]));
+        $this->assertSame(
+            'Changed hostnames and origins, proxy settings, WAF',
+            EdgeRevision::describeChange($base, [...$base, 'hostnames' => [], 'settings' => ['a' => 2], 'waf' => ['profile' => 'strict']]),
+        );
+    }
+
     public function test_revision_change_time_tracks_revision_mutations_only(): void
     {
         $domain = Domain::query()->create([
@@ -50,7 +63,7 @@ class EdgeRevisionHistoryTest extends TestCase
         $response = $this->actingAs($user)->getJson("/api/domains/{$domain->id}/revisions")->assertOk()
             ->assertJsonPath('data.0.revision', 1)->assertJsonPath('data.0.summary.hostnames', 1)
             ->assertJsonPath('data.0.summary.tls_mode', 'custom');
-        $this->assertSame(['revision', 'status', 'checksum', 'summary', 'created_at'], array_keys($response->json('data.0')));
+        $this->assertSame(['revision', 'status', 'checksum', 'summary', 'change_summary', 'created_by', 'created_at'], array_keys($response->json('data.0')));
         $this->assertStringNotContainsString('SECRETKEYMATERIAL', $response->getContent());
         $this->assertStringNotContainsString('PRIVATE KEY', $response->getContent());
     }

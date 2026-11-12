@@ -62,8 +62,9 @@ class DomainDetailSections
         $pool = $placement?->state === 'draining' ? $placement->targetPool : $placement?->activePool;
         $settings = PlatformDnsSetting::query()->find(1);
         $timezone = app(PlatformSettings::class);
-        $revisions = EdgeRevision::query()->where('domain_id', $domain->id)->where('status', 'validated')->latest('revision')->limit(10)->get()
-            ->map(fn (EdgeRevision $revision): string => "#{$revision->revision}   ".$timezone->formatTimestamp($revision->created_at, 'Y-m-d H:i:s'))->all();
+        $revisions = EdgeRevision::query()->with('author')->where('domain_id', $domain->id)->where('status', 'validated')->latest('revision')->limit(10)->get()
+            ->map(fn (EdgeRevision $revision): string => "#{$revision->revision}   ".$timezone->formatTimestamp($revision->created_at, 'Y-m-d H:i:s')
+                .'   '.($revision->author?->name ?? 'Platform').($revision->change_summary === null ? '' : '   '.$revision->change_summary))->all();
 
         return ['title' => 'Delivery', 'rows' => [
             self::row('Placement', $placement?->state, 'badge', empty: 'Not placed'),

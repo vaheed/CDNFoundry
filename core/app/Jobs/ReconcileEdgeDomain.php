@@ -225,6 +225,10 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
             }
             EdgeRevision::query()->firstOrCreate(['domain_id' => $domain->id, 'revision' => $revision], [
                 'snapshot' => $snapshot, 'checksum' => $checksum, 'status' => 'validated', 'created_by' => $operation?->actor_id,
+                'change_summary' => EdgeRevision::describeChange(
+                    EdgeRevision::query()->where('domain_id', $domain->id)->where('revision', '<', $revision)->latest('revision')->value('snapshot'),
+                    $snapshot,
+                ),
             ]);
             foreach ($candidates as $candidate) {
                 $payload = $candidate['payload'];
