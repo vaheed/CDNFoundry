@@ -15,6 +15,23 @@ Keep every item small. One engine per concern, typed settings, bounded
 lists, no expression language, no per-domain process, and nothing on the
 request path that calls Laravel or an outside service.
 
+## Frontend rules for every phase
+
+Every screen added or changed in any phase, in both panels and the Fleet web
+page, follows two rules:
+
+- **Help on every complex item.** Any field, toggle, action, or column whose
+  meaning is not obvious from its label (rule conditions, attack score,
+  thresholds, counting keys, datasets, schema uploads, and similar) has a
+  short tooltip in plain words: what it does and when to use it. Use the
+  existing help-label pattern; no long text in the tooltip.
+- **An example placeholder in every input.** Every text, number, URL, list,
+  and tag input shows a realistic example value as its placeholder (for
+  example `https://logs.example.com/ingest`, `/api/login`, `100`). A
+  placeholder is never the only label and never a real secret.
+
+The browser suite checks both on every changed screen.
+
 ## Phase gate
 
 A phase is complete only when all five fields pass and are recorded
@@ -25,7 +42,7 @@ separately at the end of the phase:
 | Implementation | Merged to `dev` in small commits. Replaced code is deleted. |
 | Tests | Feature and unit tests for happy path, permissions, validation, idempotency, failure, and last valid state. |
 | Runtime qualification | Python E2E under `tests/e2e` on a real Compose stack. |
-| Browser suite | `tests/browser` passes for every changed screen, with visual snapshots and accessibility checks |
+| Browser suite | `tests/browser` passes for every changed screen, with visual snapshots and accessibility checks, and confirms every input has an example placeholder and every complex item has a tooltip. |
 | Documentation | Every affected operator and user page states the new behavior. |
 
 Phase 11 re-runs every gate together, so a phase that passed early is checked
@@ -256,6 +273,7 @@ above left open and proves the finished system end to end.
 | 11.4 | **Audit Phase 5: telemetry.** | Run the Grafana and panel browser suites against staging, read-only. Replay the scripted test attack. | Suites pass with one screenshot per dashboard; the attack is found by domain, edge, reason, and rule, and its request, download, and upload counts match. |
 | 11.5 | **Full test run for Phases 1 to 10.** | On one fresh Compose stack: the Laravel suite, Go tests, contract and observability tests, every `tests/e2e` file added by these phases, and the full browser suite with visual snapshots and accessibility checks. Then each phase's own gate re-run on staging. | One record listing every suite, its result, and the commit it ran on. No unexecuted test is reported as passed. |
 | 11.6 | **Documentation check.** | Every page touched by Phases 1 to 10 matches the running system. | Each page reviewed against the record in 11.5. |
+| 11.7 | **Tooltip and placeholder check.** | Walk every screen added or changed by Phases 1 to 10 against the frontend rules. | A browser test lists zero inputs without an example placeholder and zero complex items without a tooltip. |
 
 **Gate:** one record per audit phase (11.1 to 11.4) and one full
 qualification record (11.5), all on the same release.
