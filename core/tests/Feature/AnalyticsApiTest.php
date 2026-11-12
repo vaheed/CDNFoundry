@@ -135,6 +135,26 @@ class AnalyticsApiTest extends TestCase
         $this->assertSame($revision, $domain->refresh()->revision);
     }
 
+    public function test_volume_reports_download_and_upload_by_edge_cell_domain_and_country_inside_the_scope(): void
+    {
+        [$user, $domain] = $this->ownedDomain();
+        $admin = User::factory()->admin()->create();
+        $row = json_encode(['edge_id' => 'edge-1', 'cell' => 'cell-01', 'domain_id' => 7, 'country' => 'DE', 'requests' => 2, 'upload_bytes' => 150, 'download_bytes' => 1300]);
+        Http::fake(['*' => Http::response($row)]);
+
+        foreach (['edges', 'cells', 'countries'] as $dimension) {
+            $this->actingAs($user)->getJson("/api/domains/{$domain->id}/analytics/volume/{$dimension}")->assertOk()
+                ->assertJsonPath('data.0.upload_bytes', 150)->assertJsonPath('data.0.download_bytes', 1300);
+        }
+        Http::assertSent(fn ($request): bool => str_contains($request->body(), 'FROM cdnf.edge_volume_hourly') && str_contains($request->body(), 'domain_id = {domain_id:UInt64}') && str_contains($request->body(), 'GROUP BY cell, edge_id'));
+
+        $this->actingAs($user)->getJson('/api/admin/analytics/volume/domains')->assertForbidden();
+        foreach (['edges', 'cells', 'domains', 'countries'] as $dimension) {
+            $this->actingAs($admin)->getJson("/api/admin/analytics/volume/{$dimension}")->assertOk()->assertJsonPath('data.0.download_bytes', 1300);
+        }
+        Http::assertSent(fn ($request): bool => str_contains($request->body(), 'GROUP BY domain_id') && str_contains($request->body(), 'WHERE 1 AND'));
+    }
+
     public function test_admin_global_scope_is_separate_from_domain_scope(): void
     {
         [$user] = $this->ownedDomain();

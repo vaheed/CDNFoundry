@@ -61,6 +61,10 @@ final class AnalyticsStore
             'edges' => ['edge_id, sum(requests) AS requests, sum(bytes_out) AS bytes_out', 'edge_id', 'sum(requests) DESC, edge_id', 'edge_hourly'],
             'domains' => ["domain_id, sum(requests) AS requests, sum(bytes_in) AS bytes_in, sum(bytes_out) AS bytes_out, sumIf(requests, cache_status = 'HIT') AS cache_hits, sum(origin_errors) AS origin_errors, sum(security_blocks) AS security_blocks", 'domain_id', 'sum(requests) DESC, domain_id', 'edge_hourly'],
             'compression' => ['compression_encoding AS encoding, compression_profile AS profile, compression_fallback AS fallback, count() AS requests, sum(bytes_out) AS delivered_bytes, round(sum(bytes_out * compression_ratio)) AS identity_bytes, greatest(identity_bytes - delivered_bytes, 0) AS bytes_saved, if(identity_bytes = 0, 0, round(bytes_saved / identity_bytes, 6)) AS savings_ratio', 'encoding, profile, fallback', 'bytes_saved DESC, encoding, profile, fallback', 'edge_events'],
+            'volume-edges' => ['edge_id, sum(requests) AS requests, sum(bytes_in) AS upload_bytes, sum(bytes_sent) AS download_bytes', 'edge_id', 'download_bytes DESC, edge_id', 'edge_volume_hourly'],
+            'volume-cells' => ['cell, edge_id, sum(requests) AS requests, sum(bytes_in) AS upload_bytes, sum(bytes_sent) AS download_bytes', 'cell, edge_id', 'download_bytes DESC, cell, edge_id', 'edge_volume_hourly'],
+            'volume-domains' => ['domain_id, sum(requests) AS requests, sum(bytes_in) AS upload_bytes, sum(bytes_sent) AS download_bytes', 'domain_id', 'download_bytes DESC, domain_id', 'edge_volume_hourly'],
+            'volume-countries' => ['country, sum(requests) AS requests, sum(bytes_in) AS upload_bytes, sum(bytes_sent) AS download_bytes', 'country', 'download_bytes DESC, country', 'edge_volume_hourly'],
             'dns' => ['qtype, rcode, sum(queries) AS queries', 'qtype, rcode', 'sum(queries) DESC, qtype, rcode', 'dns_hourly'],
             default => throw ValidationException::withMessages(['view' => 'The analytics view is invalid.']),
         };
