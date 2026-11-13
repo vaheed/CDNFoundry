@@ -206,7 +206,8 @@ server {
                 ('cidr-v6-miss', '2606:4700:4701::1111', '2606:4700:4700::/48', 200),
             ]:
                 cases.append((label, ipv4, expected, {'security': {'trusted_proxy_cidrs': ['0.0.0.0/0', '::/0'],
-                    'rules': [{'match_type': 'cidr', 'value': cidr, 'action': 'block'}]}, 'forwarded': forwarded}))
+                    'rules': [{'id': 1, 'name': None, 'priority': 1, 'action': 'block',
+                               'conditions': [{'field': 'client_ip', 'operator': 'equals', 'value': cidr}]}]}, 'forwarded': forwarded}))
             dns_records = {
                 'dns-v4.origin.test': {'A': [ipv4], 'AAAA': []},
                 'dns-v6.origin.test': {'A': [], 'AAAA': [ipv6]},
