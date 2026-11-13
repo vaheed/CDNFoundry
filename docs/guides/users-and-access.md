@@ -99,8 +99,8 @@ support question. Open **Users**, choose **Log in as user** on the user's row, a
 user, with their domains and permissions, and the user's password is not needed.
 
 - A banner on every page says whose account you are using. **Return to admin** ends it and opens **Users** again.
-- Starting and ending are audit entries (`user.impersonation_started` and `user.impersonation_ended`). Every change you
-  make meanwhile is recorded as the user's, with `impersonated_by` set to your user ID. The user is not notified.
+- Starting and ending are audit entries (`user.impersonation_started` and `user.impersonation_ended`). Every change while you act as
+  them is recorded as the user's, with `impersonated_by` set to your user ID. The user is not notified.
 - You cannot create an API token or change the user's profile or password while acting as them, so nothing you create
   outlives the session in their name.
 - It is offered only for active domain users: never for another administrator, a disabled user, or yourself.
