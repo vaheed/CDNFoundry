@@ -115,12 +115,13 @@ def host(domain_id: int, rules: list[dict], waf: dict | None = None) -> dict:
     return config
 
 
-def waf_profile(name: str) -> dict:
+def waf_profile(name: str, **tuning: object) -> dict:
     settings = {
         "off": (0, 0, 0, False), "monitor": (1, 5, 1048576, False), "balanced": (1, 5, 1048576, True),
     }[name]
     return {"name": name, "paranoia_level": settings[0], "inbound_threshold": settings[1], "outbound_threshold": 4,
-            "body_limit_bytes": settings[2], "blocking": settings[3], "ruleset": "owasp-crs/4.26.0-modsecurity/3.0.14", "exclusions": []}
+            "body_limit_bytes": settings[2], "blocking": settings[3], "ruleset": "owasp-crs/4.26.0-modsecurity/3.0.14", "exclusions": [],
+            "off_categories": [], "off_rules": [], "log_only_rules": [], **tuning}
 
 
 def access_entries(hostname: str) -> list[dict]:
@@ -200,6 +201,10 @@ def qualify(directory: pathlib.Path) -> None:
         "ratelog.example": host(36, [rate_rule(1, [condition("path", "equals", "/watched")], "log", threshold=2)]),
         "ratechallenge.example": host(37, [rate_rule(1, [condition("path", "equals", "/members")], "challenge", threshold=2)]),
         "rateallow.example": host(38, [rule(1, [condition("client_ip", "equals", "198.51.100.77")], "allow"), rate_rule(2, [], threshold=1)]),
+        "tunecategory.example": host(39, [], waf_profile("balanced", off_categories=["942"])),
+        "tunerule.example": host(40, [], waf_profile("balanced", off_rules=[913100])),
+        "tuneloganly.example": host(41, [], waf_profile("balanced", log_only_rules=[913100])),
+        "tunethreshold.example": host(42, [], waf_profile("balanced", inbound_threshold=100)),
         "unsafe.example": host(26, [{"id": 1, "conditions": [], "action": "block", "priority": 1},
                                    {"id": 4, "conditions": [{"field": "path", "operator": "equals", "value": "/"}], "action": "block", "priority": 4, "rate_limit": {"key": "client_ip", "threshold": 0, "period_seconds": 7, "duration_seconds": 1}},
                                    {"id": 2, "conditions": [{"field": "path", "operator": "equals"}] * 6, "action": "block", "priority": 2},
@@ -237,6 +242,14 @@ def qualify(directory: pathlib.Path) -> None:
     events = json.loads(run("docker", "exec", NAME, "wget", "-q", "-O-", "--header=X-Edge-Status-Token: runtime-test-token", "http://127.0.0.1:9080/passive-failures").stdout)["security"]
     limited = [event for event in events if event["reason_code"] == "custom_rule_rate_limited"]
     assert len(limited) == 1 and limited[0]["domain_id"] == 36, events
+    # a log-only managed rule lets the scanner through and records an event; the same rule not adjusted would block
+    scanner = "User-Agent: sqlmap/1.7.2#stable (https://sqlmap.org)"
+    expect(get("scorebalanced.example", "/", scanner), 403, "waf_block")
+    expect(get("tuneloganly.example", "/", scanner), 200)
+    events = json.loads(run("docker", "exec", NAME, "wget", "-q", "-O-", "--header=X-Edge-Status-Token: runtime-test-token", "http://127.0.0.1:9080/passive-failures").stdout)["security"]
+    logged_rules = [event for event in events if event["reason_code"] == "waf_rule_logged"]
+    assert len(logged_rules) == 1 and logged_rules[0]["domain_id"] == 41, events
+    expect(get("tuneloganly.example", "/"), 200)
     # hostname
     expect(get("hostname.example"), 403, blocked)
     # path: prefix, suffix, substring, list, and a log action that does not block
@@ -381,6 +394,21 @@ def qualify(directory: pathlib.Path) -> None:
     time.sleep(11)
     expect(get("ratepath.example", "/limited"), 200)
     expect(get("rateheader.example", "/", "X-Api-Key: alpha"), 200)
+
+    # adjustable managed rules: a category off, one rule off, and a raised threshold each let a payload through that the profile blocks
+    expect(get("tunecategory.example", sqli), 200)
+    expect(get("tunecategory.example", xss), 403, "waf_block")
+    expect(get("tunerule.example", "/", scanner), 200)
+    expect(get("tunerule.example", sqli), 403, "waf_block")
+    expect(get("tunethreshold.example", sqli), 200)
+    assert [entry for entry in access_entries("tunethreshold.example") if entry["path"] == sqli][0]["attack_score"] < 40
+    # the catalog the control plane validates against is the one the cells run: same release, one control per category and rule
+    image = "cdnfoundry/edge-runtime:e2e"
+    version = run("docker", "exec", NAME, "sh", "-c", "grep -h -o -m1 \"ver:'OWASP_CRS/[0-9.]*'\" /etc/cdnfoundry/crs/rules/REQUEST-901-INITIALIZATION.conf").stdout.strip()
+    catalog = json.loads((ROOT / "core/resources/contracts/crs-rules.json").read_text())
+    assert version == f"ver:'OWASP_CRS/{catalog['ruleset'].split('/')[1]}'", (version, catalog["ruleset"])
+    controls = int(run("docker", "exec", NAME, "sh", "-c", "grep -c ruleRemoveById /etc/cdnfoundry/waf-controls.conf").stdout)
+    assert controls == len(catalog["categories"]) + len(catalog["rules"]), controls
 
     # a malformed or oversized rule never matches and never takes the cell down
     expect(get("unsafe.example"), 200)
