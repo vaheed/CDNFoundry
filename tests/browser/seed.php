@@ -178,6 +178,18 @@ foreach ([
     $rulesDomain->securityRules()->create(['name' => $name, 'action' => $action, 'priority' => $priority, 'conditions' => $conditions, 'fingerprint' => SecurityRuleData::fingerprint($conditions, $action)]);
 }
 
+// Client-side security on the same domain: awkward origins (IPv6, punycode, a long address) and one baseline entry among the new ones.
+$rulesDomain->update(['client_security' => ['maximum_reports_per_minute' => 120, 'baseline_minutes' => 60, 'enabled_at' => now()->subDay()->toIso8601String()]]);
+foreach ([
+    ['script', '/checkout', 'https://cdn.example.net', now()->subHours(20), 'baseline'],
+    ['script', '/checkout', 'https://xn--bcher-kva.example', now()->subHours(3), 'reported'],
+    ['connection', '/products/a-very-long-page-name/with/nested/segments/that/keep/going/until/it/is/cut', 'https://tracking-and-analytics-collector.some-extremely-long-vendor-domain.example', now()->subMinutes(12), 'reported'],
+    ['script', '/', 'https://[2001:db8::10]:8443', now()->subMinutes(5), 'reported'],
+    ['script', '/cart', 'inline', now()->subMinutes(2), 'reported'],
+] as [$kind, $page, $resource, $seen, $source]) {
+    $rulesDomain->clientScriptSightings()->create(['kind' => $kind, 'page_path' => $page, 'resource' => $resource, 'first_seen_at' => $seen, 'last_seen_at' => $seen, 'approved_at' => $source === 'baseline' ? $seen : null, 'source' => $source]);
+}
+
 // Platform rulesets: one for a chosen list (the domain above) with a rate limit, and one for every domain, with long names.
 $provider = PlatformRuleset::query()->create(['name' => 'Known scanner paths and credential-stuffing endpoints across every customer site we host', 'description' => 'Blocks requests that probe for admin pages and slows repeated login attempts', 'enabled' => true, 'applies_to_all' => false, 'created_by' => $admin->id]);
 $provider->domains()->attach($rulesDomain->id);

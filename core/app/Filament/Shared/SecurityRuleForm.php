@@ -43,8 +43,16 @@ final class SecurityRuleForm
         'attack_score_rce' => 'The same 1 to 99 score counting only command injection signs.',
         'prompt_injection_score' => 'From 1 (two or more known injection phrases) or 29 (one phrase) to 99 (none), from fixed phrase patterns on the prompt of your AI endpoints. It is pattern based and does not understand the prompt. Needs AI protection set up.',
         'prompt_pii' => 'Whether the prompt holds an email address, payment card number, IBAN, or US social security number. Needs AI protection set up.',
+        'schema_violation' => 'How the request differs from the uploaded API schema: an unknown path, a method the path does not allow, a missing or wrongly typed parameter, or a JSON body over the limit. "Any" matches every violation. Needs an API schema.',
         'leaked_password' => 'Whether the password sent to one of the domain\'s login paths is in the list of known leaked passwords. Needs login paths set in Credential check.',
     ];
+
+    /** @return array<string, string> */
+    private static function violationOptions(): array
+    {
+        return ['any' => 'Any violation', 'none' => 'No violation', 'unknown_path' => 'Unknown path', 'wrong_method' => 'Wrong method', 'missing_parameter' => 'Missing parameter',
+            'invalid_parameter' => 'Wrongly typed parameter', 'body_too_large' => 'JSON body too large'];
+    }
 
     public static function fields(bool $withPreview = true): array
     {
@@ -95,7 +103,7 @@ final class SecurityRuleForm
      * Every kind of value has its own input and its own state key, so one input can never reset the value another kind holds.
      * The stored condition has the single key `value`; these two methods move it between that and the form's keys.
      */
-    private const VALUE_KEYS = ['value', 'value_number', 'value_list', 'value_country', 'value_continent', 'value_method', 'value_tls', 'value_flag'];
+    private const VALUE_KEYS = ['value', 'value_number', 'value_list', 'value_country', 'value_continent', 'value_method', 'value_tls', 'value_violation', 'value_flag'];
 
     public static function valueKey(?string $field, ?string $operator): string
     {
@@ -108,6 +116,7 @@ final class SecurityRuleForm
             $kind === 'continent' => 'value_continent',
             $kind === 'method' => 'value_method',
             $kind === 'tls' => 'value_tls',
+            $kind === 'violation' => 'value_violation',
             $list && in_array($kind, ['text', 'address', 'host', 'extension', 'asn', 'score'], true) => 'value_list',
             in_array($kind, ['asn', 'bytes', 'score'], true) => 'value_number',
             default => 'value',
@@ -174,6 +183,8 @@ final class SecurityRuleForm
                 ->visible($uses('value_method'))->placeholder('Choose a method')->columnSpanFull(),
             Select::make('value_tls')->label('TLS version')->options(array_combine(SecurityRuleData::TLS_VERSIONS, SecurityRuleData::TLS_VERSIONS))->multiple($list)->required()
                 ->visible($uses('value_tls'))->placeholder('Choose a version')->columnSpanFull(),
+            Select::make('value_violation')->label('Violation')->options(self::violationOptions())->multiple($list)->required()
+                ->visible($uses('value_violation'))->placeholder('Choose a violation')->columnSpanFull(),
             Toggle::make('value_flag')->label(FilamentHelp::label('Present', 'On matches requests that have it. Off matches requests that do not.'))->default(true)->visible($uses('value_flag'))->columnSpanFull(),
         ];
     }
