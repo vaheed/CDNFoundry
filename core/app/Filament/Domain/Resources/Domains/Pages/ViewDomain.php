@@ -12,6 +12,8 @@ use App\Filament\Domain\Resources\Domains\Widgets\DomainIncidentBanner;
 use App\Filament\Domain\Resources\Domains\Widgets\DomainKpiStrip;
 use App\Filament\Domain\Resources\Domains\Widgets\DomainNeedsAttention;
 use App\Http\Controllers\AiProtectionController;
+use App\Http\Controllers\ApiSchemaController;
+use App\Http\Controllers\ClientSecurityController;
 use App\Http\Controllers\CredentialCheckController;
 use App\Http\Controllers\DnsDeploymentController;
 use App\Http\Controllers\DomainController;
@@ -43,6 +45,7 @@ use App\Support\PlatformSettings;
 use App\Support\ProxyRevisionRollback;
 use App\Support\SecurityAlertData;
 use App\Support\SecurityConfig;
+use App\Support\ApiSchemaData;
 use App\Support\SensitiveDataCheckData;
 use App\Support\UploadedCertificate;
 use Filament\Actions\Action;
@@ -106,14 +109,14 @@ class ViewDomain extends ViewRecord
         return $result;
     }
 
-    /** A tab or the polling KPI strip saw the domain change: re-read it and refresh the other views. */
-    #[On('domain-updated')]
     /** @return array<int, string> rule id => "942100 SQL Injection Attack Detected via libinjection" */
     private static function wafRuleOptions(): array
     {
         return collect(ManagedWafTuning::catalog()['rules'])->mapWithKeys(fn (array $rule): array => [$rule['id'] => $rule['id'].' '.$rule['message']])->all();
     }
 
+    /** A tab or the polling KPI strip saw the domain change: re-read it and refresh the other views. */
+    #[On('domain-updated')]
     public function refreshDomain(bool $includeTabs = false): void
     {
         try {
@@ -584,6 +587,56 @@ class ViewDomain extends ViewRecord
                     $this->record->refresh();
                     Notification::make()->success()->title('AI protection removed')->send();
                 }),
+            Action::make('apiSchema')->label('API schema')->icon('phosphor-brackets-curly')->extraAttributes(['data-testid' => 'api-schema-action'])
+                ->modalHeading('Check requests against an OpenAPI schema')
+                ->modalDescription(fn (): string => 'Paste an OpenAPI 3 document as JSON. The control plane keeps only a table of paths, methods, and parameters, up to '.ApiSchemaData::MAXIMUM_OPERATIONS.' operations. The cell sets API schema violation on requests that do not fit it; add a rule on that field to log or block them.'
+                    .(is_array($this->record->api_schema) ? ' Current schema: '.($this->record->api_schema['title'] ?: 'untitled').', '.count($this->record->api_schema['operations']).' operations under '.$this->record->api_schema['base_path'].'.' : ''))
+                ->schema([
+                    Textarea::make('document')->label(FilamentHelp::label('OpenAPI document', 'An OpenAPI 3 document in JSON, up to 256 KB. YAML is not accepted. Only paths, methods, and path, query, and header parameters are used; request bodies are checked for size only.'))
+                        ->required()->rows(10)->extraInputAttributes(['class' => 'font-mono'])->placeholder('{"openapi": "3.0.3", "info": {"title": "Orders", "version": "1"}, "paths": {"/orders": {"get": {}}}}'),
+                    TextInput::make('base_path')->label(FilamentHelp::label('Base path', 'Only requests under this path are checked. Paths in the document are matched after it. Use / to check every request.'))
+                        ->required()->maxLength(100)->default('/')->placeholder('/api/v1'),
+                    TextInput::make('maximum_body_bytes')->label(FilamentHelp::label('JSON body limit (bytes)', 'A request with a JSON body larger than this is a violation. Up to 1,048,576.'))
+                        ->required()->numeric()->default(ApiSchemaData::DEFAULT_BODY_BYTES)->minValue(1)->maxValue(ApiSchemaData::MAXIMUM_BODY_BYTES)->placeholder('65536'),
+                ])
+                ->action(function (array $data, Action $action): void {
+                    try {
+                        app(ApiSchemaController::class)->update(request()->merge($data), $this->record);
+                    } catch (ValidationException $exception) {
+                        Notification::make()->danger()->title('The schema was not saved')->body(collect($exception->errors())->flatten()->first())->persistent()->send();
+                        $action->halt();
+                    }
+                    $this->record->refresh();
+                    Notification::make()->success()->title('API schema saved')->body('Violations appear in Security events. Add a rule on API schema violation to block them.')->send();
+                }),
+            Action::make('removeApiSchema')->label('Remove API schema')->icon('phosphor-brackets-curly')->color('danger')->requiresConfirmation()
+                ->visible(fn (): bool => $this->record->api_schema !== null)
+                ->action(function (): void {
+                    app(ApiSchemaController::class)->destroy(request(), $this->record);
+                    $this->record->refresh();
+                    Notification::make()->success()->title('API schema removed')->send();
+                }),
+            Action::make('clientSecurity')->label('Client-side security')->icon('phosphor-browsers')->extraAttributes(['data-testid' => 'client-security-action'])
+                ->modalHeading('Watch the scripts your pages load')
+                ->modalDescription('The cell adds a report-only Content-Security-Policy to your HTML pages. Browsers then report each script and connection to the cell, which keeps the page, the type, and the origin of what was loaded. Nothing is blocked and no page content is stored. Anyone can send a report, so treat the list as a hint, not proof.')
+                ->schema([
+                    TextInput::make('maximum_reports_per_minute')->label(FilamentHelp::label('Reports per minute', 'Most reports one cell accepts for this domain each minute. The rest are dropped. A busy site sends many; 120 is enough to see every script within minutes.'))
+                        ->required()->numeric()->minValue(10)->maxValue(600)->placeholder('120'),
+                    TextInput::make('baseline_minutes')->label(FilamentHelp::label('Baseline window (minutes)', 'Scripts first seen in this time after you turn it on are marked approved and send no notification. Later new ones send one.'))
+                        ->required()->numeric()->minValue(0)->maxValue(1440)->placeholder('60'),
+                ])->fillForm(fn (): array => $this->record->client_security ?? ['maximum_reports_per_minute' => 120, 'baseline_minutes' => 60])
+                ->action(function (array $data): void {
+                    app(ClientSecurityController::class)->update(request()->merge($data), $this->record);
+                    $this->record->refresh();
+                    Notification::make()->success()->title('Client-side security saved')->body('Scripts appear in the Scripts and connections tab once browsers report them.')->send();
+                }),
+            Action::make('removeClientSecurity')->label('Turn off client-side security')->icon('phosphor-browsers')->color('danger')->requiresConfirmation()
+                ->visible(fn (): bool => $this->record->client_security !== null)
+                ->action(function (): void {
+                    app(ClientSecurityController::class)->destroy(request(), $this->record);
+                    $this->record->refresh();
+                    Notification::make()->success()->title('Client-side security turned off')->send();
+                }),
             Action::make('startIncident')->icon('phosphor-shield-warning')->label('Start incident profile')->color('danger')->extraAttributes(['data-testid' => 'incident-start-action'])
                 ->modalHeading('Start the incident profile?')
                 ->modalDescription('For the time you choose, the domain gets tighter request limits, the web application firewall in blocking mode, restricted methods and body size, and a browser challenge. It protects your origin and the cells from request floods; it cannot absorb traffic that saturates a host or link.')
@@ -774,7 +827,7 @@ class ViewDomain extends ViewRecord
             }),
         ];
         // Long forms open as a right-side sheet; a form of one or two fields opens as a small centered dialog.
-        $sheets = ['importZone', 'proxyDefaults', 'cacheSettings', 'uploadCertificate', 'securitySettings', 'wafProfile', 'credentialCheck', 'sensitiveDataCheck', 'aiProtection'];
+        $sheets = ['importZone', 'proxyDefaults', 'cacheSettings', 'uploadCertificate', 'securitySettings', 'wafProfile', 'credentialCheck', 'sensitiveDataCheck', 'aiProtection', 'apiSchema', 'clientSecurity'];
         $dialogs = ['moveEdgePool', 'developmentMode', 'purgeCache', 'tlsMode', 'securityAlert'];
         $group = fn (array $names): array => collect($actions)
             ->keyBy(fn (Action $action): string => $action->getName())
@@ -808,7 +861,7 @@ class ViewDomain extends ViewRecord
                 ->icon('phosphor-lock')
                 ->color('gray')
                 ->button(),
-            ActionGroup::make($group(['securitySettings', 'wafProfile', 'securityAlert', 'removeSecurityAlert', 'credentialCheck', 'removeCredentialCheck', 'sensitiveDataCheck', 'removeSensitiveDataCheck', 'aiProtection', 'removeAiProtection', 'startIncident', 'endIncident', 'startMaintenance', 'endMaintenance', 'protectSecurity', 'quarantineSecurity', 'returnSecurityToNormal']))
+            ActionGroup::make($group(['securitySettings', 'wafProfile', 'securityAlert', 'removeSecurityAlert', 'credentialCheck', 'removeCredentialCheck', 'sensitiveDataCheck', 'removeSensitiveDataCheck', 'aiProtection', 'removeAiProtection', 'apiSchema', 'removeApiSchema', 'clientSecurity', 'removeClientSecurity', 'startIncident', 'endIncident', 'startMaintenance', 'endMaintenance', 'protectSecurity', 'quarantineSecurity', 'returnSecurityToNormal']))
                 ->label('Security')
                 ->icon('phosphor-shield-check')
                 ->color('gray')
