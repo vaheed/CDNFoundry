@@ -66,6 +66,7 @@ final class SecurityRuleData
         'attack_score_sqli' => ['kind' => 'score', 'operators' => self::NUMBER],
         'attack_score_xss' => ['kind' => 'score', 'operators' => self::NUMBER],
         'attack_score_rce' => ['kind' => 'score', 'operators' => self::NUMBER],
+        'leaked_password' => ['kind' => 'flag', 'operators' => self::FLAG],
     ];
 
     public const FIELD_LABELS = [
@@ -73,7 +74,7 @@ final class SecurityRuleData
         'continent' => 'Continent', 'asn' => 'ASN', 'client_ip' => 'Client IP', 'user_agent' => 'User agent', 'referer' => 'Referer', 'referer_host' => 'Referer host', 'referer_present' => 'Referer', 'file_extension' => 'File extension',
         'header' => 'Header', 'cookie_present' => 'Cookie', 'content_type' => 'Content type', 'body_size' => 'Body size (bytes)',
         'tls_version' => 'TLS version', 'attack_score' => 'Attack score', 'attack_score_sqli' => 'Attack score (SQL injection)',
-        'attack_score_xss' => 'Attack score (XSS)', 'attack_score_rce' => 'Attack score (command injection)',
+        'attack_score_xss' => 'Attack score (XSS)', 'attack_score_rce' => 'Attack score (command injection)', 'leaked_password' => 'Leaked password',
     ];
 
     public const OPERATOR_LABELS = [
@@ -98,7 +99,7 @@ final class SecurityRuleData
             if (isset($condition['name'])) {
                 $label .= " {$condition['name']}";
             }
-            if (in_array($field, ['query_present', 'cookie_present', 'referer_present'], true)) {
+            if (in_array($field, ['query_present', 'cookie_present', 'referer_present', 'leaked_password'], true)) {
                 $present = ($condition['value'] ?? null) === true;
 
                 return $field === 'query_present' ? ($present ? 'Query string is present' : 'Query string is absent') : $label.($present ? ' is present' : ' is absent');

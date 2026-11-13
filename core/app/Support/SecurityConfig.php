@@ -151,6 +151,7 @@ final class SecurityConfig
             'trusted_proxy_cidrs' => array_values($configured['trusted_proxy_cidrs']),
             'configured_limits' => $configured['limits'],
             'limits' => $limits,
+            'credential_check' => CredentialCheckData::forEdge($domain->credential_check),
             'platform_rules' => PlatformRulesets::forDomain($domain),
             'rules' => $domain->securityRules()->where('enabled', true)->orderBy('priority')->orderBy('id')
                 ->get(['id', 'name', 'preset', 'conditions', 'rate_limit', 'action', 'priority'])->toArray(),

@@ -41,6 +41,7 @@ final class SecurityRuleForm
         'attack_score_sqli' => 'The same 1 to 99 score counting only SQL injection signs.',
         'attack_score_xss' => 'The same 1 to 99 score counting only cross-site scripting signs.',
         'attack_score_rce' => 'The same 1 to 99 score counting only command injection signs.',
+        'leaked_password' => 'Whether the password sent to one of the domain\'s login paths is in the list of known leaked passwords. Needs login paths set in Credential check.',
     ];
 
     public static function fields(bool $withPreview = true): array
