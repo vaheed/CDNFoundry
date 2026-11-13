@@ -1,414 +1,735 @@
 ---
-title: Roadmap
-description: Owner roadmap after the 2026-11-11 audit phases. Adds notifications, customer log push, the incident profile, cache rules, a simple WAF, and measured performance, then closes every open gate.
+title: WAF roadmap
+description: The plan for a stronger CDNFoundry WAF, starting from a code-verified audit of what the edge runs today. Eleven ordered phases, each with measurable acceptance criteria and verification.
 ---
 
-# Roadmap
+# WAF roadmap
 
-**Status: active.** Written 2026-11-12. It replaces the audit roadmap of
-2026-11-11. That roadmap's Phases 1 to 5 are implemented on `dev`; their
-missing gate records are closed in the last phase here. Its Phase 6 is
-dropped. Its Phases 7 to 10 become Phases 3, 4, 9, and 10. Work happens on
-`dev`, one phase at a time, in order.
+**Status: active.** Written 2026-11-14. It replaces the earlier roadmap in full.
+It starts with an audit of the code on `dev` (the OpenResty runtime, the
+ModSecurity and CRS integration, the gateway, the agent, the control plane, and
+the tests) and then lists ordered phases. Work happens on `dev`, one phase at a
+time, in order. A phase starts only when the phases it depends on have passed
+their gates.
 
-Keep every item small. One engine per concern, typed settings, bounded
-lists, no expression language, no per-domain process, and nothing on the
-request path that calls Laravel or an outside service.
+This roadmap is part of the product contract in `AGENTS.md`. Where a phase
+conflicts with that contract, the contract wins, and the phase is changed first.
 
-## Frontend rules for every phase
+## 1. Starting point
 
-Every screen added or changed in any phase, in both panels and the Fleet web
-page, follows two rules:
+### How a request is judged today
 
-- **Help on every complex item.** Any field, toggle, action, or column whose
-  meaning is not obvious from its label (rule conditions, attack score,
-  thresholds, counting keys, datasets, schema uploads, and similar) has a
-  short tooltip in plain words: what it does and when to use it. Use the
-  existing help-label pattern; no long text in the tooltip.
-- **An example placeholder in every input.** Every text, number, URL, list,
-  and tag input shows a realistic example value as its placeholder (for
-  example `https://logs.example.com/ingest`, `/api/login`, `100`). A
-  placeholder is never the only label and never a real secret.
+Every request reaches one data-driven OpenResty runtime
+(`docker/openresty/runtime.lua`). Behind the edge gateway, the cell trusts
+PROXY protocol only from the gateway's networks. The access phase runs in this
+order:
 
-The browser suite checks both on every changed screen.
+1. Host and SNI checks, the drain and emergency switches, and the domain's
+   enabled flag.
+2. Request safety: the WAF body limit, malformed JSON, the allowed methods, the
+   header and body size limits, and the incident profile's methods and body size.
+3. Client address (a per-domain trusted proxy list for `X-Forwarded-For`), then
+   country, continent, and ASN from local MaxMind files.
+4. Detections, run only when a rule uses their field: the leaked password check,
+   the prompt checks, and the API schema check (the schema check always runs
+   when a schema exists).
+5. Attack score. When the managed WAF is on, or a rule uses a score field, the
+   cell opens a new loopback TCP connection to a second ModSecurity listener and
+   copies the request to it. CRS scores the request there without blocking and
+   returns its anomaly points in a redirect address. When the domain has
+   log-only rules, the request is scored twice. After scoring, inspection in the
+   cache location is switched off for that request.
+6. Typed custom rules: platform rulesets first, then the domain's rules.
+   Actions are `block`, `allow`, `log`, `challenge`, and `skip_managed`.
+7. Rate-limit rules: fixed windows per cell, keyed by client address,
+   address and path, or a named header.
+8. The managed WAF decision: block when the score reaches the threshold.
+9. Challenge, from a rule or from the incident profile.
+10. Built-in per-client and per-domain request and connection limits, in
+    fixed one-second windows per cell.
+11. Cache key, admission, and the internal redirect to a cache location.
 
-## Phase gate
+Rejections are counted per reason in shared memory. The agent sends them to the
+control plane in its heartbeat. There they drive the domain's automatic security
+state and the security alert. Every request is also logged through Vector to
+ClickHouse.
 
-A phase is complete only when all five fields pass and are recorded
-separately at the end of the phase:
+### Capability status
+
+Status terms: **Verified** means implemented and covered by a real-cell or
+real-service test. **Tested in parts** means implemented, with important paths
+untested. **Basic** means it works but is a limited form of the capability.
+**Partial** means part of the capability is missing. **Inert** means it is in
+the data model or documentation but the edge does not enforce it. **Missing**
+means no implementation was found.
+
+| Capability | Status | What the code shows |
+| --- | --- | --- |
+| Managed rules (ModSecurity 3.0.17, CRS 4.30.0, pinned in the image) | Verified, with a gap | `managed_waf.py` and `custom_rules.py` pass on real cells. A request body is sent for scoring only when it has a `Content-Length`, so chunked bodies are scored on headers and URI only, and inspection is then switched off. This was found by reading the code; no test sends a chunked attack body. |
+| Profiles and tuning (paranoia, threshold, categories, single rules, log only) | Verified | A header-driven control file is generated at image build from the rule catalog. Log only costs a second full CRS pass. |
+| Matched rule visibility | Partial | A block always records rule `949110` and the threshold. The rules that matched are not returned to the cell. |
+| WAF exclusions | Inert | The API answers `409 waf_exclusions_unavailable` and the snapshot carries `[]`. The only per-path way out is a `skip_managed` rule, which turns off all managed rules for that path. |
+| Attack score | Basic | 99 minus 5 for each CRS point. It is not calibrated, and its false positive rate on real traffic is not measured. |
+| Typed custom rules and platform rulesets | Verified | Up to 5 conditions, fixed fields and operators, no regex, 1,000 rules per domain. There are no fields for query argument values or cookie values, no rule expiry, and no shadow mode. "Preview" only validates the rule and reports its position. |
+| Built-in limits and rate-limit rules | Verified, basic | Fixed windows, counted per cell. IPv6 clients are keyed by the full /128 address, though the gateway already groups by /64. The counters for all domains share one dictionary each, and a full dictionary evicts entries, so high-cardinality traffic to one domain can evict another domain's counters. Requests are counted, never responses. |
+| Gateway connection and handshake limits | Verified (Go tests) | Per source (IPv4 address or IPv6 /64) and per hostname. |
+| Automatic security state | Tested in parts | It covers the whole domain: 50 escalating events in 5 minutes tighten limits for every client, even when one client caused them. Cells report at most 20 noisy entries per heartbeat across all domains, so domains past the first 20 can miss escalation and alerts. |
+| Under attack mode (incident profile) | Verified on a cell | WAF blocking at high sensitivity, protected limits, method and body limits, and the challenge, with expiry by the cell's own clock. The challenge bypass prefixes are fixed to `/api/` and `/.well-known/`. The staging gate is still open. |
+| Proof-of-work challenge | Partial | Fixed 16-bit difficulty. The HMAC key is derived from the node token and the cell name, so a token works on one cell only and the key never rotates. The token is bound to the exact client address and user agent, so it breaks when a mobile client changes address. A non-HTML request without a token gets a plain 403. Without JavaScript there is only an explanation, with no other way through. |
+| Bot management and verified crawlers | Missing | There is only the user agent word-list preset. Nothing identifies real search engine crawlers, fingerprints TLS, or scores automation. |
+| IP reputation and threat intelligence | Missing | There are only hand-written lists inside rules (100 values each). No cell shares anything with another. |
+| Leaked passwords | Basic | About 100 common passwords, built into the image, not a signed dataset. |
+| Sensitive data in responses | Basic | Log only, the first 16 KiB, uncompressed text only. |
+| AI prompt checks | Basic | Phrase matching. Measured against 20 hand-written clean prompts. |
+| API schema | Partial | OpenAPI 3 JSON only. Paths, methods, and path, query, and header parameters are checked. The body is checked for size only. No false positive or latency measurement. |
+| Client-side script monitoring | Basic | Report-only CSP. Reports can be forged, so the list is only a hint. |
+| Security events and analytics | Verified | Raw request events are kept for 7 days and an hourly security rollup for 400 days. The events tab shows the newest 500 of 24 hours. The alert counts heartbeat reports. |
+| Ruleset version per cell | Missing | Cells do not report the CRS version they run (WAF upkeep check, 2026-11-12). |
+| WAF performance | Not measured | `cell_throughput.py` measures cache hits only. The latency cost of the WAF, scoring, and rules has never been measured on a sized host. |
+
+### The most important weaknesses
+
+1. **Inspection can be bypassed and is costly.** Chunked request bodies are not
+   inspected. Each scored request opens a new loopback connection and, with
+   log-only rules, runs CRS twice. Nobody knows the latency cost.
+2. **Nothing is measured.** No clean-traffic corpus, attack corpus, false
+   positive rate, false negative rate, or latency budget exists for any
+   detection.
+3. **Mitigation is domain-wide or per address, nothing in between.** One noisy
+   client can tighten limits for every visitor of a domain. IPv6 address
+   rotation escapes per-client limits. One domain's attack can evict another
+   domain's counters.
+4. **Every cell is on its own.** Challenge tokens, rate counts, and offender
+   knowledge stay on one cell. A client that moves between cells or PoPs starts
+   over.
+5. **There are no client signals beyond address, geography, and user agent.**
+   No verified crawlers, TLS fingerprints, reputation, or bot score.
+6. **Tuning is coarse and risky.** There are no scoped exclusions and no shadow
+   mode. Rules cannot expire. Nobody can see which CRS rule matched or how often
+   a rule matches.
+
+## 2. Direction
+
+- **Measure first.** Every detection, limit, and challenge change is judged
+  against the same corpora and benchmark, built in Phase 1. A phase that cannot
+  show its false positive rate, its false negative rate, and its latency cost
+  is not complete.
+- **Decide at the edge.** Every security decision is made in the cell from
+  local state. The control plane manages policy, compiles and signs data,
+  aggregates reports, and runs analytics. No request waits on Laravel, another
+  cell, another PoP, or an outside service.
+- **Mitigate the client first, the domain last.** Most actions target a client
+  key (an address, an IPv6 prefix, a session, or a token). Domain-wide
+  tightening is kept for attacks that come from many sources.
+- **Bring intelligence in as data.** Crawler ranges, reputation, IP lists, and
+  password corpora reach cells as signed, versioned, bounded datasets. Each
+  dataset has a fixed memory size and a last valid version that stays active.
+- **Share between cells asynchronously.** Cells report bounded summaries, the
+  control plane aggregates them, and cells receive the result within minutes.
+  Losing that path removes only the shared layer, never local protection.
+- **Make every decision explainable.** Each decision records which stage acted,
+  which rule or signal matched, and which datasets it used. Heuristics are named
+  and readable. There is no machine-learned scoring.
+- **Ship every new detection observe-first.** It starts in shadow or log mode,
+  shows its measured impact, and only then blocks.
+
+Bounds that apply in every phase: one engine per concern, typed settings, no
+expression language, no unbounded regex, no per-domain process, file, or reload,
+and shared memory that is bounded and partitioned so one tenant cannot evict
+another tenant's state.
+
+## 3. Phase rules
+
+### Gate
+
+A phase is complete only when every field passes. The fields are recorded
+separately at the end of the phase.
 
 | Field | Required evidence |
 | --- | --- |
 | Implementation | Merged to `dev` in small commits. Replaced code is deleted. |
-| Tests | Feature and unit tests for happy path, permissions, validation, idempotency, failure, and last valid state. |
-| Runtime qualification | Python E2E under `tests/e2e` on a real Compose stack. |
-| Browser suite | `tests/browser` passes for every changed screen, with visual snapshots and accessibility checks, and confirms every input has an example placeholder and every complex item has a tooltip. |
-| Documentation | Every affected operator and user page states the new behavior. |
+| Tests | Feature and unit tests for the happy path, permissions, validation, idempotency, failure, and last valid state. Go and Lua tests where the runtime changed. |
+| Runtime qualification | Python E2E under `tests/e2e` on real cells, including IPv4 and IPv6, and the Phase 1 harness re-run with its numbers recorded. |
+| Browser suite | `tests/browser` passes for every changed screen, with visual snapshots and accessibility checks. Every input has an example placeholder and every complex item has a help tooltip. |
+| Documentation | Every affected operator and user page states the new behavior and its limits. |
 
-Phase 11 re-runs every gate together, so a phase that passed early is checked
-again against the finished system.
+### Frontend rules
 
----
+Every changed screen, in both panels and the Fleet web page, has a short tooltip
+on every complex item. Every text, number, URL, list, and tag input has a
+realistic example placeholder. A placeholder is never the only label and never a
+real secret.
 
-## Phase 1: Notifications
+### Measurement rules
 
-Today: Alertmanager sends to one optional external webhook
-(`ALERT_WEBHOOK_URL`). Only administrators receive anything, and staging had
-no receiver at all.
-
-Target: one `notifier` container, placed with the monitoring containers,
-delivers every notification to Telegram, Discord, Slack, or a generic
-webhook. It is the only container that needs outbound access to these
-providers.
-
-| # | Item | Direction | Proof of completion |
-| --- | --- | --- | --- |
-| 1.1 | **One notifier container.** | Runs the core image as a worker for a single `notifications` queue lane, using Laravel Notifications with one channel class per provider. Alertmanager sends to a private internal receiver in the control plane, which queues the alert for the notifier. Delivery is asynchronous, retried with backoff, and never blocks another lane. `ALERT_WEBHOOK_URL` is removed; the webhook becomes one optional, external, administrator-only channel type. | E2E: an alert reaches a fake receiver for each of the four channel types; a down provider does not delay other channels or queues. |
-| 1.2 | **Administrator channels in Platform settings.** | Administrators add channels in Platform settings and receive everything: every Alertmanager alert, and every domain event below for all domains. Tokens and webhook URLs are encrypted and shown once. A "Send test" action returns an operation. | Feature and browser tests for add, test, remove, and the one-time secret. |
-| 1.3 | **Domain user channels in the user panel.** | An administrator switch in Platform settings turns this on or off for domain users. When it is on, a domain user adds Telegram, Discord, or Slack channels under their account and picks events for their assigned domains only: certificate issued, failed, or expiring; domain verification; DNS deployment failed; security state changed; incident profile started or ended; origin errors above a threshold; log push failing (Phase 2); security event alerts (Phase 6). When it is off, existing user channels stop sending and are kept. | Policy tests: a user never receives an event for an unassigned domain; switching off stops delivery within one minute. |
-| 1.4 | **Bounds and abuse safety.** | Maximum channels per user and per platform. Per-channel rate limit, with repeats of one event coalesced into one digest message. Slack and Discord URLs must use HTTPS and the provider's own host; the generic webhook goes through the same destination checks as an origin (no loopback, private, metadata, or platform addresses), checked again when it connects. A channel that fails N times in a row is paused and its owner sees why. | Tests for each limit, the URL checks, and the pause. |
-
-**Gate:** on a staging stack, an administrator and a domain user each
-receive a real test message on every channel type, and a domain user never
-sees another customer's event.
-
-### Phase 1 completion gate (recorded 2026-11-13, branch `dev`)
-
-| Field | Status |
-| --- | --- |
-| Implementation | Done for 1.1 to 1.4 (commits `914034f` to `11f28ed`). A bug found on 2026-11-13 is fixed: the administrator channel list was cached as Eloquent models in a store that refuses to unserialize objects, so the second event within a minute failed (`f6db1f8`). |
-| Tests | `NotificationChannelTest`, `NotificationChannelPanelTest`, and `AlertmanagerReceiverTest` pass in the full Laravel suite (729 tests), including a new regression test that reproduces the failure through a serializing cache store. |
-| Runtime qualification | `tests/e2e/notifications.py` passes on the development stack: an Alertmanager payload reaches an administrator channel of each of the four types at a fake provider, a provider that never answers does not delay the others, a domain user receives only events for an assigned domain, and the switch stops delivery. |
-| Browser suite | `notifications.spec.ts` passes in all four projects (light and dark, desktop and phone) with the accessibility check. Its two snapshots were updated on 2026-11-13 because the shared theme changed (flat value tags, no empty widget gap); the screen itself did not change. |
-| Documentation | `docs/guides/notifications.md`. |
-| Open | The gate asks for real messages from real Telegram, Discord, and Slack on a staging stack. Only fake providers were used; no staging stack or provider tokens are available to this work. |
+Numbers come from the Phase 1 harness on the reference cell, a host of the size
+the sizing guide recommends, unless a phase says otherwise. A development-host
+number may be recorded, but it is labeled as one and never passes a gate.
 
 ---
 
-## Phase 2: Log push for domain users
+## Phase 1: Verification baseline
 
-The platform's central logs (ClickHouse, Loki, and the administrator's own
-access to them) are a separate system and do not change in this phase.
+**Objective.** Make false positives, false negatives, and latency measurable,
+and record today's numbers, before any detection changes.
 
-This phase adds one thing: an administrator can turn log push on or off for
-domain users, and when it is on, a domain user can add an endpoint that
-receives the logs of their own domains.
+**Current state.** The E2E tests prove single behaviors with a few hand-written
+payloads. There is no clean-traffic corpus, no use of the CRS regression tests,
+no WAF latency benchmark, and no report of the ruleset version per cell.
 
-| # | Item | Direction | Proof of completion |
-| --- | --- | --- | --- |
-| 2.1 | **Administrator switch.** | One switch in Platform settings, off by default: "Domain users can push logs to their own endpoint". Turning it off stops every push within one minute and keeps the users' destinations. | Feature and browser tests. |
-| 2.2 | **Destinations per domain.** | When the switch is on, a domain user adds up to two destinations per domain: HTTPS (gzip NDJSON, bearer token or HMAC signature) or S3-compatible storage. Datasets: HTTP requests, security events, DNS queries. Destination checks are the same as for an origin. Credentials are encrypted and shown once. A "Send test" action returns an operation. | Validation and policy tests; a destination on a private or platform address is refused. |
-| 2.3 | **One shared push worker, reading ClickHouse.** | A `log-push` queue lane reads each destination's own domain rows from ClickHouse by cursor, in bounded batches, about once a minute. No per-domain Vector sink, process, or config: tenant settings never reach Vector. A slow or failing destination retries with backoff and keeps its cursor. When it falls behind the retention window it skips ahead and records the gap. Serving and central telemetry are never affected. | E2E: a test destination receives every row for its domain in order; a destination down for one hour catches up; one behind retention reports the gap. |
-| 2.4 | **No foreign or platform data.** | A fixed field allowlist per dataset. Rows come only from the destination's domain. Excluded: edge and cell names, internal addresses, node proofs, platform hostnames, other domains' IDs, and raw query strings (only `query_hash`, as stored). Client IP is included, with an option to truncate it. | Contract test on the allowlist; E2E with two domains shows zero rows of the other domain. |
-| 2.5 | **Visible state.** | The domain page shows each destination's last delivery, lag, failures, and bytes pushed. Repeated failure sends a "log push failing" notification. | Browser test of the status; notification test. |
+**Scope.**
 
-**Gate:** two domains on one cell each push to their own receiver; each
-receiver gets only its own rows, with delay under a stated bound; turning
-the switch off stops both.
+- An **attack corpus**: the CRS project's own regression tests for the pinned
+  version, plus CDNFoundry cases for evasions that concern this runtime
+  (chunked bodies, HTTP/2 without a content length, encodings, header limits,
+  oversized bodies).
+- A **clean corpus** of at least 10,000 requests: browser page loads, form
+  posts, JSON APIs, file uploads, mobile API clients, webhooks, and crawlers.
+  It is generated or recorded only from test systems, never from customer data.
+- A **harness** that replays both corpora against a real cell at each profile
+  and paranoia level and reports the block, log, and pass rates.
+- A **latency and CPU benchmark** for WAF off, Observe, Recommended, and High
+  sensitivity, with log-only rules, with 100 and 1,000 custom rules, with 20
+  rate-limit rules, and with each detection on. Body sizes are 0, 4 KiB,
+  64 KiB, and 1 MiB.
+- **Ruleset and dataset versions per cell** in the heartbeat, shown on the cell
+  and pool screens, with an alert when they differ from the pinned versions.
 
-### Phase 2 completion gate (recorded 2026-11-13, branch `dev`)
+**Technical direction.** The harness is a Python tool under `tests/` that
+drives the cell over the network. It needs no hook inside the runtime. Its
+results are written as a machine-readable record that each later phase
+compares against.
 
-| Field | Status |
-| --- | --- |
-| Implementation | Done for 2.1 to 2.5 (commits `b5eb500` to `3a74c20`, with fixes `478ad98` and `6e4b29a`). |
-| Tests | `LogPushTest` and `LogPushPanelTest` pass in the full Laravel suite (729 tests). |
-| Runtime qualification | `tests/e2e/log_push.py` passes on the development stack with real ClickHouse rows, the real scheduler, and the `log-pusher` worker: two receivers each get only their own domain's rows in order with no platform field, a receiver that is down catches up without a gap or a duplicate, falling behind retention records the gap, and the switch stops delivery and keeps the destination. |
-| Browser suite | `log-push.spec.ts` passes in all four projects with the accessibility check. Its snapshot was updated on 2026-11-13: the domain header changed, and Sent became an optional column so the table fits its card. |
-| Documentation | `docs/guides/log-push.md` (its list numbering error is fixed). |
-| Open | The delay bound is not stated as a number in the documentation, and the gate's two domains share a development cell, not a staging cell. |
+**Dependencies.** None.
 
----
+**Acceptance criteria.**
 
-## Phase 3: A domain-scoped, time-limited Under Attack profile
+- The harness produces, for each profile, the attack detection rate, the clean
+  false positive rate, and the latency at p50, p95, and p99 with CPU per request.
+  The baseline is recorded in this roadmap.
+- The chunked-body case is in the corpus. Its result today is recorded, whatever
+  it is.
+- A cell running a different CRS version from the pinned one raises an alert
+  within two heartbeats.
 
-Previously Phase 7. Today "Enable Under Attack mode" is an administrator-only
-action that sets the security state to `restricted` (tighter per-client
-limits only). It does not touch the WAF, has no expiry the operator
-chooses, and the recovery job ends it after ten quiet minutes. On staging,
-the attacker stayed under the per-client limits, and blocking mode on the
-WAF is what stopped it.
-
-| # | Item | Direction | Proof of completion |
-| --- | --- | --- | --- |
-| 3.1 | **One incident profile per domain.** | One action, for a chosen duration: WAF blocking at high sensitivity, protected limits, restricted methods and body size, and the challenge from 3.2. Stored as desired state with an expiry, delivered through the security overlay (one revision on, one off). Available to the domain's users. | E2E: all four protections reach the edge within a measured delay; expiry removes them with no operator action. |
-| 3.2 | **A proof-of-work challenge at the edge.** | A signed, expiring, single-domain token bound to the client address and user agent, verified in Lua with a per-cell key from the bundle. Issuance is rate-limited and replay is bounded by expiry and a small seen-set. Needs a no-script and screen-reader path, a bypass for trusted clients and marked API paths, no cookie except the token, and a fallback to rate limits, never to open. A third-party CAPTCHA is evaluated only after this has measured results. The challenge becomes an action that WAF rules can use (Phase 5). | E2E: no token gets the challenge; a solved token passes until expiry; replayed or foreign-domain tokens are refused; a headless flood stays blocked; the accessibility check passes. |
-| 3.3 | **Visible state and history.** | The domain page shows active protections, who enabled them, and when they end, with an early end in one click. Each action is an audit entry. Challenge outcomes and WAF blocks appear in telemetry. Start and end send notifications (Phase 1). | Browser test of the banner, expiry, and early end. |
-| 3.4 | **Honest limits.** | Copy states that this protects the origin and the cell from request floods. It does not absorb traffic that saturates a host, link, or upstream. | Copy reviewed in the browser suite. |
-| 3.5 | **WAF upkeep check.** | Check the false-positive workflow, rule visibility for domain users, and ruleset updates across cells against the running system. Inputs for Phase 5. | A short verified status per topic. |
-
-**Gate:** the profile, enabled from the panel on a staging domain, blocks
-the scripted test attack (rate-limit trips, a WAF block, a blocked rule),
-admits a real browser after the challenge, expires on time, and leaves two
-revisions and a readable trail.
-
-### Phase 3 completion gate (recorded 2026-11-13, branch `dev`)
-
-| Field | Status |
-| --- | --- |
-| Implementation | Done for 3.1 to 3.5 (commits `e5a120a` to `8fbb9b1`). On 2026-11-13 the older administrator-only Under Attack mode, which only tightened limits, was removed and the incident profile became the one **Under attack mode** control (`d5e7a75`), with an **End now** button on its banner. |
-| Tests | `IncidentProfileTest` and `IncidentProfilePanelTest` pass in the full Laravel suite (729 tests). |
-| Runtime qualification | `tests/e2e/openresty_runtime.py` passes on a real cell, including the incident overlay, the challenge (no token, solved token, replayed and foreign tokens), and expiry. |
-| Browser suite | `incident-profile.spec.ts` passes in all four projects (light and dark, desktop and phone) with the accessibility check. The test that ends the profile and expects the banner to clear stays marked `fixme`; ending is proved on the server. |
-| Documentation | `docs/guides/incident-response.md`, `security.md`, `managed-waf.md`, and `operations/runbooks.md` describe the single control. The WAF upkeep check (3.5) is `docs/audit/2026-11-12-waf-upkeep-check.md`. |
-| Open | The gate's staging run (a real browser admitted after the challenge on a staging domain) has not been done: no staging stack is available to this work. |
+**Verification.** The harness itself is tested against a stub origin. One full
+run on the reference cell is stored with the release record. The version
+mismatch is tested by starting a cell from an image with a changed version label.
 
 ---
 
-## Phase 4: Cache rules
+## Phase 2: Inspection integrity and cost
 
-Previously Phase 8.
+**Objective.** Inspect every request that should be inspected, once, at a known
+cost, and record why each request was blocked.
 
-| # | Item | Direction | Proof of completion |
-| --- | --- | --- | --- |
-| 4.1 | **Cookie names to ignore, with presets.** | `ignore_cookie_names` exists. Add presets for common analytics cookies and show the hit ratio effect. | Hit ratio measured before and after on a recorded traffic sample. |
-| 4.2 | **Path rules for cache behavior.** | Bypass or TTL by path prefix or suffix, inside the typed domain settings, bounded count. | E2E per rule type. |
-| 4.3 | **Purge by prefix, only if needed.** | Decide from purge logs. Build on the per-URL generation mechanism only if full purge is overused. | Decision recorded with the numbers. |
+**Current state.** Scoring copies the request over a new loopback connection
+every time. A body without a `Content-Length` is not sent to scoring. Log-only
+rules need a second CRS pass. Only `949110` is recorded. Exclusions are inert.
+When scoring fails, the cell falls back to inspecting the request with the
+level's unadjusted defaults.
 
-**Gate:** each shipped item has a before and after measurement.
+**Scope.**
 
-### Phase 4 completion gate (recorded 2026-11-13, branch `dev`)
+- **Body coverage.** Bodies without a `Content-Length` (chunked, and HTTP/2) are
+  read up to the inspection limit and inspected. For a body over the limit, the
+  domain chooses one explicit policy: refuse with 413, or inspect the first N
+  bytes and mark the request `body_truncated` (a new rule field).
+- **One pass.** Each request goes through CRS at most once, log-only rules
+  included. Connections to the scoring listener are reused.
+- **Matched rules.** Up to 8 matched rule IDs and their categories reach the
+  cell and the request event for every blocked or logged request. Matched data
+  is never included.
+- **Scoped exclusions.** A rule or category is turned off for a hostname, path
+  prefix, or method. The cell evaluates the scope and passes it to the scoring
+  pass through the existing off-list mechanism. Exclusions on a single parameter
+  are added only if a mechanism is proven free of the earlier bypass.
+- **Explicit failure.** A scoring failure is counted, logged with a reason, and
+  alerted. The fallback stays inline inspection, and its effect on tuning is
+  documented.
 
-| Field | Status |
-| --- | --- |
-| Implementation | Done for 4.1 presets and 4.2 path rules (commits `6a68680`, `98fe0c2`, `9105081`). 4.3 purge by prefix is not built: it waits for purge-log numbers. |
-| Tests | `CacheApiTest` and `FilamentWorkflowTest` pass (40 tests): bounds, permissions, validation, the cross-field checks, and the form action. |
-| Runtime qualification | `tests/e2e/openresty_runtime.py` passes on a fresh image build (28 min): prefix cookie names, bypass prefix and suffix rules, an unmatched path, and a TTL rule that outlives a one-second origin TTL. |
-| Browser suite | Only `tests/browser/specs/cache-rules.spec.ts` was run, as the screen it covers is the only one changed: 12 of 12 pass (light and dark, desktop and phone), with placeholder, tooltip, and accessibility checks and a new form snapshot. The full suite is re-run in Phase 11. |
-| Documentation | `docs/guides/cache.md` and `docs/reference/limits.md` updated. |
-| Open | 4.1 hit ratio before and after on a recorded traffic sample, and the 4.3 decision from purge logs: neither has been measured yet. The gate stays open on these two items. |
+**Technical direction.** Keep ModSecurity and CRS pinned in the image. Change
+how the cell hands requests to the engine, not the engine. Every change is
+proven on the pinned ModSecurity version, because libmodsecurity's behavior
+differs from the reference.
 
-### Phase 5 completion gate (recorded 2026-11-13, branch `dev`)
+**Dependencies.** Phase 1.
 
-| Field | Status |
-| --- | --- |
-| Implementation | Done for 5.1 to 5.6: typed custom rules, attack score, rate-limit rules, adjustable managed rules, user agent and hotlink presets, platform rulesets. The old match type and value rule shape is gone; one migration converted existing rules in place. |
-| Tests | The full Laravel suite passes (698 tests, 15,102 assertions): validation of every bound, permissions, idempotent routes, duplicate refusal, revision rollback, rollout to exactly the affected domains, and the panel flows. |
-| Runtime qualification | On real OpenResty cells: `tests/e2e/custom_rules.py` passes (every field and action, attack score on clean and attack payloads, Observe, blocking and skip, rate limits tripping at the stated count and releasing after their duration, category, rule, log-only and threshold adjustments, both presets, platform rules first and removed again, and the scripted attack stopped by a score rule, a rate-limit rule and a platform rule with each stop found in the request telemetry). `managed_waf.py`, `edge_security.py`, `openresty_runtime.py`, `vector_traffic.py`, `telemetry_analytics.py`, and `clickhouse_migrations.py` pass. |
-| Browser suite | Only the screens this phase changed were run: `custom-rules.spec.ts` (24 of 24, re-run in Phase 6 after a shared form fix), `waf-tuning.spec.ts` (8 of 8), `platform-rulesets.spec.ts` (16 of 16), each in light and dark, desktop and phone, with placeholder, tooltip and accessibility checks. The full suite is re-run in Phase 11. |
-| Documentation | `docs/guides/security.md`, `docs/guides/managed-waf.md`, `docs/reference/limits.md`, `docs/architecture/data-model.md`, and the generated API reference. |
-| Open | The attack score weighs five points per CRS anomaly point; its false positive rate is not measured on a recorded clean sample. Real HTTPS `tls_version` values are not covered by an E2E (plain HTTP reports `none`). Revision snapshots written before the typed rules cannot be rolled back to. The WAF no longer inspects responses. |
+**Acceptance criteria.**
 
----
+- Every attack in the corpus that is blocked with a `Content-Length` is also
+  blocked when sent chunked, and over HTTP/2 with no length.
+- No request is inspected twice. The benchmark shows added p50 and p99 latency
+  at Recommended at least 30% below the Phase 1 baseline, and log-only rules add
+  under 10% on top of that.
+- 100% of WAF blocks in the harness carry at least one matched rule ID besides
+  `949110`.
+- A path-scoped exclusion stops its rule only on that path. Sending the excluded
+  path in a query, header, or encoded form does not trigger it.
+- The clean false positive rate at Recommended is no higher than the Phase 1
+  baseline.
 
-## Phases 5 to 8: A simple WAF
-
-Today: managed WAF (OWASP CRS on ModSecurity) with Off, Observe,
-Recommended, and High Sensitivity profiles and scoped exclusions; allow or
-block rules by IP, CIDR, country, or continent; per-domain client rate and
-connection limits.
-
-Rules for all four phases:
-
-- **One rule engine.** Custom rules, rate-limit rules, user agent blocking,
-  and hotlink protection are all typed rules evaluated by one Lua module in
-  the cell, delivered in the domain's bundle. Presets are just rules.
-- **Typed rules, not an expression language.** A rule is: up to 5 conditions,
-  all of which must match. Each condition is a field from a fixed list, an
-  operator from a fixed list (equals, not equals, starts with, ends with,
-  contains, in list, greater than, less than), and a value. No regex until it
-  can be bounded. Every detection in Phases 7 and 8 adds a field, not a new
-  engine.
-- **Fields:** hostname, path, query presence, method, country, continent,
-  ASN, client IP or CIDR, user agent, referer, a named header, a named cookie
-  present, content type, body size, TLS version, attack score, and the
-  detection flags added later.
-- **Actions:** block, challenge (Phase 3), log, allow (stop evaluating custom
-  rules), and skip managed rules.
-- **Order:** platform rulesets, then domain custom rules, then rate-limit
-  rules, then managed rules.
-- **Bounds:** maximum rules per domain, values per list, and body bytes
-  inspected, set as platform settings with hard ceilings.
-
-## Phase 5: Rules and managed rules
-
-| # | Item | Direction | Proof of completion |
-| --- | --- | --- | --- |
-| 5.1 | **Custom rules.** | Replace today's IP and geo rules with the typed rule model above. Existing rules are migrated to it. Create, edit, reorder, disable, and preview in the domain panel and API. | E2E per field and action on a real cell; validation tests for every bound. |
-| 5.2 | **Attack score.** | Each inspected request gets a score from 1 (attack) to 99 (clean) from the CRS anomaly scores, overall and for SQL injection, XSS, and command injection. It is logged and usable as a rule field, also in Observe mode. | E2E: known payloads score low and clean requests score high; a rule on `attack_score < 20` blocks. |
-| 5.3 | **Rate-limit rules.** | A rule's conditions, a counting key (client IP, IP and path, or a named header), a threshold per period (10 s, 1 min, 10 min), an action, and a duration. Counted per cell; the copy says it is not a global count across PoPs. | E2E: the threshold trips at the stated count and releases after the duration. |
-| 5.4 | **Managed rules you can adjust.** | Per category on or off, per-rule disable or log-only, paranoia level, and anomaly threshold, on top of today's profiles. The ruleset version is shown; updates come only through a release, never downloaded at runtime. | E2E: a disabled rule no longer blocks; ruleset version matches the release. |
-| 5.5 | **User agent blocking and hotlink protection.** | Two presets in the UI. User agent: a list of values with block or challenge. Hotlink: file extensions plus allowed referer hosts, with an empty referer allowed. Both are stored as custom rules. | E2E for each preset. |
-| 5.6 | **Platform rulesets.** | Administrators define a ruleset (custom and rate-limit rules) and apply it to all domains or a selected list. It runs before domain rules. Domain users see its name and its matches, not its contents. | E2E: a platform rule blocks on two domains; removing it restores both. |
-
-**Gate:** the scripted test attack is blocked by a custom rule on attack
-score, a rate-limit rule, and a platform ruleset, each found in telemetry.
-
-## Phase 6: Security events and analytics
-
-| # | Item | Direction | Proof of completion |
-| --- | --- | --- | --- |
-| 6.1 | **Security events.** | A domain page of mitigated requests (sampled logs only): time, rule, action, attack score, path, country, ASN, user agent, request ID. Filters on each. "Create exception" and "Create rule" start from an event. Sampling and retention are bounded and stated. | Browser test of filters and both shortcuts. |
-| 6.2 | **Security analytics.** | All requests, mitigated or not, by attack score band, action, country, ASN, path, and user agent, from ClickHouse rollups. | Query test against a counted test sample; browser test. |
-| 6.3 | **Security event alerts.** | Per-domain threshold on mitigations per period, sent through the notifier (Phase 1). Coalesced. | E2E: the attack script produces one alert, not one per request. |
-
-**Gate:** a domain user finds the attack script's requests in security
-events, builds a rule from one, and receives one alert.
-
-### Phase 6 completion gate (recorded 2026-11-13, branch `dev`)
-
-| Field | Status |
-| --- | --- |
-| Implementation | Done for 6.1 to 6.3: the Security events tab (filters, create rule, create exception), security analytics (an hourly ClickHouse rollup plus path and user agent from stored events), and the per-domain security alert. The cell now logs which rule acted (`security_rule`). A bug found on the way is fixed: the shared rule form let value inputs reset each other, so editing or prefilling a rule lost its values. |
-| Tests | The full Laravel suite passes except one contract test that required the new command to be documented; that is fixed and the test passes (711 tests in the last full run, plus `CommandNamespaceTest` and `RepositoryContractTest` re-run after the fix). Covered: filter and scope rules, platform rules shown by ruleset name only, exceptions only where a domain can pass the rule, an unavailable store, alert bounds and one alert per episode. |
-| Runtime qualification | Real ClickHouse: `security_analytics.py` inserts a counted sample of 100 requests and every breakdown, the 30 mitigated requests, and their filters match exactly. Real scheduler and notifier: `security_alert.py` produces one webhook delivery for an attack that kept blocking requests across more than two scheduler runs. Real cell: `custom_rules.py` checks the logged rule reference on each stop. `vector_traffic.py`, `clickhouse_migrations.py`, and `telemetry_analytics.py` pass. |
-| Browser suite | Changed screens only: `security-events.spec.ts` (12 of 12), `analytics-security.spec.ts` (4 of 4), `security-alert.spec.ts` (8 of 8), the existing `every-screen.spec.ts` for the changed analytics page (all screens pass), and `custom-rules.spec.ts` with `platform-rulesets.spec.ts` after the shared form change (40 of 40), each in light and dark, desktop and phone, with placeholder, tooltip, and accessibility checks. The events tab runs against a ClickHouse stand-in inside the disposable browser container. The full suite is re-run in Phase 11. |
-| Documentation | `docs/guides/security.md`, `docs/guides/analytics.md`, `docs/guides/notifications.md`, `docs/operations/cli-commands.md`, and the generated API reference. |
-| Open | The gate's single scripted attack is covered in pieces, not as one run: the cell stops it and logs the rule (Phase 5), the counted-sample test proves the list and counts, and the alert test proves one alert. No single run goes cell to agent to events tab to rule to alert, because the dev stack has no domain served through a cell with an attached agent for this test. The alert counts events as the control plane stores them; the agent's report path is covered by existing tests, not this one. The events list is the newest 500 of 24 hours, kept 7 days, and is a sample during a large attack. |
-
-## Phase 7: Detections
-
-Each detection sets a field for custom rules and logs it. None blocks on its
-own unless a rule says so. Datasets come through a signed release, never
-from an outside service at runtime.
-
-| # | Item | Direction | Proof of completion |
-| --- | --- | --- | --- |
-| 7.1 | **Leaked credentials.** | The domain names its login paths and the username and password fields (with presets for common form and JSON shapes). The cell checks a hash of the password against a bounded leaked-password set, delivered as a release artifact with a fixed memory size. Sets `leaked_password`. Passwords and hashes are never logged. | E2E: a known leaked password sets the flag; a fresh password does not; no log contains either. |
-| 7.2 | **Sensitive data detection.** | Log-only inspection of the first bounded bytes of text responses for card numbers (with Luhn check), IBANs, private keys, and common API key formats. Shows in security events with the match masked. | E2E per pattern; no unmasked value is stored. |
-| 7.3 | **Security for AI applications.** | The domain marks its LLM endpoints and the JSON field holding the prompt. A managed pattern ruleset sets `prompt_injection_score` and `prompt_pii`. The copy says it is pattern-based. | E2E with a fixed set of known injection prompts and clean prompts; false positive rate recorded. |
-
-**Gate:** each detection has a measured false positive rate on a recorded
-clean sample and a measured latency cost.
-
-### Phase 7 completion gate (recorded 2026-11-13, branch `dev`)
-
-| Field | Status |
-| --- | --- |
-| Implementation | Done for 7.1 to 7.3 in a smaller form than the table says: a leaked-password check on named login paths, a log-only sensitive data check on response starts, and prompt injection and personal data fields for named AI endpoints. All three set rule fields or log events and never block by themselves. One shared base controller serves the three settings. |
-| Tests | The full Laravel suite passes (719 tests, 15,345 assertions) including `CredentialCheckTest` and `DetectionSettingsTest`: validation of every bound, permissions, revisioning, audit entries, the compiled snapshot, and the rule fields. The Lua detectors were also run against known cards, IBANs, keys, and prompts outside nginx. |
-| Runtime qualification | `tests/e2e/detections.py` passes on a real cell and origin: JSON and form logins, every case that must not set the flag, each sensitive data kind once and never for clean or binary content, 6 of 6 injections stopped and 0 of 20 clean prompts, and no secret, hash, or match in any log or status. `tests/e2e/custom_rules.py` still passes. |
-| Browser suite | Changed screens only: `credential-check.spec.ts` and `detections.spec.ts` (8 of 8 each, light and dark, desktop and phone) with placeholder, tooltip, and accessibility checks. The rule form gained three fields, so `custom-rules.spec.ts` and `platform-rulesets.spec.ts` were re-run: 40 of 40. The full suite is re-run in Phase 11. |
-| Documentation | `docs/guides/security.md` and the generated API reference. |
-| Open | 7.1: the leaked-password set is a list of about 100 very common passwords, not a breach corpus, and is built into the image from the repository, not delivered as a signed release artifact. 7.2: security events show the kind and count, not a masked value, and compressed responses are not read. 7.3: the false positive rate is 0 of 20 hand-written prompts, not a recorded real sample, and the check is phrase matching only. The gate asks for a false positive rate on a recorded clean sample for each detection and a latency cost; latency is measured on a development host only. `tests/contract/test_security_event_reasons.py` fails on `domain_restricted`, which is not new. |
-
-## Phase 8: API and client-side protection
-
-| # | Item | Direction | Proof of completion |
-| --- | --- | --- | --- |
-| 8.1 | **Application profiles (API schema).** | Upload an OpenAPI 3 document, bounded in size and number of operations. Control compiles it into a typed table of paths, methods, and parameters; the cell sets `schema_violation` (unknown path, wrong method, missing or mistyped parameter, JSON body too large). Review detections in security events, then block with a custom rule. | E2E per violation type; an invalid document is refused with a clear error. |
-| 8.2 | **Client-side security.** | For opted-in domains, the edge adds a report-only Content-Security-Policy to HTML responses and receives reports on a reserved path, bounded per domain, through Vector into ClickHouse. The domain page lists scripts and connections seen per page with first-seen dates. A new script sends a notification. An enforced policy built from the approved list is a later, separate choice. | E2E: a page loading a new script appears in the list and triggers one notification. |
-
-**Gate:** a test API with a schema shows its violations, and a test page
-shows a newly added script, both in the panel.
-
-### Phase 8 completion gate (recorded 2026-11-13, branch `dev`)
-
-| Field | Status |
-| --- | --- |
-| Implementation | Done for 8.1 and 8.2 in a smaller form than the table says. 8.1: an OpenAPI 3 JSON document is compiled into a typed table (paths, methods, path, query and header parameters, a JSON body size limit) and the cell sets `schema_violation` (`unknown_path`, `wrong_method`, `missing_parameter`, `invalid_parameter`, `body_too_large`); each is also a security event, and a rule on the field blocks. 8.2: opted-in domains get a report-only policy on HTML responses, a reserved report path bounded per domain and cell, reports through Vector into ClickHouse, a scheduled sync into a per-domain list with first-seen dates, and one notification per run for new entries after a baseline window. |
-| Tests | The full Laravel suite passes (726 tests, 15,451 assertions), including `ApiSchemaTest` (compile, every bound and refusal, permissions, last valid table kept), `ClientSecurityTest` (opt-in, baseline, one notification, approval, permissions), and a new regression test for the `domain-updated` handler. |
-| Runtime qualification | `tests/e2e/application_protection.py` passes on a real cell and origin: each violation kind blocks through a rule, a request that fits or is outside the base path does not, a log rule matches only its kind, the policy appears on HTML only and never replaces the origin's, browser-style and Reporting API reports are reduced to kind, page and origin (no query or fragment), foreign or other-directive reports are dropped, and reports over the per-minute bound are dropped. `tests/e2e/vector_traffic.py` and `tests/e2e/clickhouse_migrations.py` pass. `tests/e2e/detections.py` still passes. `tests/e2e/client_scripts.py` passes on the development stack with the real scheduler, ClickHouse and notifier: the first script is the baseline and sends nothing, a later script and connection are listed and sent as one notification that stays one over two more scheduler runs, and approval clears the list. |
-| Browser suite | Changed screens only: `application-protection.spec.ts` (12 of 12, light and dark, desktop and phone) covers the API schema sheet, the client-side sheet, and the Scripts and connections tab, with placeholder, tooltip and accessibility checks. `custom-rules.spec.ts` and `detections.spec.ts` (24 and 8 of 24 and 8) were re-run after the rule form gained a field and passed. The full suite is re-run in Phase 11. |
-| Documentation | `docs/guides/security.md` (API schema, client-side security), `notifications.md`, `operations/cli-commands.md`, `reference/configuration.md`, and the generated API reference. |
-| Open | The gate's two panel scenes are covered in pieces: schema violations are proved on a real cell and the panel sheet saves and refuses a document, but no single run goes from the panel through the agent to a cell; the script list is proved from real ClickHouse rows written the way Vector writes them, not from a real browser loading a page and reporting. Bodies are checked for size only, not for fields; YAML documents and cookie parameters are not supported. Reports can be forged by anyone, so the list is a hint. Report requests count as ordinary traffic in usage. No false positive or latency measurement was taken for the schema check. `make docs-check` also reports existing list numbering errors in `guides/log-push.md` and `operations/fleet-web.md` (not touched here), and `tests/contract/test_security_event_reasons.py` still fails on `domain_restricted`, which is not new. |
-
-### Phases 1 to 8 review (recorded 2026-11-13, branch `dev`)
-
-An owner-requested pass over Phases 1 to 8 before Phase 10. It changed no phase's scope.
-
-| Field | Status |
-| --- | --- |
-| Implementation | The domain page shows each action once, beside the facts it changes, with a Protection section listing every detection; the rule sheet is one column; rules on a detection field are refused until the detection is set up, and a detection in use cannot be turned off; the older administrator Under Attack mode is merged into the incident profile as one **Under attack mode**; the notifier no longer fails on a second event within a minute; the WAF moves to OWASP CRS 4.30.0 and ModSecurity 3.0.17 with `make waf-version-check`; the documentation site publishes Markdown copies, `llms.txt` by section, and `llms-full.txt`. |
-| Tests | The full Laravel suite passes (729 tests, 15,499 assertions). Pint, `make contract-check`, `make openapi-check`, and `make docs-check` pass. `tests/contract/test_security_event_reasons.py` now passes. PHPStan finds no error from this work, but 536 older errors from Phases 1 to 8 remain outside the baseline, so static analysis is not green. |
-| Runtime qualification | On the rebuilt cell image: `managed_waf.py`, `custom_rules.py` (which checks the catalog against the CRS version on the cell), `detections.py`, `application_protection.py`, `openresty_runtime.py`, and `edge_purge_protocol.py` pass. On the development stack: `notifications.py` and `log_push.py` pass. |
-| Browser suite | Every changed screen: `spike`, `custom-rules`, `platform-rulesets`, `security-events`, `detections`, `credential-check`, `application-protection`, `security-alert`, `waf-tuning`, `cache-rules`, `incident-profile`, `edge-health`, `notifications`, and `log-push` pass in all four projects with the accessibility check; snapshots changed only for the overview, domain, notifications, and log push screens. `every-screen`, `first-run-setup`, and `screens-rich` pass in all four projects. `crawl.spec.ts` opens every link, action, section button, menu item, row action, and tab of both panels with no server error, script error, or policy violation. |
-| Documentation | New `reference/security-rules.md` and `reference/waf.md`; updated `guides/domain-panel.md`, `incident-response.md`, `security.md`, `managed-waf.md`, `analytics.md`, `domains.md`, `notifications.md`, `operations/runbooks.md`, and `development/testing.md`. |
-| Open | The 536 older static analysis errors. The open items of each phase gate above are unchanged by this review. |
+**Verification.** The harness with the chunked and HTTP/2 variants. E2E for each
+exclusion scope and the bypass attempts. A failure injection that stops the
+scoring listener and checks the fallback, the counter, and the alert. The
+benchmark compared with Phase 1.
 
 ---
 
-## Phase 9: Measured performance envelope
+## Phase 3: Client identity, fairness, and signal fidelity
 
-Previously Phase 9. Existing results (20,000 domains, 10,000 DNS changes) are
-control-plane and single-cell results on a development host only. The audit's
-50-connection ramp is a health check, not a capacity figure.
+**Objective.** Mitigate the client that misbehaves without harming other
+visitors or other tenants, and report every domain's events accurately.
 
-Measure on dedicated hosts of the size the sizing guide recommends. Record
-hardware, OS and runtime versions, topology, counts of PoPs, edges, cells,
-and domains, dataset, concurrency, duration, throughput, latency
-percentiles, errors, the saturated resource, and recovery time:
+**Current state.** Cell limits, rate-limit rules, and challenge binding use the
+full client address. Shared dictionaries are shared by all domains and evict
+entries when full. Domain escalation reacts to any 50 events. Heartbeats carry
+at most 20 noisy entries in total.
 
-1. Control-plane mutation throughput.
-2. DNS propagation latency, change accepted to answer on every PoP.
-3. Edge request throughput on one host.
-4. Cache-hit and cache-miss throughput.
-5. Origin connection saturation and recovery.
-6. TLS handshake capacity, including the gateway's handshake budget.
-7. Recovery after losing one edge, with PoPs in separate networks (three
-   PoPs, two regions).
-8. WAF cost: latency with managed rules, custom rules, and each detection on.
-9. Log push and notifier load: bounded worker time per domain at the
-    stated domain counts.
+**Scope.**
 
-Publish one-cell, one-host, and multi-PoP results under separate headings.
-Choose capacity work from the saturated resource each test names.
+- **One client key** for the cell and the gateway: IPv4 address, or an IPv6
+  prefix (default /64, configurable per domain from /48 to /128). It is used by
+  built-in limits, rate-limit rules, and challenge binding.
+- **Fair memory.** Each domain gets a bounded share of counter memory. When the
+  share is full, new keys fold into a coarser key (prefix, then ASN), never into
+  "no decision", and other domains' counters are never evicted.
+- **Client penalty box per cell.** A client key that trips repeated escalating
+  events on a domain is challenged or blocked for a bounded time on that domain.
+  The thresholds and actions are typed settings.
+- **Breadth-aware escalation.** The automatic domain state escalates only when
+  events come from more than a set number of distinct client keys. Events from
+  fewer sources go to the penalty box.
+- **Complete reporting.** Heartbeat summaries are bounded per domain and in
+  total, ranked by count, and carry distinct client counts, so every domain's
+  counts reach escalation and alerts.
 
-**Gate:** every row has a recorded run, and the sizing guide quotes only
-those runs.
+**Technical direction.** All of it stays in the cell's shared memory and the
+existing overlay and heartbeat paths. No new service. Counters are partitioned
+by domain within fixed dictionaries.
 
-## Phase 10: Evidence for adoption
+**Dependencies.** Phase 1.
 
-Previously Phase 10.
+**Acceptance criteria.**
 
-| # | Question | What must be shown |
-| --- | --- | --- |
-| 10.1 | Independent security review of artifact signing, origin validation, cache isolation, edge enrollment, identity renewal and revocation, deployment integrity, and the log push and notifier egress. | An external review; its scope, findings, and fixes published. |
-| 10.2 | Why deploy this instead of running OpenResty, PowerDNS, DNSdist, and Grafana directly? | A third party installs a fleet from the documentation and passes the Phase 11 gate without help. |
-| 10.3 | What is hard to copy? | Measured envelopes (Phase 9), a clean external review (10.1), and a record of releases that passed staging gates, kept current per release. |
+- A flood rotating through 1,000,000 IPv6 addresses inside one /64 is limited
+  as one client.
+- A flood with 1,000,000 distinct keys against domain A does not change when
+  domain B's rate-limit rule trips: B's threshold is still met within ±5%.
+- A single client generating 1,000 escalating events in 5 minutes does not
+  change the domain state, and is penalized within 10 seconds on that cell.
+  Traffic from 500 distinct clients does change the state.
+- With 200 domains under attack on one cell, every domain's count reaches the
+  control plane within two heartbeats.
 
-**Gate:** the external review is published and the records exist for the
-current release.
-
-### Phase 10 status (recorded 2026-11-13)
-
-| Item | Status |
-| --- | --- |
-| 10.1 | Not started. The scope package for the reviewer is `docs/audit/2026-11-13-security-review-scope.md`; no reviewer is engaged, and the review must be external. |
-| 10.2 | Not started. It needs a third party installing a fleet from the documentation. |
-| 10.3 | Not started. It depends on Phase 9 (skipped by the owner on 2026-11-13), 10.1, and staging gate records per release. |
-
-Phase 10 is not complete and cannot be completed from inside the project.
+**Verification.** E2E on a real cell with IPv4 and IPv6 traffic generators. A
+cardinality flood test across two domains. A heartbeat test with 200 noisy
+domains. Shared memory usage recorded under the flood.
 
 ---
 
-## Phase 11: Missing gate records and full qualification
+## Phase 4: Policy lifecycle
 
-The last phase. Nothing new is built here. It closes every gate the work
-above left open and proves the finished system end to end.
+**Objective.** Make every security change testable before it blocks, visible
+while it runs, and quick to undo.
 
-| # | Item | Direction | Proof of completion |
-| --- | --- | --- | --- |
-| 11.1 | **Audit Phase 1: exposure.** | Outside scan and path sweep from a host outside the management allowlist. | Stored with the release: only SSH, DNS, HTTP, HTTPS, and the edge-control listener answer; no management path, metrics endpoint, or version string. |
-| 11.2 | **Audit Phase 2: cache isolation.** | Run `openresty_runtime.py` and `edge_purge_protocol.py` and the browser suite, and record the results the gate left blank. | Both E2E files and the browser suite pass, listed in the record. |
-| 11.3 | **Audit Phase 3: edge health.** | On staging, measure the time from a fixed heartbeat to a healthy edge. Run the split ClientHello script on both PoPs. | Recovery within one heartbeat interval, measured; all six cases pass. |
-| 11.4 | **Audit Phase 5: telemetry.** | Run the Grafana and panel browser suites against staging, read-only. Replay the scripted test attack. | Suites pass with one screenshot per dashboard; the attack is found by domain, edge, reason, and rule, and its request, download, and upload counts match. |
-| 11.5 | **Full test run for Phases 1 to 10.** | On one fresh Compose stack: the Laravel suite, Go tests, contract and observability tests, every `tests/e2e` file added by these phases, and the full browser suite with visual snapshots and accessibility checks. Then each phase's own gate re-run on staging. | One record listing every suite, its result, and the commit it ran on. No unexecuted test is reported as passed. |
-| 11.6 | **Documentation check.** | Every page touched by Phases 1 to 10 matches the running system. | Each page reviewed against the record in 11.5. |
-| 11.7 | **Tooltip and placeholder check.** | Walk every screen of the platform, in both Filament panels and the Fleet web, not only those added or changed by Phases 1 to 10, against the frontend rules. | A browser test crawls every screen of both panels and the Fleet web and lists zero inputs without an example placeholder and zero complex items without a tooltip. |
+**Current state.** Rules apply on save. Revisions can be rolled back. There is
+no shadow mode, no expiry, and no per-rule match count. Platform rulesets apply
+to all their domains at once.
 
-**Gate:** one record per audit phase (11.1 to 11.4) and one full
-qualification record (11.5), all on the same release.
+**Scope.**
 
-### Phase 11 progress (recorded 2026-11-13, branch `dev`)
+- **Shadow mode** for any custom, rate-limit, or platform rule: the cell
+  evaluates the rule and records what it would have done
+  (`would_block`, `would_challenge`) without acting. A rule can move from shadow
+  to enforce in one step.
+- **Expiry** on any rule. The cell enforces it by its own clock, so temporary
+  blocks end even when the control plane is down.
+- **Match counts** per rule, enforced and shadow, by hour, from a ClickHouse
+  rollup, on the rule list and in the API.
+- **Impact estimate** before saving: what the rule would have matched in the
+  last 24 hours, computed only over the fields the request events store, and
+  labeled as partial.
+- **Staged platform rulesets**: shadow first, then a chosen subset of domains,
+  then all.
+- **Measured propagation**: the time from saving a policy to it being enforced
+  on every cell.
 
-| Item | Status |
-| --- | --- |
-| 11.1 | Not done: it needs a host outside the management allowlist and a staging fleet. |
-| 11.2 | Runtime part done: `openresty_runtime.py` and `edge_purge_protocol.py` pass (the second with digest-pinned images from a temporary local registry). The full browser suite is not yet re-run. |
-| 11.3 | Not done: it needs staging and both PoPs. |
-| 11.4 | Not done: it needs staging. |
-| 11.5 | Partly done: the Laravel suite, contract checks, and the end-to-end files listed in the Phases 1 to 8 review pass on the development host. Not yet run together on one fresh stack: Go tests, observability tests, every other end-to-end file, and the full browser suite. |
-| 11.6 | Done for the pages touched on 2026-11-13; `make docs-check` passes. |
-| 11.7 | Done for both Filament panels: `crawl.spec.ts` now opens every dialog and form on every screen and fails on any text, number, URL, or text-area input without an example placeholder, and on any field whose meaning is not obvious that has neither a help tooltip nor a description line. The first run listed 173 findings; all are fixed and the crawl passes with zero. Not done for the Fleet web page, which has its own browser suite and was not audited. |
+**Technical direction.** Shadow and expiry are rule attributes in the existing
+typed model and snapshot. Counts and estimates come from ClickHouse, outside the
+request path. Rollback stays the existing revision rollback.
 
-Phase 11 is not complete.
+**Dependencies.** Phase 2 (rule references in events), Phase 1.
+
+**Acceptance criteria.**
+
+- A shadow rule never changes a response. Its `would_*` count matches an
+  enforce-mode run of the same traffic within 1%.
+- An expiring rule stops acting within 2 seconds of its expiry, with the control
+  plane stopped.
+- Propagation p95 is 60 seconds or less from save to enforcement on all cells
+  in a two-edge test. The measured value is documented.
+- A rollback restores the previous behavior, proven by the harness.
+
+**Verification.** Feature tests for the new attributes, permissions, and
+idempotency. E2E for shadow, expiry, and rollback. A ClickHouse query test
+against a counted sample. Browser tests for the shadow badge, the counts, and
+the estimate.
 
 ---
 
-## Out of scope unless the owner admits it
+## Phase 5: Signed security datasets
 
-BGP control, volumetric scrubbing, machine-learned bot or attack scoring,
-outside verification services on the request path, Kubernetes,
-microservices, Kafka, a second dashboard or backend, billing or reseller
-hierarchies, plugin runtimes, custom expression languages, and multi-origin
-load balancing.
+**Objective.** One safe way for large, changing security data to reach cells,
+without a release and without any runtime download.
+
+**Current state.** The leaked-password list is built into the image. GeoIP and
+ASN databases are files on the host. Rule lists hold 100 values each. No
+general dataset channel exists.
+
+**Scope.**
+
+- A **dataset artifact**: typed (CIDR list, hash set), versioned, signed by the
+  control plane's artifact key, with a fixed maximum size per type. Cells hold
+  it in a fixed-memory structure with lookups in logarithmic time or better.
+- **Named IP lists** that customers and administrators maintain (up to a
+  platform limit, for example 10,000 entries per domain list), usable from rules
+  with `in_list`.
+- **Platform datasets**: published search engine crawler ranges, a larger
+  leaked-password corpus (at least 1,000,000 entries), and later the greylist
+  (Phase 8). Sources come with a release or from an import an administrator
+  enables in the control plane. A cell never fetches anything.
+- Per-cell dataset versions in the heartbeat (built on Phase 1).
+
+**Technical direction.** Reuse the signing, agent delivery, and atomic
+activation already used for snapshots. A dataset that fails validation is
+refused, the last valid version stays active, and the failure is alerted.
+
+**Dependencies.** Phase 1, Phase 3 (memory bounds).
+
+**Acceptance criteria.**
+
+- A 10,000-entry list adds under 20 µs at p99 per request lookup, measured.
+- A corrupted, oversized, or wrongly signed dataset is refused on every cell,
+  and the previous version keeps matching.
+- A list change reaches every cell within the Phase 4 propagation bound.
+- The cell's memory stays within the stated budget with every dataset at its
+  maximum size.
+
+**Verification.** Go tests for signing and refusal. Lua tests for lookups. E2E
+for activation, refusal, and last valid state. A memory measurement at maximum
+size.
+
+---
+
+## Phase 6: Rate limiting
+
+**Objective.** Rate limits that follow real abuse patterns, are accurate at
+window edges, and give a stated approximation across cells.
+
+**Current state.** Fixed windows of 10 s, 1 min, and 10 min, per cell. Keys are
+address, address and path, or header. The actions are block, challenge, and log.
+Only requests are counted.
+
+**Scope.**
+
+- **Sliding window approximation** (weighted current and previous window) for
+  rate-limit rules.
+- **More keys**: client key (Phase 3), ASN, country, cookie value, query
+  argument, and combinations of two. Header and cookie values are hashed.
+- **Counting on outcome**: a rule can count only responses with chosen statuses,
+  for example 401 and 403 on a login path, counted in the log phase.
+- **Responses**: 429 with `Retry-After`, challenge, or block, with a
+  machine-readable body for non-HTML clients.
+- **Multi-cell modes**: `per_cell` (today), and `shared`, where each cell
+  enforces the threshold divided by the number of cells serving the domain.
+  Long windows (1 hour, 24 hours) are aggregated by the control plane from
+  heartbeat summaries and sent back as client-key mitigations. The documentation
+  states the error bound of each mode.
+
+**Technical direction.** Enforcement stays in cell shared memory. Cross-cell
+aggregation is asynchronous and only adds mitigations; it never delays a request.
+
+**Dependencies.** Phase 3, Phase 4, Phase 5 (lists as keys and exemptions).
+
+**Acceptance criteria.**
+
+- On one cell, a rule trips within ±5% of its threshold for steady traffic and
+  within ±10% for traffic around window edges.
+- In `shared` mode over three cells with balanced traffic, admitted requests
+  stay at or below 120% of the threshold.
+- A credential-stuffing run (5,000 failed logins from 200 addresses) is stopped
+  by an outcome rule, and successful logins from the same NAT address are never
+  counted.
+- Long-window mitigations reach all cells within 5 minutes.
+
+**Verification.** E2E on one and three cells with IPv4 and IPv6. A replayed
+login abuse scenario. A memory bound test at maximum keys. Browser tests for the
+new rule options.
+
+---
+
+## Phase 7: Challenge and bot mitigation
+
+**Objective.** A challenge that works across cells and PoPs, adapts to risk,
+does not break APIs or mobile clients, and is backed by explainable bot signals.
+
+**Current state.** Proof of work at a fixed 16 bits with a per-cell key that
+never rotates. Tokens are bound to the exact address and user agent. Non-HTML
+requests get a plain 403. Under attack mode bypasses `/api/` and
+`/.well-known/` (fixed). No crawler verification, no TLS fingerprint, no bot
+signals.
+
+**Scope.**
+
+- **Pool-wide keys with rotation**: challenge keys issued by the control plane,
+  delivered in signed bundles with a key ID, two keys active during a rotation.
+  A token works on any cell that serves the domain, in any PoP.
+- **Binding** to the client key (Phase 3) and the user agent family, so a client
+  that changes address inside its prefix keeps its token. Each token has its own
+  request budget, so a token shared by a bot farm stops working.
+- **Adaptive difficulty** from the penalty box (Phase 3), reputation (Phase 8),
+  and the domain state, capped by a measured solve time.
+- **API-aware behavior**: non-HTML requests get a machine-readable refusal with
+  the reason. Each domain chooses its own bypass prefixes and methods for under
+  attack mode, instead of the fixed list.
+- **Verified crawlers**: a request whose user agent claims a known crawler and
+  whose address is in that crawler's published ranges (Phase 5) gets
+  `verified_bot` and a category. The same claim from outside the ranges gets
+  `fake_crawler`. Verified crawlers skip the challenge by default.
+- **TLS fingerprint**: the gateway already parses the ClientHello. It computes a
+  JA4-style fingerprint and passes it to the cell in a PROXY v2 TLV. Without a
+  gateway the field is empty.
+- **Bot signals**: a `bot_score` from named, readable components (the
+  fingerprint does not match the claimed browser, browser headers are missing,
+  automation markers, a fingerprint in a known automation dataset, a verified
+  crawler). The components are logged, and the score is a rule field.
+
+**Technical direction.** No third-party CAPTCHA and no outside service on the
+request path. Key material is never in snapshots the customer can read and never
+logged. The challenge page meets the browser suite's accessibility checks. Its
+copy says that JavaScript is needed and what the visitor can do.
+
+**Dependencies.** Phase 3, Phase 5, Phase 6.
+
+**Acceptance criteria.**
+
+- A token issued on one cell is accepted on another cell in another PoP. A key
+  rotation re-challenges no client whose token is still valid.
+- A mobile client moving between addresses in one /64 keeps its token.
+- Solve time p95 at maximum difficulty is 3 seconds or less on the slowest device
+  in the test matrix.
+- A headless flood (scripted HTTP clients and a headless browser) does not get
+  through more than the measured fraction stated in the documentation. Real
+  browsers in the browser suite pass on desktop and phone.
+- A verified crawler reaches the origin under attack mode. A fake crawler does
+  not.
+- `bot_score` marks under 1% of the clean corpus as automated at the default
+  threshold.
+
+**Verification.** Go tests for the fingerprint and TLV. Lua tests for token and
+key handling. E2E across two edges. The harness with bot and clean corpora.
+Browser and accessibility tests of the challenge page. An external review of
+the token and key design, included in Phase 11.
+
+---
+
+## Phase 8: Client reputation and shared threat intelligence
+
+**Objective.** A client that attacks one domain or PoP is treated with suspicion
+everywhere within minutes, without blocking shared NATs, without exposing one
+tenant's data to another, and without making a request wait on a remote system.
+
+**Current state.** Nothing is shared between cells. The penalty box (Phase 3) is
+per cell and per domain.
+
+**Scope.**
+
+- Cells report a bounded summary of their top offending client keys with reason
+  counts, every heartbeat.
+- The control plane aggregates the summaries over a sliding window across
+  edges, PoPs, and domains, and assigns each client key a reputation band that
+  decays over time. It publishes the result as a greylist dataset (Phase 5) with
+  a TTL on each entry.
+- Cells expose `client_reputation` (a band) and `greylisted` as rule fields. The
+  platform default is to challenge greylisted clients, never to block them.
+  Domains can opt out or ask for stricter handling.
+- **NAT and crawler safety**: a key with a high share of clean traffic or solved
+  challenges is excluded or capped. Verified crawlers are never greylisted.
+- **Privacy and isolation**: client addresses in the aggregate are kept for 7
+  days at most. A customer sees "platform reputation" as the cause, never the
+  other domain or tenant.
+
+**Technical direction.** This builds only on the heartbeat, the control plane
+queues, and the dataset channel. There is no cell-to-cell traffic and no
+synchronous lookup. When the control plane is down, cells keep the last greylist
+until its entries expire, then fall back to local protection only.
+
+**Dependencies.** Phase 3, Phase 5, Phase 6, Phase 7.
+
+**Acceptance criteria.**
+
+- A client attacking domain A through three PoPs is challenged on domain B in
+  another PoP within 5 minutes at p95.
+- In a NAT simulation (one address, 95% clean traffic from many browsers, 5%
+  attack), the address is not greylisted.
+- With the control plane stopped, greylist entries expire on schedule and no
+  request is blocked by a stale entry after its TTL.
+- No customer-facing API or screen shows another tenant's domain or data.
+
+**Verification.** E2E on a two-PoP staging stack. NAT and crawler simulations
+in the harness. Policy tests for tenant isolation. A retention test for the
+aggregate.
+
+---
+
+## Phase 9: API and account protection
+
+**Objective.** Positive security for APIs and protection against account
+takeover, both decided at the edge.
+
+**Current state.** The API schema checks paths, methods, and parameters, and the
+body for size only. Only OpenAPI JSON is accepted. The leaked-password list is
+small. There is no JWT validation and no endpoint discovery.
+
+**Scope.**
+
+- **JSON body validation** against the schema: types, required fields, enums,
+  and unknown fields, with bounded depth, field count, and body size. Cookie
+  parameters. YAML documents are accepted and converted in the control plane.
+- **JWT validation** at the edge for marked paths: signature against keys the
+  customer uploads (no runtime JWKS fetch), `exp`, `nbf`, `iss`, and `aud`. Sets
+  `jwt_valid`, plus a hashed subject usable as a rate-limit key (Phase 6).
+- **Account takeover**: login outcome counting (Phase 6) together with the
+  large leaked-password corpus (Phase 5). Usernames and passwords are never
+  logged.
+- **Endpoint discovery**: the control plane groups observed paths into
+  templates from request events and offers them as a starting schema.
+
+**Technical direction.** Compile the schema and keys in the control plane into
+bounded tables in the snapshot. The cell never parses OpenAPI. Every new check
+starts in shadow mode (Phase 4).
+
+**Dependencies.** Phase 4, Phase 5, Phase 6.
+
+**Acceptance criteria.**
+
+- On an API clean corpus, body validation marks under 0.5% of requests, and adds
+  under 1 ms p99 for 16 KiB bodies.
+- Tokens that are expired, wrongly signed, or for another audience are refused,
+  and valid tokens pass, with IPv4 and IPv6.
+- A leaked password from the large corpus sets the flag, and no log or event
+  holds it.
+- Discovered templates cover at least 90% of the requests in a test API's
+  traffic.
+
+**Verification.** Feature tests for compilation and refusal. Lua tests for
+validation. E2E per check. Harness measurements of false positives and latency.
+Browser tests of the schema and JWT screens.
+
+---
+
+## Phase 10: Investigation and analytics
+
+**Objective.** An operator or domain owner can explain any decision and
+follow an attack from start to end.
+
+**Current state.** Request events carry the action, reason, rule reference, and
+scores. The events tab shows the newest 500 of 24 hours. The alert counts
+heartbeat reports. Attacks are not grouped.
+
+**Scope.**
+
+- A **decision trace** on each mitigated or shadow-matched request: the stage,
+  the rule references, matched CRS IDs (Phase 2), scores, client key,
+  reputation band, bot components, and dataset versions. It holds no request
+  data beyond what events store today.
+- **Security events without the 500 cap**: cursor pagination over a bounded time
+  range, with the same filters.
+- **Attack episodes**: mitigations grouped by domain, time, and overlapping
+  client keys or rules into one record with a start, an end, a peak, and its top
+  sources, paths, and rules. Alerts are sent per episode.
+- **Views**: top client keys, rules by match count, bot and reputation
+  breakdowns, and false-positive candidates (blocks followed by solved
+  challenges or by allows from the same key).
+- **Stated retention** for each of these, with redaction rules unchanged.
+
+**Technical direction.** Everything is computed in ClickHouse rollups and
+bounded queries. The request path only adds bounded fields to the existing log
+line.
+
+**Dependencies.** Phases 2, 3, 4, 7, and 8.
+
+**Acceptance criteria.**
+
+- For every mitigated request in a harness run, the trace names the stage and
+  the rule or signal that acted.
+- The events list pages through a 1,000,000-event attack in a 24-hour range with
+  each page answered under 1 second on the reference ClickHouse.
+- One scripted attack produces one episode and one alert.
+- The log line grows by no more than the stated byte budget.
+
+**Verification.** ClickHouse query tests against a counted sample. E2E from
+cell to ClickHouse to the API. Browser tests for traces, episodes, and views.
+
+---
+
+## Phase 11: Full qualification and external review
+
+**Objective.** Prove that the finished WAF works as one system on a real
+multi-PoP fleet, under load and failure.
+
+**Current state.** Earlier gates were often closed on a development stack. No
+staging run, performance envelope, or external review exists.
+
+**Scope.**
+
+- A staging fleet with three PoPs in two regions.
+- **Attack scenarios**: an L7 flood from 10,000 addresses and from IPv6
+  rotation, credential stuffing, scanners, the evasion corpus, and a headless
+  browser farm. The clean corpus runs at the same time.
+- **Failure injection**: control plane down, agent down, a corrupt dataset, the
+  scoring listener down, full shared memory, ClickHouse down, and a PoP lost.
+- **A WAF performance envelope** on the reference cell: requests per second and
+  latency for each profile and feature, and the saturated resource.
+- **An external review** of the challenge tokens and keys, dataset signing,
+  tenant isolation, and the bypass corpus.
+
+**Dependencies.** Phases 1 to 10.
+
+**Acceptance criteria.**
+
+- Every attack scenario is mitigated. The clean corpus's false positive rate
+  stays at or below each phase's stated rate.
+- In each failure, serving continues from the last valid state, and the
+  documented failure behavior matches what happened.
+- The sizing guide quotes only numbers from this run.
+- The external review is published with its scope, findings, and fixes.
+
+**Verification.** The harness and scenario scripts on staging, each with a
+stored record listing the release, the commit, and every result. No unexecuted
+test is reported as passed.
+
+---
+
+## 4. Completion
+
+The roadmap is complete when:
+
+- Phases 1 to 11 have passed their gates on the same release.
+- Every row in the capability table reads Verified, or states in the
+  documentation why it stays limited.
+- The harness runs in qualification for every release. A release that worsens
+  a recorded false positive rate, detection rate, or latency beyond its
+  tolerance fails.
+- Every security decision a cell makes can be traced to its rule, signal, or
+  dataset version in the analytics.
+
+## 5. Out of scope unless the owner admits it
+
+Volumetric scrubbing and BGP control (the edge cannot absorb a saturated
+uplink), machine-learned attack or bot scoring, third-party CAPTCHA or any
+outside verification on the request path, synchronous calls between cells or
+PoPs, custom regex or an expression language in rules, full CRS response
+inspection and response rewriting, customer-uploaded `SecRule` content,
+Kubernetes, microservices, Kafka, and a second dashboard or backend.
