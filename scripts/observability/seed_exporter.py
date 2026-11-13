@@ -114,7 +114,7 @@ def event_rows(minute: int, pop: dict, scenarios: model.Scenarios, per_minute: i
     moment = minute * 60.0
     flood = pop["pop"] == "seed-fra" and scenarios.on("l7-flood", moment)
     down = scenarios.on("origin-down", moment)
-    for index in range(per_minute * (15 if flood else 1)):
+    for index in range(per_minute * (25 if flood else 1)):
         h = lambda salt: digest(minute, pop["pop"], index, salt)  # noqa: E731
         domain = 9002 if flood and index % 10 else model.DOMAINS[h(1) % len(model.DOMAINS)]
         pick = h(2) % 10000

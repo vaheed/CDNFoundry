@@ -100,7 +100,7 @@ TRAFFIC_STATS = lambda: [
 def now_dashboard() -> dict:
     status = stat("Platform status", "One sentence that names what is wrong, or says everything reports in.", [prom("cdnfoundry_status_summary", "{{summary}}", instant=True, fmt="table")], "none", w=24, h=3)
     status["options"]["reduceOptions"]["fields"] = "/^summary$/"
-    status["options"]["text"] = {"valueSize": 28}
+    status["options"]["text"] = {"valueSize": 22}
     pops = table("PoPs", "Each PoP with its traffic, 5xx ratio, and heartbeat age.", [
         prom(f"sum by (pop) ({req()})", "Requests", instant=True, fmt="table"),
         prom(f'100 * sum by (pop) ({req(",status_class=\"5xx\"")}) / sum by (pop) ({req()})', "5xx", instant=True, fmt="table"),
