@@ -17,6 +17,7 @@ final class DomainSecurityRules
     public static function create(Domain $domain, array $input, ?User $actor, ?string $ipAddress): SecurityRule
     {
         $data = SecurityRuleData::validate($input);
+        SecurityRuleData::assertFieldsAvailable($domain, $data['conditions']);
         abort_if($domain->securityRules()->count() >= config('security.maximum_rules_per_domain'), 409, 'The per-domain security-rule limit has been reached.');
         if ($domain->securityRules()->where('fingerprint', $data['fingerprint'])->exists()) {
             throw ValidationException::withMessages(['conditions' => 'The domain already has a rule with the same conditions and action.']);

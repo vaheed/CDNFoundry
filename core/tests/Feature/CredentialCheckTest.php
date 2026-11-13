@@ -94,6 +94,8 @@ class CredentialCheckTest extends TestCase
         [$user, $domain] = $this->ownedDomain();
         $rule = fn ($value, $operator = 'equals') => ['name' => 'Leaked', 'action' => 'block', 'priority' => 1, 'conditions' => [['field' => 'leaked_password', 'operator' => $operator, 'value' => $value]]];
 
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", $rule(true))->assertUnprocessable();
+        $domain->update(['credential_check' => ['login_paths' => [['path' => '/login', 'format' => 'form', 'password_field' => 'password', 'username_field' => null]]]]);
         $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", $rule(true))->assertCreated();
         $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", $rule('yes'))->assertUnprocessable();
         $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", $rule(true, 'contains'))->assertUnprocessable();

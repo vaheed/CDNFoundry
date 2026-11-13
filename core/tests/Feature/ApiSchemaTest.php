@@ -115,8 +115,16 @@ class ApiSchemaTest extends TestCase
 
         $rule = fn (mixed $value, int $priority) => ['name' => 'schema', 'action' => 'block', 'priority' => $priority, 'conditions' => [['field' => 'schema_violation', 'operator' => 'equals', 'value' => $value]]];
         $post = fn (array $body) => $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", $body);
+        $post($rule('any', 1))->assertUnprocessable()->assertJsonPath('code', 'validation_failed')
+            ->assertJsonValidationErrors(['conditions.0.field' => 'API schema violation needs API schema. Set up API schema under Security first.']);
+        $this->actingAs($user)->putJson($url, ['document' => $this->document()])->assertAccepted();
         $post($rule('any', 1))->assertCreated();
         $post($rule('unknown_path', 2))->assertCreated();
         $post($rule('teapot', 3))->assertUnprocessable();
+
+        $this->actingAs($user)->deleteJson($url)->assertConflict()->assertJsonPath('message', 'API schema is used by 2 custom rules. Delete or change them first.');
+        $this->assertNotNull($domain->refresh()->api_schema);
+        $domain->securityRules()->delete();
+        $this->actingAs($user)->deleteJson($url)->assertAccepted();
     }
 }

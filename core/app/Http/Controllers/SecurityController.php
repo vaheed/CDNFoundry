@@ -67,6 +67,7 @@ class SecurityController extends Controller
         $this->rule($domain, $rule);
         Gate::authorize('update', $domain);
         $data = SecurityRuleData::validate($request->all());
+        SecurityRuleData::assertFieldsAvailable($domain, $data['conditions']);
         $this->refuseDuplicate($domain, $data, $rule);
         SecurityRuleData::assertRateLimitCapacity($domain, $data['rate_limit'] === null ? 0 : 1, false, $rule->id);
         DB::transaction(function () use ($data, $domain, $request, $rule): void {
@@ -100,6 +101,7 @@ class SecurityController extends Controller
     {
         Gate::authorize('update', $domain);
         $data = SecurityRuleData::validate($request->all());
+        SecurityRuleData::assertFieldsAvailable($domain, $data['conditions']);
         $position = $domain->securityRules()->where('enabled', true)->where('priority', '<=', $data['priority'])->count() + 1;
         $duplicate = $domain->securityRules()->where('fingerprint', $data['fingerprint'])->value('id');
 
@@ -139,6 +141,7 @@ class SecurityController extends Controller
             'rules.*' => ['required', 'array'], 'replace_existing' => ['sometimes', 'boolean'],
         ]);
         $rules = collect($data['rules'])->map(fn (array $rule): array => SecurityRuleData::validate($rule));
+        $rules->each(fn (array $rule, int $index) => SecurityRuleData::assertFieldsAvailable($domain, $rule['conditions'], "rules.$index.conditions"));
         $duplicates = $rules->pluck('fingerprint')->duplicates();
         if ($duplicates->isNotEmpty()) {
             throw ValidationException::withMessages(['rules' => 'The import contains duplicate normalized rules.']);

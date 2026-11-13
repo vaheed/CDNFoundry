@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AuditLog;
 use App\Models\Domain;
 use App\Support\DomainSecurityRules;
+use App\Support\SecurityRuleData;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -40,6 +41,9 @@ abstract class DetectionSettingsController extends Controller
     public function destroy(Request $request, Domain $domain): JsonResponse
     {
         Gate::authorize('update', $domain);
+        if (isset(SecurityRuleData::REQUIREMENT_LABELS[$this->column()])) {
+            SecurityRuleData::assertDetectionUnused($domain, $this->column());
+        }
 
         return $this->save($request, $domain, null, '_removed');
     }

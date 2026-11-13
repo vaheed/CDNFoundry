@@ -91,6 +91,9 @@ class DetectionSettingsTest extends TestCase
         $rule = fn (string $field, $value, string $operator, int $priority) => ['name' => $field, 'action' => 'block', 'priority' => $priority, 'conditions' => [['field' => $field, 'operator' => $operator, 'value' => $value]]];
         $post = fn (array $body) => $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", $body);
 
+        $post($rule('prompt_injection_score', '30', 'less_than', 1))->assertUnprocessable();
+        $post($rule('prompt_pii', true, 'equals', 3))->assertUnprocessable();
+        $domain->update(['ai_protection' => ['endpoints' => ['/v1/chat'], 'prompt_field' => 'messages']]);
         $post($rule('prompt_injection_score', '30', 'less_than', 1))->assertCreated();
         $post($rule('prompt_injection_score', '100', 'less_than', 2))->assertUnprocessable();
         $post($rule('prompt_pii', true, 'equals', 3))->assertCreated();

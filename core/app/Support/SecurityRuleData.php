@@ -72,6 +72,14 @@ final class SecurityRuleData
         'schema_violation' => ['kind' => 'violation', 'operators' => self::CHOICE],
     ];
 
+    /** Fields that only carry a value when the domain has the named detection set up, keyed to its domains column. */
+    public const FIELD_REQUIREMENTS = [
+        'prompt_injection_score' => 'ai_protection', 'prompt_pii' => 'ai_protection',
+        'schema_violation' => 'api_schema', 'leaked_password' => 'credential_check',
+    ];
+
+    public const REQUIREMENT_LABELS = ['ai_protection' => 'AI protection', 'api_schema' => 'API schema', 'credential_check' => 'Credential check'];
+
     /** The values of the schema violation field: any violation, or one kind. "none" is a request that fits the schema. */
     public const SCHEMA_VIOLATIONS = ['any', 'none', ...ApiSchemaData::VIOLATIONS];
 
@@ -217,6 +225,39 @@ final class SecurityRuleData
         $minutes = $rate['duration_seconds'] % 60 === 0 ? ($rate['duration_seconds'] / 60).' min' : $rate['duration_seconds'].' s';
 
         return "{$rate['threshold']} requests per ".self::RATE_PERIODS[$rate['period_seconds']]." per $key, then ".strtolower(self::ACTION_LABELS[$action] ?? $action)." for $minutes";
+    }
+
+    /** @return array<string, string> field => the detection it needs, for every field this domain cannot use yet */
+    public static function unavailableFields(Domain $domain): array
+    {
+        return collect(self::FIELD_REQUIREMENTS)->filter(fn (string $column): bool => $domain->{$column} === null)
+            ->map(fn (string $column): string => self::REQUIREMENT_LABELS[$column])->all();
+    }
+
+    /**
+     * Refuses conditions on a field whose detection the domain has not set up: such a rule would be saved and never match.
+     *
+     * @param  array<int, array<string, mixed>>  $conditions  validated conditions
+     */
+    public static function assertFieldsAvailable(Domain $domain, array $conditions, string $path = 'conditions'): void
+    {
+        $unavailable = self::unavailableFields($domain);
+        foreach (array_values($conditions) as $index => $condition) {
+            $needs = $unavailable[$condition['field']] ?? null;
+            if ($needs !== null) {
+                throw ValidationException::withMessages(["$path.$index.field" => self::FIELD_LABELS[$condition['field']]." needs $needs. Set up $needs under Security first."]);
+            }
+        }
+    }
+
+    /** Refuses removing a detection while rules of the domain still use one of its fields. */
+    public static function assertDetectionUnused(Domain $domain, string $column): void
+    {
+        $fields = array_keys(array_filter(self::FIELD_REQUIREMENTS, fn (string $needs): bool => $needs === $column));
+        $count = $domain->securityRules()->pluck('conditions')
+            ->filter(fn (mixed $conditions): bool => collect(is_string($conditions) ? json_decode($conditions, true) : $conditions)
+                ->contains(fn (mixed $condition): bool => is_array($condition) && in_array($condition['field'] ?? null, $fields, true)))->count();
+        abort_if($count > 0, 409, self::REQUIREMENT_LABELS[$column]." is used by $count custom ".str('rule')->plural($count).'. Delete or change '.($count === 1 ? 'it' : 'them').' first.');
     }
 
     /** Refuses a change that would leave the domain with more rate-limit rules than the platform allows. */
