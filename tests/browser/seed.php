@@ -14,6 +14,7 @@ use App\Models\EdgeRevision;
 use App\Models\LogPushDestination;
 use App\Models\NotificationChannel;
 use App\Models\Operation;
+use App\Models\PlatformRuleset;
 use App\Models\SystemSetting;
 use App\Models\SecurityEvent;
 use App\Models\User;
@@ -176,6 +177,17 @@ foreach ([
 ] as [$name, $action, $priority, $conditions]) {
     $rulesDomain->securityRules()->create(['name' => $name, 'action' => $action, 'priority' => $priority, 'conditions' => $conditions, 'fingerprint' => SecurityRuleData::fingerprint($conditions, $action)]);
 }
+
+// Platform rulesets: one for a chosen list (the domain above) with a rate limit, and one for every domain, with long names.
+$provider = PlatformRuleset::query()->create(['name' => 'Known scanner paths and credential-stuffing endpoints across every customer site we host', 'description' => 'Blocks requests that probe for admin pages and slows repeated login attempts', 'enabled' => true, 'applies_to_all' => false, 'created_by' => $admin->id]);
+$provider->domains()->attach($rulesDomain->id);
+foreach ([
+    ['Block admin page probes', 'block', 10, [['field' => 'path', 'operator' => 'starts_with', 'value' => '/wp-admin']], null],
+    ['Slow repeated logins', 'block', 20, [['field' => 'path', 'operator' => 'equals', 'value' => '/login']], ['key' => 'client_ip_path', 'threshold' => 20, 'period_seconds' => 60, 'duration_seconds' => 300]],
+] as [$name, $action, $priority, $conditions, $rate]) {
+    $provider->rules()->create(['name' => $name, 'action' => $action, 'priority' => $priority, 'conditions' => $conditions, 'rate_limit' => $rate, 'fingerprint' => SecurityRuleData::fingerprint($conditions, $action, $rate)]);
+}
+PlatformRuleset::query()->create(['name' => 'Disabled test ruleset', 'enabled' => false, 'applies_to_all' => true, 'created_by' => $admin->id]);
 
 // Log push: the switch is on, and the first assigned domain has a healthy destination and a failing one with a long error.
 $logPush = SystemSetting::query()->findOrFail('log_push');

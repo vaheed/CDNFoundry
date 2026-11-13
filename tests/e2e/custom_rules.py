@@ -20,6 +20,17 @@ EDGE_NETWORK = base.EDGE_NETWORK
 run = base.run
 
 # Addresses from the documentation ranges, mapped to autonomous system numbers by the fixture database.
+def platform_rule(identifier: str, ruleset: str, conditions: list[dict], action: str = "block", priority: int = 10, rate: dict | None = None) -> dict:
+    return {"id": identifier, "ruleset": ruleset, "name": None, "conditions": conditions, "action": action, "priority": priority, "rate_limit": rate}
+
+
+# Two platform rules shared by the platform domains: a block on a path prefix and a rate limit on another path.
+PLATFORM_RULES = [
+    platform_rule("p1", "Known probes", [{"field": "path", "operator": "starts_with", "value": "/wp-"}]),
+    platform_rule("p2", "Known probes", [{"field": "path", "operator": "equals", "value": "/search"}], priority=20,
+                  rate={"key": "client_ip", "threshold": 2, "period_seconds": 600, "duration_seconds": 10}),
+]
+
 ASN_TABLE = {"203.0.113.7": 64500, "203.0.113.8": 64501, "198.51.100.9": 64502}
 
 
@@ -107,8 +118,9 @@ def rate_rule(identifier: int, conditions: list[dict], action: str = "block", ke
     return {**rule(identifier, conditions, action), "rate_limit": limit}
 
 
-def host(domain_id: int, rules: list[dict], waf: dict | None = None) -> dict:
+def host(domain_id: int, rules: list[dict], waf: dict | None = None, platform_rules: list[dict] | None = None) -> dict:
     config = base.host(domain_id, rules)
+    config["security"]["platform_rules"] = platform_rules or []
     config["security"]["allowed_methods"] = ["GET", "HEAD", "POST", "PUT"]
     if waf:
         config["waf"] = waf
@@ -211,6 +223,9 @@ def qualify(directory: pathlib.Path) -> None:
         ])]),
         "uapreset.example": host(44, [rule(1, [condition("user_agent", "contains", "sqlmap")]), rule(2, [condition("user_agent", "contains", "nikto")]),
                                       rule(3, [condition("user_agent", "contains", "curl")], "challenge")]),
+        "platformone.example": host(45, [], platform_rules=PLATFORM_RULES),
+        "platformtwo.example": host(46, [rule(1, [condition("path", "equals", "/wp-login.php")], "allow")], platform_rules=PLATFORM_RULES),
+        "platformnone.example": host(47, []),
         "unsafe.example": host(26, [{"id": 1, "conditions": [], "action": "block", "priority": 1},
                                    {"id": 4, "conditions": [{"field": "path", "operator": "equals", "value": "/"}], "action": "block", "priority": 4, "rate_limit": {"key": "client_ip", "threshold": 0, "period_seconds": 7, "duration_seconds": 1}},
                                    {"id": 2, "conditions": [{"field": "path", "operator": "equals"}] * 6, "action": "block", "priority": 2},
@@ -432,6 +447,37 @@ def qualify(directory: pathlib.Path) -> None:
     expect(get("uapreset.example", "/"), 403, "challenge_required")                                        # the test client is curl, so it is challenged
     code, head, body = get("uapreset.example", "/", "Accept: text/html")
     assert code == 403 and "Checking your browser" in body, (code, head)
+
+    # platform rulesets run before the domain's own rules: the block holds on both domains, even where a domain rule would allow it
+    platform_reason = "platform_rule_block"
+    expect(get("platformone.example", "/wp-login.php"), 403, platform_reason)
+    expect(get("platformtwo.example", "/wp-login.php"), 403, platform_reason)
+    expect(get("platformone.example", "/index.html"), 200)
+    expect(get("platformnone.example", "/wp-login.php"), 200)                       # a domain the ruleset does not reach
+    for _ in range(2):
+        expect(get("platformone.example", "/search"), 200)
+    expect(get("platformone.example", "/search"), 429, "platform_rule_rate_limited")
+    # removing the ruleset restores both domains: the cell loads a new runtime state without the platform rules
+    state = json.loads((directory / "active.json").read_text())
+    for name in ("platformone.example", "platformtwo.example"):
+        state["hosts"][name]["security"]["platform_rules"] = []
+    state.update({"sequence": 2, "generation_id": "e2e-rules-2"})
+    (directory / "active.json").write_text(json.dumps(state, separators=(",", ":")))
+    for _ in range(20):
+        if get("platformone.example", "/wp-login.php")[0] == 200:
+            break
+        time.sleep(1)
+    expect(get("platformone.example", "/wp-login.php"), 200)
+    expect(get("platformtwo.example", "/wp-login.php"), 200)
+
+    # the phase gate: the same scripted attack is stopped by a rule on the attack score, a rate-limit rule, and a platform ruleset,
+    # and each stop is in the request telemetry the cell ships to Vector, with its reason, action, and score
+    stopped_by_score = [entry for entry in access_entries("scoreoff.example") if entry["path"] == sqli and entry["status"] == 403]
+    assert stopped_by_score and stopped_by_score[0]["security_reason"] == "custom_rule_block" and stopped_by_score[0]["security_action"] == "block" and 1 <= stopped_by_score[0]["attack_score"] < 20, stopped_by_score
+    stopped_by_rate = [entry for entry in access_entries("ratepath.example") if entry["status"] == 429]
+    assert stopped_by_rate and stopped_by_rate[0]["security_reason"] == "custom_rule_rate_limited" and stopped_by_rate[0]["security_action"] == "block", stopped_by_rate
+    stopped_by_platform = [entry for entry in access_entries("platformone.example") if entry["path"] == "/wp-login.php" and entry["status"] == 403]
+    assert stopped_by_platform and stopped_by_platform[0]["security_reason"] == "platform_rule_block", stopped_by_platform
 
     # a malformed or oversized rule never matches and never takes the cell down
     expect(get("unsafe.example"), 200)
