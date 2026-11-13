@@ -40,6 +40,7 @@ use App\Http\Controllers\NameserverController;
 use App\Http\Controllers\NotificationChannelController;
 use App\Http\Controllers\OperationController;
 use App\Http\Controllers\ProxyController;
+use App\Http\Controllers\SecurityAlertController;
 use App\Http\Controllers\SecurityController;
 use App\Http\Controllers\SecurityMitigationController;
 use App\Http\Controllers\SecurityPresetController;
@@ -131,6 +132,9 @@ Route::middleware(['auth:sanctum', 'account.active', 'token.scope', 'throttle:ac
     Route::post('/domains/{domain}/security/rules/preview', [SecurityController::class, 'previewRule']);
     Route::put('/domains/{domain}/security/rules/order', [SecurityController::class, 'reorderRules'])->middleware('idempotent');
     Route::post('/domains/{domain}/security/rules/import', [SecurityController::class, 'importRules'])->middleware(['throttle:bulk', 'idempotent']);
+    Route::get('/domains/{domain}/security/alert', [SecurityAlertController::class, 'show']);
+    Route::put('/domains/{domain}/security/alert', [SecurityAlertController::class, 'update'])->middleware('idempotent');
+    Route::delete('/domains/{domain}/security/alert', [SecurityAlertController::class, 'destroy'])->middleware('idempotent');
     Route::get('/domains/{domain}/security/mitigations', [SecurityMitigationController::class, 'index']);
     Route::get('/domains/{domain}/security/platform-rulesets', [SecurityController::class, 'platformRulesets']);
     Route::get('/domains/{domain}/security/presets', [SecurityPresetController::class, 'show']);

@@ -17,6 +17,7 @@ final class NotificationEvents
         'incident.started' => 'Incident profile started',
         'incident.ended' => 'Incident profile ended',
         'origin.errors_high' => 'Origin errors above threshold',
+        'security.mitigations_high' => 'Mitigated requests above threshold',
         'log_push.failing' => 'Log push failing',
     ];
 

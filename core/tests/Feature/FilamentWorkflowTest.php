@@ -584,6 +584,27 @@ class FilamentWorkflowTest extends TestCase
         $this->assertNull($domain->refresh()->waf_tuning);
     }
 
+    public function test_the_security_alert_dialog_saves_shows_and_removes_the_threshold(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $domain = Domain::query()->create(['name' => 'alert-ui.example.test', 'display_name' => 'Alert UI', 'revision' => 1]);
+        Filament::setCurrentPanel(Filament::getPanel('admin'));
+        $this->actingAs($admin);
+
+        Livewire::test(ViewDomain::class, ['record' => $domain->id])
+            ->assertActionHidden('removeSecurityAlert')
+            ->mountAction('securityAlert')->assertSet('mountedActions.0.data.period_minutes', 5)
+            ->fillForm(['threshold' => 250, 'period_minutes' => 15])->callMountedAction()->assertHasNoActionErrors();
+        $this->assertSame(['threshold' => 250, 'period_minutes' => 15], $domain->refresh()->security_alert);
+
+        Livewire::test(ViewDomain::class, ['record' => $domain->id])
+            ->mountAction('securityAlert')->assertSet('mountedActions.0.data.threshold', 250)
+            ->fillForm(['threshold' => 0])->callMountedAction()->assertHasActionErrors(['threshold']);
+        $this->assertSame(250, $domain->refresh()->security_alert['threshold']);
+        Livewire::test(ViewDomain::class, ['record' => $domain->id])->assertActionVisible('removeSecurityAlert')->callAction('removeSecurityAlert');
+        $this->assertNull($domain->refresh()->security_alert);
+    }
+
     public function test_domain_can_be_deleted_from_the_domain_page_and_the_action_then_disappears(): void
     {
         Queue::fake();

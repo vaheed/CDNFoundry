@@ -13,6 +13,7 @@ use App\Filament\Domain\Resources\Domains\Widgets\DomainKpiStrip;
 use App\Filament\Domain\Resources\Domains\Widgets\DomainNeedsAttention;
 use App\Http\Controllers\DnsDeploymentController;
 use App\Http\Controllers\DomainController;
+use App\Http\Controllers\SecurityAlertController;
 use App\Http\Controllers\WafController;
 use App\Jobs\EnsureManagedCertificates;
 use App\Jobs\ImportDnsZone;
@@ -36,6 +37,7 @@ use App\Support\IncidentProfile;
 use App\Support\ManagedWafTuning;
 use App\Support\PlatformSettings;
 use App\Support\ProxyRevisionRollback;
+use App\Support\SecurityAlertData;
 use App\Support\SecurityConfig;
 use App\Support\UploadedCertificate;
 use Filament\Actions\Action;
@@ -490,6 +492,27 @@ class ViewDomain extends ViewRecord
                         'strict' => 'High-sensitivity protection will block more aggressively; watch for false positives.',
                     })->send();
                 }),
+            Action::make('securityAlert')->label('Security alert')->icon('phosphor-bell-ringing')->extraAttributes(['data-testid' => 'security-alert-action'])
+                ->modalHeading('Alert on mitigated requests')
+                ->modalDescription('Send one notification when your rules and the managed firewall block this many requests in a period. It is sent at most once an hour.')
+                ->schema([
+                    TextInput::make('threshold')->label(FilamentHelp::label('Blocked requests', 'The number of blocked or challenged requests, counted over every location, that triggers the alert. Requests that a rule only logs do not count.'))
+                        ->numeric()->required()->minValue(1)->maxValue(1000000)->placeholder('500'),
+                    Select::make('period_minutes')->label(FilamentHelp::label('Within', 'The window the requests are counted in. A longer window needs a sustained attack to trigger.'))
+                        ->options(SecurityAlertData::PERIODS)->default(5)->required()->placeholder('Choose a period'),
+                ])->fillForm(fn (): array => $this->record->security_alert ?? ['period_minutes' => 5])
+                ->action(function (array $data): void {
+                    app(SecurityAlertController::class)->update(request()->merge($data), $this->record);
+                    $this->record->refresh();
+                    Notification::make()->success()->title('Security alert saved')->body('You will be notified when '.number_format((int) $data['threshold']).' requests are blocked within '.$data['period_minutes'].' minutes.')->send();
+                }),
+            Action::make('removeSecurityAlert')->label('Remove security alert')->icon('phosphor-bell-slash')->color('danger')->requiresConfirmation()
+                ->visible(fn (): bool => $this->record->security_alert !== null)
+                ->action(function (): void {
+                    app(SecurityAlertController::class)->destroy(request(), $this->record);
+                    $this->record->refresh();
+                    Notification::make()->success()->title('Security alert removed')->send();
+                }),
             Action::make('startIncident')->icon('phosphor-shield-warning')->label('Start incident profile')->color('danger')->extraAttributes(['data-testid' => 'incident-start-action'])
                 ->modalHeading('Start the incident profile?')
                 ->modalDescription('For the time you choose, the domain gets tighter request limits, the web application firewall in blocking mode, restricted methods and body size, and a browser challenge. It protects your origin and the cells from request floods; it cannot absorb traffic that saturates a host or link.')
@@ -681,7 +704,7 @@ class ViewDomain extends ViewRecord
         ];
         // Long forms open as a right-side sheet; a form of one or two fields opens as a small centered dialog.
         $sheets = ['importZone', 'proxyDefaults', 'cacheSettings', 'uploadCertificate', 'securitySettings', 'wafProfile'];
-        $dialogs = ['moveEdgePool', 'developmentMode', 'purgeCache', 'tlsMode'];
+        $dialogs = ['moveEdgePool', 'developmentMode', 'purgeCache', 'tlsMode', 'securityAlert'];
         $group = fn (array $names): array => collect($actions)
             ->keyBy(fn (Action $action): string => $action->getName())
             ->only($names)
@@ -714,7 +737,7 @@ class ViewDomain extends ViewRecord
                 ->icon('phosphor-lock')
                 ->color('gray')
                 ->button(),
-            ActionGroup::make($group(['securitySettings', 'wafProfile', 'startIncident', 'endIncident', 'startMaintenance', 'endMaintenance', 'protectSecurity', 'quarantineSecurity', 'returnSecurityToNormal']))
+            ActionGroup::make($group(['securitySettings', 'wafProfile', 'securityAlert', 'removeSecurityAlert', 'startIncident', 'endIncident', 'startMaintenance', 'endMaintenance', 'protectSecurity', 'quarantineSecurity', 'returnSecurityToNormal']))
                 ->label('Security')
                 ->icon('phosphor-shield-check')
                 ->color('gray')
