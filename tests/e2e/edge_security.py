@@ -250,6 +250,10 @@ def limits(**overrides: int) -> dict[str, int]:
     return values
 
 
+def typed_rule(identifier: int, field: str, value: str) -> dict:
+    return {"id": identifier, "name": None, "conditions": [{"field": field, "operator": "equals", "value": value}], "action": "block", "priority": 1}
+
+
 def host(domain_id: int, rules: list[dict] | None = None, state: str = "normal", **limit_overrides: int) -> dict:
     return {
         "domain": f"domain-{domain_id}.example", "domain_id": domain_id, "revision": 1,
@@ -301,9 +305,9 @@ def main() -> None:
         run("openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1", "-subj", "/CN=e2e-runtime", "-keyout", str(temporary / "tls.key"), "-out", str(temporary / "tls.crt"))
         hosts = {
             "healthy.example": host(1),
-            "ipv4.example": host(2, [{"id": 1, "match_type": "cidr", "value": "127.0.0.0/8", "action": "block", "priority": 1}]),
-            "ipv6.example": host(3, [{"id": 2, "match_type": "cidr", "value": "::1/128", "action": "block", "priority": 1}]),
-            "geo.example": host(4, [{"id": 3, "match_type": "country", "value": "US", "action": "block", "priority": 1}]),
+            "ipv4.example": host(2, [typed_rule(1, "client_ip", "127.0.0.0/8")]),
+            "ipv6.example": host(3, [typed_rule(2, "client_ip", "::1/128")]),
+            "geo.example": host(4, [typed_rule(3, "country", "US")]),
             "rate.example": host(5, requests_per_second=2, request_burst=1),
             "connections.example": host(6, connections_per_client=1, connections_per_domain=2),
             "origin-capacity.example": host(7, origin_max_connections=1),
@@ -329,10 +333,10 @@ def main() -> None:
             status(curl("unknown.example"), 421, "unknown_host")
             status(curl("healthy.example", method="TRACE"), 405, "invalid_method")
             status(curl("body.example", method="POST", data="0123456789"), 413, "body_too_large")
-            status(curl("ipv4.example"), 403, "domain_restricted")
+            status(curl("ipv4.example"), 403, "custom_rule_block")
             ipv6 = run("docker", "run", "--rm", "--network", f"container:{NAME}", "curlimages/curl:8.16.0", "-g", "-sS", "-D", "-", "-o", "/dev/null", "-H", "Host: ipv6.example", "http://[::1]:8080/", check=False)
-            status(ipv6, 403, "domain_restricted")
-            status(curl("geo.example", headers=("X-Forwarded-For: 8.8.8.8",)), 403, "domain_restricted")
+            status(ipv6, 403, "custom_rule_block")
+            status(curl("geo.example", headers=("X-Forwarded-For: 8.8.8.8",)), 403, "custom_rule_block")
             status(curl("quarantine.example"), 429, "domain_quarantined")
 
             # The limiter allows three requests per one-second bucket. Send
