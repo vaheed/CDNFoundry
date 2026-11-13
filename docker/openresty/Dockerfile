@@ -58,6 +58,10 @@ COPY --from=module-builder /tmp/ModSecurity/modsecurity.conf-recommended /etc/cd
 COPY --from=module-builder /tmp/ModSecurity/unicode.mapping /etc/cdnfoundry/unicode.mapping
 COPY --from=module-builder /tmp/coreruleset/crs-setup.conf.example /etc/cdnfoundry/crs-setup.conf
 COPY --from=module-builder /tmp/coreruleset/rules /etc/cdnfoundry/crs/rules
+COPY docker/openresty/datasets/common-passwords.txt /tmp/common-passwords.txt
+COPY scripts/ci/build_leaked_passwords.py /tmp/build_leaked_passwords.py
+RUN apk add --no-cache --virtual .dataset-build python3 && python3 /tmp/build_leaked_passwords.py /tmp/common-passwords.txt /etc/cdnfoundry/leaked-passwords.sha256 \
+    && rm -f /tmp/common-passwords.txt /tmp/build_leaked_passwords.py && apk del .dataset-build
 COPY docker/openresty/waf.conf /etc/cdnfoundry/waf.conf
 COPY docker/openresty/waf-score.conf /etc/cdnfoundry/waf-score.conf
 COPY core/resources/contracts/crs-rules.json /tmp/crs-rules.json

@@ -379,8 +379,29 @@ local function refresh(premature)
     ngx.log(ngx.NOTICE, "runtime state loaded generation=", state.generation_id, " sequence=", tostring(state.sequence))
 end
 
+-- Loads the leaked-password set from the release into shared memory once per cell. A missing or oversized file leaves the set
+-- empty, so no password ever matches, and the cell keeps serving.
+local LEAKED_PASSWORD_LIMIT = 200000
+local function load_leaked_passwords()
+    local set = ngx.shared.leaked_passwords
+    if not set or not set:add("loaded", true) then return end
+    local file = io.open(os.getenv("LEAKED_PASSWORDS_FILE") or "/etc/cdnfoundry/leaked-passwords.sha256", "rb")
+    if not file then ngx.log(ngx.WARN, "leaked-password set unavailable"); return end
+    local count = 0
+    for line in file:lines() do
+        if #line == 16 and line:find("^%x+$") then
+            count = count + 1
+            if count > LEAKED_PASSWORD_LIMIT then set:flush_all(); set:add("loaded", true); ngx.log(ngx.ERR, "leaked-password set is over its limit"); break end
+            set:set(line, true)
+        end
+    end
+    file:close()
+    set:set("count", count)
+end
+
 function M.start()
     refresh(false)
+    load_leaked_passwords()
     local geo_path = os.getenv("GEOIP_DATABASE") or ""
     if geo_path ~= "" then
         local ok_module, maxminddb = pcall(require, "maxminddb")
@@ -677,6 +698,57 @@ local function score_request(body_limit, off_list)
     }
 end
 
+-- Whether a field of the rules uses the leaked-password flag, so a request is only read when a rule can use the result.
+local function has_leaked_password_rule(rules)
+    for index, rule in ipairs(rules) do
+        if index > 1000 then break end
+        if type(rule.conditions) == "table" then
+            for _, condition in ipairs(rule.conditions) do
+                if type(condition) == "table" and condition.field == "leaked_password" then return true end
+            end
+        end
+    end
+    return false
+end
+
+local function form_value(body, wanted)
+    for pair in body:gmatch("[^&]+") do
+        local key, value = pair:match("^([^=]*)=?(.*)$")
+        if key and ngx.unescape_uri((key:gsub("%+", " "))) == wanted then return ngx.unescape_uri((value:gsub("%+", " "))) end
+    end
+    return nil
+end
+
+local function json_value(body, wanted)
+    local decoded = cjson.decode(body)
+    for part in wanted:gmatch("[^.]+") do
+        if type(decoded) ~= "table" then return nil end
+        decoded = decoded[part]
+    end
+    return type(decoded) == "string" and decoded or nil
+end
+
+-- Checks the submitted password on a configured login path against the leaked-password set. Returns true or false, or nil when the
+-- request is not a login request or the password could not be read. The password is hashed here and never stored or logged.
+local function leaked_password_flag(check, method, uri)
+    if type(check) ~= "table" or type(check.login_paths) ~= "table" then return nil end
+    if method ~= "POST" and method ~= "PUT" and method ~= "PATCH" then return nil end
+    local login
+    for index, candidate in ipairs(check.login_paths) do
+        if index > 5 then break end
+        if type(candidate) == "table" and candidate.path == uri then login = candidate; break end
+    end
+    if not login or type(login.password_field) ~= "string" then return nil end
+    local body = request_body_text(math.min(tonumber(check.body_bytes) or 8192, 8192))
+    if not body then return nil end
+    local password
+    if login.format == "json" then password = json_value(body, login.password_field) else password = form_value(body, login.password_field) end
+    if type(password) ~= "string" or password == "" or #password > 256 then return nil end
+    local set = ngx.shared.leaked_passwords
+    if not set then return nil end
+    return set:get(resty_string.to_hex(sha256_raw(password)):sub(1, 16)) == true
+end
+
 -- The host of a Referer address in lower case, or nil when the header is absent or is not an address.
 local function referer_host(referer)
     if type(referer) ~= "string" or #referer > 2048 then return nil end
@@ -817,6 +889,7 @@ local function condition_matches(condition, request)
     if field == "body_size" then return number_matches(operator, request.body_size, expected) end
     if field == "tls_version" then return text_matches(operator, request.tls_version, expected, false) end
     if SCORE_FIELDS[field] then return number_matches(operator, request.scores and request.scores[field], expected) end
+    if field == "leaked_password" then return request.leaked_password ~= nil and request.leaked_password == (expected == true) end
     return false
 end
 
@@ -1202,6 +1275,7 @@ function M.access()
     }
     local skip_managed = false
     local rule_challenge = nil
+    if has_leaked_password_rule(rules) then request.leaked_password = leaked_password_flag(config.security and config.security.credential_check, method, request.path) end
     -- The managed WAF scores the request for its own profile; a custom rule on the attack score asks for a score even when
     -- the profile is off, and then the request is scored at paranoia level 1 and never blocked by the managed rules.
     local waf_settings = config.waf or {}
