@@ -183,6 +183,65 @@ tab. In the API they are `PUT` and `DELETE` on
 - A preset rule that you edit by hand becomes an ordinary rule, and the preset no
   longer lists it. Deleting a preset removes only its own rules.
 
+### Platform rulesets
+
+**You need:** an administrator account.
+
+A platform ruleset is a named set of custom and rate-limit rules that an
+administrator applies to every domain or to a list of domains. It uses the same
+fields, operators, actions, and bounds as a domain's own rules, and it runs
+before them.
+
+<DocTabs :labels="['Admin panel', 'API']">
+<template #tab-1>
+
+Open **Operate → Platform rulesets**, choose **New ruleset**, and name it. Turn on
+**Apply to all domains**, or search for the domains to include. Save, then add
+rules on the ruleset page with **Add rule**. The sheet is the same one a domain
+uses, including the rate limit.
+
+</template>
+<template #tab-2>
+
+```sh
+curl -X POST "$CDNF_URL/api/admin/platform-rulesets" \
+  -H "Authorization: Bearer $CDNF_TOKEN" -H "Idempotency-Key: $(uuidgen)" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Known scanner paths", "domain_ids": [12, 34]}'
+
+curl -X POST "$CDNF_URL/api/admin/platform-rulesets/$RULESET_ID/rules" \
+  -H "Authorization: Bearer $CDNF_TOKEN" -H "Idempotency-Key: $(uuidgen)" \
+  -H "Content-Type: application/json" \
+  -d '{"conditions": [{"field": "path", "operator": "starts_with", "value": "/wp-admin"}], "action": "block", "priority": 10}'
+```
+
+`PATCH /api/admin/platform-rulesets/{id}` changes `enabled`, `applies_to_all`, or
+`domain_ids`. `DELETE` removes the ruleset. Rules have their own `GET`, `PATCH`,
+and `DELETE` under `.../rules`.
+
+</template>
+</DocTabs>
+
+**Expected result:** every change answers `202` with an operation ID. The
+operation recompiles the edge bundle of each domain the change reached, 500
+domains at a time on the bulk lane, and the cells receive the new signed
+revision. Disabling or deleting a ruleset takes its rules away from every domain
+it reached.
+
+- Platform rules run first, ordered by ruleset and then by priority. Only `block`
+  and `allow` end evaluation, as for domain rules. A platform `allow` also stops
+  the domain's own rules for that request, and a platform block holds even where a
+  domain rule would allow the request.
+- A platform rate limit counts per cell, like a domain's.
+- The cell records `platform_rule_block`, `platform_rule_challenge`,
+  `platform_rule_log`, and `platform_rule_rate_limited`. They never raise a
+  domain's automatic security state.
+- Domain owners see the names and descriptions of the rulesets that apply, and how
+  many requests platform rules matched in the last 24 hours, on the domain's
+  **Custom rules** tab and at `GET /api/domains/{id}/security/platform-rulesets`.
+  They never see a platform rule's conditions.
+- Up to 10 rulesets, 100 rules per ruleset, and 500 listed domains per ruleset.
+
 ### Actions
 
 | Action | Effect |
