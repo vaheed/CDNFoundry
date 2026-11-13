@@ -1,4 +1,5 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname } from 'node:path'
 import { defineConfig, type HeadConfig } from 'vitepress'
 
 const siteUrl = (process.env.DOCS_SITE_URL ?? 'https://vaheed.github.io/CDNFoundry').replace(/\/$/, '')
@@ -11,7 +12,38 @@ function pageUrl(relativePath: string): string {
   return `${siteUrl}/${cleanPath}`.replace(/([^:]\/)\/+/g, '$1')
 }
 
-function breadcrumbItems(relativePath: string): Array<Record<string, unknown>> {
+/** The address of a page's plain Markdown copy, which the build writes next to the HTML for AI agents. */
+function markdownUrl(relativePath: string): string {
+  return `${siteUrl}/${relativePath}`.replace(/([^:]\/)\/+/g, '$1')
+}
+
+// Top-level folders in the order a reader meets them, with the heading llms.txt groups them under.
+const llmsSections: Array<[string, string]> = [
+  ['', 'Start here'],
+  ['getting-started', 'Get started'],
+  ['concepts', 'Concepts'],
+  ['guides', 'Guides'],
+  ['deployment', 'Deploy'],
+  ['operations', 'Operate'],
+  ['reference', 'Reference'],
+  ['architecture', 'Architecture'],
+  ['security', 'Security model'],
+  ['troubleshooting', 'Troubleshooting'],
+  ['development', 'Development'],
+  ['contributing', 'Contributing'],
+  ['audit', 'Audit records']
+]
+
+function frontMatter(source: string): { fields: (name: string) => string | undefined; body: string } {
+  const match = /^---\n([\s\S]*?)\n---\n?/.exec(source)
+  const front = match?.[1] ?? ''
+  return {
+    fields: (name) => new RegExp(`^${name}:\\s*(.+)$`, 'm').exec(front)?.[1]?.replace(/^["']|["']$/g, ''),
+    body: match ? source.slice(match[0].length) : source
+  }
+}
+
+function breadcrumbItems(relativePath: string, title: string): Array<Record<string, unknown>> {
   const cleanPath = relativePath
     .replace(/(^|\/)index\.md$/, '$1')
     .replace(/\.md$/, '')
@@ -26,10 +58,12 @@ function breadcrumbItems(relativePath: string): Array<Record<string, unknown>> {
 
   segments.forEach((segment, index) => {
     const itemPath = segments.slice(0, index + 1).join('/')
+    const last = index === segments.length - 1
     items.push({
       '@type': 'ListItem',
       position: index + 2,
-      name: segment.replace(/-/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()),
+      // The page itself is named by its title; the folders above it by their name.
+      name: last ? title : segment.replace(/-/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()),
       item: `${siteUrl}/${itemPath}`
     })
   })
@@ -282,26 +316,45 @@ export default defineConfig({
     }],
     ['meta', { property: 'og:site_name', content: 'CDNFoundry' }],
     ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
-    ['link', { rel: 'icon', href: `${siteBase}favicon.svg`, type: 'image/svg+xml' }]
+    ['link', { rel: 'icon', href: `${siteBase}favicon.svg`, type: 'image/svg+xml' }],
+    ['link', { rel: 'alternate', type: 'text/plain', href: `${siteBase}llms.txt`, title: 'Documentation index for AI assistants' }]
   ],
   buildEnd(siteConfig) {
-    // llms.txt: a plain index of every page for AI assistants (https://llmstxt.org).
-    const lines = ['# CDNFoundry', '', '> Self-hosted private CDN: authoritative DNS, edge delivery, TLS, caching, security, and telemetry.', '']
-    for (const page of [...siteConfig.pages].sort()) {
+    // For AI assistants and agents (https://llmstxt.org): llms.txt indexes every page by section and links to a plain
+    // Markdown copy of each page, written next to its HTML; llms-full.txt holds every page in one file.
+    const summary = '> Self-hosted private CDN: authoritative DNS, edge delivery, TLS, caching, security, and telemetry, run from one Laravel control plane.'
+    const index: string[] = ['# CDNFoundry', '', summary, '',
+      `The whole documentation in one file: ${siteUrl}/llms-full.txt. Every page below is also available as Markdown by its link.`, '']
+    const full: string[] = ['# CDNFoundry documentation', '', summary, '']
+    // A section's own overview (its index page) comes first, then its pages in name order.
+    const pages = [...siteConfig.pages].sort((a, b) => (a.endsWith('index.md') ? a.replace(/index\.md$/, '') : a).localeCompare(b.endsWith('index.md') ? b.replace(/index\.md$/, '') : b))
+    const grouped = new Map<string, string[]>(llmsSections.map(([folder]) => [folder, []]))
+    for (const page of pages) {
       const source = readFileSync(`${siteConfig.srcDir}/${page}`, 'utf8')
-      const front = /^---\n([\s\S]*?)\n---/.exec(source)?.[1] ?? ''
-      const field = (name: string) => new RegExp(`^${name}:\\s*(.+)$`, 'm').exec(front)?.[1]?.replace(/^["']|["']$/g, '')
-      const title = field('title') ?? page
-      const description = field('description')
-      lines.push(`- [${title}](${pageUrl(page)})${description ? `: ${description}` : ''}`)
+      const { fields, body } = frontMatter(source)
+      const title = fields('title') ?? page
+      const description = fields('description')
+      const target = `${siteConfig.outDir}/${page}`
+      mkdirSync(dirname(target), { recursive: true })
+      writeFileSync(target, `${body.trimStart().startsWith('# ') ? '' : `# ${title}\n\n`}${body.trim()}\n\nSource: ${pageUrl(page)}\n`)
+      const folder = page.includes('/') ? page.split('/')[0] : ''
+      const line = `- [${title}](${markdownUrl(page)})${description ? `: ${description}` : ''}`
+      ;(grouped.get(folder) ?? grouped.set(folder, []).get(folder)!).push(line)
+      full.push('---', '', `Source: ${pageUrl(page)}`, '', body.trim(), '')
     }
-    writeFileSync(`${siteConfig.outDir}/llms.txt`, `${lines.join('\n')}\n`)
+    const headings = new Map(llmsSections)
+    for (const [folder, lines] of grouped) {
+      if (lines.length === 0) continue
+      index.push(`## ${headings.get(folder) ?? folder}`, '', ...lines, '')
+    }
+    writeFileSync(`${siteConfig.outDir}/llms.txt`, `${index.join('\n').trim()}\n`)
+    writeFileSync(`${siteConfig.outDir}/llms-full.txt`, `${full.join('\n').trim()}\n`)
   },
   transformHead({ pageData }): HeadConfig[] {
     const title = pageData.frontmatter.title ?? pageData.title ?? 'CDNFoundry Documentation'
     const description = pageData.frontmatter.description ?? 'CDNFoundry private CDN documentation.'
     const canonical = pageUrl(pageData.relativePath)
-    const socialImage = `${siteUrl}/social-card.svg`
+    const socialImage = `${siteUrl}/social-card.png`
     const isHome = pageData.relativePath === 'index.md'
     const keywords = pageData.frontmatter.keywords ?? [
       'private CDN',
@@ -312,6 +365,8 @@ export default defineConfig({
       'OpenResty',
       'Laravel'
     ]
+    const publisher = { '@type': 'Organization', name: 'CDNFoundry contributors', url: `${siteUrl}/`, logo: `${siteUrl}/favicon.svg` }
+    const modified = pageData.lastUpdated ? new Date(pageData.lastUpdated).toISOString() : undefined
     const articleSchema = {
       '@context': 'https://schema.org',
       '@type': isHome ? 'WebSite' : 'TechArticle',
@@ -319,7 +374,11 @@ export default defineConfig({
       headline: title,
       description,
       url: canonical,
+      image: socialImage,
       inLanguage: 'en-US',
+      ...(modified ? { dateModified: modified } : {}),
+      author: publisher,
+      publisher,
       isPartOf: {
         '@type': 'WebSite',
         name: 'CDNFoundry',
@@ -329,7 +388,23 @@ export default defineConfig({
     const breadcrumbSchema = {
       '@context': 'https://schema.org',
       '@type': 'BreadcrumbList',
-      itemListElement: breadcrumbItems(pageData.relativePath)
+      itemListElement: breadcrumbItems(pageData.relativePath, title)
+    }
+    // The product itself, on the home page only: what search engines show as the software it documents.
+    const softwareSchema = {
+      '@context': 'https://schema.org',
+      '@type': 'SoftwareApplication',
+      name: 'CDNFoundry',
+      description: 'Self-hosted private CDN with authoritative DNS, edge delivery, TLS, caching, a web application firewall, and telemetry.',
+      applicationCategory: 'NetworkingApplication',
+      operatingSystem: 'Linux',
+      url: `${siteUrl}/`,
+      image: socialImage,
+      offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' }
+    }
+
+    if (pageData.isNotFound) {
+      return [['meta', { name: 'robots', content: 'noindex, follow' }]]
     }
 
     return [
@@ -345,13 +420,17 @@ export default defineConfig({
       ['meta', { property: 'og:image:width', content: '1200' }],
       ['meta', { property: 'og:image:height', content: '630' }],
       ['meta', { property: 'og:image:alt', content: 'CDNFoundry private CDN documentation' }],
+      ['meta', { property: 'og:image:type', content: 'image/png' }],
+      ...(modified ? [['meta', { property: 'article:modified_time', content: modified }] as HeadConfig] : []),
+      ['link', { rel: 'alternate', type: 'text/markdown', href: markdownUrl(pageData.relativePath), title: 'This page as Markdown' }],
       ['meta', { property: 'og:locale', content: 'en_US' }],
       ['meta', { name: 'twitter:title', content: title }],
       ['meta', { name: 'twitter:description', content: description }],
       ['meta', { name: 'twitter:image', content: socialImage }],
       ['meta', { name: 'twitter:image:alt', content: 'CDNFoundry private CDN documentation' }],
       ['script', { type: 'application/ld+json' }, JSON.stringify(articleSchema)],
-      ['script', { type: 'application/ld+json' }, JSON.stringify(breadcrumbSchema)]
+      ['script', { type: 'application/ld+json' }, JSON.stringify(breadcrumbSchema)],
+      ...(isHome ? [['script', { type: 'application/ld+json' }, JSON.stringify(softwareSchema)] as HeadConfig] : [])
     ]
   },
   themeConfig: {

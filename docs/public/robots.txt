@@ -1,4 +1,7 @@
 User-agent: *
 Allow: /
 
+# Documentation index and full text for AI assistants: https://vaheed.github.io/CDNFoundry/llms.txt
+# Every page is also published as Markdown at the same path with .md.
+
 Sitemap: https://vaheed.github.io/CDNFoundry/sitemap.xml

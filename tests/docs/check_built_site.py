@@ -153,6 +153,21 @@ def main() -> int:
     llms = DIST / "llms.txt"
     if not llms.is_file() or "/getting-started/" not in llms.read_text(encoding="utf-8"):
         failures.append("llms.txt: missing or does not index the pages")
+    if llms.is_file() and "## Guides" not in llms.read_text(encoding="utf-8"):
+        failures.append("llms.txt: pages are not grouped by section")
+    full = DIST / "llms-full.txt"
+    if not full.is_file() or "# Security and DDoS readiness" not in full.read_text(encoding="utf-8"):
+        failures.append("llms-full.txt: missing or does not hold every page")
+    for source in ("index.md", "guides/security.md", "reference/security-rules.md"):
+        if not (DIST / source).is_file():
+            failures.append(f"{source}: the Markdown copy for AI agents is missing")
+    if not (DIST / "social-card.png").is_file() or 'social-card.png' not in home_markup:
+        failures.append("index.html: the Open Graph image must be the PNG social card")
+    if '"@type":"SoftwareApplication"' not in home_markup:
+        failures.append("index.html: missing SoftwareApplication structured data")
+    not_found = DIST / "404.html"
+    if not_found.is_file() and 'name="robots" content="noindex' not in not_found.read_text(encoding="utf-8"):
+        failures.append("404.html: must not be indexed")
 
     sitemap_urls: set[str] = set()
     sitemap = DIST / "sitemap.xml"
