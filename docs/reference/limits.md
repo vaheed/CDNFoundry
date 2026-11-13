@@ -31,7 +31,7 @@ their documented bounds.
 | Cache path rules | 16 per domain; ignored cookie names 32 |
 | Persisted URL purges per PoP | 50,000 keys, kept one year |
 | Outstanding purges (pending or running) | 1,000 per domain |
-| Security rules | 1,000 per domain, 500 per import, 5 conditions per rule, 100 values per list condition |
+| Security rules | 1,000 per domain, 500 per import, 5 conditions per rule, 100 values per list condition, 20 rate-limit rules (ceiling 50) |
 | Usage export | 10,000 rows |
 | TLS upload | 16 KiB leaf, 64 KiB chain, 16 KiB key. Keys: RSA 2048 to 4096 bits, or EC P-256 or P-384 |
 

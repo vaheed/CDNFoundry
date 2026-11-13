@@ -129,6 +129,37 @@ count only SQL injection, cross-site scripting, or command injection signs.
   refuses a request at its anomaly threshold from the same score, before the
   request is inspected again on its way to the origin.
 
+### Rate-limit rules
+
+A rate-limit rule is a custom rule that also counts. Turn on **Limit the request
+rate** in the rule sheet, or send a `rate_limit` object in the API:
+
+```json
+{"conditions": [{"field": "path", "operator": "equals", "value": "/login"}],
+ "action": "block", "priority": 10,
+ "rate_limit": {"key": "client_ip_path", "threshold": 20, "period_seconds": 60, "duration_seconds": 300}}
+```
+
+- `key` is what one client is: `client_ip`, `client_ip_path` (the address on one
+  path), or `header` with a `header_name` such as `X-Api-Key`. A request without
+  that header is not counted.
+- `threshold` requests per `period_seconds` (10, 60, or 600) is the allowance.
+  The 21st request in the example goes over.
+- Past the allowance the action applies to that key for `duration_seconds` (10 to
+  86400), then the key is released and starts again with a fresh allowance.
+- The action is `block` (answers 429, `custom_rule_rate_limited`), `challenge`, or
+  `log`.
+- A rate-limit rule with no conditions counts every request of the domain. Only a
+  rate-limit rule may have no conditions.
+- Rate-limit rules run after the domain's other custom rules and before the
+  managed WAF. A client that an `allow` rule trusts is not counted.
+- **Counts are per cell.** Each cell counts on its own with fixed time windows,
+  so this is not a global count across locations. Over several cells a client can
+  send up to the threshold on each one.
+- A domain may have 20 rate-limit rules (a platform setting, never above 50). The
+  counters live in fixed shared memory on the cell; when it is full, requests are
+  let through, never blocked.
+
 ### Actions
 
 | Action | Effect |
