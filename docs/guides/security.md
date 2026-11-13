@@ -96,6 +96,9 @@ receive a new signed revision.
 | `asn` | equals, not equals, in list, greater than, less than | 0 to 4294967295 |
 | `client_ip` | equals, not equals, in list | An IPv4 or IPv6 address or CIDR |
 | `body_size` | equals, not equals, greater than, less than | Bytes, up to 1 GiB |
+| `referer_host` | equals, not equals, in list, not in list | The host of the Referer header, such as `www.example.com` |
+| `referer_present` | equals | `true` when the request has a Referer with an address |
+| `file_extension` | equals, not equals, in list, not in list | The extension of the path in lower case, without the dot |
 | `tls_version` | equals, not equals, in list | `TLSv1`, `TLSv1.1`, `TLSv1.2`, `TLSv1.3`, or `none` for plain HTTP |
 | `attack_score`, `attack_score_sqli`, `attack_score_xss`, `attack_score_rce` | equals, not equals, in list, greater than, less than | 1 to 99 |
 
@@ -159,6 +162,26 @@ rate** in the rule sheet, or send a `rate_limit` object in the API:
 - A domain may have 20 rate-limit rules (a platform setting, never above 50). The
   counters live in fixed shared memory on the cell; when it is full, requests are
   let through, never blocked.
+
+### Presets: user agents and hotlinks
+
+Two presets write ordinary custom rules, so they follow the same order, limits,
+and revisions as any rule. In the panel they are under **Presets** on the rules
+tab. In the API they are `PUT` and `DELETE` on
+`/api/domains/{domain}/security/presets/user-agent` and `.../hotlink`, and
+`GET .../security/presets` reads them back.
+
+- **User agents.** A list of up to 50 words and an action, `block` or `challenge`.
+  Each word becomes one rule that matches when the user agent contains it, without
+  regard to case. Saving again replaces the whole set in one revision.
+- **Hotlink protection.** A list of file extensions and a list of allowed referer
+  hosts. One rule blocks requests for those extensions that carry a Referer from
+  any other host. Your own domain and its `www` form are always allowed, and a
+  request with no Referer is never blocked. Hosts match exactly, so list each one
+  you want, such as `www.partner.example`. The port and any user name in the
+  Referer are ignored.
+- A preset rule that you edit by hand becomes an ordinary rule, and the preset no
+  longer lists it. Deleting a preset removes only its own rules.
 
 ### Actions
 

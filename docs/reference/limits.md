@@ -31,6 +31,7 @@ their documented bounds.
 | Cache path rules | 16 per domain; ignored cookie names 32 |
 | Persisted URL purges per PoP | 50,000 keys, kept one year |
 | Outstanding purges (pending or running) | 1,000 per domain |
+| Rule presets | 50 user agents, 50 file extensions, and 48 allowed referer hosts per domain |
 | Managed WAF adjustments | 100 disabled rules and 100 log-only rules per domain, from the pinned ruleset's catalog |
 | Security rules | 1,000 per domain, 500 per import, 5 conditions per rule, 100 values per list condition, 20 rate-limit rules (ceiling 50) |
 | Usage export | 10,000 rows |
