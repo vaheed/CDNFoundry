@@ -9,6 +9,7 @@ use App\Models\AuditLog;
 use App\Models\Domain;
 use App\Models\Operation;
 use App\Models\SecurityRule;
+use App\Support\DomainSecurityRules;
 use App\Support\FilamentHelp;
 use App\Support\PlatformRulesets;
 use App\Support\SecurityPresets;
@@ -114,21 +115,7 @@ class SecurityRulesRelationManager extends RelationManager
 
     private function createRule(array $input): SecurityRule
     {
-        $domain = $this->getOwnerRecord();
-        abort_if($domain->securityRules()->count() >= config('security.maximum_rules_per_domain'), 409, 'The per-domain security-rule limit has been reached.');
-        $data = SecurityRuleData::validate($input);
-        $this->refuseDuplicate($domain, $data);
-        SecurityRuleData::assertRateLimitCapacity($domain, $data['rate_limit'] === null ? 0 : 1);
-        $rule = DB::transaction(function () use ($data, $domain): SecurityRule {
-            $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
-            $rule = $locked->securityRules()->create($data);
-            $this->changed($locked, 'security.rule_created', $rule);
-
-            return $rule;
-        });
-        $this->reconcile($domain);
-
-        return $rule;
+        return DomainSecurityRules::create($this->getOwnerRecord(), $input, auth()->user(), request()->ip());
     }
 
     private function updateRule(SecurityRule $rule, array $input): SecurityRule

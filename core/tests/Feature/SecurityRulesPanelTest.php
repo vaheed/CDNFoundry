@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Filament\Domain\Resources\Domains\Pages\ViewDomain;
 use App\Filament\Domain\Resources\Domains\RelationManagers\SecurityRulesRelationManager;
+use App\Filament\Shared\SecurityRuleForm;
 use App\Jobs\ReconcileEdgeDomain;
 use App\Models\Domain;
 use App\Models\User;
@@ -36,8 +37,8 @@ class SecurityRulesPanelTest extends TestCase
             'name' => 'Admin from abroad', 'action' => 'block', 'priority' => 10, 'enabled' => true,
             'conditions' => [
                 ['field' => 'path', 'operator' => 'starts_with', 'value' => '/admin'],
-                ['field' => 'country', 'operator' => 'in_list', 'value' => ['IR', 'RU']],
-                ['field' => 'cookie_present', 'operator' => 'equals', 'name' => 'session', 'value' => false],
+                ['field' => 'country', 'operator' => 'in_list', 'value_country' => ['IR', 'RU']],
+                ['field' => 'cookie_present', 'operator' => 'equals', 'name' => 'session', 'value_flag' => false],
             ],
         ])->assertHasNoTableActionErrors()->assertSee('Admin from abroad');
         $rule = $domain->securityRules()->firstOrFail();
@@ -48,14 +49,14 @@ class SecurityRulesPanelTest extends TestCase
 
         $this->manager($domain)->callTableAction('create', data: [
             'action' => 'log', 'priority' => 20, 'enabled' => true,
-            'conditions' => [['field' => 'asn', 'operator' => 'greater_than', 'value' => '64500']],
+            'conditions' => [['field' => 'asn', 'operator' => 'greater_than', 'value_number' => '64500']],
         ])->assertHasNoTableActionErrors();
         $second = $domain->securityRules()->where('action', 'log')->firstOrFail();
         $this->assertSame(64500, $second->conditions[0]['value']);
 
         // A rule with the same conditions and action is refused, and an unsupported operator is reported on its field.
         $this->manager($domain)->callTableAction('create', data: [
-            'name' => 'Same', 'action' => 'block', 'priority' => 30, 'enabled' => true, 'conditions' => $rule->conditions,
+            'name' => 'Same', 'action' => 'block', 'priority' => 30, 'enabled' => true, 'conditions' => SecurityRuleForm::toForm($rule->conditions),
         ]);
         $this->assertSame(2, $domain->securityRules()->count());
         $this->manager($domain)->callTableAction('create', data: [
@@ -69,7 +70,7 @@ class SecurityRulesPanelTest extends TestCase
 
         $this->manager($domain)->callTableAction('edit', $second, data: [
             'name' => 'Watch large bodies', 'action' => 'log', 'priority' => 5, 'enabled' => false,
-            'conditions' => [['field' => 'body_size', 'operator' => 'greater_than', 'value' => 1000]],
+            'conditions' => [['field' => 'body_size', 'operator' => 'greater_than', 'value_number' => 1000]],
         ])->assertHasNoTableActionErrors();
         $this->assertFalse($second->refresh()->enabled);
 
@@ -128,5 +129,33 @@ class SecurityRulesPanelTest extends TestCase
         $this->manager($domain)->callTableAction('removeHotlinkPreset');
         $this->assertSame(0, $domain->securityRules()->count());
         $this->manager($domain)->assertTableActionHidden('removeUserAgentPreset');
+    }
+
+    public function test_editing_a_rule_opens_with_every_saved_value_in_its_own_input(): void
+    {
+        Queue::fake();
+        Filament::setCurrentPanel(Filament::getPanel('app'));
+        $user = User::factory()->create();
+        $domain = Domain::query()->create(['name' => 'edit-hydrate.example', 'display_name' => 'Edit', 'revision' => 1, 'lifecycle_state' => 'active']);
+        $domain->users()->attach($user->id);
+        $this->actingAs($user);
+        $conditions = [
+            ['field' => 'path', 'operator' => 'starts_with', 'value' => '/admin'], ['field' => 'country', 'operator' => 'in_list', 'value' => ['IR', 'RU']],
+            ['field' => 'asn', 'operator' => 'greater_than', 'value' => 64500], ['field' => 'asn', 'operator' => 'in_list', 'value' => [1, 2]],
+            ['field' => 'cookie_present', 'operator' => 'equals', 'name' => 'session', 'value' => false],
+        ];
+        $rule = $domain->securityRules()->create(['action' => 'block', 'priority' => 5, 'conditions' => $conditions, 'fingerprint' => 'x']);
+
+        $component = $this->manager($domain)->mountTableAction('edit', $rule);
+        $shown = array_values($component->get('mountedActions.0.data.conditions'));
+        $this->assertSame('/admin', $shown[0]['value']);
+        $this->assertSame(['IR', 'RU'], $shown[1]['value_country']);
+        $this->assertSame(64500, $shown[2]['value_number']);
+        $this->assertSame([1, 2], $shown[3]['value_list']);
+        $this->assertFalse($shown[4]['value_flag']);
+
+        // Saving without touching anything stores the same conditions.
+        $component->callMountedTableAction()->assertHasNoTableActionErrors();
+        $this->assertEquals($conditions, $rule->refresh()->conditions);
     }
 }

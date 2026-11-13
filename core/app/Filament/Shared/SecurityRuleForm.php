@@ -13,7 +13,6 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Utilities\Get;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\HtmlString;
 
 /** The fields of one typed security rule, shared by a domain's custom rules and the rules of a platform ruleset. */
@@ -50,9 +49,10 @@ final class SecurityRuleForm
             TextInput::make('name')->label('Name')->maxLength(100)->placeholder('Block the admin area from abroad'),
             Repeater::make('conditions')->label(FilamentHelp::label('Conditions', 'Every condition must match for the rule to apply. Up to five.'))
                 ->minItems(fn (Get $get): int => $get('rate_limited') ? 0 : 1)->maxItems(SecurityRuleData::MAXIMUM_CONDITIONS)->defaultItems(1)->addActionLabel('Add condition')->live()
-                ->schema(self::conditionFields())->columns(2)->required(fn (Get $get): bool => ! $get('rate_limited')),
+                ->schema(self::conditionFields())->columns(2)->required(fn (Get $get): bool => ! $get('rate_limited'))
+                ->formatStateUsing(fn (mixed $state): array => self::toForm($state))->dehydrateStateUsing(fn (mixed $state): array => self::toStored($state)),
             Toggle::make('rate_limited')->label(FilamentHelp::label('Limit the request rate', 'Count the requests that match, and apply the action only once a client goes over the limit. Counted separately on each cell, not as one global count across locations.'))->live()
-                ->afterStateHydrated(fn (Toggle $component, ?Model $record) => $component->state(filled($record?->rate_limit)))->dehydrated(false)->default(false),
+                ->afterStateHydrated(fn (Toggle $component, mixed $record) => $component->state(filled(is_array($record) ? ($record['rate_limit'] ?? null) : $record?->rate_limit)))->dehydrated(false)->default(false),
             Group::make(self::rateLimitFields())->statePath('rate_limit')->visible(fn (Get $get): bool => (bool) $get('rate_limited')),
             Select::make('action')->label(FilamentHelp::label('Action', 'Block answers 403 (429 for a rate limit). Challenge asks a browser for a short proof of work. Log records an event and continues. Allow stops all later rules and skips the challenge. Skip managed rules turns the managed WAF off for the request.'))
                 ->options(fn (Get $get): array => $get('rate_limited') ? array_intersect_key(SecurityRuleData::ACTION_LABELS, array_flip(SecurityRuleData::RATE_ACTIONS)) : SecurityRuleData::ACTION_LABELS)->required()->placeholder('Choose what happens'),
@@ -63,8 +63,8 @@ final class SecurityRuleForm
         ];
         if ($withPreview) {
             $fields[] = Placeholder::make('reads_as')->label('Reads as')->content(function (Get $get): HtmlString {
-                $conditions = collect($get('conditions') ?? [])->filter(fn ($row): bool => is_array($row) && filled($row['field'] ?? null) && filled($row['operator'] ?? null)
-                    && (is_bool($row['value'] ?? null) || filled($row['value'] ?? null)))->all();
+                $conditions = collect(self::toStored($get('conditions')))->filter(fn ($row): bool => is_array($row) && filled($row['field'] ?? null) && filled($row['operator'] ?? null)
+                    && (is_bool($row['value'] ?? null) || filled($row['value'] ?? null)))->values()->all();
                 $action = SecurityRuleData::ACTION_LABELS[$get('action')] ?? null;
 
                 return new HtmlString(e($conditions === [] ? 'Fill in a condition to preview the rule.' : (SecurityRuleData::describe($conditions).($action ? ' → '.$action : ''))));
@@ -88,12 +88,61 @@ final class SecurityRuleForm
         ];
     }
 
+    /**
+     * Every kind of value has its own input and its own state key, so one input can never reset the value another kind holds.
+     * The stored condition has the single key `value`; these two methods move it between that and the form's keys.
+     */
+    private const VALUE_KEYS = ['value', 'value_number', 'value_list', 'value_country', 'value_continent', 'value_method', 'value_tls', 'value_flag'];
+
+    public static function valueKey(?string $field, ?string $operator): string
+    {
+        $kind = SecurityRuleData::FIELDS[$field]['kind'] ?? null;
+        $list = in_array($operator, ['in_list', 'not_in_list'], true);
+
+        return match (true) {
+            $kind === 'flag' => 'value_flag',
+            $kind === 'country' => 'value_country',
+            $kind === 'continent' => 'value_continent',
+            $kind === 'method' => 'value_method',
+            $kind === 'tls' => 'value_tls',
+            $list && in_array($kind, ['text', 'address', 'host', 'extension', 'asn', 'score'], true) => 'value_list',
+            in_array($kind, ['asn', 'bytes', 'score'], true) => 'value_number',
+            default => 'value',
+        };
+    }
+
+    /** Stored conditions (or a prefill) to the form's per-kind keys. */
+    public static function toForm(mixed $conditions): array
+    {
+        return collect(is_array($conditions) ? $conditions : [])->map(function (mixed $condition): array {
+            $condition = is_array($condition) ? $condition : [];
+            $key = self::valueKey($condition['field'] ?? null, $condition['operator'] ?? null);
+            $value = $condition['value'] ?? null;
+            $form = array_diff_key($condition, array_flip(self::VALUE_KEYS));
+
+            return $key === 'value' ? [...$form, 'value' => $value] : [...$form, $key => $value];
+        })->all();
+    }
+
+    /** The form's per-kind keys back to the stored `value`. */
+    public static function toStored(mixed $items): array
+    {
+        return collect(is_array($items) ? $items : [])->map(function (mixed $item): array {
+            $item = is_array($item) ? $item : [];
+            $value = $item[self::valueKey($item['field'] ?? null, $item['operator'] ?? null)] ?? null;
+            if (is_array($value)) {
+                $value = array_values($value);
+            }
+
+            return [...array_diff_key($item, array_flip(self::VALUE_KEYS)), 'value' => $value];
+        })->values()->all();
+    }
+
     private static function conditionFields(): array
     {
         $kind = fn (Get $get): ?string => SecurityRuleData::FIELDS[$get('field')]['kind'] ?? null;
         $list = fn (Get $get): bool => in_array($get('operator'), ['in_list', 'not_in_list'], true);
-        $text = fn (Get $get): bool => in_array($kind($get), ['text', 'address', 'host', 'extension'], true) && ! $list($get);
-        $choice = fn (string $name) => fn (Get $get): bool => $kind($get) === $name;
+        $uses = fn (string $key) => fn (Get $get): bool => self::valueKey($get('field'), $get('operator')) === $key;
 
         return [
             Select::make('field')->label('Field')->options(SecurityRuleData::FIELD_LABELS)->required()->live()->placeholder('Choose a field')
@@ -103,26 +152,26 @@ final class SecurityRuleForm
                 ->options(fn (Get $get): array => collect(SecurityRuleData::FIELDS[$get('field')]['operators'] ?? [])->mapWithKeys(fn (string $operator): array => [$operator => SecurityRuleData::OPERATOR_LABELS[$operator]])->all()),
             TextInput::make('name')->label('Name')->maxLength(64)->required()->placeholder(fn (Get $get): string => $get('field') === 'cookie_present' ? 'session' : 'X-Api-Key')
                 ->visible(fn (Get $get): bool => (SecurityRuleData::FIELDS[$get('field')]['named'] ?? false) === true)->columnSpanFull(),
-            TextInput::make('value')->label('Value')->required()->maxLength(512)->visible($text)->columnSpanFull()
+            TextInput::make('value')->label('Value')->required()->maxLength(512)->visible($uses('value'))->columnSpanFull()
                 ->placeholder(fn (Get $get): string => self::EXAMPLES[$get('field')] ?? 'Value'),
-            TextInput::make('value')->label('Value')->numeric()->required()->visible(fn (Get $get): bool => in_array($kind($get), ['asn', 'bytes', 'score'], true) && ! $list($get))
+            TextInput::make('value_number')->label('Value')->numeric()->required()->visible($uses('value_number'))
                 ->placeholder(fn (Get $get): string => match ($kind($get)) {
                     'asn' => '64500', 'score' => '20', default => '1048576'
                 })->columnSpanFull(),
-            TagsInput::make('value')->label('Values')->required()->visible(fn (Get $get): bool => $list($get) && in_array($kind($get), ['text', 'address', 'host', 'extension', 'asn', 'score'], true))
+            TagsInput::make('value_list')->label('Values')->required()->visible($uses('value_list'))
                 ->placeholder(fn (Get $get): string => match ($kind($get)) {
                     'asn' => '64500', 'score' => '10', default => self::EXAMPLES[$get('field')] ?? 'Value'
                 })
                 ->helperText('Type a value and press Enter. Up to '.SecurityRuleData::listValuesLimit().' values.')->columnSpanFull(),
-            Select::make('value')->label('Country')->options(GeoVocabulary::countryOptions())->searchable()->multiple(fn (Get $get): bool => $list($get))->required()
-                ->visible($choice('country'))->placeholder('Search by name or code')->columnSpanFull(),
-            Select::make('value')->label('Continent')->options(GeoVocabulary::continentOptions())->multiple(fn (Get $get): bool => $list($get))->required()
-                ->visible($choice('continent'))->placeholder('Choose a continent')->columnSpanFull(),
-            Select::make('value')->label('Method')->options(array_combine(SecurityRuleData::HTTP_METHODS, SecurityRuleData::HTTP_METHODS))->multiple(fn (Get $get): bool => $list($get))->required()
-                ->visible($choice('method'))->placeholder('Choose a method')->columnSpanFull(),
-            Select::make('value')->label('TLS version')->options(array_combine(SecurityRuleData::TLS_VERSIONS, SecurityRuleData::TLS_VERSIONS))->multiple(fn (Get $get): bool => $list($get))->required()
-                ->visible($choice('tls'))->placeholder('Choose a version')->columnSpanFull(),
-            Toggle::make('value')->label(FilamentHelp::label('Present', 'On matches requests that have it. Off matches requests that do not.'))->default(true)->visible($choice('flag'))->columnSpanFull(),
+            Select::make('value_country')->label('Country')->options(GeoVocabulary::countryOptions())->searchable()->multiple($list)->required()
+                ->visible($uses('value_country'))->placeholder('Search by name or code')->columnSpanFull(),
+            Select::make('value_continent')->label('Continent')->options(GeoVocabulary::continentOptions())->multiple($list)->required()
+                ->visible($uses('value_continent'))->placeholder('Choose a continent')->columnSpanFull(),
+            Select::make('value_method')->label('Method')->options(array_combine(SecurityRuleData::HTTP_METHODS, SecurityRuleData::HTTP_METHODS))->multiple($list)->required()
+                ->visible($uses('value_method'))->placeholder('Choose a method')->columnSpanFull(),
+            Select::make('value_tls')->label('TLS version')->options(array_combine(SecurityRuleData::TLS_VERSIONS, SecurityRuleData::TLS_VERSIONS))->multiple($list)->required()
+                ->visible($uses('value_tls'))->placeholder('Choose a version')->columnSpanFull(),
+            Toggle::make('value_flag')->label(FilamentHelp::label('Present', 'On matches requests that have it. Off matches requests that do not.'))->default(true)->visible($uses('value_flag'))->columnSpanFull(),
         ];
     }
 }
