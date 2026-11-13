@@ -61,6 +61,9 @@ The system reports these components.
 - Horizon master state and each queue.
 - Scheduler heartbeat.
 - ClickHouse and Vector probes.
+- Prometheus and Loki readiness (**Metrics and alert rules**, **Operational logs**). With Prometheus down no metric is collected and no
+  alert can fire, so the control plane checks it directly.
+- Alertmanager reachability and a configured receiver (**Alert delivery**).
 - Maximum host clock offset, read from Prometheus.
 - MMDB (GeoIP database) presence, readability, size, and age.
 - Enabled and fresh edges, and listener readiness.

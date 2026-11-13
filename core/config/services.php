@@ -35,6 +35,7 @@ return [
     // A CA file for qualification against a fake receiver with a private certificate. It is never honored in production.
     'log_push' => ['test_ca_file' => env('LOG_PUSH_TEST_CA_FILE')],
     'prometheus' => ['url' => env('PROMETHEUS_URL', 'http://prometheus:9090')],
+    'loki' => ['url' => env('LOKI_URL', 'http://loki:3100')],
     'grafana' => ['explore_url' => env('GRAFANA_EXPLORE_URL')],
     'acme' => [
         'enabled' => filter_var(env('ACME_ENABLED', false), FILTER_VALIDATE_BOOL),

@@ -148,6 +148,7 @@ object storage; other Restic backends need their own credential/mount wiring.
 | `CLICKHOUSE_DATABASE` | internal/default | Database queried by Laravel; Compose fixes `cdnf` |
 | `GEOIP_DATABASE` | edge runtime | MMDB file path; Compose fixes `/mmdb/GeoLite2-City.mmdb` |
 | `PROMETHEUS_URL` | optional control | Default `http://prometheus:9090` |
+| `LOKI_URL` | optional control | Default `http://loki:3100`. The health page checks Loki readiness here. |
 | `ALERTMANAGER_URL` | optional control | Default `http://alertmanager:9093`. The health page reads the running configuration from it to report whether alerts have a receiver |
 | `VECTOR_METRICS_URL` | optional control | Vector metrics probe URL when overridden |
 | `MMDB_STALE_HOURS` | optional control | Health threshold; default `48` |

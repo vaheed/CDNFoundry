@@ -43,6 +43,7 @@ x-core-env: &core-env
   CLICKHOUSE_PASSWORD: cdnf-reader-dev-only
   CLICKHOUSE_ZONES_PASSWORD: cdnf-zones-dev-only
   PROMETHEUS_URL: http://prometheus:9090
+  LOKI_URL: http://loki:3100
   ALERTMANAGER_URL: http://alertmanager:9093
   METRICS_TOKEN_FILE: /run/dev-metrics/metrics-token
   RESTIC_REPOSITORY: /app/storage/app/restic

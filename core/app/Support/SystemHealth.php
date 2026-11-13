@@ -38,7 +38,7 @@ final class SystemHealth
         'tls' => ['label' => 'TLS', 'description' => 'Certificate issuance and renewal', 'checks' => ['tls' => 'Certificates']],
         'cache' => ['label' => 'Cache and origin', 'description' => 'Purge and runtime task delivery', 'checks' => ['purges' => 'Cache purges', 'runtime_tasks' => 'Runtime tasks']],
         'security' => ['label' => 'Security', 'description' => 'Emergency controls and IP intelligence', 'checks' => ['emergency_modes' => 'Emergency modes', 'mmdb' => 'GeoIP data']],
-        'telemetry' => ['label' => 'Telemetry', 'description' => 'Collection and usage processing', 'checks' => ['vector' => 'Event collection', 'clickhouse' => 'Analytics storage', 'usage' => 'Usage rollups']],
+        'telemetry' => ['label' => 'Telemetry', 'description' => 'Collection and usage processing', 'checks' => ['vector' => 'Event collection', 'clickhouse' => 'Analytics storage', 'usage' => 'Usage rollups', 'prometheus' => 'Metrics and alert rules', 'alert_receiver' => 'Alert delivery', 'loki' => 'Operational logs']],
         'control' => ['label' => 'Control plane', 'description' => 'Database, jobs, scheduling, and recovery', 'checks' => ['control_database' => 'Database', 'control_ha' => 'Standby node', 'queue_backend' => 'Queue backend', 'queue_workers' => 'Workers', 'scheduler' => 'Scheduler', 'host_clock' => 'Clock', 'operations' => 'Operations', 'fleet_rollouts' => 'Fleet rollouts', 'backups' => 'Backups']],
     ];
 
@@ -103,6 +103,9 @@ final class SystemHealth
         $components['scheduler'] = $this->state($schedulerStale ? 'degraded' : 'healthy', ['last_heartbeat_at' => $heartbeat]);
         $components['clickhouse'] = $this->probe(fn () => Http::connectTimeout(1)->timeout(2)->get(config('services.clickhouse.url').'/ping')->throw());
         $components['vector'] = $this->probe(fn () => Http::connectTimeout(1)->timeout(2)->get(config('services.vector.metrics_url'))->throw());
+        // With Prometheus down no alert can fire, so it is checked here, where it does not depend on itself.
+        $components['prometheus'] = $this->probe(fn () => Http::connectTimeout(1)->timeout(2)->get(config('services.prometheus.url').'/-/ready')->throw());
+        $components['loki'] = $this->probe(fn () => Http::connectTimeout(1)->timeout(2)->get(config('services.loki.url').'/ready')->throw());
         $components['host_clock'] = $this->clock();
         $components['alert_receiver'] = $this->alertReceiver();
         $components['control_ha'] = $this->controlHighAvailability();
