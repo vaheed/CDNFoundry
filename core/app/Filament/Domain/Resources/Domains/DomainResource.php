@@ -5,10 +5,10 @@ namespace App\Filament\Domain\Resources\Domains;
 use App\Filament\Domain\Resources\Domains\Pages\CreateDomain;
 use App\Filament\Domain\Resources\Domains\Pages\ListDomains;
 use App\Filament\Domain\Resources\Domains\Pages\ViewDomain;
+use App\Filament\Domain\Resources\Domains\RelationManagers\ClientScriptsRelationManager;
 use App\Filament\Domain\Resources\Domains\RelationManagers\DnsRecordsRelationManager;
 use App\Filament\Domain\Resources\Domains\RelationManagers\HistoryRelationManager;
 use App\Filament\Domain\Resources\Domains\RelationManagers\LogPushRelationManager;
-use App\Filament\Domain\Resources\Domains\RelationManagers\ClientScriptsRelationManager;
 use App\Filament\Domain\Resources\Domains\RelationManagers\SecurityEventsRelationManager;
 use App\Filament\Domain\Resources\Domains\RelationManagers\SecurityRulesRelationManager;
 use App\Filament\Domain\Resources\Domains\RelationManagers\UsersRelationManager;
@@ -84,7 +84,6 @@ class DomainResource extends Resource
     public static function infolist(Schema $schema): Schema
     {
         return $schema->columns(1)->components([
-            View::make('filament.domain.quick-actions'),
             View::make('filament.domain.overview'),
         ]);
     }

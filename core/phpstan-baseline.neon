@@ -657,7 +657,7 @@ parameters:
 		-
 			message: '#^Cannot access property \$security_state on Illuminate\\Database\\Eloquent\\Model\|int\|string\.$#'
 			identifier: property.nonObject
-			count: 3
+			count: 2
 			path: app/Filament/Domain/Resources/Domains/Pages/ViewDomain.php
 
 		-
@@ -825,7 +825,7 @@ parameters:
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
 			identifier: property.notFound
-			count: 4
+			count: 3
 			path: app/Filament/Domain/Resources/Domains/RelationManagers/SecurityRulesRelationManager.php
 
 		-

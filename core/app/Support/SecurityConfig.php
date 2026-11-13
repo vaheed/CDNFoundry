@@ -11,12 +11,37 @@ final class SecurityConfig
 {
     public const MANUAL_PROFILE = 'manual';
 
+    /** Each limit's label with its unit, and one line on what it bounds. */
+    public const LIMIT_LABELS = [
+        'requests_per_second' => ['Requests per second', 'Steady requests one client may send each second before it is slowed or refused.'],
+        'request_burst' => ['Request burst', 'Extra requests one client may send at once above the steady rate.'],
+        'connections_per_client' => ['Connections per client', 'Open connections allowed from one client address at the same time.'],
+        'connections_per_domain' => ['Connections per domain', 'Open connections to this domain at the same time, across all clients, on one cell.'],
+        'tls_handshakes_per_second' => ['TLS handshakes per second', 'New TLS sessions one client may start each second.'],
+        'maximum_request_body_size' => ['Request body size (bytes)', 'Largest request body accepted. Larger uploads are refused with 413.'],
+        'maximum_header_size' => ['Header size (bytes)', 'Largest total size of the request headers.'],
+        'client_header_timeout' => ['Header timeout (seconds)', 'How long a client may take to send its headers.'],
+        'client_body_timeout' => ['Body timeout (seconds)', 'Longest pause allowed between two parts of a request body.'],
+        'keepalive_timeout' => ['Keep-alive timeout (seconds)', 'How long an idle connection stays open for the next request.'],
+        'maximum_requests_per_connection' => ['Requests per connection', 'Requests served on one connection before it is closed.'],
+        'maximum_request_duration' => ['Request duration (seconds)', 'Longest time one request may take from start to end.'],
+        'origin_max_connections' => ['Origin connections', 'Open connections from one cell to your origin at the same time.'],
+        'origin_connect_timeout' => ['Origin connect timeout (seconds)', 'How long to wait for the origin to accept a connection.'],
+        'origin_read_timeout' => ['Origin read timeout (seconds)', 'Longest wait for the origin to send the next part of a response.'],
+        'origin_send_timeout' => ['Origin send timeout (seconds)', 'Longest wait for the origin to accept the next part of a request.'],
+        'origin_retry_limit' => ['Origin retries', 'How many times a failed origin request is tried again. 0 never retries.'],
+        'origin_failure_threshold' => ['Origin failures before pause', 'Failed origin requests in a row before the cell stops sending for a while.'],
+        'origin_recovery_timeout' => ['Origin pause (seconds)', 'How long the cell waits after those failures before trying the origin again.'],
+        'maximum_cache_key_length' => ['Cache key length (bytes)', 'Longest cache key. Requests with a longer one are not cached.'],
+        'cache_admissions_per_second' => ['Cache admissions per second', 'New objects the cache stores for this domain each second.'],
+    ];
+
     /**
      * Reasons that show a domain's own protections working or traffic that never reached the domain. They stay visible as
      * security events but never push the domain toward a stricter automatic state.
      */
     public const NON_ESCALATING_REASONS = [
-        'domain_restricted', 'domain_quarantined', 'edge_emergency_mode', 'invalid_method',
+        'domain_quarantined', 'edge_emergency_mode', 'invalid_method',
         'unknown_host', 'unknown_sni', 'sni_host_mismatch',
         // The incident profile working: it never pushes the domain toward a stricter automatic state.
         'incident_method', 'incident_body_size', 'challenge_required', 'challenge_invalid',

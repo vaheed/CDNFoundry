@@ -158,4 +158,48 @@ class SecurityRulesPanelTest extends TestCase
         $component->callMountedTableAction()->assertHasNoTableActionErrors();
         $this->assertEquals($conditions, $rule->refresh()->conditions);
     }
+
+    public function test_a_field_whose_detection_is_off_cannot_be_used_and_the_detection_cannot_be_turned_off_under_a_rule(): void
+    {
+        Queue::fake();
+        Filament::setCurrentPanel(Filament::getPanel('app'));
+        $user = User::factory()->create();
+        $domain = Domain::query()->create(['name' => 'needs-ai.example', 'display_name' => 'Needs AI', 'revision' => 1, 'lifecycle_state' => 'active']);
+        $domain->users()->attach($user->id);
+        $this->actingAs($user);
+        $rule = ['action' => 'block', 'priority' => 10, 'enabled' => true, 'conditions' => [['field' => 'prompt_injection_score', 'operator' => 'less_than', 'value_number' => '30']]];
+
+        $this->manager($domain)->callTableAction('create', data: $rule);
+        $this->assertSame(0, $domain->securityRules()->count());
+
+        $domain->update(['ai_protection' => ['endpoints' => ['/v1/chat'], 'prompt_field' => 'messages']]);
+        $this->manager($domain)->callTableAction('create', data: $rule)->assertHasNoTableActionErrors();
+        $this->assertSame(1, $domain->securityRules()->count());
+
+        Livewire::test(ViewDomain::class, ['record' => $domain->id])->callAction(['aiProtection', 'turnOff'])
+            ->assertNotified('Nothing was changed');
+        $this->assertNotNull($domain->refresh()->ai_protection);
+
+        $domain->securityRules()->delete();
+        Livewire::test(ViewDomain::class, ['record' => $domain->id])->callAction(['aiProtection', 'turnOff'])->assertNotified('AI protection turned off');
+        $this->assertNull($domain->refresh()->ai_protection);
+    }
+
+    public function test_the_domain_page_shows_one_under_attack_control_and_each_action_once(): void
+    {
+        Filament::setCurrentPanel(Filament::getPanel('app'));
+        $user = User::factory()->create();
+        $domain = Domain::query()->create(['name' => 'one-control.example', 'display_name' => 'One', 'revision' => 1, 'lifecycle_state' => 'active']);
+        $domain->users()->attach($user->id);
+        $this->actingAs($user);
+
+        $page = Livewire::test(ViewDomain::class, ['record' => $domain->id])
+            ->assertActionVisible('startIncident')->assertSee('Under attack mode')->assertDontSee('Enable Under Attack mode')->assertDontSee('Start incident profile')
+            ->assertActionDoesNotExist('protectSecurity')->assertActionHidden('moveEdgePool');
+        $html = $page->html();
+        foreach (['purge-cache', 'cache-settings', 'development-mode', 'reconcile-dns', 'waf-profile', 'ai-protection'] as $action) {
+            $this->assertSame(1, substr_count($html, 'data-testid="overview-action-'.$action.'"'), $action);
+        }
+        $this->assertStringNotContainsString('domain-quick-actions', $html);
+    }
 }

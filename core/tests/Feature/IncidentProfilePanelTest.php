@@ -25,7 +25,7 @@ class IncidentProfilePanelTest extends TestCase
         $domain->users()->attach($user->id);
         $this->actingAs($user);
 
-        Livewire::test(DomainIncidentBanner::class, ['record' => $domain])->assertDontSee('Incident profile is on');
+        Livewire::test(DomainIncidentBanner::class, ['record' => $domain])->assertDontSee('Under attack mode is on');
         Livewire::test(ViewDomain::class, ['record' => $domain->id])
             ->assertActionVisible('startIncident')->assertActionHidden('endIncident')
             ->callAction('startIncident', ['duration_minutes' => 30])->assertHasNoActionErrors();
@@ -33,7 +33,7 @@ class IncidentProfilePanelTest extends TestCase
         $this->assertNotNull($domain->incident_expires_at);
 
         Livewire::test(DomainIncidentBanner::class, ['record' => $domain])
-            ->assertSee('Incident profile is on')->assertSee('Responder One')
+            ->assertSee('Under attack mode is on')->assertSee('Responder One')
             ->assertSee('Protected request and connection limits')->assertDontSee('Not enforced yet')
             ->assertSee('cannot absorb traffic that saturates a host, a link, or an upstream');
         $page = Livewire::test(ViewDomain::class, ['record' => $domain->id]);

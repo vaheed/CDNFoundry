@@ -15,6 +15,7 @@ use App\Http\Controllers\AiProtectionController;
 use App\Http\Controllers\ApiSchemaController;
 use App\Http\Controllers\ClientSecurityController;
 use App\Http\Controllers\CredentialCheckController;
+use App\Http\Controllers\DetectionSettingsController;
 use App\Http\Controllers\DnsDeploymentController;
 use App\Http\Controllers\DomainController;
 use App\Http\Controllers\SecurityAlertController;
@@ -33,6 +34,7 @@ use App\Models\EdgeArtifact;
 use App\Models\EdgePool;
 use App\Models\EdgeRevision;
 use App\Models\Operation;
+use App\Support\ApiSchemaData;
 use App\Support\BindZone;
 use App\Support\CachePolicy;
 use App\Support\CredentialCheckData;
@@ -45,7 +47,6 @@ use App\Support\PlatformSettings;
 use App\Support\ProxyRevisionRollback;
 use App\Support\SecurityAlertData;
 use App\Support\SecurityConfig;
-use App\Support\ApiSchemaData;
 use App\Support\SensitiveDataCheckData;
 use App\Support\UploadedCertificate;
 use Filament\Actions\Action;
@@ -78,6 +79,7 @@ use Illuminate\Support\HtmlString;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\On;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class ViewDomain extends ViewRecord
 {
@@ -127,6 +129,15 @@ class ViewDomain extends ViewRecord
         $this->dispatch('domain-refreshed', tabs: $includeTabs);
     }
 
+    /** A header widget (the under attack banner) asks the page to open one of its actions. Only listed actions can be opened. */
+    #[On('open-domain-action')]
+    public function openDomainAction(string $name): void
+    {
+        if (in_array($name, ['endIncident'], true)) {
+            $this->mountAction($name);
+        }
+    }
+
     public function getTitle(): string
     {
         return $this->record->display_name ?: $this->record->name;
@@ -172,6 +183,11 @@ class ViewDomain extends ViewRecord
         return 1;
     }
 
+    private function hasValidCustomCertificate(): bool
+    {
+        return $this->domain()->tlsCertificates()->where('kind', 'custom')->where('status', 'active')->where('expires_at', '>', now())->exists();
+    }
+
     private function domain(): Domain
     {
         assert($this->record instanceof Domain);
@@ -179,7 +195,8 @@ class ViewDomain extends ViewRecord
         return $this->record;
     }
 
-    protected function getHeaderActions(): array
+    /** @return array<string, Action> every action of the page by name, shown in the header or next to the facts it changes */
+    private function domainActions(): array
     {
         $actions = [
             Action::make('reconcileDns')->label('Reconcile authoritative DNS')->icon('phosphor-arrows-clockwise')
@@ -191,7 +208,9 @@ class ViewDomain extends ViewRecord
                         ->body("Operation {$operation['id']} will preserve the previous valid zone until activation succeeds.")->send();
                 }),
             Action::make('tlsMode')->label('TLS mode')->icon('phosphor-lock')->schema([
-                Select::make('mode')->options(['managed' => 'Managed', 'custom' => 'Custom', 'disabled' => 'Disabled'])->required(),
+                Select::make('mode')->label(FilamentHelp::label('Mode', 'Managed: the platform issues and renews the certificate. Custom: your uploaded certificate is served. Disabled: no HTTPS for this domain.'))
+                    ->options(fn (): array => ['managed' => 'Managed', 'custom' => $this->hasValidCustomCertificate() ? 'Custom' : 'Custom (upload a certificate first)', 'disabled' => 'Disabled'])
+                    ->disableOptionWhen(fn (string $value): bool => $value === 'custom' && ! $this->hasValidCustomCertificate())->required(),
             ])->fillForm(fn (): array => ['mode' => $this->record->tls_mode])
                 ->action(function (array $data): void {
                     DB::transaction(function () use ($data): void {
@@ -234,9 +253,9 @@ class ViewDomain extends ViewRecord
                     Notification::make()->warning()->title('Managed reissue queued')->body("Operation {$operation->id} will create a new order within the global CA budget.")->send();
                 }),
             Action::make('uploadCertificate')->label('Upload custom certificate')->icon('phosphor-file-arrow-up')->schema([
-                Textarea::make('certificate')->label('Leaf certificate PEM')->rows(8)->maxLength(16384)->required(),
-                Textarea::make('chain')->label('Intermediate certificates PEM')->rows(8)->maxLength(65536),
-                Textarea::make('private_key')->label('Private key PEM')->rows(8)->maxLength(16384)->required(),
+                Textarea::make('certificate')->label(FilamentHelp::label('Leaf certificate PEM', 'The certificate for this domain itself, not the chain.'))->rows(8)->maxLength(16384)->required()->placeholder('-----BEGIN CERTIFICATE-----'),
+                Textarea::make('chain')->label(FilamentHelp::label('Intermediate certificates PEM', 'The certificates between yours and the root, in order. Leave the root out.'))->rows(8)->maxLength(65536)->placeholder('-----BEGIN CERTIFICATE-----'),
+                Textarea::make('private_key')->label(FilamentHelp::label('Private key PEM', 'Stored encrypted and never shown again.'))->rows(8)->maxLength(16384)->required()->placeholder('-----BEGIN PRIVATE KEY-----'),
             ])->action(function (array $data): void {
                 $expectedRevision = (int) $this->record->revision;
                 $validated = UploadedCertificate::validate($this->record, $data['certificate'], $data['chain'] ?? '', $data['private_key']);
@@ -360,7 +379,7 @@ class ViewDomain extends ViewRecord
                     Notification::make()->success()->title('Cache settings saved')->body('The latest domain revision is queued for edge delivery.')->send();
                 }),
             Action::make('developmentMode')->label('Enable development mode')->icon('phosphor-code')->schema([
-                TextInput::make('duration_minutes')->label('Duration (minutes)')->numeric()->default(30)->minValue(1)->maxValue(1440)->required(),
+                TextInput::make('duration_minutes')->label(FilamentHelp::label('Duration (minutes)', 'Every request skips the cache until then. It turns off by itself.'))->numeric()->default(30)->minValue(1)->maxValue(1440)->required()->placeholder('30'),
             ])->visible(fn (): bool => ! $this->record->cache_development_mode_until?->isFuture())
                 ->action(function (array $data): void {
                     DB::transaction(function () use ($data): void {
@@ -387,7 +406,7 @@ class ViewDomain extends ViewRecord
                 Radio::make('type')->hiddenLabel()->options(['all' => 'Everything', 'urls' => 'Exact URLs'])
                     ->descriptions(['all' => 'Every cached object for this domain.', 'urls' => 'Up to 100 URLs, one per line.'])
                     ->default('all')->required()->live(),
-                Textarea::make('urls')->label('URLs (one per line)')->rows(8)->maxLength(131072)->visible(fn ($get): bool => $get('type') === 'urls')->required(fn ($get): bool => $get('type') === 'urls'),
+                Textarea::make('urls')->label('URLs (one per line)')->placeholder('https://www.example.com/styles/app.css')->rows(8)->maxLength(131072)->visible(fn ($get): bool => $get('type') === 'urls')->required(fn ($get): bool => $get('type') === 'urls'),
             ])->action(function (array $data): void {
                 $urls = $data['type'] === 'urls' ? preg_split('/\R/', trim((string) $data['urls']), flags: PREG_SPLIT_NO_EMPTY) : [];
                 abort_if(count($urls) > 100, 422, 'At most 100 URLs may be purged at once.');
@@ -395,10 +414,10 @@ class ViewDomain extends ViewRecord
                 Notification::make()->info()->title('Cache purge queued')->body("Purge {$purge->id} is visible in per-edge delivery state.")->send();
             }),
             Action::make('proxyDefaults')->label('Proxy defaults')->icon('phosphor-sliders-horizontal')->schema([
-                Toggle::make('enabled')->default(true)->required(),
-                Toggle::make('redirect_https')->label('Redirect HTTP to HTTPS')->default(false)->required(),
-                Select::make('http_versions')->label('Allowed HTTP versions')->multiple()->options(['1.1' => 'HTTP/1.1', '2' => 'HTTP/2'])->required()->maxItems(2),
-                TextInput::make('retry_count')->label('Origin retry count')->numeric()->default(0)->minValue(0)->maxValue(2)->required(),
+                Toggle::make('enabled')->label(FilamentHelp::label('Proxy enabled', 'Off makes the edge answer 503 for every proxied hostname of this domain. DNS-only records are not affected.'))->default(true)->required(),
+                Toggle::make('redirect_https')->label(FilamentHelp::label('Redirect HTTP to HTTPS', 'Plain HTTP requests get a 301 to the same address over HTTPS.'))->default(false)->required(),
+                Select::make('http_versions')->label(FilamentHelp::label('Allowed HTTP versions', 'Versions visitors may use to reach the edge. Keep both unless an old client needs only one.'))->multiple()->options(['1.1' => 'HTTP/1.1', '2' => 'HTTP/2'])->required()->maxItems(2)->placeholder('Choose versions'),
+                TextInput::make('retry_count')->label(FilamentHelp::label('Origin retry count', 'How many times a failed request to the origin is tried again. Only safe methods are retried.'))->numeric()->default(0)->minValue(0)->maxValue(2)->required()->placeholder('0'),
             ])->fillForm(function (): array {
                 return is_array($this->record->proxy_settings) ? $this->record->proxy_settings : ReconcileEdgeDomain::defaults();
             })->action(function (array $data): void {
@@ -438,14 +457,15 @@ class ViewDomain extends ViewRecord
                             $set("limits.$field", $value);
                         }
                     }),
-                Select::make('quarantine_policy')->label('Automatic readiness policy')->options([
+                Select::make('quarantine_policy')->label(FilamentHelp::label('Automatic readiness policy', 'What the platform does when this domain draws unusual error or attack traffic. Manual only records it. Automatic restriction tightens the limits by itself and lifts them when traffic is quiet.'))->options([
                     'manual' => 'Manual', 'automatic' => 'Automatic restriction',
                     'automatic_with_admin_notification' => 'Automatic restriction with administrator notification',
                 ])->required(),
-                TagsInput::make('allowed_methods')->label('Allowed methods')->suggestions(config('security.allowed_methods'))->required()->nestedRecursiveRules(['in:'.implode(',', config('security.allowed_methods'))]),
+                TagsInput::make('allowed_methods')->label(FilamentHelp::label('Allowed methods', 'Requests with any other HTTP method are refused with 405.'))->placeholder('GET')->suggestions(config('security.allowed_methods'))->required()->nestedRecursiveRules(['in:'.implode(',', config('security.allowed_methods'))]),
                 TagsInput::make('trusted_proxy_cidrs')->label(FilamentHelp::label('Trusted L4 proxy CIDRs', 'Leave empty unless requests arrive only through an approved balancer that overwrites X-Forwarded-For.')),
                 ...collect(array_keys(config('security.profiles.standard')))->map(fn (string $field): TextInput => TextInput::make("limits.$field")
-                    ->label(str($field)->replace('_', ' ')->title()->toString())->numeric()
+                    ->label(FilamentHelp::label(SecurityConfig::LIMIT_LABELS[$field][0] ?? str($field)->replace('_', ' ')->ucfirst()->toString(), SecurityConfig::LIMIT_LABELS[$field][1] ?? null))->numeric()
+                    ->placeholder((string) (config('security.profiles.standard')[$field] ?? ''))
                     ->minValue($field === 'origin_retry_limit' ? 0 : 1)
                     ->maxValue(fn (Get $get): int => SecurityConfig::ceilingLimits((string) $get('profile'))[$field])
                     ->disabled(fn (Get $get): bool => $get('profile') !== SecurityConfig::MANUAL_PROFILE)->dehydrated()->required())->all(),
@@ -504,6 +524,7 @@ class ViewDomain extends ViewRecord
             Action::make('securityAlert')->label('Security alert')->icon('phosphor-bell-ringing')->extraAttributes(['data-testid' => 'security-alert-action'])
                 ->modalHeading('Alert on mitigated requests')
                 ->modalDescription('Send one notification when your rules and the managed firewall block this many requests in a period. It is sent at most once an hour.')
+                ->extraModalFooterActions(fn (): array => $this->turnOffAction('security_alert', SecurityAlertController::class, 'Security alert removed', 'Remove alert'))
                 ->schema([
                     TextInput::make('threshold')->label(FilamentHelp::label('Blocked requests', 'The number of blocked or challenged requests, counted over every location, that triggers the alert. Requests that a rule only logs do not count.'))
                         ->numeric()->required()->minValue(1)->maxValue(1000000)->placeholder('500'),
@@ -515,16 +536,10 @@ class ViewDomain extends ViewRecord
                     $this->record->refresh();
                     Notification::make()->success()->title('Security alert saved')->body('You will be notified when '.number_format((int) $data['threshold']).' requests are blocked within '.$data['period_minutes'].' minutes.')->send();
                 }),
-            Action::make('removeSecurityAlert')->label('Remove security alert')->icon('phosphor-bell-slash')->color('danger')->requiresConfirmation()
-                ->visible(fn (): bool => $this->record->security_alert !== null)
-                ->action(function (): void {
-                    app(SecurityAlertController::class)->destroy(request(), $this->record);
-                    $this->record->refresh();
-                    Notification::make()->success()->title('Security alert removed')->send();
-                }),
             Action::make('credentialCheck')->label('Credential check')->icon('phosphor-key')->extraAttributes(['data-testid' => 'credential-check-action'])
                 ->modalHeading('Check logins against leaked passwords')
                 ->modalDescription('Name the login paths and where the password is sent. Rules can then act on Leaked password. The password is checked on the cell and is never stored or logged.')
+                ->extraModalFooterActions(fn (): array => $this->turnOffAction('credential_check', CredentialCheckController::class, 'Credential check turned off', 'Turn off'))
                 ->schema([
                     Repeater::make('login_paths')->label('Login paths')->minItems(1)->maxItems(CredentialCheckData::MAXIMUM_LOGIN_PATHS)->addActionLabel('Add login path')->table([
                         TableColumn::make('Path'), TableColumn::make('Format'), TableColumn::make('Password field'), TableColumn::make('Username field'),
@@ -540,16 +555,10 @@ class ViewDomain extends ViewRecord
                     $this->record->refresh();
                     Notification::make()->success()->title('Credential check saved')->body('Add a rule on Leaked password to log, challenge, or block those logins.')->send();
                 }),
-            Action::make('removeCredentialCheck')->label('Remove credential check')->icon('phosphor-key')->color('danger')->requiresConfirmation()
-                ->visible(fn (): bool => $this->record->credential_check !== null)
-                ->action(function (): void {
-                    app(CredentialCheckController::class)->destroy(request(), $this->record);
-                    $this->record->refresh();
-                    Notification::make()->success()->title('Credential check removed')->send();
-                }),
             Action::make('sensitiveDataCheck')->label('Sensitive data check')->icon('phosphor-eye-slash')->extraAttributes(['data-testid' => 'sensitive-data-action'])
                 ->modalHeading('Watch responses for sensitive data')
                 ->modalDescription('The cell reads the first 16 KB of text responses and records a security event when it finds one of these. It only logs: the response is not changed and the value is never stored.')
+                ->extraModalFooterActions(fn (): array => $this->turnOffAction('sensitive_data_check', SensitiveDataController::class, 'Sensitive data check turned off', 'Turn off'))
                 ->schema([
                     CheckboxList::make('kinds')->label(FilamentHelp::label('Look for', 'Each kind is matched by a fixed pattern. Card numbers must pass the Luhn check and IBANs the country length and checksum, so ordinary numbers rarely match.'))
                         ->options(SensitiveDataCheckData::KINDS)->required()->minItems(1),
@@ -559,16 +568,10 @@ class ViewDomain extends ViewRecord
                     $this->record->refresh();
                     Notification::make()->success()->title('Sensitive data check saved')->body('Matches appear in Security events.')->send();
                 }),
-            Action::make('removeSensitiveDataCheck')->label('Remove sensitive data check')->icon('phosphor-eye-slash')->color('danger')->requiresConfirmation()
-                ->visible(fn (): bool => $this->record->sensitive_data_check !== null)
-                ->action(function (): void {
-                    app(SensitiveDataController::class)->destroy(request(), $this->record);
-                    $this->record->refresh();
-                    Notification::make()->success()->title('Sensitive data check removed')->send();
-                }),
             Action::make('aiProtection')->label('AI protection')->icon('phosphor-chat-circle-text')->extraAttributes(['data-testid' => 'ai-protection-action'])
                 ->modalHeading('Score prompts sent to your AI endpoints')
                 ->modalDescription('Name the paths that take a prompt and the JSON field that holds it. Rules can then act on Prompt injection score and Personal data in prompt. The check is pattern based: it matches known phrases and does not understand a prompt.')
+                ->extraModalFooterActions(fn (): array => $this->turnOffAction('ai_protection', AiProtectionController::class, 'AI protection turned off', 'Turn off'))
                 ->schema([
                     TagsInput::make('endpoints')->label(FilamentHelp::label('Endpoint paths', 'Exact paths that receive a prompt by POST or PUT. Up to five.'))
                         ->required()->placeholder('/v1/chat')->nestedRecursiveRules(['string', 'max:200']),
@@ -580,17 +583,11 @@ class ViewDomain extends ViewRecord
                     $this->record->refresh();
                     Notification::make()->success()->title('AI protection saved')->body('Add a rule on Prompt injection score or Personal data in prompt to log or block.')->send();
                 }),
-            Action::make('removeAiProtection')->label('Remove AI protection')->icon('phosphor-chat-circle-text')->color('danger')->requiresConfirmation()
-                ->visible(fn (): bool => $this->record->ai_protection !== null)
-                ->action(function (): void {
-                    app(AiProtectionController::class)->destroy(request(), $this->record);
-                    $this->record->refresh();
-                    Notification::make()->success()->title('AI protection removed')->send();
-                }),
             Action::make('apiSchema')->label('API schema')->icon('phosphor-brackets-curly')->extraAttributes(['data-testid' => 'api-schema-action'])
                 ->modalHeading('Check requests against an OpenAPI schema')
                 ->modalDescription(fn (): string => 'Paste an OpenAPI 3 document as JSON. The control plane keeps only a table of paths, methods, and parameters, up to '.ApiSchemaData::MAXIMUM_OPERATIONS.' operations. The cell sets API schema violation on requests that do not fit it; add a rule on that field to log or block them.'
                     .(is_array($this->record->api_schema) ? ' Current schema: '.($this->record->api_schema['title'] ?: 'untitled').', '.count($this->record->api_schema['operations']).' operations under '.$this->record->api_schema['base_path'].'.' : ''))
+                ->extraModalFooterActions(fn (): array => $this->turnOffAction('api_schema', ApiSchemaController::class, 'API schema removed', 'Remove schema'))
                 ->schema([
                     Textarea::make('document')->label(FilamentHelp::label('OpenAPI document', 'An OpenAPI 3 document in JSON, up to 256 KB. YAML is not accepted. Only paths, methods, and path, query, and header parameters are used; request bodies are checked for size only.'))
                         ->required()->rows(10)->extraInputAttributes(['class' => 'font-mono'])->placeholder('{"openapi": "3.0.3", "info": {"title": "Orders", "version": "1"}, "paths": {"/orders": {"get": {}}}}'),
@@ -609,16 +606,10 @@ class ViewDomain extends ViewRecord
                     $this->record->refresh();
                     Notification::make()->success()->title('API schema saved')->body('Violations appear in Security events. Add a rule on API schema violation to block them.')->send();
                 }),
-            Action::make('removeApiSchema')->label('Remove API schema')->icon('phosphor-brackets-curly')->color('danger')->requiresConfirmation()
-                ->visible(fn (): bool => $this->record->api_schema !== null)
-                ->action(function (): void {
-                    app(ApiSchemaController::class)->destroy(request(), $this->record);
-                    $this->record->refresh();
-                    Notification::make()->success()->title('API schema removed')->send();
-                }),
             Action::make('clientSecurity')->label('Client-side security')->icon('phosphor-browsers')->extraAttributes(['data-testid' => 'client-security-action'])
                 ->modalHeading('Watch the scripts your pages load')
                 ->modalDescription('The cell adds a report-only Content-Security-Policy to your HTML pages. Browsers then report each script and connection to the cell, which keeps the page, the type, and the origin of what was loaded. Nothing is blocked and no page content is stored. Anyone can send a report, so treat the list as a hint, not proof.')
+                ->extraModalFooterActions(fn (): array => $this->turnOffAction('client_security', ClientSecurityController::class, 'Client-side security turned off', 'Turn off'))
                 ->schema([
                     TextInput::make('maximum_reports_per_minute')->label(FilamentHelp::label('Reports per minute', 'Most reports one cell accepts for this domain each minute. The rest are dropped. A busy site sends many; 120 is enough to see every script within minutes.'))
                         ->required()->numeric()->minValue(10)->maxValue(600)->placeholder('120'),
@@ -630,44 +621,33 @@ class ViewDomain extends ViewRecord
                     $this->record->refresh();
                     Notification::make()->success()->title('Client-side security saved')->body('Scripts appear in the Scripts and connections tab once browsers report them.')->send();
                 }),
-            Action::make('removeClientSecurity')->label('Turn off client-side security')->icon('phosphor-browsers')->color('danger')->requiresConfirmation()
-                ->visible(fn (): bool => $this->record->client_security !== null)
-                ->action(function (): void {
-                    app(ClientSecurityController::class)->destroy(request(), $this->record);
-                    $this->record->refresh();
-                    Notification::make()->success()->title('Client-side security turned off')->send();
-                }),
-            Action::make('startIncident')->icon('phosphor-shield-warning')->label('Start incident profile')->color('danger')->extraAttributes(['data-testid' => 'incident-start-action'])
-                ->modalHeading('Start the incident profile?')
+            Action::make('startIncident')->icon('phosphor-shield-warning')->label('Under attack mode')->color('danger')->extraAttributes(['data-testid' => 'incident-start-action'])
+                ->modalHeading('Turn on under attack mode?')
                 ->modalDescription('For the time you choose, the domain gets tighter request limits, the web application firewall in blocking mode, restricted methods and body size, and a browser challenge. It protects your origin and the cells from request floods; it cannot absorb traffic that saturates a host or link.')
+                ->modalSubmitActionLabel('Turn on')
                 ->schema([Select::make('duration_minutes')->label(FilamentHelp::label('Duration', 'How long the protections stay on. They turn off by themselves at the end; you can end them sooner.'))
                     ->options([15 => '15 minutes', 30 => '30 minutes', 60 => '1 hour', 180 => '3 hours', 720 => '12 hours', 1440 => '24 hours'])->default(60)->required()])
                 ->visible(fn (): bool => ! IncidentProfile::active($this->record))
                 ->action(function (array $data): void {
                     StartIncidentProfile::execute($this->record, auth()->user(), (int) $data['duration_minutes'], request()->ip());
                     $this->refreshDomain(includeTabs: true);
-                    Notification::make()->warning()->title('Incident profile started')->body('The protections are on their way to the cells and end on their own.')->send();
+                    Notification::make()->warning()->title('Under attack mode is on')->body('The protections are on their way to the cells and end on their own.')->send();
                 }),
-            Action::make('endIncident')->icon('phosphor-shield-check')->label('End incident profile')->color('success')->requiresConfirmation()->extraAttributes(['data-testid' => 'incident-end-action'])
-                ->modalHeading('End the incident profile now?')
+            Action::make('endIncident')->icon('phosphor-shield-check')->label('End under attack mode')->color('success')->requiresConfirmation()->extraAttributes(['data-testid' => 'incident-end-action'])
+                ->modalHeading('End under attack mode now?')
                 ->visible(fn (): bool => IncidentProfile::active($this->record))
                 ->action(function (): void {
                     EndIncidentProfile::execute($this->record, auth()->user(), 'manual', request()->ip());
                     $this->refreshDomain(includeTabs: true);
-                    Notification::make()->success()->title('Incident profile ended')->send();
+                    Notification::make()->success()->title('Under attack mode ended')->send();
                 }),
             Action::make('startMaintenance')->icon('phosphor-wrench')->label('Start maintenance')->color('warning')->requiresConfirmation()->schema([
-                TextInput::make('body')->label('503 response message')->default('Service temporarily unavailable')->maxLength(4096)->required(),
+                TextInput::make('body')->label(FilamentHelp::label('503 response message', 'Every visitor gets this text with status 503 until maintenance ends. The origin is not contacted.'))->default('Service temporarily unavailable')->maxLength(4096)->required()->placeholder('Back at 14:00 UTC'),
             ])->visible(fn (): bool => ! is_array($this->record->proxy_settings['maintenance'] ?? null))
                 ->action(fn (array $data) => $this->changeMaintenance((string) $data['body'])),
             Action::make('endMaintenance')->icon('phosphor-check-circle')->label('End maintenance')->color('success')->requiresConfirmation()
                 ->visible(fn (): bool => is_array($this->record->proxy_settings['maintenance'] ?? null))
                 ->action(fn () => $this->changeMaintenance(null)),
-            Action::make('protectSecurity')->icon('phosphor-shield-warning')->label('Enable Under Attack mode')->color('warning')->requiresConfirmation()
-                ->modalHeading('Enable Under Attack mode?')
-                ->modalDescription('Use this temporary mode during an active attack. It tightens rate and connection limits, but does not change the domain WAF profile or move the domain.')
-                ->visible(fn (): bool => auth()->user()?->isAdmin() === true && ! in_array($this->record->security_state, ['restricted', 'quarantined'], true))
-                ->action(fn () => $this->changeSecurityState('restricted', null)),
             Action::make('quarantineSecurity')->icon('phosphor-prohibit')->label('Quarantine domain')->color('danger')->requiresConfirmation()
                 ->visible(fn (): bool => auth()->user()?->isAdmin() === true && $this->record->security_state !== 'quarantined' && $this->record->dnsRecords()->where('mode', 'proxied')->exists())
                 ->action(fn () => $this->changeSecurityState('quarantined', EdgePool::query()->where('enabled', true)->where('withdrawn', false)->where('kind', 'quarantine')->orderBy('id')->firstOrFail())),
@@ -675,7 +655,7 @@ class ViewDomain extends ViewRecord
                 ->visible(fn (): bool => auth()->user()?->isAdmin() === true && in_array($this->record->security_state, ['restricted', 'quarantined'], true))
                 ->action(fn () => $this->changeSecurityState('recovering', EdgePool::query()->where('enabled', true)->where('withdrawn', false)->where('kind', 'shared')->orderBy('id')->firstOrFail())),
             Action::make('rollbackProxy')->icon('phosphor-arrow-counter-clockwise')->label('Rollback proxy revision')->color('warning')->requiresConfirmation()->schema([
-                Select::make('revision')->options(fn (): array => EdgeRevision::query()->where('domain_id', $this->record->id)->where('status', 'validated')->where('revision', '<', $this->record->revision)->latest('revision')->limit(50)->get()
+                Select::make('revision')->label(FilamentHelp::label('Revision', 'An earlier validated configuration. Rolling back saves it again as a new revision; nothing is lost.'))->placeholder('Choose a revision')->options(fn (): array => EdgeRevision::query()->where('domain_id', $this->record->id)->where('status', 'validated')->where('revision', '<', $this->record->revision)->latest('revision')->limit(50)->get()
                     ->mapWithKeys(fn (EdgeRevision $revision): array => [$revision->revision => "#{$revision->revision} · {$revision->created_at->copy()->setTimezone(app(PlatformSettings::class)->displayTimezone())->format('Y-m-d H:i:s')}"])->all())->required(),
             ])->visible(fn (): bool => EdgeRevision::query()->where('domain_id', $this->record->id)->where('status', 'validated')->where('revision', '<', $this->record->revision)->exists())
                 ->action(function (array $data): void {
@@ -685,7 +665,7 @@ class ViewDomain extends ViewRecord
                     ReconcileEdgeDomain::dispatch($this->record->id)->afterCommit();
                 }),
             Action::make('moveEdgePool')->label('Move service pool')->icon('phosphor-arrows-left-right')->schema([
-                Select::make('pool_id')->label('Target pool')->options(function (): array {
+                Select::make('pool_id')->label(FilamentHelp::label('Target pool', 'The domain starts on the new pool first and leaves the old one only after the new one is ready.'))->placeholder('Choose a pool')->options(function (): array {
                     $placement = DomainEdgePlacement::query()->where('domain_id', $this->record->id)->first();
 
                     return EdgePool::query()->where('enabled', true)->where('withdrawn', false)
@@ -799,8 +779,8 @@ class ViewDomain extends ViewRecord
                     }
                 }),
             Action::make('importZone')->icon('phosphor-upload-simple')->label('Import zone')->schema([
-                Textarea::make('zone')->required()->maxLength(BindZone::MAX_BYTES)->rows(12),
-                Toggle::make('replace_existing')->label('Replace existing records')->default(false),
+                Textarea::make('zone')->label(FilamentHelp::label('Zone file', 'A BIND zone file. SOA and NS records are managed by the platform and skipped.'))->required()->maxLength(BindZone::MAX_BYTES)->rows(12)->placeholder('www 300 IN A 192.0.2.10'),
+                Toggle::make('replace_existing')->label(FilamentHelp::label('Replace existing records', 'Off adds the imported records to the current ones. On removes every current record first.'))->default(false),
             ])->action(function (array $data): void {
                 if (strlen($data['zone']) > 65536 || substr_count($data['zone'], "\n") + 1 > 100) {
                     $operation = Operation::query()->create(['actor_id' => auth()->id(), 'type' => 'dns.zone_import', 'status' => 'pending', 'input' => ['domain_id' => $this->record->id, 'zone' => $data['zone'], 'replace_existing' => (bool) $data['replace_existing'], 'ip_address' => request()->ip()]]);
@@ -828,45 +808,79 @@ class ViewDomain extends ViewRecord
         ];
         // Long forms open as a right-side sheet; a form of one or two fields opens as a small centered dialog.
         $sheets = ['importZone', 'proxyDefaults', 'cacheSettings', 'uploadCertificate', 'securitySettings', 'wafProfile', 'credentialCheck', 'sensitiveDataCheck', 'aiProtection', 'apiSchema', 'clientSecurity'];
-        $dialogs = ['moveEdgePool', 'developmentMode', 'purgeCache', 'tlsMode', 'securityAlert'];
-        $group = fn (array $names): array => collect($actions)
+        $dialogs = ['moveEdgePool', 'developmentMode', 'purgeCache', 'tlsMode', 'securityAlert', 'startIncident', 'startMaintenance', 'rollbackProxy'];
+
+        // Every form names what its button does; a generic "Submit" never shows.
+        $submit = ['importZone' => 'Import', 'uploadCertificate' => 'Upload', 'tlsMode' => 'Save', 'developmentMode' => 'Turn on', 'startMaintenance' => 'Start maintenance',
+            'moveEdgePool' => 'Move', 'rollbackProxy' => 'Roll back', 'proxyDefaults' => 'Save', 'cacheSettings' => 'Save', 'securitySettings' => 'Save', 'wafProfile' => 'Save',
+            'securityAlert' => 'Save', 'credentialCheck' => 'Save', 'sensitiveDataCheck' => 'Save', 'aiProtection' => 'Save', 'apiSchema' => 'Save', 'clientSecurity' => 'Save'];
+
+        return collect($actions)
             ->keyBy(fn (Action $action): string => $action->getName())
-            ->only($names)
+            ->each(fn (Action $action, string $name) => isset($submit[$name]) ? $action->modalSubmitActionLabel($submit[$name]) : null)
             ->map(fn (Action $action): Action => match (true) {
                 in_array($action->getName(), $sheets, true) => $action->slideOver()->modalWidth(Width::TwoExtraLarge),
                 in_array($action->getName(), $dialogs, true) => $action->modalWidth(Width::Medium),
                 default => $action,
             })
-            ->values()
             ->all();
+    }
+
+    /** The header keeps what concerns the whole domain; settings sit beside their section on the Overview tab. */
+    protected function getHeaderActions(): array
+    {
+        $actions = $this->domainActions();
 
         return [
-            ActionGroup::make($group(['verifyNameservers', 'forceVerifyNameservers', 'reconcileDns', 'activate', 'disable', 'deleteDomain', 'importZone', 'exportZone']))
-                ->label('Domain actions')
-                ->icon('phosphor-globe')
-                ->color('gray')
-                ->button(),
-            ActionGroup::make($group(['proxyDefaults', 'rollbackProxy', 'moveEdgePool']))
-                ->label('Delivery')
-                ->icon('phosphor-cloud')
-                ->color('gray')
-                ->button(),
-            ActionGroup::make($group(['cacheSettings', 'developmentMode', 'disableDevelopmentMode', 'purgeCache']))
-                ->label('Cache')
-                ->icon('phosphor-database')
-                ->color('gray')
-                ->button(),
-            ActionGroup::make($group(['tlsMode', 'renewManagedCertificate', 'reissueManagedCertificate', 'uploadCertificate', 'deleteCustomCertificate']))
-                ->label('TLS')
-                ->icon('phosphor-lock')
-                ->color('gray')
-                ->button(),
-            ActionGroup::make($group(['securitySettings', 'wafProfile', 'securityAlert', 'removeSecurityAlert', 'credentialCheck', 'removeCredentialCheck', 'sensitiveDataCheck', 'removeSensitiveDataCheck', 'aiProtection', 'removeAiProtection', 'apiSchema', 'removeApiSchema', 'clientSecurity', 'removeClientSecurity', 'startIncident', 'endIncident', 'startMaintenance', 'endMaintenance', 'protectSecurity', 'quarantineSecurity', 'returnSecurityToNormal']))
-                ->label('Security')
-                ->icon('phosphor-shield-check')
-                ->color('gray')
-                ->button(),
+            $actions['verifyNameservers'],
+            $actions['startIncident'],
+            ActionGroup::make(array_values(Arr::only($actions, ['reconcileDns', 'importZone', 'exportZone', 'activate', 'forceVerifyNameservers', 'moveEdgePool', 'quarantineSecurity', 'returnSecurityToNormal', 'disable', 'deleteDomain'])))
+                ->label('More actions')->icon('phosphor-dots-three')->color('gray')->button()->extraAttributes(['data-testid' => 'domain-more-actions']),
         ];
+    }
+
+    /** Actions shown beside the Overview sections are not in the header, so they are cached here to stay mountable. */
+    public function cacheInteractsWithHeaderActions(): void
+    {
+        parent::cacheInteractsWithHeaderActions();
+        foreach ($this->domainActions() as $name => $action) {
+            if (! array_key_exists($name, $this->cachedActions)) {
+                $this->cacheAction($action);
+            }
+        }
+    }
+
+    /** Whether a named action exists and is visible right now, for the buttons the Overview tab draws itself. */
+    public function canShowDomainAction(string $name): bool
+    {
+        return $this->getAction($name, isMounting: false)?->isVisible() === true;
+    }
+
+    /**
+     * The "Turn off" button in a detection's settings sheet, present only while the detection is on. A detection whose fields
+     * custom rules still use is refused with the reason, and the sheet stays open.
+     *
+     * @param  class-string<DetectionSettingsController|SecurityAlertController>  $controller
+     * @return array<int, Action>
+     */
+    private function turnOffAction(string $column, string $controller, string $title, string $label): array
+    {
+        if ($this->domain()->{$column} === null) {
+            return [];
+        }
+
+        return [Action::make('turnOff')->label($label)->color('danger')->requiresConfirmation()->extraAttributes(['data-testid' => 'settings-turn-off'])
+            ->modalHeading($label.'?')->modalSubmitActionLabel($label)->cancelParentActions()
+            ->action(function (Action $action) use ($controller, $title): void {
+                try {
+                    app($controller)->destroy(request(), $this->domain());
+                } catch (HttpException $exception) {
+                    Notification::make()->danger()->title('Nothing was changed')->body($exception->getMessage())->persistent()->send();
+                    $action->halt();
+                }
+                $this->record->refresh();
+                Notification::make()->success()->title($title)->send();
+            })];
     }
 
     private function changeSecurityState(string $state, ?EdgePool $pool): void
@@ -880,10 +894,12 @@ class ViewDomain extends ViewRecord
                     'state' => 'deploying', 'drain_after' => null, 'last_error' => null,
                 ]);
             }
-            $domain->securityEvents()->create([
-                'state' => $state, 'reason_code' => $state === 'quarantined' ? 'domain_quarantined' : 'domain_restricted',
-                'details' => ['actor_id' => auth()->id(), 'target_pool_id' => $pool?->id], 'occurred_at' => now(),
-            ]);
+            if ($state === 'quarantined') {
+                $domain->securityEvents()->create([
+                    'state' => $state, 'reason_code' => 'domain_quarantined',
+                    'details' => ['actor_id' => auth()->id(), 'target_pool_id' => $pool?->id], 'occurred_at' => now(),
+                ]);
+            }
             AuditLog::record(auth()->user(), "security.domain_$state", $domain, ['revision' => $domain->revision, 'target_pool_id' => $pool?->id], request()->ip());
             if (in_array($state, ['recovering', 'normal'], true)) {
                 ChangeAutomaticSecurityState::execute($domain, 'normal', 'operator_return_to_normal', ['actor_id' => auth()->id()]);

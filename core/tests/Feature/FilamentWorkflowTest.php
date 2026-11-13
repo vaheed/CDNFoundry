@@ -469,9 +469,9 @@ class FilamentWorkflowTest extends TestCase
         $component = fn () => Livewire::test(ViewDomain::class, ['record' => $domain->id]);
 
         $component()->assertSee('Cache UI')->assertSee('cache-ui.example.test')
-            ->assertSee('Domain actions')->assertSee('Delivery')->assertSee('Cache')->assertSee('TLS')
+            ->assertSee('More actions')->assertSee('Delivery')->assertSee('Cache')->assertSee('TLS')->assertSee('Protection')
             ->assertDontSee('Deploy proxy configuration')
-            ->assertSee('Cache settings')->assertSee('Enable development mode')->assertSee('Purge cache')
+            ->assertSeeHtml('data-testid="overview-action-cache-settings"')->assertSeeHtml('data-testid="overview-action-development-mode"')->assertSeeHtml('data-testid="overview-action-purge-cache"')
             ->callAction('cacheSettings', data: [
                 'enabled' => true, 'edge_ttl_seconds' => 600, 'browser_ttl_seconds' => 120,
                 'maximum_object_bytes' => 104857600, 'respect_origin_headers' => true,
@@ -592,8 +592,7 @@ class FilamentWorkflowTest extends TestCase
         $this->actingAs($admin);
 
         Livewire::test(ViewDomain::class, ['record' => $domain->id])
-            ->assertActionHidden('removeSecurityAlert')
-            ->mountAction('securityAlert')->assertSet('mountedActions.0.data.period_minutes', 5)
+            ->assertDontSee('Remove alert')->mountAction('securityAlert')->assertSet('mountedActions.0.data.period_minutes', 5)
             ->fillForm(['threshold' => 250, 'period_minutes' => 15])->callMountedAction()->assertHasNoActionErrors();
         $this->assertSame(['threshold' => 250, 'period_minutes' => 15], $domain->refresh()->security_alert);
 
@@ -601,7 +600,7 @@ class FilamentWorkflowTest extends TestCase
             ->mountAction('securityAlert')->assertSet('mountedActions.0.data.threshold', 250)
             ->fillForm(['threshold' => 0])->callMountedAction()->assertHasActionErrors(['threshold']);
         $this->assertSame(250, $domain->refresh()->security_alert['threshold']);
-        Livewire::test(ViewDomain::class, ['record' => $domain->id])->assertActionVisible('removeSecurityAlert')->callAction('removeSecurityAlert');
+        Livewire::test(ViewDomain::class, ['record' => $domain->id])->callAction(['securityAlert', 'turnOff']);
         $this->assertNull($domain->refresh()->security_alert);
     }
 
@@ -633,17 +632,17 @@ class FilamentWorkflowTest extends TestCase
         $this->actingAs($admin);
 
         Livewire::test(ViewDomain::class, ['record' => $domain->id])
-            ->assertSee('Start maintenance')
-            ->assertSee('Enable Under Attack mode')
-            ->assertSee('Web application firewall')
-            ->assertDontSee('Restrict domain')
+            ->assertSeeHtml('data-testid="overview-action-start-maintenance"')
+            ->assertSee('Under attack mode')
+            ->assertDontSee('Enable Under Attack mode')
+            ->assertSee('Firewall (WAF)')
             ->callAction('startMaintenance', data: ['body' => 'Planned maintenance'])
             ->assertHasNoActionErrors();
 
         $this->assertSame(['status' => 503, 'body' => 'Planned maintenance'], $domain->refresh()->proxy_settings['maintenance']);
 
         Livewire::test(ViewDomain::class, ['record' => $domain->id])
-            ->assertSee('End maintenance')
+            ->assertSeeHtml('data-testid="overview-action-end-maintenance"')
             ->callAction('endMaintenance')
             ->assertHasNoActionErrors();
 

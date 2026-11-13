@@ -9,7 +9,7 @@ use Filament\Widgets\Widget;
 use Illuminate\Database\Eloquent\Model;
 use Livewire\Attributes\On;
 
-/** Shown only while the incident profile is on: what it turns on, who started it, and when it ends. */
+/** Shown only while under attack mode (the incident profile) is on: what it turns on, who started it, and when it ends. */
 class DomainIncidentBanner extends Widget
 {
     public ?Model $record = null;
