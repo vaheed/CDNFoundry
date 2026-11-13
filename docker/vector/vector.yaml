@@ -135,6 +135,23 @@ transforms:
       .waf_processing_us = to_int(.waf_processing_us) ?? 0
       .waf_body_limit = slice!(to_string(.waf_body_limit) ?? "none", 0, 16)
       .waf_exclusion_id = to_int(.waf_exclusion_id) ?? 0
+      # Attack scores run from 1 (attack) to 99 (clean); 0 means the request was not scored.
+      .attack_score = to_int(.attack_score) ?? 0
+      if .attack_score < 0 || .attack_score > 99 {
+        .attack_score = 0
+      }
+      .attack_score_sqli = to_int(.attack_score_sqli) ?? 0
+      if .attack_score_sqli < 0 || .attack_score_sqli > 99 {
+        .attack_score_sqli = 0
+      }
+      .attack_score_xss = to_int(.attack_score_xss) ?? 0
+      if .attack_score_xss < 0 || .attack_score_xss > 99 {
+        .attack_score_xss = 0
+      }
+      .attack_score_rce = to_int(.attack_score_rce) ?? 0
+      if .attack_score_rce < 0 || .attack_score_rce > 99 {
+        .attack_score_rce = 0
+      }
       # Timings arrive from nginx as seconds. A list ("0.001, 0.004") means retries, "-" means no
       # sample; the last attempt is the one that served the response.
       request_seconds = parse_float(to_string(.request_time) ?? "") ?? -1.0

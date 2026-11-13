@@ -159,6 +159,26 @@ def main() -> None:
                 assert row['origin_error'] == expected_error, (key, 'origin_error', row['origin_error'])
                 assert row.get('origin_latency_ms') == expected_latency, (key, 'origin_latency_ms', row.get('origin_latency_ms'))
                 assert 'origin_response_time' not in row
+            # Attack scores run from 1 to 99; a value outside the range, or one that is not a number, becomes 0 (not scored).
+            score_cases = {'score-low': {'attack_score': 4, 'attack_score_sqli': '7', 'attack_score_xss': 99, 'attack_score_rce': 1},
+                           'score-bad': {'attack_score': 150, 'attack_score_sqli': -3, 'attack_score_xss': 'abc', 'attack_score_rce': 100},
+                           'score-none': {}}
+            for key, scores in score_cases.items():
+                event = {'domain_id': 42, 'hostname': 'qualification.test', 'path': '/'+key, **scores}
+                request = urllib.request.Request('http://127.0.0.1:'+hostport, data=json.dumps(event).encode(),
+                                                 headers={'Content-Type': 'application/json', 'Authorization': AUTHORIZATION})
+                with opener.open(request, timeout=3) as response:
+                    assert response.status == 200
+            for _ in range(40):
+                rows = [json.loads(line) for line in (root/'result/edge.json').read_text().splitlines()]
+                by_path = {row['path']: row for row in rows}
+                if all('/'+key in by_path for key in score_cases):
+                    break
+                time.sleep(0.25)
+            fields = ('attack_score', 'attack_score_sqli', 'attack_score_xss', 'attack_score_rce')
+            assert [by_path['/score-low'][name] for name in fields] == [4, 7, 99, 1], by_path['/score-low']
+            assert [by_path['/score-bad'][name] for name in fields] == [0, 0, 0, 0], by_path['/score-bad']
+            assert [by_path['/score-none'][name] for name in fields] == [0, 0, 0, 0], by_path['/score-none']
             print(json.dumps({'qualification': 'vector_traffic', 'http_json_sources': 'passed',
                               'production_transforms': 'passed', 'query_redaction': 'passed', 'origin_metric_cases': len(cases)}))
         except Exception:
