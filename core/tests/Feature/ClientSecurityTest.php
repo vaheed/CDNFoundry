@@ -9,6 +9,7 @@ use App\Models\NotificationChannel;
 use App\Models\User;
 use App\Support\SecurityConfig;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Factory;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -38,7 +39,7 @@ class ClientSecurityTest extends TestCase
     private function reports(Domain $domain, array $rows): void
     {
         $lines = array_map(fn (array $row): string => json_encode(['domain_id' => (string) $domain->id, 'kind' => $row[0], 'page' => $row[1], 'resource' => $row[2], 'first_seen' => $row[3], 'last_seen' => $row[3]]), $rows);
-        Http::swap(new \Illuminate\Http\Client\Factory);
+        Http::swap(new Factory);
         Http::fake(['*' => Http::response(implode("\n", $lines))]);
     }
 
