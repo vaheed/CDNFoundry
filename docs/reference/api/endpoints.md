@@ -94,6 +94,7 @@ for authentication, pagination, response, and retry behaviour.
 | `GET` | `/domains/{domain}/security/ddos` | Required | No | `get.domains.domain.security.ddos` |
 | `PATCH` | `/domains/{domain}/security/ddos` | Required | Supported | `patch.domains.domain.security.ddos` |
 | `GET` | `/domains/{domain}/security/events` | Required | No | `get.domains.domain.security.events` |
+| `GET` | `/domains/{domain}/security/mitigations` | Required | No | `get.domains.domain.security.mitigations` |
 | `GET` | `/domains/{domain}/security/platform-rulesets` | Required | No | `get.domains.domain.security.platform-rulesets` |
 | `DELETE` | `/domains/{domain}/security/presets/hotlink` | Required | Supported | `delete.domains.domain.security.presets.hotlink` |
 | `PUT` | `/domains/{domain}/security/presets/hotlink` | Required | Supported | `put.domains.domain.security.presets.hotlink` |

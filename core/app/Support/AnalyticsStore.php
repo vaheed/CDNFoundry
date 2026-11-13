@@ -251,6 +251,53 @@ final class AnalyticsStore
         return ['items' => $rows, 'next_cursor' => $hasMore && is_array($last) ? $this->encodeCursor($last) : null];
     }
 
+    /** The most mitigated requests one list returns. The list is the newest of the window, not every mitigated request. */
+    public const MITIGATIONS_LIMIT = 500;
+
+    /**
+     * Mitigated requests of one domain, newest first: blocked, challenged, or logged by a rule. Only stored request events can be
+     * listed, so the list is bounded by the event retention and by MITIGATIONS_LIMIT.
+     *
+     * @param  array{action?: ?string, rule?: ?string, reason?: ?string, score_max?: ?int, path?: ?string, country?: ?string, asn?: ?int, user_agent?: ?string, request_id?: ?string}  $filters
+     */
+    public function mitigations(Domain $domain, array $range, array $filters): array
+    {
+        $parameters = [...$this->parameters($range, $domain), 'limit' => self::MITIGATIONS_LIMIT];
+        $where = ["event_type = 'request'", "(security_action = 'block' OR security_rule != '')"];
+        $equals = ['rule' => ['security_rule', 'String'], 'reason' => ['security_reason', 'String'], 'country' => ['country', 'String'], 'request_id' => ['request_id', 'String']];
+        foreach ($equals as $name => [$column, $type]) {
+            if (filled($filters[$name] ?? null)) {
+                $where[] = "{$column} = {{$name}:{$type}}";
+                $parameters[$name] = (string) $filters[$name];
+            }
+        }
+        foreach (['path' => 'path', 'user_agent' => 'user_agent'] as $name => $column) {
+            if (filled($filters[$name] ?? null)) {
+                $where[] = "positionCaseInsensitiveUTF8({$column}, {{$name}:String}) > 0";
+                $parameters[$name] = (string) $filters[$name];
+            }
+        }
+        if (filled($filters['asn'] ?? null)) {
+            $where[] = 'asn = {asn:UInt32}';
+            $parameters['asn'] = (int) $filters['asn'];
+        }
+        if (filled($filters['score_max'] ?? null)) {
+            $where[] = 'attack_score BETWEEN 1 AND {score_max:UInt8}';
+            $parameters['score_max'] = (int) $filters['score_max'];
+        }
+        $where[] = match ($filters['action'] ?? null) {
+            'blocked' => "security_action = 'block'",
+            'logged' => "security_action != 'block'",
+            default => '1',
+        };
+        $rows = $this->query('SELECT occurred_at, event_id, hostname, method, path, status, security_action, security_reason, security_rule, attack_score, country, asn, user_agent, request_id, client_ip FROM cdnf.edge_events WHERE '.$this->edgeScope($domain).' AND occurred_at >= {from:DateTime64} AND occurred_at < {to:DateTime64} AND '.implode(' AND ', $where).' ORDER BY occurred_at DESC, event_id DESC LIMIT {limit:UInt32}', $parameters);
+        foreach ($rows as &$row) {
+            $row['client_ip'] = $this->maskAddress((string) ($row['client_ip'] ?? ''));
+        }
+
+        return $rows;
+    }
+
     /** @param array<int, string> $domains */
     public function usageInterval(CarbonImmutable $from, CarbonImmutable $to, array $domains): array
     {

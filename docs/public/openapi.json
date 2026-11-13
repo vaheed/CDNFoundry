@@ -9462,6 +9462,44 @@
                 }
             }
         },
+        "/domains/{domain}/security/mitigations": {
+            "get": {
+                "operationId": "get.domains.domain.security.mitigations",
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    },
+                    {
+                        "$ref": "#/components/parameters/Cursor"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/Success"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/StableError"
+                    }
+                }
+            }
+        },
         "/domains/{domain}/security/platform-rulesets": {
             "get": {
                 "operationId": "get.domains.domain.security.platform-rulesets",
