@@ -107,6 +107,7 @@ runs them through `cdnfoundry-fleet control ...` (see
 | --- | --- | --- |
 | `cdnf:edge:complete-placement-drains {--limit=100}` | Promotes ready target pools after DNS drain, advances desired revisions, records audit events, and queues edge reconciliation. Limit is clamped to 1–1,000. | Every minute |
 | `cdnf:edge:dispatch-origin-checks {--limit=100}` | Dispatches a jittered, bounded batch of explicitly enabled origin checks. Limit is clamped to 1–500 and at most five checks are selected per domain. | Every minute |
+| `cdnf:notifications:security-mitigations` | For each active domain with a security alert, sums the blocked, challenged, and rate-limited requests the edges reported over the alert's period and queues one `security.mitigations_high` notification when the threshold is reached, then waits an hour for that domain. Reads stored security events only. | Every minute |
 | `cdnf:notifications:origin-errors` | Reads the one-minute traffic rollup and queues one `origin.errors_high` notification for each domain whose origin errors reach the platform threshold over five minutes, then waits an hour for that domain. Reads telemetry only; stores nothing. | Every five minutes |
 | `cdnf:security:expire-incidents {--limit=200}` | Ends incident profiles whose time is up, in a bounded batch, and sends the end overlay. | Every minute |
 | `cdnf:log-push:dispatch` | Queues one bounded push on the `log-push` lane for each active destination that is due, while the administrator switch is on. Retrying destinations wait for their backoff. It stores nothing. | Every minute |
@@ -174,6 +175,7 @@ or internal non-command work, which is intentionally not renamed here.
 | `cdnf:edge:promote-placements` | Every minute | Promote placements by quorum |
 | `cdnf:edge:reconcile-stale-placements` | Every minute | Retry stale placements |
 | `cdnf:edge:dispatch-origin-checks` | Every minute | Queue due opt-in origin checks |
+| `cdnf:notifications:security-mitigations` | Every minute | Notify when a domain's mitigated requests reach its alert |
 | `cdnf:notifications:origin-errors` | Every five minutes | Notify on origin error spikes |
 | `cdnf:security:expire-incidents` | Every minute | End finished incident profiles |
 | `cdnf:log-push:dispatch` | Every minute | Queue due log pushes |
