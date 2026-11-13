@@ -379,6 +379,23 @@ final class AnalyticsStore
             ['domain' => $domainId, 'afterAt' => $afterAt, 'afterId' => $afterId, 'until' => $until->format('Y-m-d H:i:s.v'), 'limit' => $limit]);
     }
 
+    /**
+     * The scripts and connections browsers reported for these domains since a time, one row per page and resource.
+     *
+     * @param  list<int>  $domainIds
+     * @return list<array{domain_id: int|string, kind: string, page: string, resource: string, first_seen: string, last_seen: string}>
+     */
+    public function clientReports(array $domainIds, CarbonImmutable $from): array
+    {
+        $ids = implode(',', array_map('intval', $domainIds));
+        if ($ids === '') {
+            return [];
+        }
+
+        return $this->query("SELECT domain_id, splitByChar('|', client_report)[1] AS kind, splitByChar('|', client_report)[2] AS page, splitByChar('|', client_report)[3] AS resource, toString(min(occurred_at)) AS first_seen, toString(max(occurred_at)) AS last_seen FROM cdnf.edge_events WHERE domain_id IN ({$ids}) AND client_report != '' AND occurred_at >= {from:DateTime64} GROUP BY domain_id, kind, page, resource HAVING kind != '' AND page != '' AND resource != '' ORDER BY domain_id, first_seen LIMIT 5000",
+            ['from' => $from->format('Y-m-d H:i:s.u')]);
+    }
+
     /** @return list<array{hostname: string, blocked: int|string}> */
     public function topAttackedHostnames(CarbonImmutable $from, CarbonImmutable $to): array
     {

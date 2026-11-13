@@ -69,14 +69,18 @@ final class SecurityRuleData
         'leaked_password' => ['kind' => 'flag', 'operators' => self::FLAG],
         'prompt_injection_score' => ['kind' => 'score', 'operators' => self::NUMBER],
         'prompt_pii' => ['kind' => 'flag', 'operators' => self::FLAG],
+        'schema_violation' => ['kind' => 'violation', 'operators' => self::CHOICE],
     ];
+
+    /** The values of the schema violation field: any violation, or one kind. "none" is a request that fits the schema. */
+    public const SCHEMA_VIOLATIONS = ['any', 'none', ...ApiSchemaData::VIOLATIONS];
 
     public const FIELD_LABELS = [
         'hostname' => 'Hostname', 'path' => 'Path', 'query_present' => 'Query string', 'method' => 'Method', 'country' => 'Country',
         'continent' => 'Continent', 'asn' => 'ASN', 'client_ip' => 'Client IP', 'user_agent' => 'User agent', 'referer' => 'Referer', 'referer_host' => 'Referer host', 'referer_present' => 'Referer', 'file_extension' => 'File extension',
         'header' => 'Header', 'cookie_present' => 'Cookie', 'content_type' => 'Content type', 'body_size' => 'Body size (bytes)',
         'tls_version' => 'TLS version', 'attack_score' => 'Attack score', 'attack_score_sqli' => 'Attack score (SQL injection)',
-        'attack_score_xss' => 'Attack score (XSS)', 'attack_score_rce' => 'Attack score (command injection)', 'leaked_password' => 'Leaked password', 'prompt_injection_score' => 'Prompt injection score', 'prompt_pii' => 'Personal data in prompt',
+        'attack_score_xss' => 'Attack score (XSS)', 'attack_score_rce' => 'Attack score (command injection)', 'leaked_password' => 'Leaked password', 'prompt_injection_score' => 'Prompt injection score', 'prompt_pii' => 'Personal data in prompt', 'schema_violation' => 'API schema violation',
     ];
 
     public const OPERATOR_LABELS = [
@@ -273,6 +277,7 @@ final class SecurityRuleData
             'method' => self::choice($value, self::HTTP_METHODS, $path, strtoupper(...)),
             'country' => self::choice($value, GeoVocabulary::countries(), $path, strtoupper(...)),
             'continent' => self::choice($value, GeoVocabulary::CONTINENTS, $path, strtoupper(...)),
+            'violation' => self::choice($value, self::SCHEMA_VIOLATIONS, $path, fn (string $item): string => $item),
             'tls' => self::choice($value, self::TLS_VERSIONS, $path, fn (string $item): string => $item),
             'asn' => self::integer($value, 0, 4294967295, $path),
             'host' => self::host($value, $path),

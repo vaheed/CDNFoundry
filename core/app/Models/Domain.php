@@ -22,7 +22,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
-#[Fillable(['name', 'display_name', 'lifecycle_state', 'revision', 'nameservers_verified_at', 'nameservers_verified_by', 'disabled_at', 'deprovision_after', 'proxy_settings', 'active_edge_revision', 'cache_settings', 'cache_epoch', 'cache_development_mode_until', 'tls_mode', 'active_tls_certificate_id', 'security_settings', 'security_state', 'automatic_security_state', 'security_overlay_sequence', 'security_state_changed_at', 'waf_profile', 'waf_tuning', 'security_alert', 'credential_check', 'sensitive_data_check', 'ai_protection', 'delegation_token', 'delegation_nameservers', 'claim_expires_at'])]
+#[Fillable(['name', 'display_name', 'lifecycle_state', 'revision', 'nameservers_verified_at', 'nameservers_verified_by', 'disabled_at', 'deprovision_after', 'proxy_settings', 'active_edge_revision', 'cache_settings', 'cache_epoch', 'cache_development_mode_until', 'tls_mode', 'active_tls_certificate_id', 'security_settings', 'security_state', 'automatic_security_state', 'security_overlay_sequence', 'security_state_changed_at', 'waf_profile', 'waf_tuning', 'security_alert', 'credential_check', 'sensitive_data_check', 'ai_protection', 'api_schema', 'client_security', 'delegation_token', 'delegation_nameservers', 'claim_expires_at'])]
 class Domain extends Model
 {
     use SoftDeletes;
@@ -298,6 +298,11 @@ class Domain extends Model
         return $this->hasOne(TlsOrder::class)->orderByDesc('created_at')->orderByDesc('id');
     }
 
+    public function clientScriptSightings(): HasMany
+    {
+        return $this->hasMany(ClientScriptSighting::class);
+    }
+
     public function securityRules(): HasMany
     {
         return $this->hasMany(SecurityRule::class);
@@ -357,7 +362,7 @@ class Domain extends Model
             'proxy_settings' => 'array',
             'cache_settings' => 'array',
             'cache_development_mode_until' => 'immutable_datetime',
-            'security_settings' => 'array', 'waf_tuning' => 'array', 'security_alert' => 'array', 'credential_check' => 'array', 'sensitive_data_check' => 'array', 'ai_protection' => 'array',
+            'security_settings' => 'array', 'waf_tuning' => 'array', 'security_alert' => 'array', 'credential_check' => 'array', 'sensitive_data_check' => 'array', 'ai_protection' => 'array', 'api_schema' => 'array', 'client_security' => 'array',
             'security_state_changed_at' => 'immutable_datetime',
             'active_edge_revision' => 'integer',
             'revision_changed_at' => 'immutable_datetime',

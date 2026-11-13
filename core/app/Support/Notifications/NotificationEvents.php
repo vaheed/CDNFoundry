@@ -19,6 +19,7 @@ final class NotificationEvents
         'origin.errors_high' => 'Origin errors above threshold',
         'security.mitigations_high' => 'Mitigated requests above threshold',
         'log_push.failing' => 'Log push failing',
+        'client_script.new' => 'New script or connection seen on a page',
     ];
 
     /** @return array<string, string> */

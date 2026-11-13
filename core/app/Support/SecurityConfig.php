@@ -28,6 +28,8 @@ final class SecurityConfig
         'platform_rule_block', 'platform_rule_challenge', 'platform_rule_log', 'platform_rule_rate_limited',
         // Detections working: they only log what the response held, so they never push the domain toward a stricter state.
         'sensitive_data_card', 'sensitive_data_iban', 'sensitive_data_private_key', 'sensitive_data_api_key',
+        // The API profile working: a request outside the uploaded schema is logged, and a rule decides what happens to it.
+        'schema_unknown_path', 'schema_wrong_method', 'schema_missing_parameter', 'schema_invalid_parameter', 'schema_body_too_large',
     ];
 
     /** Automatic escalation looks at the rate over a short window, never at a lifetime counter. */
@@ -156,6 +158,8 @@ final class SecurityConfig
             'credential_check' => CredentialCheckData::forEdge($domain->credential_check),
             'sensitive_data' => SensitiveDataCheckData::forEdge($domain->sensitive_data_check),
             'ai_protection' => AiProtectionData::forEdge($domain->ai_protection),
+            'api_schema' => ApiSchemaData::forEdge($domain->api_schema),
+            'client_security' => ClientSecurityData::forEdge($domain->client_security),
             'platform_rules' => PlatformRulesets::forDomain($domain),
             'rules' => $domain->securityRules()->where('enabled', true)->orderBy('priority')->orderBy('id')
                 ->get(['id', 'name', 'preset', 'conditions', 'rate_limit', 'action', 'priority'])->toArray(),

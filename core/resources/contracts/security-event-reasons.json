@@ -41,6 +41,11 @@
     "sensitive_data_card",
     "sensitive_data_iban",
     "sensitive_data_private_key",
-    "sensitive_data_api_key"
+    "sensitive_data_api_key",
+    "schema_unknown_path",
+    "schema_wrong_method",
+    "schema_missing_parameter",
+    "schema_invalid_parameter",
+    "schema_body_too_large"
   ]
 }

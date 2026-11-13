@@ -14,7 +14,7 @@ final class SecurityAlertData
     public const COOLDOWN_MINUTES = 60;
 
     /** Reasons a rule or the platform enforces. A request only logged by a rule is not a mitigation. */
-    public const NOT_MITIGATIONS = ['custom_rule_log', 'platform_rule_log', 'waf_rule_logged', 'sensitive_data_card', 'sensitive_data_iban', 'sensitive_data_private_key', 'sensitive_data_api_key'];
+    public const NOT_MITIGATIONS = ['custom_rule_log', 'platform_rule_log', 'waf_rule_logged', 'sensitive_data_card', 'sensitive_data_iban', 'sensitive_data_private_key', 'sensitive_data_api_key', 'schema_unknown_path', 'schema_wrong_method', 'schema_missing_parameter', 'schema_invalid_parameter', 'schema_body_too_large'];
 
     public static function validate(array $input): array
     {

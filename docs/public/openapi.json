@@ -9767,6 +9767,478 @@
                 }
             }
         },
+        "/domains/{domain}/security/api-schema": {
+            "delete": {
+                "operationId": "delete.domains.domain.security.api-schema",
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    },
+                    {
+                        "$ref": "#/components/parameters/IdempotencyKey"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/Success"
+                    },
+                    "201": {
+                        "$ref": "#/components/responses/Created"
+                    },
+                    "202": {
+                        "$ref": "#/components/responses/Accepted"
+                    },
+                    "204": {
+                        "description": "The mutation completed with no response body."
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "409": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationError"
+                    }
+                }
+            },
+            "get": {
+                "operationId": "get.domains.domain.security.api-schema",
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/Success"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/StableError"
+                    }
+                }
+            },
+            "put": {
+                "operationId": "put.domains.domain.security.api-schema",
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    },
+                    {
+                        "$ref": "#/components/parameters/IdempotencyKey"
+                    }
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "maxProperties": 100,
+                                "additionalProperties": true
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/Success"
+                    },
+                    "201": {
+                        "$ref": "#/components/responses/Created"
+                    },
+                    "202": {
+                        "$ref": "#/components/responses/Accepted"
+                    },
+                    "204": {
+                        "description": "The mutation completed with no response body."
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "409": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationError"
+                    }
+                }
+            }
+        },
+        "/domains/{domain}/security/client-side": {
+            "delete": {
+                "operationId": "delete.domains.domain.security.client-side",
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    },
+                    {
+                        "$ref": "#/components/parameters/IdempotencyKey"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/Success"
+                    },
+                    "201": {
+                        "$ref": "#/components/responses/Created"
+                    },
+                    "202": {
+                        "$ref": "#/components/responses/Accepted"
+                    },
+                    "204": {
+                        "description": "The mutation completed with no response body."
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "409": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationError"
+                    }
+                }
+            },
+            "get": {
+                "operationId": "get.domains.domain.security.client-side",
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/Success"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/StableError"
+                    }
+                }
+            },
+            "put": {
+                "operationId": "put.domains.domain.security.client-side",
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    },
+                    {
+                        "$ref": "#/components/parameters/IdempotencyKey"
+                    }
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "maxProperties": 100,
+                                "additionalProperties": true
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/Success"
+                    },
+                    "201": {
+                        "$ref": "#/components/responses/Created"
+                    },
+                    "202": {
+                        "$ref": "#/components/responses/Accepted"
+                    },
+                    "204": {
+                        "description": "The mutation completed with no response body."
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "409": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationError"
+                    }
+                }
+            }
+        },
+        "/domains/{domain}/security/client-side/scripts": {
+            "get": {
+                "operationId": "get.domains.domain.security.client-side.scripts",
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/Success"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/StableError"
+                    }
+                }
+            }
+        },
+        "/domains/{domain}/security/client-side/scripts/approve": {
+            "post": {
+                "operationId": "post.domains.domain.security.client-side.scripts.approve",
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    },
+                    {
+                        "$ref": "#/components/parameters/IdempotencyKey"
+                    }
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "maxProperties": 100,
+                                "additionalProperties": true
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/Success"
+                    },
+                    "201": {
+                        "$ref": "#/components/responses/Created"
+                    },
+                    "202": {
+                        "$ref": "#/components/responses/Accepted"
+                    },
+                    "204": {
+                        "description": "The mutation completed with no response body."
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "409": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationError"
+                    }
+                }
+            }
+        },
+        "/domains/{domain}/security/client-side/scripts/{sighting}/approve": {
+            "post": {
+                "operationId": "post.domains.domain.security.client-side.scripts.sighting.approve",
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    },
+                    {
+                        "name": "sighting",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    },
+                    {
+                        "$ref": "#/components/parameters/IdempotencyKey"
+                    }
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "maxProperties": 100,
+                                "additionalProperties": true
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/Success"
+                    },
+                    "201": {
+                        "$ref": "#/components/responses/Created"
+                    },
+                    "202": {
+                        "$ref": "#/components/responses/Accepted"
+                    },
+                    "204": {
+                        "description": "The mutation completed with no response body."
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "409": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationError"
+                    }
+                }
+            }
+        },
         "/domains/{domain}/security/credential-check": {
             "delete": {
                 "operationId": "delete.domains.domain.security.credential-check",
