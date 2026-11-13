@@ -144,6 +144,17 @@ Previously Phase 8.
 | Documentation | `docs/guides/cache.md` and `docs/reference/limits.md` updated. |
 | Open | 4.1 hit ratio before and after on a recorded traffic sample, and the 4.3 decision from purge logs: neither has been measured yet. The gate stays open on these two items. |
 
+### Phase 5 completion gate (recorded 2026-11-13, branch `dev`)
+
+| Field | Status |
+| --- | --- |
+| Implementation | Done for 5.1 to 5.6: typed custom rules, attack score, rate-limit rules, adjustable managed rules, user agent and hotlink presets, platform rulesets. The old match type and value rule shape is gone; one migration converted existing rules in place. |
+| Tests | The full Laravel suite passes (698 tests, 15,102 assertions): validation of every bound, permissions, idempotent routes, duplicate refusal, revision rollback, rollout to exactly the affected domains, and the panel flows. |
+| Runtime qualification | On real OpenResty cells: `tests/e2e/custom_rules.py` passes (every field and action, attack score on clean and attack payloads, Observe, blocking and skip, rate limits tripping at the stated count and releasing after their duration, category, rule, log-only and threshold adjustments, both presets, platform rules first and removed again, and the scripted attack stopped by a score rule, a rate-limit rule and a platform rule with each stop found in the request telemetry). `managed_waf.py`, `edge_security.py`, `openresty_runtime.py`, `vector_traffic.py`, `telemetry_analytics.py`, and `clickhouse_migrations.py` pass. |
+| Browser suite | Only the screens this phase changed were run: `custom-rules.spec.ts` (24 of 24), `waf-tuning.spec.ts` (8 of 8), `platform-rulesets.spec.ts` (16 of 16), each in light and dark, desktop and phone, with placeholder, tooltip and accessibility checks. The full suite is re-run in Phase 11. |
+| Documentation | `docs/guides/security.md`, `docs/guides/managed-waf.md`, `docs/reference/limits.md`, `docs/architecture/data-model.md`, and the generated API reference. |
+| Open | The attack score weighs five points per CRS anomaly point; its false positive rate is not measured on a recorded clean sample. Real HTTPS `tls_version` values are not covered by an E2E (plain HTTP reports `none`). Revision snapshots written before the typed rules cannot be rolled back to. The WAF no longer inspects responses. |
+
 ---
 
 ## Phases 5 to 8: A simple WAF
