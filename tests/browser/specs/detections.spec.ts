@@ -7,7 +7,6 @@ async function openAction(page: Page, testId: string, heading: string) {
     await signIn(page, 'admin', 'admin@browser.test', adminPassword);
     await page.goto('/admin/domains/1');
     await settle(page);
-    await page.getByRole('button', { name: 'Security', exact: true }).click();
     await page.getByTestId(testId).click();
     const modal = page.locator('.fi-modal-window:visible');
     await expect(modal.getByRole('heading', { name: heading })).toBeVisible();
@@ -15,18 +14,18 @@ async function openAction(page: Page, testId: string, heading: string) {
 }
 
 test('the sensitive data sheet lists the kinds, explains that it only logs, and saves', async ({ page }) => {
-    const modal = await openAction(page, 'sensitive-data-action', 'Watch responses for sensitive data');
+    const modal = await openAction(page, 'overview-action-sensitive-data-check', 'Watch responses for sensitive data');
     await expect(modal.getByText('It only logs')).toBeVisible();
     await expect(modal.getByLabel('Payment card numbers (with the Luhn check)')).toBeVisible();
     expect(await modal.locator('[x-tooltip]').count()).toBeGreaterThanOrEqual(1);
     await expectAccessible(page);
     await modal.getByLabel('IBAN bank account numbers').check();
-    await modal.getByRole('button', { name: 'Submit', exact: true }).click();
+    await modal.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.getByText('Sensitive data check saved')).toBeVisible();
 });
 
 test('the AI protection sheet shows examples, says it is pattern based, saves, and can be removed', async ({ page }) => {
-    const modal = await openAction(page, 'ai-protection-action', 'Score prompts sent to your AI endpoints');
+    const modal = await openAction(page, 'overview-action-ai-protection', 'Score prompts sent to your AI endpoints');
     await expect(modal.getByText('does not understand a prompt')).toBeVisible();
     await expect(modal.getByPlaceholder('/v1/chat')).toBeVisible();
     await expect(modal.getByPlaceholder('messages', { exact: true })).toBeVisible();
@@ -35,10 +34,10 @@ test('the AI protection sheet shows examples, says it is pattern based, saves, a
     await modal.getByPlaceholder('/v1/chat').fill('/v1/chat');
     await modal.getByPlaceholder('/v1/chat').press('Enter');
     await modal.getByPlaceholder('messages', { exact: true }).fill('messages');
-    await modal.getByRole('button', { name: 'Submit', exact: true }).click();
+    await modal.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.getByText('AI protection saved')).toBeVisible();
-    await page.getByRole('button', { name: 'Security', exact: true }).click();
-    await page.getByRole('menuitem', { name: 'Remove AI protection' }).click();
-    await page.locator('.fi-modal-window:visible').getByRole('button', { name: 'Confirm' }).click();
-    await expect(page.getByText('AI protection removed')).toBeVisible();
+    await page.getByTestId('overview-action-ai-protection').click();
+    await page.locator('.fi-modal-window:visible').getByTestId('settings-turn-off').click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Turn off', exact: true }).click();
+    await expect(page.getByText('AI protection turned off')).toBeVisible();
 });

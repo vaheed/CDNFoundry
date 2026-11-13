@@ -58,7 +58,8 @@ test('create rule starts from the request, and an exception is offered only wher
     const sheet = page.locator('.fi-modal-window:visible');
     await expect(sheet.getByRole('heading', { name: 'Create a rule from this request' })).toBeVisible();
     await expect(sheet.getByRole('textbox', { name: 'Value*' }).first()).toHaveValue('/admin/login');
-    await expect(sheet.getByText('Path equals /admin/login')).toBeVisible();
+    await expect(sheet.getByRole('heading', { name: 'Path equals /admin/login' })).toBeVisible();
+    await expect(sheet.getByTestId('rule-reads-as')).toContainText('Path equals /admin/login');
     await expectAccessible(page);
     await sheet.getByRole('button', { name: 'Cancel' }).click();
     // The request stopped by a platform rule has no exception: platform rules run before the domain's own.

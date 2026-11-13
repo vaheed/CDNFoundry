@@ -55,7 +55,7 @@ test('a ruleset page lists its rules in words, including the rate limit', async 
     await page.getByRole('button', { name: 'Add rule' }).click();
     const sheet = page.locator('.fi-modal-window:visible');
     await expect(sheet.getByRole('combobox', { name: /^Field/ })).toBeVisible();
-    await sheet.getByText('Limit the request rate').click();
+    await sheet.getByText('Only above a request rate').click();
     await settle(page);
     await expect(sheet.getByRole('spinbutton', { name: /^Requests/ })).toHaveAttribute('placeholder', '100');
     await expectAccessible(page);

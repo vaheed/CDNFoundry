@@ -7,8 +7,7 @@ async function openWaf(page: Page) {
     await signIn(page, 'admin', 'admin@browser.test', adminPassword);
     await page.goto('/admin/domains/1');
     await settle(page);
-    await page.getByRole('button', { name: 'Security', exact: true }).click();
-    await page.getByTestId('waf-profile-action').click();
+    await page.getByTestId('overview-action-waf-profile').click();
     const modal = page.locator('.fi-modal-window:visible');
     await expect(modal.getByRole('heading', { name: 'Choose web application firewall protection' })).toBeVisible();
     return modal;
@@ -18,7 +17,7 @@ test('the adjustments start collapsed and show the pinned ruleset when opened', 
     const modal = await openWaf(page);
     await expect(modal.getByText('Paranoia level')).toBeHidden();
     await modal.getByText('Adjust managed rules').click();
-    await expect(modal.getByText('owasp-crs/4.26.0')).toBeVisible();
+    await expect(modal.getByText('owasp-crs/4.30.0')).toBeVisible();
     await expect(modal.getByText('Paranoia level')).toBeVisible();
     await expectAccessible(page);
 });

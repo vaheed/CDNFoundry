@@ -80,7 +80,7 @@ test('the rate limit fields appear with the toggle, with examples and a per-cell
     await page.getByRole('button', { name: 'Add rule' }).click();
     const sheet = page.locator('.fi-modal-window:visible');
     await expect(sheet.getByRole('spinbutton', { name: /^Requests/ })).toHaveCount(0);
-    await sheet.getByText('Limit the request rate').click();
+    await sheet.getByText('Only above a request rate').click();
     await settle(page);
     await expect(sheet.getByRole('spinbutton', { name: /^Requests/ })).toHaveAttribute('placeholder', '100');
     await expect(sheet.getByRole('spinbutton', { name: /^Then for/ })).toHaveAttribute('placeholder', '300');
@@ -117,4 +117,22 @@ test('the user agent preset dialog has an example and a tooltip, and the hotlink
     await sheet.getByRole('button', { name: 'Cancel' }).click();
     await page.getByRole('button', { name: 'Presets', exact: true }).click();
     await expect(page.getByRole('menuitem', { name: 'Remove user agent rules' })).toHaveCount(0);
+});
+
+test('a field whose detection is not set up is listed but cannot be picked', async ({ page }) => {
+    await openRules(page);
+    await page.getByRole('button', { name: 'Add rule' }).click();
+    const sheet = page.locator('.fi-modal-window:visible');
+    const option = sheet.getByRole('combobox', { name: /^Field/ }).locator('option', { hasText: 'Prompt injection score (needs AI protection)' });
+    await expect(option).toHaveCount(1);
+    await expect(option).toBeDisabled();
+    await expect(sheet.getByRole('combobox', { name: /^Field/ }).locator('option', { hasText: 'Attack score' }).first()).toBeEnabled();
+    // The sheet reads top to bottom in one column: conditions, then the action, then the rule in words.
+    const conditions = await sheet.getByRole('combobox', { name: /^Field/ }).boundingBox();
+    const action = await sheet.getByRole('combobox', { name: /^Action/ }).boundingBox();
+    const width = (await sheet.boundingBox())?.width ?? 0;
+    expect(conditions && action && conditions.y < action.y && action.width > width * 0.6).toBe(true);
+    await expect(sheet.getByTestId('rule-reads-as')).toContainText('Reads as');
+    await expect(sheet.getByRole('button', { name: 'Add rule', exact: true })).toBeVisible();
+    await expectAccessible(page);
 });

@@ -12,6 +12,47 @@ import { adminPassword, settle, signIn, userPassword } from './helpers';
 
 type Problem = string;
 
+/*
+ * Roadmap frontend rules: every text, number, URL, list, and tag input shows an example placeholder, and every field whose
+ * meaning is not obvious from its label carries a help tooltip. Labels below are obvious and need no tooltip.
+ */
+const OBVIOUS_LABELS = new Set([
+    'name', 'note', 'notes', 'description', 'email', 'email address', 'password', 'confirm password', 'new password', 'current password',
+    'domain', 'display label', 'label', 'title', 'enabled', 'active', 'path', 'value', 'values', 'field', 'operator', 'action', 'country',
+    'continent', 'method', 'type', 'content', 'hostname', 'host', 'search', 'reason', 'comment', 'url', 'urls (one per line)', 'username field',
+    'password field', 'format', 'mode', 'role', 'user', 'users', 'domains', 'events', 'channel', 'header name', 'match', 'per', 'count by',
+    'requests', 'token name', 'expires', 'ttl', 'priority', 'name (optional)', 'revision', 'certificate', 'region', 'location', 'port',
+]);
+
+/** Inputs without an example and complex labels without help inside one open dialog or form. */
+async function auditForm(scope: Locator, where: string, problems: Problem[]): Promise<void> {
+    const found = await scope.evaluate((root, obvious) => {
+        const out: string[] = [];
+        const visible = (element: Element) => {
+            const box = (element as HTMLElement).getBoundingClientRect();
+            return box.width > 0 && box.height > 0 && getComputedStyle(element).visibility !== 'hidden';
+        };
+        const labelOf = (input: Element) => {
+            const wrapper = input.closest('.fi-fo-field');
+            return (wrapper?.querySelector('.fi-fo-field-label-content')?.textContent ?? input.getAttribute('aria-label') ?? input.id ?? '').replace(/\*/g, '').trim();
+        };
+        for (const input of root.querySelectorAll('input[type=text], input[type=number], input[type=url], input[type=email], input:not([type]), textarea')) {
+            const element = input as HTMLInputElement;
+            if (!visible(element) || element.readOnly || element.disabled) continue;
+            if (element.closest('.fi-fo-select, .fi-select-input, [role=combobox], .fi-fo-date-time-picker')) continue;
+            if ((element.getAttribute('placeholder') ?? '').trim() === '') out.push(`input "${labelOf(element) || element.name || 'unnamed'}" has no example placeholder`);
+        }
+        for (const label of root.querySelectorAll('.fi-fo-field-label-content')) {
+            if (!visible(label)) continue;
+            const text = (label.textContent ?? '').replace(/\*/g, '').trim();
+            if (text === '' || obvious.includes(text.toLowerCase())) continue;
+            if (!label.querySelector('[x-tooltip]') && !label.closest('label')?.querySelector('[x-tooltip]')) out.push(`field "${text}" has no help tooltip`);
+        }
+        return out;
+    }, [...OBVIOUS_LABELS]);
+    for (const finding of new Set(found)) problems.push(`${where}: ${finding}`);
+}
+
 function watch(page: Page, problems: Problem[]): void {
     page.on('pageerror', (error) => problems.push(`${page.url()} script error: ${error.message}`));
     // The panels run under an enforced Content-Security-Policy; a blocked script, style, image, or request is a failure.
@@ -55,6 +96,8 @@ async function closeModal(page: Page, modal: Locator): Promise<void> {
 }
 
 /** Clicks one action and checks the result: a dialog that opens and closes, a navigation, or an immediate run without errors. */
+const helpProblems: Problem[] = [];
+
 async function tryAction(page: Page, target: Locator, label: string, origin: string, problems: Problem[]): Promise<void> {
     // A disabled action (for example deleting your own account) is correct behavior, not a failure: it is not clicked.
     if (await target.isDisabled().catch(() => false) || (await target.getAttribute('aria-disabled')) === 'true') {
@@ -63,6 +106,7 @@ async function tryAction(page: Page, target: Locator, label: string, origin: str
     await target.click({ timeout: 5_000 });
     const modal = await openModal(page);
     if (modal) {
+        await auditForm(modal, `${origin} "${label}"`, helpProblems);
         const heading = modal.locator('.fi-modal-heading');
         if ((await heading.count()) === 0 || (await heading.first().innerText()).trim() === '') {
             problems.push(`${origin}: dialog for "${label}" has no heading`);
@@ -115,6 +159,18 @@ async function exerciseActions(page: Page, path: string, problems: Problem[]): P
             await tryAction(page, button, name, path, problems).catch((error) => problems.push(`${path}: row action "${name}" failed: ${String(error).split('\n')[0]}`));
         }
     }
+
+    // Buttons beside the facts they change on a detail page's overview sections.
+    const sectionButtons = page.locator('[data-testid^="overview-action-"]:visible');
+    const sectionIds = [...new Set(await sectionButtons.evaluateAll((buttons) => buttons.map((button) => button.getAttribute('data-testid') ?? '')))];
+    for (const id of sectionIds) {
+        const button = page.getByTestId(id).first();
+        if (!(await button.isVisible().catch(() => false))) continue;
+        await tryAction(page, button, id, path, problems).catch((error) => problems.push(`${path}: section action "${id}" failed: ${String(error).split('\n')[0]}`));
+    }
+
+    // Forms shown on the page itself (settings pages, edit pages).
+    await auditForm(page.locator('main, .fi-main').first(), path, helpProblems);
 
     // Tabs (detail pages and relation managers).
     const tabs = page.locator('[role=tab]:visible, .fi-tabs-item:visible');
@@ -169,14 +225,22 @@ test.describe('crawl every link and action', () => {
         test.setTimeout(30 * 60_000);
     });
 
-    test('administrator panel', async ({ page }) => {
+    test('administrator panel', async ({ page }, info) => {
         await signIn(page, 'admin', 'admin@browser.test', adminPassword);
-        expect(await crawl(page, 'admin')).toEqual([]);
+        helpProblems.length = 0;
+        const problems = await crawl(page, 'admin');
+        await info.attach('form-help-admin', { body: [...new Set(helpProblems)].join('\n') || 'none', contentType: 'text/plain' });
+        expect(problems).toEqual([]);
+        expect([...new Set(helpProblems)]).toEqual([]);
     });
 
-    test('domain panel', async ({ page }) => {
+    test('domain panel', async ({ page }, info) => {
         await signIn(page, 'app', 'user@browser.test', userPassword);
-        expect(await crawl(page, 'app')).toEqual([]);
+        helpProblems.length = 0;
+        const problems = await crawl(page, 'app');
+        await info.attach('form-help-app', { body: [...new Set(helpProblems)].join('\n') || 'none', contentType: 'text/plain' });
+        expect(problems).toEqual([]);
+        expect([...new Set(helpProblems)]).toEqual([]);
     });
 
     test('public pages and their links', async ({ page }) => {

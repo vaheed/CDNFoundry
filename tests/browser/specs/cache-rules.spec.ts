@@ -7,8 +7,7 @@ async function openCacheSettings(page: Page) {
     await signIn(page, 'admin', 'admin@browser.test', adminPassword);
     await page.goto('/admin/domains/1');
     await settle(page);
-    await page.getByRole('button', { name: 'Cache', exact: true }).click();
-    await page.getByTestId('cache-settings-action').click();
+    await page.getByTestId('overview-action-cache-settings').click();
     const modal = page.locator('.fi-modal-window:visible');
     await expect(modal.getByRole('heading', { name: 'Cache settings' })).toBeVisible();
     return modal;
@@ -50,12 +49,12 @@ test('a path prefix without a leading slash is refused on the field', async ({ p
     const modal = await openCacheSettings(page);
     await modal.getByRole('button', { name: 'Add path rule' }).click();
     await modal.getByRole('textbox', { name: 'Path*' }).fill('static');
-    // Blurring the field sends its value and re-renders the form; clicking Submit during that re-render is lost.
+    // Blurring the field sends its value and re-renders the form; clicking Save during that re-render is lost.
     await modal.getByRole('textbox', { name: 'Path*' }).press('Tab');
     await page.waitForLoadState('networkidle');
     await modal.getByRole('combobox', { name: 'Action*' }).selectOption('bypass');
     // The Action select is live: let its Livewire round trip finish before submitting.
     await page.waitForLoadState('networkidle');
-    await modal.getByRole('button', { name: 'Submit', exact: true }).click();
+    await modal.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(modal.getByText('A path prefix must start with /.')).toBeVisible();
 });
