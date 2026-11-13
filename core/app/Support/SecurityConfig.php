@@ -26,6 +26,8 @@ final class SecurityConfig
         'waf_rule_logged',
         // Platform rulesets working: set by the operator for the domain, they never push it toward a stricter state.
         'platform_rule_block', 'platform_rule_challenge', 'platform_rule_log', 'platform_rule_rate_limited',
+        // Detections working: they only log what the response held, so they never push the domain toward a stricter state.
+        'sensitive_data_card', 'sensitive_data_iban', 'sensitive_data_private_key', 'sensitive_data_api_key',
     ];
 
     /** Automatic escalation looks at the rate over a short window, never at a lifetime counter. */
@@ -152,6 +154,8 @@ final class SecurityConfig
             'configured_limits' => $configured['limits'],
             'limits' => $limits,
             'credential_check' => CredentialCheckData::forEdge($domain->credential_check),
+            'sensitive_data' => SensitiveDataCheckData::forEdge($domain->sensitive_data_check),
+            'ai_protection' => AiProtectionData::forEdge($domain->ai_protection),
             'platform_rules' => PlatformRulesets::forDomain($domain),
             'rules' => $domain->securityRules()->where('enabled', true)->orderBy('priority')->orderBy('id')
                 ->get(['id', 'name', 'preset', 'conditions', 'rate_limit', 'action', 'priority'])->toArray(),

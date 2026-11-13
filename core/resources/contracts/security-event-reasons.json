@@ -37,6 +37,10 @@
     "platform_rule_block",
     "platform_rule_challenge",
     "platform_rule_log",
-    "platform_rule_rate_limited"
+    "platform_rule_rate_limited",
+    "sensitive_data_card",
+    "sensitive_data_iban",
+    "sensitive_data_private_key",
+    "sensitive_data_api_key"
   ]
 }
