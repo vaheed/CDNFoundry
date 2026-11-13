@@ -32,6 +32,7 @@
     "custom_rule_block",
     "custom_rule_challenge",
     "custom_rule_log",
-    "custom_rule_rate_limited"
+    "custom_rule_rate_limited",
+    "waf_rule_logged"
   ]
 }

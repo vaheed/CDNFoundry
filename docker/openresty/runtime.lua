@@ -640,15 +640,16 @@ end
 -- Asks ModSecurity for the CRS anomaly points of this request without blocking it: the request goes to the loopback
 -- scoring listener, which answers with a redirect whose address carries the points. Returns nil when no score could be read,
 -- and the request is then never scored. A body larger than the limit is not forwarded, so only its headers and address count.
-local function score_request(body_limit)
+local function score_request(body_limit, off_list)
     local socket = ngx.socket.tcp()
     socket:settimeouts(200, 1000, 2000)
     if not socket:connect("127.0.0.1", 9082) then return nil end
     local body = request_body_text(body_limit)
     local lines = {ngx.req.get_method() .. " " .. (ngx.var.request_uri or "/") .. " HTTP/1.1", "Connection: close"}
+    if off_list and #off_list > 0 then lines[#lines + 1] = "X-CDNF-Internal-WAF-Off: ," .. table.concat(off_list, ",") .. "," end
     for name, value in pairs(ngx.req.get_headers(100, true)) do
         local lowered = name:lower()
-        if not SCORE_HOP_HEADERS[lowered] then
+        if not SCORE_HOP_HEADERS[lowered] and lowered ~= "x-cdnf-internal-waf-off" then
             if type(value) ~= "table" then value = {value} end
             for _, item in ipairs(value) do
                 if not tostring(item):find("[\r\n]") then lines[#lines + 1] = name .. ": " .. tostring(item) end
@@ -1160,13 +1161,26 @@ function M.access()
     local scoring = waf_mode == "block" or waf_mode == "monitor"
     if scoring or has_score_rule(rules) then
         if not scoring then ngx.req.set_header("X-CDNF-Internal-WAF-Paranoia", "1") end
-        local scores = score_request(math.max(1024, math.min(1048576, tonumber(waf_settings.body_limit_bytes) or 1048576)))
+        local limit = math.max(1024, math.min(1048576, tonumber(waf_settings.body_limit_bytes) or 1048576))
+        -- Categories and rules the domain switched off are removed from the scoring pass. Log-only rules are removed from the
+        -- score that decides, and a second pass without that removal shows whether one of them matched.
+        local off = {}
+        for _, prefix in ipairs(waf_settings.off_categories or {}) do off[#off + 1] = tostring(prefix) end
+        for _, id in ipairs(waf_settings.off_rules or {}) do off[#off + 1] = tostring(id) end
+        local detected
+        local log_only = waf_settings.log_only_rules or {}
+        if #log_only > 0 and scoring then detected = score_request(limit, off) end
+        for _, id in ipairs(log_only) do off[#off + 1] = tostring(id) end
+        local scores = score_request(limit, off)
+        if scores and detected and detected.total > scores.total then record_security_event("waf_rule_logged") end
         if scores then
             request.scores = scores
             ngx.var.cdn_attack_score = tostring(scores.attack_score)
             ngx.var.cdn_attack_score_sqli = tostring(scores.attack_score_sqli)
             ngx.var.cdn_attack_score_xss = tostring(scores.attack_score_xss)
             ngx.var.cdn_attack_score_rce = tostring(scores.attack_score_rce)
+            -- The score decided; inspecting the same request again on its way to the origin would apply the unadjusted rules.
+            ngx.req.set_header("X-CDNF-Internal-WAF-Mode", "off")
         end
     end
     for index, rule in ipairs(rules) do

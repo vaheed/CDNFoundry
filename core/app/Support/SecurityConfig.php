@@ -22,6 +22,8 @@ final class SecurityConfig
         'incident_method', 'incident_body_size', 'challenge_required', 'challenge_invalid',
         // A domain's own custom rules working: they never push the domain toward a stricter automatic state.
         'custom_rule_block', 'custom_rule_challenge', 'custom_rule_log', 'custom_rule_rate_limited',
+        // A log-only managed rule matched: the domain chose to watch it, not to count it.
+        'waf_rule_logged',
     ];
 
     /** Automatic escalation looks at the rate over a short window, never at a lifetime counter. */

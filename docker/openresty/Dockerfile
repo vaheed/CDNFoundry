@@ -60,6 +60,15 @@ COPY --from=module-builder /tmp/coreruleset/crs-setup.conf.example /etc/cdnfound
 COPY --from=module-builder /tmp/coreruleset/rules /etc/cdnfoundry/crs/rules
 COPY docker/openresty/waf.conf /etc/cdnfoundry/waf.conf
 COPY docker/openresty/waf-score.conf /etc/cdnfoundry/waf-score.conf
+COPY core/resources/contracts/crs-rules.json /tmp/crs-rules.json
+RUN set -eu; n=0; \
+    for prefix in $(grep -o '"[0-9][0-9][0-9]": {' /tmp/crs-rules.json | grep -o '[0-9][0-9][0-9]'); do \
+      n=$((n+1)); echo "SecRule REQUEST_HEADERS:X-CDNF-Internal-WAF-Off \"@contains ,${prefix},\" \"id:$((1100000+n)),phase:1,pass,nolog,ctl:ruleRemoveById=${prefix}000-${prefix}999\""; \
+    done > /etc/cdnfoundry/waf-controls.conf; \
+    for rule in $(grep -o '"id": [0-9]*' /tmp/crs-rules.json | grep -o '[0-9]*$'); do \
+      n=$((n+1)); echo "SecRule REQUEST_HEADERS:X-CDNF-Internal-WAF-Off \"@contains ,${rule},\" \"id:$((1100000+n)),phase:1,pass,nolog,ctl:ruleRemoveById=${rule}\""; \
+    done >> /etc/cdnfoundry/waf-controls.conf; \
+    rm /tmp/crs-rules.json
 RUN sed -i 's/^SecRuleEngine .*/SecRuleEngine On/' /etc/cdnfoundry/modsecurity.conf \
     && sed -i 's/^SecAuditEngine .*/SecAuditEngine RelevantOnly/' /etc/cdnfoundry/modsecurity.conf \
     && sed -i 's/^SecAuditLogParts .*/SecAuditLogParts AHZ/' /etc/cdnfoundry/modsecurity.conf \
