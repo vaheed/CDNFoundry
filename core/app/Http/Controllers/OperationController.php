@@ -16,6 +16,7 @@ use App\Jobs\ReconcileAllPurges;
 use App\Jobs\ReconcileAllTls;
 use App\Jobs\ReconcileDnsZone;
 use App\Jobs\ReconcileEdgeDomain;
+use App\Jobs\ReconcilePlatformRulesets;
 use App\Jobs\TestDnsCluster;
 use App\Jobs\VerifyDomainNameservers;
 use App\Models\AuditLog;
@@ -65,7 +66,7 @@ class OperationController extends Controller
     public function retry(Request $request, Operation $operation): JsonResponse
     {
         abort_unless($operation->status === 'failed', 409, 'Only failed operations can be retried.');
-        abort_unless(in_array($operation->type, ['platform_dns_identity.update', 'system_settings.update', 'domain.nameservers_verify', 'dns.zone_reconcile', 'dns.zone_import', 'dns.cluster_test', 'dns.global_reconcile', 'edge.global_reconcile', 'edges.global_reconcile', 'tls.global_reconcile', 'purges.global_reconcile', 'usage.global_reconcile', 'usage.rebuild', 'backup.create', 'backup.restore', 'backup.delete', 'edge.domain_reconcile', 'edge.origin_test'], true), 422, 'Unsupported operation type.');
+        abort_unless(in_array($operation->type, ['platform_dns_identity.update', 'system_settings.update', 'domain.nameservers_verify', 'dns.zone_reconcile', 'dns.zone_import', 'dns.cluster_test', 'dns.global_reconcile', 'edge.global_reconcile', 'edges.global_reconcile', 'tls.global_reconcile', 'purges.global_reconcile', 'usage.global_reconcile', 'usage.rebuild', 'backup.create', 'backup.restore', 'backup.delete', 'edge.domain_reconcile', 'edge.platform_ruleset_reconcile', 'edge.origin_test'], true), 422, 'Unsupported operation type.');
         $operation->update(['status' => 'pending', 'error' => null, 'finished_at' => null, 'acknowledged_at' => null, 'acknowledged_by' => null]);
         AuditLog::record($request->user(), 'operation.retry_requested', $operation, [], $request->ip());
         match ($operation->type) {
@@ -86,6 +87,7 @@ class OperationController extends Controller
             'backup.restore' => PreflightBackupRestore::dispatch($operation->input['backup_id'], $operation->getKey()),
             'backup.delete' => DeleteControlBackup::dispatch($operation->input['backup_id'], $operation->getKey()),
             'edge.domain_reconcile' => ReconcileEdgeDomain::dispatch((int) $operation->input['domain_id']),
+            'edge.platform_ruleset_reconcile' => ReconcilePlatformRulesets::dispatch($operation->getKey()),
             'edge.origin_test' => DispatchOriginTest::dispatch($operation->getKey()),
         };
 

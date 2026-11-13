@@ -24,6 +24,8 @@ final class SecurityConfig
         'custom_rule_block', 'custom_rule_challenge', 'custom_rule_log', 'custom_rule_rate_limited',
         // A log-only managed rule matched: the domain chose to watch it, not to count it.
         'waf_rule_logged',
+        // Platform rulesets working: set by the operator for the domain, they never push it toward a stricter state.
+        'platform_rule_block', 'platform_rule_challenge', 'platform_rule_log', 'platform_rule_rate_limited',
     ];
 
     /** Automatic escalation looks at the rate over a short window, never at a lifetime counter. */
@@ -149,6 +151,7 @@ final class SecurityConfig
             'trusted_proxy_cidrs' => array_values($configured['trusted_proxy_cidrs']),
             'configured_limits' => $configured['limits'],
             'limits' => $limits,
+            'platform_rules' => PlatformRulesets::forDomain($domain),
             'rules' => $domain->securityRules()->where('enabled', true)->orderBy('priority')->orderBy('id')
                 ->get(['id', 'name', 'preset', 'conditions', 'rate_limit', 'action', 'priority'])->toArray(),
         ];

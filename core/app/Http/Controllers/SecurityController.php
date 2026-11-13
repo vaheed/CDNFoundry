@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\Domain;
 use App\Models\Operation;
 use App\Models\SecurityRule;
+use App\Support\PlatformRulesets;
 use App\Support\SecurityConfig;
 use App\Support\SecurityRuleData;
 use Illuminate\Http\JsonResponse;
@@ -36,6 +37,18 @@ class SecurityController extends Controller
         });
 
         return $this->queue($request, $domain);
+    }
+
+    /** The platform rulesets that apply to the domain. Their rules are never shown to a domain owner. */
+    public function platformRulesets(Domain $domain): JsonResponse
+    {
+        Gate::authorize('view', $domain);
+        $reasons = ['platform_rule_block', 'platform_rule_challenge', 'platform_rule_log', 'platform_rule_rate_limited'];
+
+        return response()->json(['data' => [
+            'rulesets' => PlatformRulesets::namesFor($domain),
+            'matches_last_24_hours' => $domain->securityEvents()->whereIn('reason_code', $reasons)->where('occurred_at', '>=', now()->subDay())->get(['details'])->sum(fn ($event): int => (int) ($event->details['count'] ?? 0)),
+        ]]);
     }
 
     public function rules(Domain $domain): JsonResponse

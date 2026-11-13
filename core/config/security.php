@@ -10,6 +10,10 @@ return [
     ],
     'maximum_rules_per_domain' => 1000,
     'maximum_import_rules' => 500,
+    // Platform rulesets: how many exist, how many rules each holds, and how many domains a ruleset may list.
+    'maximum_platform_rulesets' => 10,
+    'maximum_platform_rules_per_ruleset' => 100,
+    'maximum_platform_ruleset_domains' => 500,
     // Rate-limit rules per domain. The hard ceiling is 50; a lower value here tightens it.
     'maximum_rate_limit_rules' => env('SECURITY_RATE_LIMIT_RULES', 20),
     // Values in one in_list condition. The hard ceiling is 100; a lower value here tightens it.
