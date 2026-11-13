@@ -36,6 +36,7 @@ alerts such as a stale edge heartbeat never reach a domain user.
 | Origin errors above threshold | Origin errors reached the platform threshold over five minutes |
 | Mitigated requests above threshold | The domain's [security alert](security.md#security-alerts) threshold was reached |
 | Log push failing | A [log push](log-push.md) destination failed several deliveries in a row |
+| New script or connection seen on a page | [Client-side security](security.md#client-side-security) saw a script or connection after its baseline window |
 | Platform alert (administrators only) | Alertmanager sent an alert |
 
 ## Add a channel as an administrator

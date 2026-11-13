@@ -103,6 +103,7 @@ receive a new signed revision.
 | `attack_score`, `attack_score_sqli`, `attack_score_xss`, `attack_score_rce` | equals, not equals, in list, greater than, less than | 1 to 99 |
 | `prompt_injection_score` | equals, not equals, in list, greater than, less than | 1 to 99 (see AI prompts) |
 | `prompt_pii` | equals | `true` when the prompt holds personal data (see AI prompts) |
+| `schema_violation` | equals, not equals, in list, not in list | `any`, `none`, `unknown_path`, `wrong_method`, `missing_parameter`, `invalid_parameter`, or `body_too_large` (see API schema) |
 | `leaked_password` | equals | `true` when the password sent to a login path is in the leaked-password set (see below) |
 
 Hostname, user agent, referer, header, and content type compare without regard to
@@ -172,6 +173,66 @@ translated attacks, and it can match a prompt that quotes an attack phrase. A
 prompt field that is a list of messages is read from each message's `content`.
 Prompts are never stored or logged. A request that is not to one of the endpoints,
 or whose prompt cannot be read, leaves both fields unset.
+
+### API schema
+
+`PUT /api/domains/{domain}/security/api-schema` takes an OpenAPI 3 document as JSON
+in `document`, a `base_path` (default `/`), and a `maximum_body_bytes` for JSON
+bodies (default 65,536, at most 1,048,576). The control plane keeps only a table of
+paths, methods, and parameters, and sends it to the cells in the signed snapshot.
+The document is limited to 256 KB and 200 operations, with at most 20 parameters per
+operation. Only references to `#/components/parameters/Name` inside the document are
+followed. YAML is not accepted, and an invalid document is refused with a message
+that says what is wrong while the previous table stays active.
+
+For every request under `base_path` the cell sets `schema_violation` to the first of:
+
+| Value | Meaning |
+| --- | --- |
+| `unknown_path` | No path in the document fits. A `{name}` part matches exactly one segment |
+| `wrong_method` | The path exists but not for this method (`HEAD` follows `GET`, and `OPTIONS` is never a violation) |
+| `missing_parameter` | A required path, query, or header parameter is absent |
+| `invalid_parameter` | A parameter does not fit its type (`integer`, `number`, `boolean`) |
+| `body_too_large` | A request with a JSON content type is larger than `maximum_body_bytes` |
+| `none` | The request fits the schema |
+
+Each violation is also counted as a security event (`schema_unknown_path` and so on)
+that never moves the domain toward a stricter automatic state. Nothing is blocked by
+the schema alone: review the events, then add a rule such as `schema_violation equals
+any` with the action block. Request bodies are checked for size only, never for their
+fields, cookie parameters are ignored, and requests outside `base_path` are never
+checked.
+
+### Client-side security
+
+`PUT /api/domains/{domain}/security/client-side` turns on script reporting.
+`maximum_reports_per_minute` (10 to 600, default 120) bounds what one cell accepts
+for the domain, and `baseline_minutes` (0 to 1,440, default 60) is the window after
+turning it on in which what browsers report is approved at once.
+
+The cell adds `Content-Security-Policy-Report-Only: script-src 'none'; connect-src
+'none'; report-uri /.cdnf/csp-report` to HTML responses that carry no report-only
+policy of their own. The policy only reports and blocks nothing. Browsers send a
+report for each script and connection they would have blocked, to the reserved path
+`/.cdnf/csp-report`. The cell reduces a report to its type, the page path (no query
+string), and the origin of what was loaded, and discards the rest. Reports for other
+hosts or other directives are dropped, and the path answers `204` to every report
+that fits the size limit (4 KB) so the page learns nothing. Reports travel through
+Vector into ClickHouse with the request log.
+
+A scheduled sync (`cdnf:client-security:sync-scripts`, every minute) records each
+page and origin once with the day it was first seen. The first window is the
+baseline. After it, a new script or connection is marked **New**, listed in the
+domain's **Scripts and connections** tab, and sent as one `client_script.new`
+notification per run (see [notifications](notifications.md)). Approving an entry,
+or all of them, changes only the list: nothing is enforced and no cell is told.
+`GET /api/domains/{domain}/security/client-side/scripts` lists them with cursor
+pagination, and `POST .../scripts/approve` or `.../scripts/{id}/approve` approves.
+
+Limits: up to 1,000 entries per domain, and anyone can send a report for your domain,
+so a fake entry is possible and a missing one proves nothing. The list shows what
+browsers reported, not every script on a page, and inline scripts appear as `inline`.
+An enforced policy built from the approved list is not offered.
 
 ### Measured results
 
