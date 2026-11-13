@@ -699,12 +699,12 @@ local function score_request(body_limit, off_list)
 end
 
 -- Whether a field of the rules uses the leaked-password flag, so a request is only read when a rule can use the result.
-local function has_leaked_password_rule(rules)
+local function has_field_rule(rules, fields)
     for index, rule in ipairs(rules) do
         if index > 1000 then break end
         if type(rule.conditions) == "table" then
             for _, condition in ipairs(rule.conditions) do
-                if type(condition) == "table" and condition.field == "leaked_password" then return true end
+                if type(condition) == "table" and fields[condition.field] then return true end
             end
         end
     end
@@ -747,6 +747,185 @@ local function leaked_password_flag(check, method, uri)
     local set = ngx.shared.leaked_passwords
     if not set then return nil end
     return set:get(resty_string.to_hex(sha256_raw(password)):sub(1, 16)) == true
+end
+
+
+-- Fixed-pattern detectors for payment cards, IBANs, private keys, and API keys. They run on a bounded slice of text, never
+-- keep the matched value, and are shared by the response check and the prompt check.
+local function luhn_valid(digits)
+    local sum, double = 0, false
+    for i = #digits, 1, -1 do
+        local digit = digits:byte(i) - 48
+        if double then digit = digit * 2; if digit > 9 then digit = digit - 9 end end
+        sum = sum + digit
+        double = not double
+    end
+    return sum % 10 == 0
+end
+
+local function card_candidate(digits)
+    return #digits >= 13 and #digits <= 19 and digits:find("^[3-6]") ~= nil and luhn_valid(digits)
+end
+
+local function find_card(text)
+    local checked = 0
+    for run in text:gmatch("%d+") do
+        checked = checked + 1
+        if checked > 200 then return false end
+        if #run >= 13 and #run <= 19 and card_candidate(run) then return true end
+    end
+    local grouped = {
+        "%d%d%d%d[ %-]%d%d%d%d[ %-]%d%d%d%d[ %-]%d%d%d%d%d?%d?%d?",
+        "%d%d%d%d[ %-]%d%d%d%d%d%d[ %-]%d%d%d%d%d",
+    }
+    for _, pattern in ipairs(grouped) do
+        checked = 0
+        for run in text:gmatch(pattern) do
+            checked = checked + 1
+            if checked > 50 then break end
+            if card_candidate((run:gsub("[ %-]", ""))) then return true end
+        end
+    end
+    return false
+end
+
+local IBAN_LENGTHS = {
+    AT = 20, BE = 16, CH = 21, DE = 22, DK = 18, ES = 24, FI = 18, FR = 27, GB = 22, IE = 22, IT = 27, LU = 20,
+    NL = 18, NO = 15, PL = 28, PT = 25, SE = 24, TR = 26, AE = 23, SA = 24,
+}
+
+local function iban_valid(candidate)
+    local length = IBAN_LENGTHS[candidate:sub(1, 2)]
+    if not length or #candidate < length then return false end
+    local rearranged = candidate:sub(5, length) .. candidate:sub(1, 4)
+    local remainder = 0
+    for i = 1, #rearranged do
+        local byte = rearranged:byte(i)
+        if byte >= 48 and byte <= 57 then
+            remainder = (remainder * 10 + byte - 48) % 97
+        elseif byte >= 65 and byte <= 90 then
+            remainder = (remainder * 100 + byte - 55) % 97
+        else
+            return false
+        end
+    end
+    return remainder == 1
+end
+
+local function find_iban(text)
+    local checked = 0
+    for candidate in text:gmatch("%f[%w]%u%u%d%d[%w ]+") do
+        checked = checked + 1
+        if checked > 50 then return false end
+        if iban_valid((candidate:sub(1, 48):gsub(" ", ""))) then return true end
+    end
+    return false
+end
+
+local API_KEY_PATTERNS = {
+    "AKIA" .. string.rep("[%u%d]", 16), "ghp_" .. string.rep("%w", 36), "sk_live_" .. string.rep("%w", 24),
+    "xox[baprs]%-%w%w%w%w%w%w%w%w%w%w", "AIza" .. string.rep("[%w_%-]", 35),
+}
+
+local function find_api_key(text)
+    for _, pattern in ipairs(API_KEY_PATTERNS) do
+        if text:find(pattern) then return true end
+    end
+    return false
+end
+
+local function find_private_key(text)
+    local start = text:find("-----BEGIN ", 1, true)
+    return start ~= nil and text:find("PRIVATE KEY-----", start, true) ~= nil
+end
+
+local SENSITIVE_DETECTORS = {card = find_card, iban = find_iban, private_key = find_private_key, api_key = find_api_key}
+local SENSITIVE_TYPES = {"text/", "json", "xml", "javascript", "x-www-form-urlencoded"}
+
+-- Reads the start of a text response, once per kind it finds records a log-only security event with no value. The response is
+-- never changed or delayed: the check runs on the chunks as they pass.
+function M.inspect_response()
+    local kinds = ngx.var.cdn_sensitive_kinds
+    if kinds == nil or kinds == "" then return end
+    local context = ngx.ctx
+    if context.sensitive_done then return end
+    if context.sensitive_buffer == nil then
+        local content_type = (ngx.header.content_type or ""):lower()
+        local readable = false
+        for _, marker in ipairs(SENSITIVE_TYPES) do
+            if content_type:find(marker, 1, true) then readable = true; break end
+        end
+        if not readable or ngx.header.content_encoding then context.sensitive_done = true; return end
+        context.sensitive_buffer = ""
+    end
+    local limit = math.min(tonumber(ngx.var.cdn_sensitive_bytes) or 16384, 16384)
+    local chunk, finished = ngx.arg[1], ngx.arg[2]
+    if #context.sensitive_buffer < limit and chunk then
+        context.sensitive_buffer = context.sensitive_buffer .. chunk:sub(1, limit - #context.sensitive_buffer)
+    end
+    if #context.sensitive_buffer < limit and not finished then return end
+    context.sensitive_done = true
+    local text = context.sensitive_buffer
+    context.sensitive_buffer = nil
+    for kind in kinds:gmatch("[a-z_]+") do
+        local detector = SENSITIVE_DETECTORS[kind]
+        if detector and detector(text) then record_security_event("sensitive_data_" .. kind) end
+    end
+end
+
+-- Prompt checks for the AI endpoints a domain names. The prompt is scored on the cell and never stored or logged.
+local INJECTION_PHRASES = {
+    "ignore previous instructions", "ignore all previous", "ignore the above", "disregard your instructions", "disregard all prior",
+    "forget everything above", "forget your instructions", "reveal your system prompt", "print your system prompt", "show your system prompt",
+    "you are now dan", "do anything now", "developer mode", "jailbreak", "pretend you have no restrictions", "override your instructions",
+    "act as an unrestricted", "bypass your safety",
+}
+
+local function prompt_injection_score(prompt)
+    local lowered = prompt:lower():gsub("%s+", " ")
+    local hits = 0
+    for _, phrase in ipairs(INJECTION_PHRASES) do
+        if lowered:find(phrase, 1, true) then hits = hits + 1 end
+    end
+    return math.max(1, 99 - 40 * hits)
+end
+
+local function prompt_has_personal_data(prompt)
+    if prompt:find("[%w%._%-%+]+@[%w%-]+%.[%w%.%-]+") then return true end
+    if prompt:find("%f[%d]%d%d%d%-%d%d%-%d%d%d%d%f[%D]") then return true end
+    return find_card(prompt) or find_iban(prompt)
+end
+
+-- Returns the injection score and the personal-data flag for a request to one of the domain's AI endpoints, or nil when the
+-- request is not one or no prompt could be read.
+local function prompt_signals(check, method, uri)
+    if type(check) ~= "table" or type(check.endpoints) ~= "table" or type(check.prompt_field) ~= "string" then return nil end
+    if method ~= "POST" and method ~= "PUT" then return nil end
+    local matched = false
+    for index, endpoint in ipairs(check.endpoints) do
+        if index > 5 then break end
+        if endpoint == uri then matched = true; break end
+    end
+    if not matched then return nil end
+    local body = request_body_text(math.min(tonumber(check.body_bytes) or 16384, 16384))
+    if not body then return nil end
+    local decoded = cjson.decode(body)
+    for part in check.prompt_field:gmatch("[^.]+") do
+        if type(decoded) ~= "table" then return nil end
+        decoded = decoded[part]
+    end
+    if type(decoded) == "table" then
+        local parts = {}
+        for index, item in ipairs(decoded) do
+            if index > 50 then break end
+            if type(item) == "string" then parts[#parts + 1] = item
+            elseif type(item) == "table" and type(item.content) == "string" then parts[#parts + 1] = item.content end
+        end
+        decoded = table.concat(parts, "\n")
+    end
+    if type(decoded) ~= "string" or decoded == "" then return nil end
+    decoded = decoded:sub(1, 16384)
+    return prompt_injection_score(decoded), prompt_has_personal_data(decoded)
 end
 
 -- The host of a Referer address in lower case, or nil when the header is absent or is not an address.
@@ -890,6 +1069,8 @@ local function condition_matches(condition, request)
     if field == "tls_version" then return text_matches(operator, request.tls_version, expected, false) end
     if SCORE_FIELDS[field] then return number_matches(operator, request.scores and request.scores[field], expected) end
     if field == "leaked_password" then return request.leaked_password ~= nil and request.leaked_password == (expected == true) end
+    if field == "prompt_injection_score" then return number_matches(operator, request.prompt_injection_score, expected) end
+    if field == "prompt_pii" then return request.prompt_pii ~= nil and request.prompt_pii == (expected == true) end
     return false
 end
 
@@ -1275,7 +1456,15 @@ function M.access()
     }
     local skip_managed = false
     local rule_challenge = nil
-    if has_leaked_password_rule(rules) then request.leaked_password = leaked_password_flag(config.security and config.security.credential_check, method, request.path) end
+    if has_field_rule(rules, {leaked_password = true}) then request.leaked_password = leaked_password_flag(security.credential_check, method, request.path) end
+    if has_field_rule(rules, {prompt_injection_score = true, prompt_pii = true}) then
+        request.prompt_injection_score, request.prompt_pii = prompt_signals(security.ai_protection, method, request.path)
+    end
+    local sensitive = security.sensitive_data
+    if type(sensitive) == "table" and type(sensitive.kinds) == "table" and #sensitive.kinds > 0 then
+        ngx.var.cdn_sensitive_kinds = table.concat(sensitive.kinds, ",")
+        ngx.var.cdn_sensitive_bytes = tostring(tonumber(sensitive.response_bytes) or 16384)
+    end
     -- The managed WAF scores the request for its own profile; a custom rule on the attack score asks for a score even when
     -- the profile is off, and then the request is scored at paranoia level 1 and never blocked by the managed rules.
     local waf_settings = config.waf or {}
