@@ -92,10 +92,10 @@ detach).
 A user with domain assignments or active API tokens cannot be permanently
 deleted. Remove assignments and revoke tokens first.
 
-## Log in as a domain user
+## Login as a domain user
 
 An administrator can open the domain panel as a domain user to see exactly what they see, for example to answer a
-support question. Open **Users**, choose **Log in as user** on the user's row, and confirm. The domain panel opens as that
+support question. Open **Users**, choose **Login as** on the user's row, and confirm. The domain panel opens as that
 user, with their domains and permissions, and the user's password is not needed.
 
 - A banner on every page says whose account you are using. **Return to admin** ends it and opens **Users** again.

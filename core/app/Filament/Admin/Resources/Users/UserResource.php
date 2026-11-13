@@ -60,12 +60,12 @@ class UserResource extends Resource
                 TextColumn::make('created_at')->dateTime()->sortable(),
             ])
             ->recordActions([
-                Action::make('impersonate')->label('Log in as user')->icon('phosphor-sign-in')->color('gray')
+                Action::make('impersonate')->label('Login as')->icon('phosphor-sign-in')->color('gray')
                     ->extraAttributes(['data-testid' => 'user-impersonate-action'])
                     ->visible(fn (User $record): bool => Impersonation::allowed(auth()->user(), $record))
-                    ->requiresConfirmation()->modalHeading(fn (User $record): string => "Log in as {$record->name}?")
+                    ->requiresConfirmation()->modalHeading(fn (User $record): string => "Login as {$record->name}?")
                     ->modalDescription('The domain panel opens as this user, with their domains and permissions. It is recorded in the audit log, and everything you change is recorded as theirs, made by you. Return with the banner at the top of the page.')
-                    ->modalSubmitActionLabel('Log in as user')
+                    ->modalSubmitActionLabel('Login as')
                     ->action(function (User $record) {
                         Impersonation::start(request(), $record);
 

@@ -10,7 +10,7 @@ test('an administrator logs in as a domain user and returns to the admin panel',
     await row.getByTestId('user-impersonate-action').click();
     const dialog = page.getByRole('alertdialog');
     await expect(dialog).toContainText('recorded in the audit log');
-    await dialog.getByRole('button', { name: 'Log in as user', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Login as', exact: true }).click();
     await page.waitForURL(/\/app/);
     await settle(page);
     const banner = page.getByTestId('impersonation-banner');
