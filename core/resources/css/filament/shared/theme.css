@@ -815,6 +815,11 @@ body,
     padding-inline: 0.5rem;
 }
 
+/* A second line under a cell value keeps AA contrast on the hovered row tint. */
+.fi-ta-text-description {
+    color: var(--cdn-text-subtle);
+}
+
 .fi-ta-row:hover,
 .fi-ta-record:hover {
     background-color: var(--cdn-tint);
