@@ -20,6 +20,8 @@ final class SecurityConfig
         'unknown_host', 'unknown_sni', 'sni_host_mismatch',
         // The incident profile working: it never pushes the domain toward a stricter automatic state.
         'incident_method', 'incident_body_size', 'challenge_required', 'challenge_invalid',
+        // A domain's own custom rules working: they never push the domain toward a stricter automatic state.
+        'custom_rule_block', 'custom_rule_challenge', 'custom_rule_log',
     ];
 
     /** Automatic escalation looks at the rate over a short window, never at a lifetime counter. */
@@ -146,7 +148,7 @@ final class SecurityConfig
             'configured_limits' => $configured['limits'],
             'limits' => $limits,
             'rules' => $domain->securityRules()->where('enabled', true)->orderBy('priority')->orderBy('id')
-                ->get(['id', 'match_type', 'value', 'action', 'priority'])->toArray(),
+                ->get(['id', 'name', 'conditions', 'action', 'priority'])->toArray(),
         ];
     }
 
@@ -169,37 +171,6 @@ final class SecurityConfig
         return ['state' => $state, 'limits' => $limits, 'incident' => IncidentProfile::payload($domain)];
     }
 
-    public static function validateRule(array $input): array
-    {
-        $data = Validator::make($input, [
-            'match_type' => ['required', Rule::in(['ip', 'cidr', 'country', 'continent'])],
-            'value' => ['required', 'string', 'max:128'],
-            'action' => ['required', Rule::in(['allow', 'block'])],
-            'priority' => ['required', 'integer', 'between:-1000000,1000000'],
-            'enabled' => ['sometimes', 'boolean'],
-            'note' => ['nullable', 'string', 'max:250'],
-        ])->validate();
-        $data['enabled'] = (bool) ($data['enabled'] ?? true);
-        $data['value'] = match ($data['match_type']) {
-            'ip' => self::validateIp($data['value']),
-            'cidr' => self::validateCidr($data['value']),
-            'country' => self::validateGeo($data['value'], GeoVocabulary::countries(), 'country'),
-            'continent' => self::validateGeo($data['value'], GeoVocabulary::CONTINENTS, 'continent'),
-        };
-
-        return $data;
-    }
-
-    private static function validateIp(string $value): string
-    {
-        $packed = @inet_pton(trim($value));
-        if ($packed === false) {
-            throw ValidationException::withMessages(['value' => 'The value must be a valid IPv4 or IPv6 address.']);
-        }
-
-        return inet_ntop($packed);
-    }
-
     private static function validateCidr(string $value): string
     {
         if (! preg_match('/^(.+)\/(\d{1,3})$/', trim($value), $matches)) {
@@ -214,15 +185,5 @@ final class SecurityConfig
         }
 
         return "$address/$prefix";
-    }
-
-    private static function validateGeo(string $value, array $allowed, string $label): string
-    {
-        $value = strtoupper(trim($value));
-        if (! in_array($value, $allowed, true)) {
-            throw ValidationException::withMessages(['value' => "The value must be a supported $label code."]);
-        }
-
-        return $value;
     }
 }

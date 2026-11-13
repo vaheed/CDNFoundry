@@ -11,7 +11,7 @@ class SecurityRule extends Model
 
     protected function casts(): array
     {
-        return ['enabled' => 'boolean'];
+        return ['enabled' => 'boolean', 'conditions' => 'array'];
     }
 
     public function domain(): BelongsTo

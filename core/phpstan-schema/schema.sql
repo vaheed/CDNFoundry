@@ -703,14 +703,15 @@ CREATE TABLE `security_events` (
 CREATE TABLE `security_rules` (
   `id` bigint NOT NULL,
   `domain_id` bigint NOT NULL,
-  `match_type` varchar(255) NOT NULL,
-  `value` varchar(255) NOT NULL,
   `action` varchar(255) NOT NULL,
   `priority` int NOT NULL,
   `enabled` boolean NOT NULL,
   `note` varchar(255),
   `created_at` geometry,
-  `updated_at` geometry
+  `updated_at` geometry,
+  `name` varchar(100),
+  `conditions` json NOT NULL,
+  `fingerprint` varchar(64) NOT NULL
 );
 
 CREATE TABLE `sessions` (

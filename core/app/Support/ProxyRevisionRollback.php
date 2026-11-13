@@ -114,9 +114,9 @@ final class ProxyRevisionRollback
             'limits' => $security['configured_limits'] ?? $security['limits'] ?? [],
         ]);
         $rules = array_map(function (array $rule): array {
-            $valid = SecurityConfig::validateRule($rule);
+            $valid = SecurityRuleData::validate($rule);
 
-            return ['match_type' => $valid['match_type'], 'value' => $valid['value'], 'action' => $valid['action'], 'priority' => $valid['priority']];
+            return ['name' => $valid['name'], 'conditions' => json_encode($valid['conditions'], JSON_THROW_ON_ERROR), 'fingerprint' => $valid['fingerprint'], 'action' => $valid['action'], 'priority' => $valid['priority']];
         }, $security['rules'] ?? []);
 
         $waf = $snapshot['waf']['name'] ?? 'off';
