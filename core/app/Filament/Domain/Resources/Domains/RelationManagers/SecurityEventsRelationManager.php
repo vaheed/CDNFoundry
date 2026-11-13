@@ -15,6 +15,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Support\Enums\Width;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Table;
@@ -76,12 +77,14 @@ class SecurityEventsRelationManager extends RelationManager
             ->recordActions([
                 Action::make('createRule')->label('Create rule')->icon('phosphor-plus-circle')->modalHeading('Create a rule from this request')
                     ->modalDescription('The conditions come from the request. Remove the ones that should not matter.')
-                    ->schema(SecurityRuleForm::fields())->fillForm(fn (array $record): array => $this->ruleFromEvent($record, false))
+                    ->slideOver()->modalWidth(Width::TwoExtraLarge)->modalSubmitActionLabel('Create rule')
+                    ->schema(SecurityRuleForm::fields($this->domain()))->fillForm(fn (array $record): array => $this->ruleFromEvent($record, false))
                     ->action(fn (array $data) => $this->save($data, 'Rule created')),
                 Action::make('createException')->label('Create exception')->icon('phosphor-shield-slash')->modalHeading('Let requests like this one through')
                     ->modalDescription('An exception is a rule that runs before the rule that fired. It lets matching requests continue.')
                     ->visible(fn (array $record): bool => in_array($record['rule']['type'] ?? 'managed', ['domain', 'managed'], true))
-                    ->schema(SecurityRuleForm::fields())->fillForm(fn (array $record): array => $this->ruleFromEvent($record, true))
+                    ->slideOver()->modalWidth(Width::TwoExtraLarge)->modalSubmitActionLabel('Create exception')
+                    ->schema(SecurityRuleForm::fields($this->domain()))->fillForm(fn (array $record): array => $this->ruleFromEvent($record, true))
                     ->action(fn (array $data) => $this->save($data, 'Exception created')),
             ])
             ->emptyStateHeading(fn (): string => $this->unavailable ? 'Security events are unavailable' : 'No mitigated requests')
@@ -164,5 +167,13 @@ class SecurityEventsRelationManager extends RelationManager
         $domain = $this->getOwnerRecord();
         DomainSecurityRules::create($domain, $data, auth()->user(), request()->ip());
         Notification::make()->success()->title($title)->body('The change is queued in the next signed edge revision.')->send();
+    }
+
+    private function domain(): Domain
+    {
+        $domain = $this->getOwnerRecord();
+        assert($domain instanceof Domain);
+
+        return $domain;
     }
 }

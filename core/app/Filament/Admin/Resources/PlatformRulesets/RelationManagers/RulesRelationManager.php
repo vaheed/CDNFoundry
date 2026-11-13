@@ -12,6 +12,7 @@ use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Schema;
+use Filament\Support\Enums\Width;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
@@ -29,7 +30,7 @@ class RulesRelationManager extends RelationManager
 
     public function form(Schema $schema): Schema
     {
-        return $schema->components(SecurityRuleForm::fields());
+        return $schema->columns(1)->components(SecurityRuleForm::fields());
     }
 
     public function table(Table $table): Table
@@ -48,10 +49,10 @@ class RulesRelationManager extends RelationManager
                 ->formatStateUsing(fn (bool $state): string => $state ? 'Enabled' : 'Disabled')
                 ->color(fn (bool $state): string => $state ? 'success' : 'gray'),
         ])->headerActions([
-            CreateAction::make()->label('Add rule')->createAnother(false)
+            CreateAction::make()->label('Add rule')->modalHeading('Add rule')->modalSubmitActionLabel('Add rule')->slideOver()->modalWidth(Width::TwoExtraLarge)->createAnother(false)
                 ->using(fn (array $data): PlatformRulesetRule => PlatformRulesets::saveRule($this->getOwnerRecord(), null, $data, auth()->user(), request()->ip())[0]),
         ])->recordActions([
-            EditAction::make()->using(fn (PlatformRulesetRule $record, array $data): PlatformRulesetRule => PlatformRulesets::saveRule($this->getOwnerRecord(), $record, $data, auth()->user(), request()->ip())[0]),
+            EditAction::make()->modalHeading('Edit rule')->modalSubmitActionLabel('Save rule')->slideOver()->modalWidth(Width::TwoExtraLarge)->using(fn (PlatformRulesetRule $record, array $data): PlatformRulesetRule => PlatformRulesets::saveRule($this->getOwnerRecord(), $record, $data, auth()->user(), request()->ip())[0]),
             DeleteAction::make()->using(fn (PlatformRulesetRule $record): bool => (bool) PlatformRulesets::deleteRule($this->getOwnerRecord(), $record, auth()->user(), request()->ip())),
         ])->defaultSort('priority')
             ->emptyStateHeading('No rules yet')

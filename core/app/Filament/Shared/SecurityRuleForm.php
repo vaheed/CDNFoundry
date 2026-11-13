@@ -2,18 +2,19 @@
 
 namespace App\Filament\Shared;
 
+use App\Models\Domain;
 use App\Support\FilamentHelp;
 use App\Support\GeoVocabulary;
 use App\Support\SecurityRuleData;
-use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Group;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Text;
 use Filament\Schemas\Components\Utilities\Get;
-use Illuminate\Support\HtmlString;
 
 /** The fields of one typed security rule, shared by a domain's custom rules and the rules of a platform ruleset. */
 final class SecurityRuleForm
@@ -41,10 +42,10 @@ final class SecurityRuleForm
         'attack_score_sqli' => 'The same 1 to 99 score counting only SQL injection signs.',
         'attack_score_xss' => 'The same 1 to 99 score counting only cross-site scripting signs.',
         'attack_score_rce' => 'The same 1 to 99 score counting only command injection signs.',
-        'prompt_injection_score' => 'From 1 (two or more known injection phrases) or 29 (one phrase) to 99 (none), from fixed phrase patterns on the prompt of your AI endpoints. It is pattern based and does not understand the prompt. Needs AI protection set up.',
-        'prompt_pii' => 'Whether the prompt holds an email address, payment card number, IBAN, or US social security number. Needs AI protection set up.',
-        'schema_violation' => 'How the request differs from the uploaded API schema: an unknown path, a method the path does not allow, a missing or wrongly typed parameter, or a JSON body over the limit. "Any" matches every violation. Needs an API schema.',
-        'leaked_password' => 'Whether the password sent to one of the domain\'s login paths is in the list of known leaked passwords. Needs login paths set in Credential check.',
+        'prompt_injection_score' => '1 (two or more known injection phrases), 29 (one phrase), or 99 (none), from fixed phrase patterns on the prompt of your AI endpoints. Pattern based: it does not understand the prompt.',
+        'prompt_pii' => 'Whether the prompt holds an email address, payment card number, IBAN, or US social security number.',
+        'schema_violation' => 'How the request differs from the API schema: an unknown path, a method the path does not allow, a missing or wrongly typed parameter, or a JSON body over the limit.',
+        'leaked_password' => 'Whether the password sent to one of the login paths is in the list of known leaked passwords.',
     ];
 
     /** @return array<string, string> */
@@ -54,35 +55,55 @@ final class SecurityRuleForm
             'invalid_parameter' => 'Wrongly typed parameter', 'body_too_large' => 'JSON body too large'];
     }
 
-    public static function fields(bool $withPreview = true): array
+    /**
+     * One column in reading order: when (conditions), then (action and an optional rate limit), the rule read back in words,
+     * and the optional details. With a domain, fields whose detection the domain has not set up stay visible but cannot be picked.
+     */
+    public static function fields(?Domain $domain = null): array
     {
-        $fields = [
-            TextInput::make('name')->label('Name')->maxLength(100)->placeholder('Block the admin area from abroad'),
-            Repeater::make('conditions')->label(FilamentHelp::label('Conditions', 'Every condition must match for the rule to apply. Up to five.'))
-                ->minItems(fn (Get $get): int => $get('rate_limited') ? 0 : 1)->maxItems(SecurityRuleData::MAXIMUM_CONDITIONS)->defaultItems(1)->addActionLabel('Add condition')->live()
-                ->schema(self::conditionFields())->columns(2)->required(fn (Get $get): bool => ! $get('rate_limited'))
-                ->formatStateUsing(fn (mixed $state): array => self::toForm($state))->dehydrateStateUsing(fn (mixed $state): array => self::toStored($state)),
-            Toggle::make('rate_limited')->label(FilamentHelp::label('Limit the request rate', 'Count the requests that match, and apply the action only once a client goes over the limit. Counted separately on each cell, not as one global count across locations.'))->live()
-                ->afterStateHydrated(fn (Toggle $component, mixed $record) => $component->state(filled(is_array($record) ? ($record['rate_limit'] ?? null) : $record?->rate_limit)))->dehydrated(false)->default(false),
-            Group::make(self::rateLimitFields())->statePath('rate_limit')->visible(fn (Get $get): bool => (bool) $get('rate_limited')),
-            Select::make('action')->label(FilamentHelp::label('Action', 'Block answers 403 (429 for a rate limit). Challenge asks a browser for a short proof of work. Log records an event and continues. Allow stops all later rules and skips the challenge. Skip managed rules turns the managed WAF off for the request.'))
-                ->options(fn (Get $get): array => $get('rate_limited') ? array_intersect_key(SecurityRuleData::ACTION_LABELS, array_flip(SecurityRuleData::RATE_ACTIONS)) : SecurityRuleData::ACTION_LABELS)->required()->placeholder('Choose what happens'),
-            TextInput::make('priority')->label(FilamentHelp::label('Order', 'Lower numbers run first. Use the move buttons in the list to change it later.'))->numeric()->default(100)
-                ->minValue(-1000000)->maxValue(1000000)->required()->placeholder('100'),
-            Toggle::make('enabled')->label('Enabled')->default(true),
-            TextInput::make('note')->label('Note')->maxLength(250)->placeholder('Why this rule exists'),
-        ];
-        if ($withPreview) {
-            $fields[] = Placeholder::make('reads_as')->label('Reads as')->content(function (Get $get): HtmlString {
+        $unavailable = $domain === null ? [] : SecurityRuleData::unavailableFields($domain);
+
+        return [
+            Section::make('When')->description('Every condition must match. Up to five.')->compact()->schema([
+                Repeater::make('conditions')->hiddenLabel()
+                    ->minItems(fn (Get $get): int => $get('rate_limited') ? 0 : 1)->maxItems(SecurityRuleData::MAXIMUM_CONDITIONS)->defaultItems(1)
+                    ->addActionLabel('Add condition')->reorderable(false)->live()
+                    ->itemLabel(function (array $state): string {
+                        $stored = self::toStored([$state])[0];
+
+                        return filled($stored['field'] ?? null) && filled($stored['operator'] ?? null) && (is_bool($stored['value'] ?? null) || filled($stored['value'] ?? null))
+                            ? SecurityRuleData::describe([$stored]) : 'New condition';
+                    })
+                    ->schema(self::conditionFields($unavailable))->columns(['default' => 1, 'sm' => 2])->required(fn (Get $get): bool => ! $get('rate_limited'))
+                    ->formatStateUsing(fn (mixed $state): array => self::toForm($state))->dehydrateStateUsing(fn (mixed $state): array => self::toStored($state)),
+            ]),
+            Section::make('Then')->compact()->schema([
+                Select::make('action')->label(FilamentHelp::label('Action', 'Block answers 403 (429 for a rate limit). Challenge asks a browser for a short proof of work. Log records an event and continues. Allow stops all later rules and skips the challenge. Skip managed rules turns the managed WAF off for the request.'))
+                    ->options(fn (Get $get): array => $get('rate_limited') ? array_intersect_key(SecurityRuleData::ACTION_LABELS, array_flip(SecurityRuleData::RATE_ACTIONS)) : SecurityRuleData::ACTION_LABELS)
+                    ->required()->live()->placeholder('Choose what happens'),
+                Toggle::make('rate_limited')->label(FilamentHelp::label('Only above a request rate', 'Count the requests that match, and apply the action only once a client goes over the limit. Counted separately on each cell, not as one global count across locations.'))->live()
+                    ->afterStateHydrated(fn (Toggle $component, mixed $record) => $component->state(filled(is_array($record) ? ($record['rate_limit'] ?? null) : $record?->rate_limit)))->dehydrated(false)->default(false),
+                Group::make(self::rateLimitFields())->statePath('rate_limit')->columns(['default' => 1, 'sm' => 2])->visible(fn (Get $get): bool => (bool) $get('rate_limited')),
+            ]),
+            Text::make(function (Get $get): string {
                 $conditions = collect(self::toStored($get('conditions')))->filter(fn ($row): bool => is_array($row) && filled($row['field'] ?? null) && filled($row['operator'] ?? null)
                     && (is_bool($row['value'] ?? null) || filled($row['value'] ?? null)))->values()->all();
                 $action = SecurityRuleData::ACTION_LABELS[$get('action')] ?? null;
+                if ($conditions === [] && ! $get('rate_limited')) {
+                    return 'Reads as: fill in a condition to see the rule in words.';
+                }
 
-                return new HtmlString(e($conditions === [] ? 'Fill in a condition to preview the rule.' : (SecurityRuleData::describe($conditions).($action ? ' → '.$action : ''))));
-            });
-        }
-
-        return $fields;
+                return 'Reads as: '.SecurityRuleData::describe($conditions).($action ? ', then '.strtolower($action) : '').'.';
+            })->extraAttributes(['data-testid' => 'rule-reads-as', 'class' => 'cdn-rule-reads-as']),
+            Section::make('Details')->compact()->collapsed()->schema([
+                TextInput::make('name')->label('Name')->maxLength(100)->placeholder('Block the admin area from abroad'),
+                TextInput::make('note')->label('Note')->maxLength(250)->placeholder('Why this rule exists'),
+                TextInput::make('priority')->label(FilamentHelp::label('Order', 'Lower numbers run first. New rules go after the existing ones. Use the move buttons in the list to change it later.'))->numeric()
+                    ->default(fn (): int => $domain === null ? 100 : (int) ($domain->securityRules()->max('priority') ?? 90) + 10)
+                    ->minValue(-1000000)->maxValue(1000000)->required()->placeholder('100'),
+                Toggle::make('enabled')->label('Enabled')->default(true),
+            ]),
+        ];
     }
 
     private static function rateLimitFields(): array
@@ -150,22 +171,24 @@ final class SecurityRuleForm
         })->values()->all();
     }
 
-    private static function conditionFields(): array
+    /** @param  array<string, string>  $unavailable  field => the detection it needs */
+    private static function conditionFields(array $unavailable): array
     {
         $kind = fn (Get $get): ?string => SecurityRuleData::FIELDS[$get('field')]['kind'] ?? null;
         $list = fn (Get $get): bool => in_array($get('operator'), ['in_list', 'not_in_list'], true);
         $uses = fn (string $key) => fn (Get $get): bool => self::valueKey($get('field'), $get('operator')) === $key;
 
         return [
-            Select::make('field')->label('Field')->options(SecurityRuleData::FIELD_LABELS)->required()->live()->placeholder('Choose a field')
-                ->afterStateUpdated(fn (callable $set) => $set('operator', 'equals'))
-                ->helperText(fn (Get $get): ?string => self::HELP[$get('field')] ?? null),
+            Select::make('field')->label('Field')->required()->live()->placeholder('Choose a field')
+                ->options(collect(SecurityRuleData::FIELD_LABELS)->map(fn (string $label, string $field): string => isset($unavailable[$field]) ? "$label (needs {$unavailable[$field]})" : $label)->all())
+                ->disableOptionWhen(fn (string $value): bool => isset($unavailable[$value]))
+                ->afterStateUpdated(fn (callable $set) => $set('operator', 'equals')),
             Select::make('operator')->label('Operator')->required()->live()->placeholder('Choose how to compare')
                 ->options(fn (Get $get): array => collect(SecurityRuleData::FIELDS[$get('field')]['operators'] ?? [])->mapWithKeys(fn (string $operator): array => [$operator => SecurityRuleData::OPERATOR_LABELS[$operator]])->all()),
             TextInput::make('name')->label('Name')->maxLength(64)->required()->placeholder(fn (Get $get): string => $get('field') === 'cookie_present' ? 'session' : 'X-Api-Key')
                 ->visible(fn (Get $get): bool => (SecurityRuleData::FIELDS[$get('field')]['named'] ?? false) === true)->columnSpanFull(),
             TextInput::make('value')->label('Value')->required()->maxLength(512)->visible($uses('value'))->columnSpanFull()
-                ->placeholder(fn (Get $get): string => self::EXAMPLES[$get('field')] ?? 'Value'),
+                ->placeholder(fn (Get $get): string => self::EXAMPLES[$get('field')] ?? 'Choose a field first'),
             TextInput::make('value_number')->label('Value')->numeric()->required()->visible($uses('value_number'))
                 ->placeholder(fn (Get $get): string => match ($kind($get)) {
                     'asn' => '64500', 'score' => '20', default => '1048576'
@@ -186,6 +209,8 @@ final class SecurityRuleForm
             Select::make('value_violation')->label('Violation')->options(self::violationOptions())->multiple($list)->required()
                 ->visible($uses('value_violation'))->placeholder('Choose a violation')->columnSpanFull(),
             Toggle::make('value_flag')->label(FilamentHelp::label('Present', 'On matches requests that have it. Off matches requests that do not.'))->default(true)->visible($uses('value_flag'))->columnSpanFull(),
+            Text::make(fn (Get $get): ?string => self::HELP[$get('field')] ?? null)->visible(fn (Get $get): bool => isset(self::HELP[$get('field')]))
+                ->color('neutral')->columnSpanFull(),
         ];
     }
 }
