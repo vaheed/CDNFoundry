@@ -196,7 +196,7 @@ def loki_lines(minute: int, scenarios: model.Scenarios) -> None:
             values = []
             for index in range(count):
                 request = f"{digest(minute, service, level, index):016x}{digest(minute, service, level, index, 1):016x}"
-                if service == "core" and level == "info" and index == 0 and minute % 30 == 0:
+                if service == "core" and level == "info" and index == 0 and minute % 5 == 0:
                     request = "cdnf-seed-request-0001"  # the request the trace dashboard opens on, so its log panel has lines
                 host = model.POPS[digest(minute, service, index) % 3]["pop"]
                 values.append([str(int((minute * 60 + index + 1) * 1e9)), json.dumps({"message": f"{service} {level} sample", "request_id": request, "domain_id": 9001 + index}), {"request_id": request, "domain_id": str(9001 + index)}])
