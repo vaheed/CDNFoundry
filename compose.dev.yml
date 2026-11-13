@@ -275,6 +275,7 @@ services:
     restart: "no"
 
   control-db:
+    restart: unless-stopped
     logging: *bounded-logging
     <<: *hardened
     cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
@@ -293,6 +294,7 @@ services:
       retries: 20
 
   redis:
+    restart: unless-stopped
     logging: *bounded-logging
     <<: *hardened
     cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
@@ -308,6 +310,7 @@ services:
       retries: 20
 
   cache:
+    restart: unless-stopped
     logging: *bounded-logging
     <<: *hardened
     cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
@@ -322,6 +325,7 @@ services:
       retries: 20
 
   pdns-db:
+    restart: unless-stopped
     logging: *bounded-logging
     <<: *hardened
     cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
@@ -433,6 +437,7 @@ services:
     restart: unless-stopped
 
   clickhouse:
+    restart: unless-stopped
     logging: *bounded-logging
     <<: *hardened
     cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, KILL, SETGID, SETUID]
@@ -600,6 +605,7 @@ services:
       start_period: 20s
 
   prometheus:
+    restart: unless-stopped
     logging: *bounded-logging
     <<: *hardened
     mem_limit: 1g
@@ -808,6 +814,7 @@ services:
       retries: 5
 
   alertmanager:
+    restart: unless-stopped
     logging: *bounded-logging
     <<: *hardened
     mem_limit: 128m
@@ -821,6 +828,7 @@ services:
     networks: [telemetry, control]
 
   origin-http:
+    restart: unless-stopped
     logging: *bounded-logging
     image: nginx:1.31.3-alpine@sha256:4a73073bd557c65b759505da037898b61f1be6cbcc3c2c3aeac22d2a470c1752
     command: [sh, -c, "dd if=/dev/zero of=/tmp/large-object bs=1048576 count=2 >/dev/null 2>&1 && dd if=/dev/zero of=/tmp/graceful-object bs=8192 count=1 >/dev/null 2>&1 && dd if=/dev/zero of=/tmp/single-flight-object bs=2048 count=1 >/dev/null 2>&1 && exec nginx -g 'daemon off;'"]
@@ -829,6 +837,7 @@ services:
     networks: [edge]
 
   origin-https:
+    restart: unless-stopped
     logging: *bounded-logging
     build:
       context: ./docker/nginx
