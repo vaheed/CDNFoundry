@@ -59,7 +59,7 @@ final class ProxyRevisionRollback
             ], $plan['rules']));
             $locked->update([
                 'proxy_settings' => $plan['proxy_settings'], 'cache_settings' => $plan['cache_settings'],
-                'security_settings' => $plan['security_settings'], 'waf_profile' => $plan['waf_profile'],
+                'security_settings' => $plan['security_settings'], 'waf_profile' => $plan['waf_profile'], 'waf_tuning' => $plan['waf_tuning'],
                 'tls_mode' => $tlsMode, 'active_tls_certificate_id' => $certificateId,
                 'cache_epoch' => $locked->cache_epoch + 1, 'cache_development_mode_until' => $plan['development_until'],
                 'revision' => $locked->revision + 1,
@@ -119,6 +119,7 @@ final class ProxyRevisionRollback
             return SecurityRuleData::row(['name' => $valid['name'], 'conditions' => $valid['conditions'], 'rate_limit' => $valid['rate_limit'], 'fingerprint' => $valid['fingerprint'], 'action' => $valid['action'], 'priority' => $valid['priority']]);
         }, $security['rules'] ?? []);
 
+        $wafTuning = is_array($snapshot['waf']['tuning'] ?? null) ? ManagedWafTuning::validate($snapshot['waf']['tuning']) : null;
         $waf = $snapshot['waf']['name'] ?? 'off';
         abort_unless(array_key_exists($waf, ManagedWaf::PROFILES), 422, 'The revision uses an unknown WAF profile.');
         $tlsMode = $snapshot['tls']['mode'] ?? 'managed';
@@ -126,7 +127,7 @@ final class ProxyRevisionRollback
 
         return [
             'records' => $records, 'proxy_settings' => $proxy, 'cache_settings' => $cacheSettings, 'security_settings' => $securitySettings,
-            'rules' => $rules, 'waf_profile' => $waf, 'tls_mode' => $tlsMode, 'development_until' => $developmentUntil,
+            'rules' => $rules, 'waf_profile' => $waf, 'waf_tuning' => $wafTuning, 'tls_mode' => $tlsMode, 'development_until' => $developmentUntil,
         ];
     }
 

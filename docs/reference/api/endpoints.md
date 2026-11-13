@@ -117,6 +117,7 @@ for authentication, pagination, response, and retry behaviour.
 | `DELETE` | `/domains/{domain}/waf/exclusions/{exclusion}` | Required | Supported | `delete.domains.domain.waf.exclusions.exclusion` |
 | `GET` | `/domains/{domain}/waf/exclusions` | Required | No | `get.domains.domain.waf.exclusions` |
 | `POST` | `/domains/{domain}/waf/exclusions` | Required | Supported | `post.domains.domain.waf.exclusions` |
+| `GET` | `/domains/{domain}/waf/rules` | Required | No | `get.domains.domain.waf.rules` |
 | `GET` | `/domains/{domain}/waf` | Required | No | `get.domains.domain.waf` |
 | `PATCH` | `/domains/{domain}/waf` | Required | Supported | `patch.domains.domain.waf` |
 | `DELETE` | `/domains/{domain}` | Required | Supported | `delete.domains.domain` |

@@ -135,6 +135,7 @@ Route::middleware(['auth:sanctum', 'account.active', 'token.scope', 'throttle:ac
     Route::get('/domains/{domain}/security/events', [SecurityController::class, 'events']);
     Route::get('/domains/{domain}/waf', [WafController::class, 'show']);
     Route::patch('/domains/{domain}/waf', [WafController::class, 'update'])->middleware('idempotent');
+    Route::get('/domains/{domain}/waf/rules', [WafController::class, 'rules']);
     Route::get('/domains/{domain}/waf/exclusions', [WafController::class, 'exclusions']);
     Route::post('/domains/{domain}/waf/exclusions', [WafController::class, 'storeExclusion'])->middleware('idempotent');
     Route::delete('/domains/{domain}/waf/exclusions/{exclusion}', [WafController::class, 'destroyExclusion'])->middleware('idempotent');

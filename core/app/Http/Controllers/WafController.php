@@ -9,6 +9,7 @@ use App\Models\EdgePool;
 use App\Models\Operation;
 use App\Models\WafExclusion;
 use App\Support\ManagedWaf;
+use App\Support\ManagedWafTuning;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -27,23 +28,49 @@ class WafController extends Controller
     {
         Gate::authorize('update', $domain);
         $data = $request->validate([
-            'profile' => ['required', 'in:off,monitor,balanced,strict'],
+            'profile' => ['sometimes', 'required', 'in:off,monitor,balanced,strict'],
+            'tuning' => ['sometimes', 'nullable', 'array'],
             'rules' => ['prohibited'], 'configuration' => ['prohibited'], 'secrule' => ['prohibited'],
         ]);
-        if ($data['profile'] !== 'off' && ! $this->wafCapablePoolAvailable($domain)) {
+        $profile = $data['profile'] ?? $domain->waf_profile;
+        $tuningGiven = array_key_exists('tuning', $data);
+        $tuning = $tuningGiven ? ManagedWafTuning::validate($data['tuning'] ?? []) : null;
+        if ($profile !== 'off' && ! $this->wafCapablePoolAvailable($domain)) {
             return response()->json([
                 'message' => 'No enabled WAF-capable pool can host this domain. An administrator must enable a WAF-capable shared pool first.',
                 'code' => 'waf_capable_pool_unavailable', 'details' => (object) [],
             ], 409);
         }
-        DB::transaction(function () use ($data, $domain, $request): void {
+        DB::transaction(function () use ($profile, $tuning, $tuningGiven, $domain, $request): void {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
             Gate::authorize('update', $locked);
-            $locked->update(['waf_profile' => $data['profile'], 'revision' => $locked->revision + 1]);
-            AuditLog::record($request->user(), 'waf.profile_updated', $locked, ['profile' => $data['profile'], 'revision' => $locked->revision], $request->ip());
+            $locked->update(['waf_profile' => $profile, 'revision' => $locked->revision + 1] + ($tuningGiven ? ['waf_tuning' => $tuning] : []));
+            AuditLog::record($request->user(), 'waf.profile_updated', $locked, ['profile' => $profile, 'tuned' => $locked->waf_tuning !== null, 'revision' => $locked->revision], $request->ip());
         });
 
         return $this->queue($request, $domain);
+    }
+
+    /** The adjustable rules of the pinned ruleset with this domain's state for each: enabled, disabled, or log only. */
+    public function rules(Request $request, Domain $domain): JsonResponse
+    {
+        Gate::authorize('view', $domain);
+        $request->validate(['category' => ['sometimes', 'string'], 'cursor' => ['sometimes', 'integer', 'min:0'], 'search' => ['sometimes', 'string', 'max:100']]);
+        $tuning = ManagedWafTuning::normalize($domain->waf_tuning);
+        $prefixes = ManagedWafTuning::categoryPrefixes();
+        $off = array_map(fn (string $category): string => $prefixes[$category], $tuning['disabled_categories']);
+        $limit = 100;
+        $rows = collect(ManagedWafTuning::catalog()['rules'])
+            ->when($request->query('category'), fn ($rules, $category) => $rules->where('category', $category))
+            ->when($request->query('search'), fn ($rules, $search) => $rules->filter(fn (array $rule): bool => str_contains(strtolower($rule['id'].' '.$rule['message']), strtolower($search))))
+            ->where('id', '>', (int) $request->query('cursor', 0))->values();
+        $page = $rows->take($limit)->map(fn (array $rule): array => [...$rule, 'state' => match (true) {
+            in_array(substr((string) $rule['id'], 0, 3), $off, true) || in_array($rule['id'], $tuning['disabled_rules'], true) => 'disabled',
+            in_array($rule['id'], $tuning['log_only_rules'], true) => 'log_only',
+            default => 'enabled',
+        }])->all();
+
+        return response()->json(['data' => $page, 'ruleset' => ManagedWafTuning::catalog()['ruleset'], 'next_cursor' => $rows->count() > $limit ? end($page)['id'] : null]);
     }
 
     public function exclusions(Domain $domain): JsonResponse
