@@ -161,7 +161,7 @@ def main() -> int:
     for source in ("index.md", "guides/security.md", "reference/security-rules.md"):
         if not (DIST / source).is_file():
             failures.append(f"{source}: the Markdown copy for AI agents is missing")
-    if not (DIST / "social-card.png").is_file() or 'social-card.png' not in home_markup:
+    if not (DIST / "screenshots" / "social-card.png").is_file() or 'screenshots/social-card.png' not in home_markup:
         failures.append("index.html: the Open Graph image must be the PNG social card")
     if '"@type":"SoftwareApplication"' not in home_markup:
         failures.append("index.html: missing SoftwareApplication structured data")

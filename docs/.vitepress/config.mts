@@ -354,7 +354,7 @@ export default defineConfig({
     const title = pageData.frontmatter.title ?? pageData.title ?? 'CDNFoundry Documentation'
     const description = pageData.frontmatter.description ?? 'CDNFoundry private CDN documentation.'
     const canonical = pageUrl(pageData.relativePath)
-    const socialImage = `${siteUrl}/social-card.png`
+    const socialImage = `${siteUrl}/screenshots/social-card.png`
     const isHome = pageData.relativePath === 'index.md'
     const keywords = pageData.frontmatter.keywords ?? [
       'private CDN',
