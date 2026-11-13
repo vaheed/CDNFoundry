@@ -865,6 +865,11 @@ function M.inspect_response()
     end
     if #context.sensitive_buffer < limit and not finished then return end
     context.sensitive_done = true
+    -- An internal redirect clears the request table, so the domain comes from the variables the access phase set.
+    if not context.security_domain then
+        context.security_domain = tonumber(ngx.var.cdn_domain_id)
+        context.security_hostname = ngx.var.cdn_original_host
+    end
     local text = context.sensitive_buffer
     context.sensitive_buffer = nil
     for kind in kinds:gmatch("[a-z_]+") do
@@ -887,7 +892,7 @@ local function prompt_injection_score(prompt)
     for _, phrase in ipairs(INJECTION_PHRASES) do
         if lowered:find(phrase, 1, true) then hits = hits + 1 end
     end
-    return math.max(1, 99 - 40 * hits)
+    return math.max(1, 99 - 70 * hits)
 end
 
 local function prompt_has_personal_data(prompt)

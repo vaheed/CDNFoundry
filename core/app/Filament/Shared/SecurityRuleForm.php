@@ -41,7 +41,7 @@ final class SecurityRuleForm
         'attack_score_sqli' => 'The same 1 to 99 score counting only SQL injection signs.',
         'attack_score_xss' => 'The same 1 to 99 score counting only cross-site scripting signs.',
         'attack_score_rce' => 'The same 1 to 99 score counting only command injection signs.',
-        'prompt_injection_score' => 'From 1 (a known injection phrase) to 99 (none), from fixed phrase patterns on the prompt of your AI endpoints. It is pattern based and does not understand the prompt. Needs AI protection set up.',
+        'prompt_injection_score' => 'From 1 (two or more known injection phrases) or 29 (one phrase) to 99 (none), from fixed phrase patterns on the prompt of your AI endpoints. It is pattern based and does not understand the prompt. Needs AI protection set up.',
         'prompt_pii' => 'Whether the prompt holds an email address, payment card number, IBAN, or US social security number. Needs AI protection set up.',
         'leaked_password' => 'Whether the password sent to one of the domain\'s login paths is in the list of known leaked passwords. Needs login paths set in Credential check.',
     ];
