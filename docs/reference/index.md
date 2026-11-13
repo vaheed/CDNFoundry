@@ -15,6 +15,8 @@ capacity. Never copy example credentials or documentation addresses.
 - [Platform settings](platform-settings.md) lists the policy values stored in PostgreSQL.
 - [Services and ports](services-and-ports.md) maps services, listeners, networks, and volumes.
 - [DNS records](dns-records.md) lists record types and validation rules.
+- [Custom rules](security-rules.md) lists every rule field, operator, action, and rate-limit setting, with examples and recipes.
+- [Managed WAF](waf.md) explains every WAF level and adjustment, with examples.
 - [Limits](limits.md) collects request and resource limits.
 - [CLI and scheduler](cli-and-scheduler.md) points to the application commands, schedules, Fleet CLI, and Make targets.
 - [Telemetry schema](telemetry-schema.md) lists stored event fields and retention.

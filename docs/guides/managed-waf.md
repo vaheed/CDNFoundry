@@ -28,13 +28,14 @@ Two settings decide whether the WAF runs for a domain.
 | **Offer managed WAF protection** on a service pool | Administrator | Where can the WAF run? |
 | **Web application firewall (WAF)** on a domain | Domain owner | What should the WAF do for this site? |
 
-CDNFoundry pins the WAF release (ModSecurity 3.0.14, its Nginx connector, and
-CRS 4.26.0) inside the immutable OpenResty image. Cells never download rules at
+CDNFoundry pins the WAF release (ModSecurity 3.0.17, its Nginx connector, and
+CRS 4.30.0) inside the immutable OpenResty image. Cells never download rules at
 run time. Customers cannot upload rules or write `SecRule` lines.
 
-**Under Attack mode** is a separate control. It tightens request and connection
-limits during an incident. It does not turn the WAF on or change the WAF level.
-See [Security](security.md).
+**Under attack mode** is a separate, temporary control. While it is on, the WAF
+runs in blocking mode at high sensitivity whatever level you chose here, together
+with tighter limits and a browser challenge. When it ends, your own level applies
+again. See [Incident response](incident-response.md).
 
 ## 1. Offer the WAF on a pool
 
@@ -92,6 +93,8 @@ accepts a level it cannot run, and never places the domain on a runtime without
 the WAF.
 
 ## Adjust the managed rules
+
+The [managed WAF reference](../reference/waf.md) explains every adjustment with examples.
 
 A protection level is a good start. When a level blocks something it should not,
 or you want to watch a rule before it counts, adjust the managed rules for the

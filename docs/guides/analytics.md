@@ -87,12 +87,12 @@ It takes the usual `from` and `to`; paths and agents accept at most 24 hours.
 The `/admin` operations overview uses complete hourly ClickHouse aggregates for
 requests, transfer, status families, cache, origin errors, average origin
 latency, and DNS responses. The URL keeps the quick range, the comparison with
-the previous period, and the domain and edge filters. A drill-down opens
+the previous period, and the domain and edge filters. Each KPI opens
 **Traffic and telemetry** with the same range and identifiers.
 
 The aggregate schema has no edge latency percentile, origin latency percentile,
-or DNS latency field. The interface shows **Unavailable** for those metrics.
-It never calculates overview figures from raw event logs.
+or DNS latency field, so the overview does not show those metrics, and it shows
+no estimated savings. It never calculates overview figures from raw event logs.
 
 Aggregate queries accept at most 90 days. Raw request, DNS, error, and security
 logs and the unsampled compression view accept at most 24 hours. Logs use

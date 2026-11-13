@@ -156,8 +156,8 @@ Never scan or delete a cache volume for a normal full purge.
 ## Security incident
 
 1. Identify the smallest affected scope and its reason codes.
-2. For one domain, use **Enable Under Attack mode**, **Start maintenance**, or
-   **Quarantine domain**. Quarantine moves target-first to the quarantine pool.
+2. For one domain, use **Under attack mode**, **Maintenance**, or
+   **Quarantine**. Quarantine moves target-first to the quarantine pool.
 3. For one unhealthy cell or edge, use **Drain**; restart only the affected
    cell when required.
 4. Use pool **Maintenance** only when every domain on that pool should return
@@ -340,7 +340,7 @@ Every alert links here. To find a runbook from an alert's name, look it up in th
 
 **Likely causes:** A layer-7 flood on a PoP or domain.
 
-**First action:** Open the domain's top client networks, ASNs, and paths. Use Under Attack mode for that domain. Volumetric saturation needs the network provider.
+**First action:** Open the domain's top client networks, ASNs, and paths. Turn on under attack mode for that domain. Volumetric saturation needs the network provider.
 
 ## Cache abuse detected {#cache-abuse}
 
@@ -468,7 +468,7 @@ Every alert links here. To find a runbook from an alert's name, look it up in th
 
 **Likely causes:** A flood or a viral event on one domain.
 
-**First action:** Open the domain's top client networks and paths. Use Under Attack mode if the traffic is hostile.
+**First action:** Open the domain's top client networks and paths. Turn on under attack mode if the traffic is hostile.
 
 ## One network sends most of a domain's traffic {#domain-single-network-share}
 

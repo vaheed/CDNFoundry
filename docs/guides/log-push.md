@@ -17,11 +17,11 @@ the platform's central logs, which do not change.
 2. Choose **Add destination**. A domain has up to two.
 3. Choose **HTTPS endpoint** or **S3-compatible storage**, then the logs to send:
 
-| Log | Contains |
-| --- | --- |
-| HTTP requests | Each request served for the domain: time, request ID, host, method, path, query hash, status, bytes, cache status, timing, client address, country, ASN, user agent, referrer, protocol |
-| Security events | The requests the platform blocked or flagged, with the action, reason, and rule |
-| DNS queries | Questions answered for your zone: name, type, response code, client address, country, ASN |
+   | Log | Contains |
+   | --- | --- |
+   | HTTP requests | Each request served for the domain: time, request ID, host, method, path, query hash, status, bytes, cache status, timing, client address, country, ASN, user agent, referrer, protocol |
+   | Security events | The requests the platform blocked or flagged, with the action, reason, and rule |
+   | DNS queries | Questions answered for your zone: name, type, response code, client address, country, ASN |
 
 4. For HTTPS, give an `https://` URL and choose how the platform authenticates. **Bearer token** sends your token in the
    `Authorization` header. **Signature** adds an `X-CDNFoundry-Signature` header (`sha256=` and the HMAC-SHA256 of the body)

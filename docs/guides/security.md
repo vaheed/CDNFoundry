@@ -48,13 +48,16 @@ For application attack detection, see [Managed WAF](managed-waf.md).
 A rule is up to five conditions that must all match, and one action. Rules are
 typed: every condition is a field from a fixed list, an operator from a fixed
 list, and a value. There are no regular expressions and no expression language.
+The [custom rule reference](../reference/security-rules.md) lists every field,
+operator, and action with examples, and complete recipes.
 
 <DocTabs :labels="['Domain panel', 'API']">
 <template #tab-1>
 
 Open the domain, then **Custom rules**. **Add rule** opens a sheet with the
 conditions, the action, and a "Reads as" line that shows the rule in words.
-**Move up** and **Move down** change the order, and **Import rules** adds many.
+**Move up** and **Move down** change the order. To add many rules at once, use
+the API's bulk import.
 
 </template>
 <template #tab-2>
@@ -493,8 +496,8 @@ separate, higher ceiling for the whole domain, 20 times that budget.
 A domain's security state is `normal`, `suspected`, `restricted`, `quarantined`,
 or `recovering`. Two sources set it, and the domain shows the stricter of the two.
 
-- **Operator state.** Administrator actions (Under Attack mode, quarantine, return to
-  normal) are desired configuration. Each one is a configuration revision with an
+- **Operator state.** Administrator actions (quarantine, return to normal) are
+  desired configuration. Each one is a configuration revision with an
   author, and it is delivered in the signed domain snapshot.
 - **Automatic state.** Agent heartbeats carry a bounded set of noisy-domain summaries
   and reason codes. When the rate of events crosses a threshold, the platform moves
@@ -539,7 +542,7 @@ protection that does nothing. The seven are `disable_request_bodies`,
 
 | Scope | Control | Who | Effect |
 | --- | --- | --- | --- |
-| Domain | **Enable Under Attack mode** | Administrator | Tightens request and connection limits for a time. It does not move the domain or change the WAF. |
+| Domain | **Under attack mode** | Domain owner | For a chosen time: tighter limits, the WAF blocking at high sensitivity, restricted methods and body size, and a browser challenge. See [Incident response](incident-response.md). |
 | Domain | **Quarantine domain** | Administrator | Deploys the domain to the quarantine pool, target first. |
 | Domain | **Start maintenance** | Domain owner | Returns the configured HTTP 503 for that domain only. |
 | Edge | Drain | Administrator | Stops new placement and traffic for that edge. |
@@ -547,14 +550,13 @@ protection that does nothing. The seven are `disable_request_bodies`,
 | Pool | Maintenance | Administrator | Returns HTTP 503 from the pool's cells until its required expiry. |
 | Pool | Withdraw | Administrator | Removes the pool from gateway and DNS publication. It does not control BGP. |
 
-The domain actions for Under Attack mode and quarantine are
-`POST /api/admin/domains/{domain}/protect` and `.../quarantine`. Pool actions
+Under attack mode is `POST /api/domains/{domain}/incident` (and `DELETE` to end it).
+Quarantine is `POST /api/admin/domains/{domain}/quarantine`, reversed by `.../return-to-normal`. Pool actions
 include `POST /api/admin/edge-pools/{pool}/maintenance` and `.../withdraw`.
 
-The WAF level is independent from Under Attack mode. The WAF detects common
-application attacks all the time, at the domain's Off, Observe, Recommended, or
-High sensitivity choice. Under Attack mode is an administrator response to
-active abusive load.
+The WAF detects common application attacks all the time, at the domain's Off,
+Observe, Recommended, or High sensitivity choice. Under attack mode raises it to
+blocking at high sensitivity only while it is on.
 
 ### Recover
 
