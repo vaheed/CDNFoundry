@@ -7,6 +7,13 @@ single source of truth; `make version-check` enforces it.
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-11-14
+
+Adds notifications, log push, an incident profile, and a typed rule engine with rate limits, managed-WAF tuning,
+platform rulesets, leaked-password, sensitive-data, AI-prompt, API-schema, and client-side protections. Domain users get a
+traffic dashboard and administrators can log in as a domain user. See the
+[release notes](docs/operations/releases/v2.1.0.md).
+
 ### Added
 
 - Notifications: one `notifier` container delivers alerts and domain events to Telegram, Discord, Slack, and an
@@ -21,11 +28,40 @@ single source of truth; `make version-check` enforces it.
   travels as a single overlay with no configuration revision, and is audited. The cell enforces every protection, including a
   proof-of-work challenge, and ends the profile by its own clock.
 - A private Alertmanager receiver in the control plane. It stores nothing and queues one message per alert group.
+- Typed custom security rules: conditions on request fields, five actions, preview and reorder endpoints, presets
+  (user agent, hotlink), and per-cell fixed-window rate limits.
+- Managed WAF scoring: an attack score on every request event, attack-score rule fields, a catalog of adjustable managed
+  rules, and per-domain adjustments applied in the cell.
+- Platform rulesets that administrators apply to all domains or a chosen list; they run first and carry their own reasons.
+- Security events and analytics: mitigated requests with the rule behind each, a Security events tab with create rule and
+  create exception, security analytics, and an alert when mitigated requests reach a domain's threshold.
+- Leaked-password check, sensitive-data logging, AI-prompt scoring, API schema checks, and report-only CSP with
+  client-side script and connection reports, each stored per domain and edited on the domain page.
+- Cache path rules and cookie name prefixes in the domain cache policy, with analytics cookie presets.
+- Domain users see traffic, what needs action, and every domain on the dashboard. Administrators can log in as a domain
+  user; the session is marked, audited, and cannot create tokens or change passwords.
+- Fleet web forms show an example in every input; a browser crawl enforces it.
+- Grafana: attack-score, reason, client-report, and custom-rule panels, alert deliveries on the control plane
+  dashboard, and fixed ranges for hourly and daily series so no panel is empty on a short range.
+
+### Changed
+
+- Notification channels replace the single alert webhook; see Removed.
 
 ### Removed
 
 - `ALERT_WEBHOOK_URL`, the Fleet `alert-webhook` command, and the Fleet web alert webhook field. Add notification
   channels in the panel instead.
+
+### Fixed
+
+- A signed-in administrator who opens `/app` is sent to `/admin` instead of a 403 page.
+- The Grafana browser suite scrolls and draws every panel before it checks one, so panels below the first screen are
+  no longer skipped.
+
+### Security
+
+- Laravel framework 13.42 clears the task output injection advisory.
 
 ## [2.0.8] - 2026-11-12
 
