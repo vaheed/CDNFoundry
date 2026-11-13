@@ -46,6 +46,8 @@ for (const scenario of scenarios) {
 
         await signIn(page, adminUser, adminPassword);
         await page.goto(`/alerting/list?view=list&search=${scenario.alert}`);
+        // Data source rules are listed in collapsed groups.
+        await page.getByRole('button', { name: 'Expand all' }).click({ timeout: 30_000 }).catch(() => undefined);
         await expect(page.getByText(scenario.alert).first()).toBeVisible({ timeout: 60_000 });
 
         await page.goto(`${scenario.dashboard}?orgId=1&from=now-30m&to=now`);

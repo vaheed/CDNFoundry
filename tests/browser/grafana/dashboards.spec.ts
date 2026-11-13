@@ -34,7 +34,8 @@ for (const dashboard of dashboards()) {
             const responses = await collectQueries(page);
             await signIn(page, adminUser, adminPassword);
             const kiosk = info.project.name === 'kiosk' ? '&kiosk' : '';
-            await page.goto(`/d/${dashboard.uid}?orgId=1&from=${ranges[range]}&to=now${kiosk}${sampleInput[dashboard.uid] ?? ''}`);
+            // refresh= turns auto-refresh off, so no query restarts between the checks and the screenshot.
+            await page.goto(`/d/${dashboard.uid}?orgId=1&from=${ranges[range]}&to=now&refresh=${kiosk}${sampleInput[dashboard.uid] ?? ''}`);
             await waitForPanels(page);
 
             // No panel reports an error or a failed query.

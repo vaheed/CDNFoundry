@@ -11,6 +11,8 @@ test.describe('interaction', () => {
         await waitForPanels(page);
         const panel = page.locator('section').filter({ hasText: 'Requests by region' }).first();
         await panel.hover();
+        // Grafana's panel shortcut for Explore is p then x.
+        await page.keyboard.press('p');
         await page.keyboard.press('x');
         await expect(page).toHaveURL(/\/explore/);
         await expect(page.getByTestId('data-testid Query field').or(page.locator('.monaco-editor, textarea')).first()).toBeVisible({ timeout: 30_000 });
@@ -19,7 +21,8 @@ test.describe('interaction', () => {
     test('live tail streams new log lines in Explore', async ({ page }) => {
         const panes = JSON.stringify({ a: { datasource: 'loki', queries: [{ refId: 'A', expr: '{service=~".+"}', queryType: 'range' }], range: { from: 'now-1h', to: 'now' } } });
         await page.goto(`/explore?schemaVersion=1&panes=${encodeURIComponent(panes)}&orgId=1`);
-        await page.getByRole('button', { name: /^Live$/ }).click();
+        // The button reads Live; its accessible name is "Start live stream your logs".
+        await page.getByTestId('data-testid explore-toolbar-live-button').click();
         await expect(page.getByText(/sample|info|error/i).first()).toBeVisible({ timeout: 60_000 });
         await page.getByRole('button', { name: /Stop|Pause/i }).first().click();
     });
@@ -27,7 +30,13 @@ test.describe('interaction', () => {
     test('the NOC wall drills down to PoP detail', async ({ page }) => {
         await page.goto('/d/cdnf-noc-wall?orgId=1&from=now-1h&to=now');
         await waitForPanels(page);
+        // Grafana draws a panel only when it scrolls into view; on a phone the PoP panels are below the first screen.
         const link = page.locator('a[href*="/d/cdnf-pop-detail"]').first();
+        for (let step = 0; step < 20 && (await link.count()) === 0; step++) {
+            await page.mouse.wheel(0, 800);
+            await page.waitForTimeout(400);
+        }
+        await link.scrollIntoViewIfNeeded();
         await expect(link).toBeVisible();
         await link.click();
         await expect(page).toHaveURL(/\/d\/cdnf-pop-detail/);

@@ -45,9 +45,23 @@ export function screenshotPath(project: string, range: string, uid: string): str
 
 /** Wait until every panel has finished loading, the way a person waits for the spinners to stop. */
 export async function waitForPanels(page: Page): Promise<void> {
+    const loading = page.locator('[data-testid="data-testid Panel loading bar"], [aria-label="Panel loading bar"]');
     await page.waitForLoadState('domcontentloaded');
-    await expect(page.locator('[data-testid="data-testid Panel loading bar"], [aria-label="Panel loading bar"]')).toHaveCount(0, { timeout: 90_000 });
+    await expect(loading).toHaveCount(0, { timeout: 90_000 });
+    await expect(page.getByRole('button', { name: 'Cancel' })).toHaveCount(0, { timeout: 90_000 });
+    // Grafana draws a panel only when it scrolls into view, so every screen of the dashboard is visited and allowed to load;
+    // otherwise panels below the first screen are never queried, checked, or shown in the screenshot.
+    const height = await page.evaluate(() => document.querySelector('[data-testid="data-testid dashboard controls"]')?.closest('main, .scrollbar-view, body')?.scrollHeight ?? document.body.scrollHeight);
+    const viewport = page.viewportSize() ?? { width: 1440, height: 900 };
+    // The pointer must be over the dashboard, not the navigation, for the wheel to scroll it.
+    await page.mouse.move(Math.round(viewport.width * 0.75), Math.round(viewport.height * 0.6));
+    for (let y = 0; y < Math.max(height, 8000); y += 600) {
+        await page.mouse.wheel(0, 600);
+        await page.waitForTimeout(250);
+        await expect(loading).toHaveCount(0, { timeout: 60_000 });
+    }
+    await page.mouse.wheel(0, -100_000);
     await expect(page.getByRole('button', { name: 'Cancel' })).toHaveCount(0, { timeout: 90_000 });
     await page.waitForTimeout(1500);
-    await expect(page.locator('[data-testid="data-testid Panel loading bar"], [aria-label="Panel loading bar"]')).toHaveCount(0, { timeout: 30_000 });
+    await expect(loading).toHaveCount(0, { timeout: 30_000 });
 }
