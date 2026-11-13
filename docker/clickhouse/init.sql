@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS cdnf.edge_events
     waf_body_limit LowCardinality(String) DEFAULT 'none',
     waf_exclusion_id UInt64 DEFAULT 0,
     security_rule LowCardinality(String) DEFAULT '',
+    client_report String DEFAULT '',
     attack_score UInt8 DEFAULT 0,
     attack_score_sqli UInt8 DEFAULT 0,
     attack_score_xss UInt8 DEFAULT 0,

@@ -162,7 +162,11 @@ def main() -> None:
             # Attack scores run from 1 to 99; a value outside the range, or one that is not a number, becomes 0 (not scored).
             score_cases = {'score-rule': {'security_rule': 'x' * 40}, 'score-low': {'attack_score': 4, 'attack_score_sqli': '7', 'attack_score_xss': 99, 'attack_score_rce': 1},
                            'score-bad': {'attack_score': 150, 'attack_score_sqli': -3, 'attack_score_xss': 'abc', 'attack_score_rce': 100},
-                           'score-none': {}}
+                           'score-none': {},
+                           # Client-side reports are kept only in the shape "kind|page|resource" and only up to 420 characters.
+                           'report-ok': {'client_report': 'script|/checkout|https://cdn.example'}, 'report-bad-kind': {'client_report': 'style|/checkout|https://cdn.example'},
+                           'report-bad-shape': {'client_report': 'script|/checkout'}, 'report-long': {'client_report': 'script|/' + 'a' * 500 + '|https://x.example'},
+                           'report-control': {'client_report': 'script|/a\u0001b|https://x.example'}}
             for key, scores in score_cases.items():
                 event = {'domain_id': 42, 'hostname': 'qualification.test', 'path': '/'+key, **scores}
                 request = urllib.request.Request('http://127.0.0.1:'+hostport, data=json.dumps(event).encode(),
@@ -180,6 +184,9 @@ def main() -> None:
             assert [by_path['/score-low'][name] for name in fields] == [4, 7, 99, 1], by_path['/score-low']
             assert [by_path['/score-bad'][name] for name in fields] == [0, 0, 0, 0], by_path['/score-bad']
             assert [by_path['/score-none'][name] for name in fields] == [0, 0, 0, 0], by_path['/score-none']
+            assert by_path['/report-ok']['client_report'] == 'script|/checkout|https://cdn.example', by_path['/report-ok']
+            assert [by_path['/'+key]['client_report'] for key in ('report-bad-kind', 'report-bad-shape', 'report-long', 'score-none')] == ['', '', '', ''], 'client_report shape'
+            assert by_path['/report-control']['client_report'] == 'script|/ab|https://x.example', by_path['/report-control']
             print(json.dumps({'qualification': 'vector_traffic', 'http_json_sources': 'passed',
                               'production_transforms': 'passed', 'query_redaction': 'passed', 'origin_metric_cases': len(cases)}))
         except Exception:
