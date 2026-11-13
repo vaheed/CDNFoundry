@@ -13,6 +13,7 @@ use App\Filament\Domain\Resources\Domains\Widgets\DomainKpiStrip;
 use App\Filament\Domain\Resources\Domains\Widgets\DomainNeedsAttention;
 use App\Http\Controllers\DnsDeploymentController;
 use App\Http\Controllers\DomainController;
+use App\Http\Controllers\CredentialCheckController;
 use App\Http\Controllers\SecurityAlertController;
 use App\Http\Controllers\WafController;
 use App\Jobs\EnsureManagedCertificates;
@@ -37,6 +38,7 @@ use App\Support\IncidentProfile;
 use App\Support\ManagedWafTuning;
 use App\Support\PlatformSettings;
 use App\Support\ProxyRevisionRollback;
+use App\Support\CredentialCheckData;
 use App\Support\SecurityAlertData;
 use App\Support\SecurityConfig;
 use App\Support\UploadedCertificate;
@@ -54,6 +56,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
+use Filament\Forms\Components\Repeater\TableColumn;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
@@ -513,6 +516,31 @@ class ViewDomain extends ViewRecord
                     $this->record->refresh();
                     Notification::make()->success()->title('Security alert removed')->send();
                 }),
+            Action::make('credentialCheck')->label('Credential check')->icon('phosphor-key')->extraAttributes(['data-testid' => 'credential-check-action'])
+                ->modalHeading('Check logins against leaked passwords')
+                ->modalDescription('Name the login paths and where the password is sent. Rules can then act on Leaked password. The password is checked on the cell and is never stored or logged.')
+                ->schema([
+                    Repeater::make('login_paths')->label('Login paths')->minItems(1)->maxItems(CredentialCheckData::MAXIMUM_LOGIN_PATHS)->addActionLabel('Add login path')->table([
+                        TableColumn::make('Path'), TableColumn::make('Format'), TableColumn::make('Password field'), TableColumn::make('Username field'),
+                    ])->schema([
+                        TextInput::make('path')->label('Path')->required()->maxLength(200)->placeholder('/api/login')->extraInputAttributes(['data-testid' => 'credential-path']),
+                        Select::make('format')->label('Format')->options(['form' => 'Form fields', 'json' => 'JSON'])->default('json')->required()->extraInputAttributes(['aria-label' => 'Body format']),
+                        TextInput::make('password_field')->label('Password field')->required()->maxLength(64)->placeholder('password'),
+                        TextInput::make('username_field')->label('Username field')->maxLength(64)->placeholder('email'),
+                    ])->default([['format' => 'json']]),
+                ])->fillForm(fn (): array => $this->record->credential_check ?? ['login_paths' => [['path' => '', 'format' => 'json', 'password_field' => '', 'username_field' => '']]])
+                ->action(function (array $data): void {
+                    app(CredentialCheckController::class)->update(request()->merge($data), $this->record);
+                    $this->record->refresh();
+                    Notification::make()->success()->title('Credential check saved')->body('Add a rule on Leaked password to log, challenge, or block those logins.')->send();
+                }),
+            Action::make('removeCredentialCheck')->label('Remove credential check')->icon('phosphor-key')->color('danger')->requiresConfirmation()
+                ->visible(fn (): bool => $this->record->credential_check !== null)
+                ->action(function (): void {
+                    app(CredentialCheckController::class)->destroy(request(), $this->record);
+                    $this->record->refresh();
+                    Notification::make()->success()->title('Credential check removed')->send();
+                }),
             Action::make('startIncident')->icon('phosphor-shield-warning')->label('Start incident profile')->color('danger')->extraAttributes(['data-testid' => 'incident-start-action'])
                 ->modalHeading('Start the incident profile?')
                 ->modalDescription('For the time you choose, the domain gets tighter request limits, the web application firewall in blocking mode, restricted methods and body size, and a browser challenge. It protects your origin and the cells from request floods; it cannot absorb traffic that saturates a host or link.')
@@ -703,7 +731,7 @@ class ViewDomain extends ViewRecord
             }),
         ];
         // Long forms open as a right-side sheet; a form of one or two fields opens as a small centered dialog.
-        $sheets = ['importZone', 'proxyDefaults', 'cacheSettings', 'uploadCertificate', 'securitySettings', 'wafProfile'];
+        $sheets = ['importZone', 'proxyDefaults', 'cacheSettings', 'uploadCertificate', 'securitySettings', 'wafProfile', 'credentialCheck'];
         $dialogs = ['moveEdgePool', 'developmentMode', 'purgeCache', 'tlsMode', 'securityAlert'];
         $group = fn (array $names): array => collect($actions)
             ->keyBy(fn (Action $action): string => $action->getName())
@@ -737,7 +765,7 @@ class ViewDomain extends ViewRecord
                 ->icon('phosphor-lock')
                 ->color('gray')
                 ->button(),
-            ActionGroup::make($group(['securitySettings', 'wafProfile', 'securityAlert', 'removeSecurityAlert', 'startIncident', 'endIncident', 'startMaintenance', 'endMaintenance', 'protectSecurity', 'quarantineSecurity', 'returnSecurityToNormal']))
+            ActionGroup::make($group(['securitySettings', 'wafProfile', 'securityAlert', 'removeSecurityAlert', 'credentialCheck', 'removeCredentialCheck', 'startIncident', 'endIncident', 'startMaintenance', 'endMaintenance', 'protectSecurity', 'quarantineSecurity', 'returnSecurityToNormal']))
                 ->label('Security')
                 ->icon('phosphor-shield-check')
                 ->color('gray')
