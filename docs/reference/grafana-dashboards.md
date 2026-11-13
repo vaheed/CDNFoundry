@@ -421,14 +421,16 @@ Refreshes every 30s.
 
 ### Daily checks
 
-Every daily check the platform makes visible, each with its pass or fail state.
+Every daily check the platform makes visible: which fail, which are not reported, and what to do.
 
 Refreshes every 30s.
 
 | Panel | What it shows |
 | --- | --- |
-| Daily checks | Every daily check as pass or fail. A red tile is a failed check; open its runbook from the Now dashboard. |
-| Checks failing | Daily checks that fail now. |
+| Failing | Checks that fail now. Each one is listed first in the table below with what to do. |
+| Not reported | Checks whose metric is not reported, usually because the part is not installed (a second control node) or has not reported yet. |
+| Passing | Checks that pass now. |
+| Daily checks | Every daily check, failures first: its state, what it checks, and what to do when it fails. |
 
 ### Data stores
 

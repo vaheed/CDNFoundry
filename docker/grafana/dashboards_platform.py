@@ -120,33 +120,76 @@ def hosts_containers() -> dict:
     return dashboard("cdnf-hosts-containers", "Hosts and containers", "cdnf-platform", "CPU, memory, disk, network, clock, restarts, and OOM kills per host.", rows, runbook="host-clock")
 
 
+# Each daily check: its name, a PromQL expression that is 1 when it passes and 0 when it fails, what it checks, and what to do
+# when it fails. A check whose metric is not reported at all shows "Not reported", never "Fail".
 CHECKS = [
-    ("PoPs hold the latest artifact", "(max(cdnfoundry_edge_gateway_active_revision) - min(cdnfoundry_edge_gateway_active_revision) <= bool 5) or vector(0)"),
-    ("DNS serials match desired", "(cdnfoundry_dns_deployments_drifted == bool 0)"),
-    ("No pool address set shrank", "(sum(cdnfoundry_pool_dns_fail_static) == bool 0)"),
-    ("No edge identity near expiry", "(min(cdnfoundry_edge_identity_expires_seconds) > bool 30 * 86400) or vector(1)"),
-    ("No placement stuck deploying", 'cdnfoundry_component_health{component="edge_placements"}'),
-    ("Queue latency under bound", "(max(cdnfoundry_queue_oldest_job_age_seconds) < bool 900) or vector(1)"),
-    ("Watchdog delivered within the hour", '(sum(increase(alertmanager_notifications_total{integration="webhook"}[1h])) > bool 0)'),
-    ("No certificate near expiry unrenewed", "(cdnfoundry_tls_certificates_expiring == bool 0)"),
-    ("Backup fresh and checks pass", 'cdnfoundry_component_health{component="backups"}'),
-    ("Vector drops nothing, ClickHouse accepts", '(sum(increase(vector_component_discarded_events_total{intentional!="true"}[1h])) == bool 0) * (sum(increase(vector_component_errors_total{component_id=~"clickhouse_.*"}[1h])) == bool 0)'),
-    ("Control HA state not degraded", '(cdnfoundry_control_ha_state{state="degraded"} == bool 0) or vector(1)'),
-    ("Valkey linked, secrets match", "((cdnfoundry_control_valkey_replica_linked == bool 1) or vector(1)) * ((cdnfoundry_control_fingerprint_mismatch == bool 0) or vector(1))"),
-    ("PoPs hold the control addresses", "(cdnfoundry_control_edges_missing_addresses == bool 0)"),
-    ("Services run on the primary node", 'cdnfoundry_component_health{component="control_ha"}'),
-    ("Standby watched, dead-man alarm delivered", '(min(up{job="node",role="control"}) == bool 1) or vector(1)'),
+    ("PoPs hold the latest artifact", "(max(cdnfoundry_edge_gateway_active_revision) - min(cdnfoundry_edge_gateway_active_revision) <= bool 5)",
+     "Every edge gateway runs a configuration revision within 5 of the newest one.", "Open Fleet and rollouts and find the edge that is behind; check its agent log."),
+    ("DNS serials match desired", "(cdnfoundry_dns_deployments_drifted == bool 0)",
+     "No DNS cluster serves an older zone than the control plane wants.", "Open DNS authoritative; reconcile the drifted zones from their domains."),
+    ("No pool held on its last answers", "(sum(cdnfoundry_pool_dns_fail_static) == bool 0)",
+     "No pool is in fail-static, where DNS keeps the last answers because no edge looks healthy.", "Open PoP fleet; bring an edge of that pool back to ready."),
+    ("No edge identity near expiry", "(min(cdnfoundry_edge_identity_expires_seconds) > bool 30 * 86400)",
+     "Every edge client certificate is valid for more than 30 days.", "Rotate the identity of the edge named in Fleet and rollouts."),
+    ("No placement stuck deploying", 'cdnfoundry_component_health{component="edge_placements"}',
+     "No domain has waited too long for a new pool or cell to become ready.", "Open the Operations screen in the admin panel and read the failing placement."),
+    ("Queue latency under bound", "(max(cdnfoundry_queue_oldest_job_age_seconds) < bool 900)",
+     "The oldest waiting job in every queue is younger than 15 minutes.", "Open Control plane; scale the busy lane or restart its worker."),
+    ("Watchdog delivered within the hour", '(sum(increase(alertmanager_notifications_total{integration="webhook"}[1h])) > bool 0)',
+     "Alertmanager delivered its always-firing watchdog in the last hour, so alerts can reach people.", "Check the notifier container and the alert receiver in Platform settings."),
+    ("No certificate near expiry unrenewed", "(cdnfoundry_tls_certificates_expiring == bool 0)",
+     "No active certificate is close to expiry without a renewal in progress.", "Open TLS posture; renew or reissue the certificate named there."),
+    ("Backup fresh and checks pass", 'cdnfoundry_component_health{component="backups"}',
+     "The last backup is recent enough and its restore check passed.", "Open Backups; run a backup with Fleet and read why the last one failed."),
+    ("Vector drops nothing, ClickHouse accepts", '(sum(increase(vector_component_discarded_events_total{intentional!="true"}[1h])) == bool 0) * (sum(increase(vector_component_errors_total{component_id=~"clickhouse_.*"}[1h])) == bool 0)',
+     "In the last hour Vector dropped no event by accident and ClickHouse refused no write.", "Open Telemetry pipeline; check ClickHouse disk and Vector buffers."),
+    ("Control HA state not degraded", '(cdnfoundry_control_ha_state{state="degraded"} == bool 0)',
+     "The two-node control plane is not in its degraded state.", "Run the Fleet control status command and follow the control HA runbook."),
+    ("Valkey linked, secrets match", "(cdnfoundry_control_valkey_replica_linked == bool 1) * (cdnfoundry_control_fingerprint_mismatch == bool 0)",
+     "The standby Valkey follows the primary and both control nodes hold the same secrets.", "Re-run the control HA setup step for the standby node."),
+    ("PoPs hold the control addresses", "(cdnfoundry_control_edges_missing_addresses == bool 0)",
+     "Every edge knows the addresses of both control nodes.", "Push the control addresses again from Fleet."),
+    ("Services run on the primary node", 'cdnfoundry_component_health{component="control_ha"}',
+     "The control services run on the node that holds the primary role.", "Follow the control HA runbook to fence and fail over."),
+    ("Standby watched", '(min(up{job="node",role="control"}) == bool 1)',
+     "Prometheus reaches the node exporter of every control node.", "Check the standby host and its node exporter."),
 ]
+
+# The state of each check: 2 pass, 0 fail, 1 not reported. min() drops the metric labels, so each check is exactly one row.
+STATE_PASS, STATE_UNKNOWN, STATE_FAIL = 2, 1, 0
+
+
+def _check_state(name: str, expr: str, about: str, todo: str) -> str:
+    labels = lambda inner: (f'label_replace(label_replace(label_replace({inner}, "check", "{name}", "", ""), '
+                            f'"about", "{about}", "", ""), "todo", "{todo}", "", "")')
+    return f"({labels(f'min({expr}) * 2')} or {labels('vector(1)')})"
+
+
+ALL_CHECKS = " or ".join(_check_state(*check) for check in CHECKS)
 
 
 def daily_checks() -> dict:
-    checks = stat("Daily checks", "Every daily check as pass or fail. A red tile is a failed check; open its runbook from the Now dashboard.", [prom(f"({expr}) or vector(0)", name, instant=True) for name, expr in CHECKS], "short", "health", w=24, h=12)
-    checks["fieldConfig"]["defaults"]["mappings"] = [{"type": "value", "options": {"1": {"text": "pass", "color": "green"}, "0": {"text": "fail", "color": "red"}}}] + checks["fieldConfig"]["defaults"]["mappings"]
-    checks["options"]["colorMode"] = "background"
-    checks["options"]["graphMode"] = "none"
-    checks["options"]["text"] = {"valueSize": 22, "titleSize": 14}
-    rows = [[checks], [stat("Checks failing", "Daily checks that fail now.", [prom(f"count(({' or '.join(f'({expr})' for _, expr in CHECKS)}) == 0) or vector(0)", "failing", instant=True)], "short", "zero_good", w=24, h=4)]]
-    return dashboard("cdnf-daily-checks", "Daily checks", "cdnf-platform", "Every daily check the platform makes visible, each with its pass or fail state.", rows, runbook="component-unhealthy")
+    count = lambda state: f"count(({ALL_CHECKS}) == {state}) or vector(0)"
+    failing = stat("Failing", "Checks that fail now. Each one is listed first in the table below with what to do.", [prom(count(STATE_FAIL), "failing", instant=True)], "short", "zero_good", w=8, h=4)
+    unknown = stat("Not reported", "Checks whose metric is not reported, usually because the part is not installed (a second control node) or has not reported yet.", [prom(count(STATE_UNKNOWN), "not reported", instant=True)], "short", "neutral", w=8, h=4)
+    passing = stat("Passing", "Checks that pass now.", [prom(count(STATE_PASS), "passing", instant=True)], "short", "neutral", w=8, h=4)
+    checks = table("Daily checks", "Every daily check, failures first: its state, what it checks, and what to do when it fails.",
+                   [prom(ALL_CHECKS, "{{check}}", instant=True, fmt="table")], w=24, h=30,
+                   transformations=[
+                       {"id": "organize", "options": {"excludeByName": {"Time": True}, "indexByName": {"Value": 0, "check": 1, "about": 2, "todo": 3},
+                                                      "renameByName": {"Value": "State", "check": "Check", "about": "What it checks", "todo": "When it fails"}}},
+                       {"id": "sortBy", "options": {"sort": [{"field": "State", "desc": False}]}}],
+                   overrides=[{"matcher": {"id": "byName", "options": "State"}, "properties": [
+                       {"id": "mappings", "value": [{"type": "value", "options": {
+                           str(STATE_FAIL): {"text": "Fail", "color": "red", "index": 0},
+                           str(STATE_UNKNOWN): {"text": "Not reported", "color": "text", "index": 1},
+                           str(STATE_PASS): {"text": "Pass", "color": "green", "index": 2}}}]},
+                       {"id": "custom.cellOptions", "value": {"type": "color-text"}}, {"id": "custom.width", "value": 130}, {"id": "custom.align", "value": "left"}]},
+                              {"matcher": {"id": "byName", "options": "Check"}, "properties": [{"id": "custom.width", "value": 300}]},
+                              # The explanations wrap instead of being cut off.
+                              {"matcher": {"id": "byRegexp", "options": "^(What it checks|When it fails)$"}, "properties": [{"id": "custom.cellOptions", "value": {"type": "auto", "wrapText": True}}]}])
+    rows = [[failing, unknown, passing], [checks]]
+    return dashboard("cdnf-daily-checks", "Daily checks", "cdnf-platform", "Every daily check the platform makes visible: which fail, which are not reported, and what to do.", rows, runbook="component-unhealthy")
 
 
 def slos() -> dict:
