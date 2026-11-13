@@ -6,7 +6,7 @@ return [
     // enforce, report-only, or off. The panels and the API send one Content-Security-Policy.
     'content_security_policy' => env('CONTENT_SECURITY_POLICY', 'enforce'),
     'waf' => [
-        'ruleset' => env('WAF_RULESET_VERSION', 'owasp-crs/4.26.0-modsecurity/3.0.14'),
+        'ruleset' => env('WAF_RULESET_VERSION', 'owasp-crs/4.30.0-modsecurity/3.0.17'),
     ],
     'maximum_rules_per_domain' => 1000,
     'maximum_import_rules' => 500,

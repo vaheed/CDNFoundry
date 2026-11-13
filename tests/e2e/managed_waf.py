@@ -51,7 +51,7 @@ def host(profile: str, blocking: bool, body_limit: int, origin_ip: str, exclusio
             "name": profile, "paranoia_level": 0 if profile == "off" else (2 if profile == "strict" else 1),
             "inbound_threshold": 3 if profile == "strict" else 5, "outbound_threshold": 4,
             "body_limit_bytes": body_limit, "blocking": blocking,
-            "ruleset": "owasp-crs/4.26.0-modsecurity/3.0.14", "exclusions": exclusions or [],
+            "ruleset": "owasp-crs/4.30.0-modsecurity/3.0.17", "exclusions": exclusions or [],
         },
         "origin": {
             "host": origin_ip, "port": 80, "scheme": "http", "host_header": "waf-origin",

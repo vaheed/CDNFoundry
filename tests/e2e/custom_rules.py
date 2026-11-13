@@ -132,7 +132,7 @@ def waf_profile(name: str, **tuning: object) -> dict:
         "off": (0, 0, 0, False), "monitor": (1, 5, 1048576, False), "balanced": (1, 5, 1048576, True),
     }[name]
     return {"name": name, "paranoia_level": settings[0], "inbound_threshold": settings[1], "outbound_threshold": 4,
-            "body_limit_bytes": settings[2], "blocking": settings[3], "ruleset": "owasp-crs/4.26.0-modsecurity/3.0.14", "exclusions": [],
+            "body_limit_bytes": settings[2], "blocking": settings[3], "ruleset": "owasp-crs/4.30.0-modsecurity/3.0.17", "exclusions": [],
             "off_categories": [], "off_rules": [], "log_only_rules": [], **tuning}
 
 

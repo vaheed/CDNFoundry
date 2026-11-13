@@ -344,7 +344,7 @@ class Renderer:
             "BACKUP_RESTORE_ALLOWED": "false",
             "MMDB_STALE_HOURS": "48",
             "VECTOR_METRICS_URL": "http://vector:9598/metrics",
-            "WAF_RULESET_VERSION": "owasp-crs/4.26.0-modsecurity/3.0.14",
+            "WAF_RULESET_VERSION": "owasp-crs/4.30.0-modsecurity/3.0.17",
             "EDGE_IDENTITY_VALIDITY_DAYS": "365",
             "REDIS_CACHE_PORT": "6379",
             "REDIS_CACHE_URL": "",

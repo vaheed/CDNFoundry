@@ -92,7 +92,7 @@ class ManagedWafTest extends TestCase
         $this->assertSame(['941'], $compiled['off_categories']);
         $this->assertSame([942100], $compiled['off_rules']);
         $this->assertSame([942120], $compiled['log_only_rules']);
-        $this->assertSame('owasp-crs/4.26.0', ManagedWafTuning::catalog()['ruleset']);
+        $this->assertSame('owasp-crs/4.30.0', ManagedWafTuning::catalog()['ruleset']);
         $this->assertStringStartsWith(ManagedWafTuning::catalog()['ruleset'], config('security.waf.ruleset'));
 
         // The tuning is replaced as a whole, kept when only the profile changes, and cleared with null.

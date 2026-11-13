@@ -1,7 +1,7 @@
 FROM openresty/openresty:1.31.1.1-2-alpine@sha256:5f621903212ed7194a6bd31de7a76c1cfbe92e7b7a6fdb0f2b38626e97bd38c4 AS brotli-builder
 
 ARG NGX_BROTLI_COMMIT=a71f9312c2deb28875acc7bacfdd5695a111aa53
-ARG MODSECURITY_COMMIT=a555e5a44573e50f04ad997b3b24c214c42f8e29
+ARG MODSECURITY_COMMIT=1925753989ccce977cdaae417b55c9726c7cf02c
 RUN apk add --no-cache autoconf automake build-base cmake curl curl-dev git libtool linux-headers lmdb-dev libxml2-dev openssl-dev pcre-dev pcre2-dev perl yajl-dev zlib-dev
 RUN git clone https://github.com/google/ngx_brotli.git /tmp/ngx_brotli \
     && git -C /tmp/ngx_brotli checkout "${NGX_BROTLI_COMMIT}" \
@@ -21,7 +21,7 @@ RUN git clone https://github.com/owasp-modsecurity/ModSecurity.git /tmp/ModSecur
 
 FROM brotli-builder AS module-builder
 ARG MODSECURITY_NGINX_COMMIT=3f4b57df10ce43b1f1c722141f7621dc64838be8
-ARG OWASP_CRS_COMMIT=955649c1221633cc3ea63674904e94fbc5fb6356
+ARG OWASP_CRS_COMMIT=e03a4f6dabc7a30ebd8c52c97d28a154f590a48f
 ARG OPENRESTY_SHA256=65b78baadd3f0984055de89bf13f4a1932e5bfe9c31932037a134ea2b1a0ce42
 RUN git clone https://github.com/owasp-modsecurity/ModSecurity-nginx.git /tmp/ModSecurity-nginx \
     && git -C /tmp/ModSecurity-nginx checkout "${MODSECURITY_NGINX_COMMIT}" \
