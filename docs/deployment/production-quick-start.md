@@ -104,8 +104,7 @@ Edit `fleet.json` and replace every example value:
 - `operator_domain`: the independently hosted management suffix.
 - `platform_domain`: the customer-facing CDN platform suffix.
 - `release`: the exact checked-out 40-character commit SHA.
-- `acme_email`: a monitored certificate contact.
-- `alert_webhook_url`: the `https://` notifier that receives every alert and the always-firing `Watchdog` alert. It is optional: leave it empty to install without notifications and set it later (Fleet web **Config** page, or `cdnfoundry-fleet alert-webhook --url`), then deploy the configuration.
+- `acme_email`: a monitored certificate contact. Alerts are not configured here: after the install, add a platform channel in the administrator panel ([Notifications](../guides/notifications.md)).
 - `management_networks`: the CIDRs of the operator networks that may open the administrator panel, the administrator API, Horizon, and Grafana. Everyone else gets `403`. The customer panel (`/app`), the customer API, and the status page stay open to everyone. Leave it empty only for a first trial; set it later with `cdnfoundry-fleet management-networks --networks`.
 - Each node's `hostname`, `public_ipv4`, region, and location.
 - The matching verified image reference in each node's `extra_env` for every `CDNF_*_IMAGE` key, from `release-manifest.json`. The projection in step 1 fills these in `fleet.verified.json`.

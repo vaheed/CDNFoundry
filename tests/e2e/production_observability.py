@@ -93,7 +93,6 @@ def main() -> int:
                 "platform_domain": "example.net",
                 "release": args.release,
                 "acme_email": "qualification@example.com",
-                "alert_webhook_url": "https://alerts.example.test/hook",
                 "ipv6": False,
             },
             "nodes": [{
