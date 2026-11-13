@@ -242,6 +242,35 @@ it reached.
   They never see a platform rule's conditions.
 - Up to 10 rulesets, 100 rules per ruleset, and 500 listed domains per ruleset.
 
+### Security events
+
+**You need:** view rights on the domain.
+
+The **Security events** tab lists the requests that a custom rule, a platform
+ruleset, or the managed firewall blocked, and the requests a rule logged. Each row
+shows the time, the rule that acted, the action, the attack score, the path, and the
+country. The network, user agent, and request ID columns are available from the
+column menu.
+
+- **Filters.** Narrow the list by action, rule reference (`r12` for a rule of this
+  domain, `p5` for a platform rule, `waf` for the managed firewall), attack score,
+  path, country, ASN, user agent, or request ID. The API is
+  `GET /api/domains/{domain}/security/mitigations`, with the same filters.
+- **Create rule** opens the rule sheet with the request's path, country, network,
+  and user agent as conditions and Block as the action. Remove the conditions that
+  should not matter before you save.
+- **Create exception** opens the same sheet with a rule that lets such requests
+  through. For a rule of your own, the exception runs just before it. For the
+  managed firewall it skips the managed rules for that path. It is not offered for a
+  platform rule, because platform rules run before the domain's own rules.
+- A platform rule is named by its ruleset only. Its conditions are never shown.
+
+**What the list is.** The list is built from stored request events: the newest 500
+mitigated requests of the last 24 hours, kept for 7 days. During a large attack
+that is a sample, not every request. The counts in **Analytics and logs** and the
+event counters that drive alerts come from the cells' own counters and rollups and
+are not limited to 500. The client address is shown masked to the network.
+
 ### Actions
 
 | Action | Effect |

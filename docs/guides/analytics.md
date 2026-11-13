@@ -59,6 +59,29 @@ Open **Analytics and logs** in the domain panel, or call the endpoints under `/a
 
 **Expected result:** the page starts empty. Choose **Select domain** (it reads **Switch domain** afterwards), search, and pick a domain. Queries start only after you pick one, and the search lists only domains you may see.
 
+### Security analytics
+
+The **Security** card on **Analytics and logs** counts every request of the chosen
+domains, mitigated or not, so you can see how much of your traffic is attack
+traffic and where it comes from.
+
+| Tab | Counts requests by | Source |
+| --- | --- | --- |
+| Attack score | Band: not scored, 1 to 19, 20 to 39, 40 to 59, 60 to 79, 80 to 99 | Hourly rollup, 400 days |
+| Actions | Allowed, blocked, or logged by a rule | Hourly rollup, 400 days |
+| Countries | Country | Hourly rollup, 400 days |
+| Networks | Autonomous system number | Hourly rollup, 400 days |
+| Paths | Path, most mitigated first | Request events, 24 hours of the range, kept 7 days |
+| User agents | User agent, most mitigated first | Request events, 24 hours of the range, kept 7 days |
+
+Each row shows the requests, how many were mitigated, and the mitigated share.
+Path and user agent have too many values for a rollup, so those two tabs read the
+stored request events and cover the last 24 hours of the range.
+
+The API serves the same numbers at
+`GET /api/domains/{domain}/analytics/security/{bands|actions|countries|asns|paths|agents}`.
+It takes the usual `from` and `to`; paths and agents accept at most 24 hours.
+
 ## Administrator operations overview
 
 The `/admin` operations overview uses complete hourly ClickHouse aggregates for
