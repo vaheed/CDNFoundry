@@ -74,3 +74,22 @@ test('the attack score field explains its scale and asks for an example number',
     await expect(sheet.getByRole('spinbutton', { name: 'Value*' })).toHaveAttribute('placeholder', '20');
     await expectAccessible(page);
 });
+
+test('the rate limit fields appear with the toggle, with examples and a per-cell explanation', async ({ page }) => {
+    await openRules(page);
+    await page.getByRole('button', { name: 'Add rule' }).click();
+    const sheet = page.locator('.fi-modal-window:visible');
+    await expect(sheet.getByRole('spinbutton', { name: /^Requests/ })).toHaveCount(0);
+    await sheet.getByText('Limit the request rate').click();
+    await settle(page);
+    await expect(sheet.getByRole('spinbutton', { name: /^Requests/ })).toHaveAttribute('placeholder', '100');
+    await expect(sheet.getByRole('spinbutton', { name: /^Then for/ })).toHaveAttribute('placeholder', '300');
+    await sheet.getByRole('combobox', { name: /^Count by/ }).selectOption('header');
+    await settle(page);
+    await expect(sheet.getByRole('textbox', { name: 'Header name*' })).toHaveAttribute('placeholder', 'X-Api-Key');
+    // A rate limit offers block, challenge, and log only.
+    const actions = await sheet.getByRole('combobox', { name: /^Action/ }).locator('option').allTextContents();
+    expect(actions.join('|')).not.toContain('Allow');
+    expect(await sheet.locator('[x-tooltip]').count()).toBeGreaterThanOrEqual(5);
+    await expectAccessible(page);
+});

@@ -99,6 +99,14 @@ def rule(identifier: int, conditions: list[dict], action: str = "block", priorit
     return {"id": identifier, "name": None, "conditions": conditions, "action": action, "priority": priority or identifier}
 
 
+def rate_rule(identifier: int, conditions: list[dict], action: str = "block", key: str = "client_ip", threshold: int = 5, period: int = 600,
+              duration: int = 10, header_name: str | None = None) -> dict:
+    limit = {"key": key, "threshold": threshold, "period_seconds": period, "duration_seconds": duration}
+    if header_name:
+        limit["header_name"] = header_name
+    return {**rule(identifier, conditions, action), "rate_limit": limit}
+
+
 def host(domain_id: int, rules: list[dict], waf: dict | None = None) -> dict:
     config = base.host(domain_id, rules)
     config["security"]["allowed_methods"] = ["GET", "HEAD", "POST", "PUT"]
@@ -186,7 +194,14 @@ def qualify(directory: pathlib.Path) -> None:
         "scorebalanced.example": host(30, [], waf_profile("balanced")),
         "scoreskip.example": host(31, [rule(1, [condition("header", "equals", "yes", "X-Trusted")], "skip_managed")], waf_profile("balanced")),
         "scorerce.example": host(32, [rule(1, [condition("attack_score_rce", "less_than", 40)])], waf_profile("off")),
+        "ratepath.example": host(33, [rate_rule(1, [condition("path", "equals", "/limited")], key="client_ip_path")]),
+        "rateheader.example": host(34, [rate_rule(1, [], key="header", header_name="x-api-key")]),
+        "rateall.example": host(35, [rate_rule(1, [], threshold=3)]),
+        "ratelog.example": host(36, [rate_rule(1, [condition("path", "equals", "/watched")], "log", threshold=2)]),
+        "ratechallenge.example": host(37, [rate_rule(1, [condition("path", "equals", "/members")], "challenge", threshold=2)]),
+        "rateallow.example": host(38, [rule(1, [condition("client_ip", "equals", "198.51.100.77")], "allow"), rate_rule(2, [], threshold=1)]),
         "unsafe.example": host(26, [{"id": 1, "conditions": [], "action": "block", "priority": 1},
+                                   {"id": 4, "conditions": [{"field": "path", "operator": "equals", "value": "/"}], "action": "block", "priority": 4, "rate_limit": {"key": "client_ip", "threshold": 0, "period_seconds": 7, "duration_seconds": 1}},
                                    {"id": 2, "conditions": [{"field": "path", "operator": "equals"}] * 6, "action": "block", "priority": 2},
                                    {"id": 3, "conditions": [{"field": "nonsense", "operator": "equals", "value": "x"}], "action": "block", "priority": 3}]),
     }
@@ -216,6 +231,12 @@ def qualify(directory: pathlib.Path) -> None:
     events = json.loads(run("docker", "exec", NAME, "wget", "-q", "-O-", "--header=X-Edge-Status-Token: runtime-test-token", "http://127.0.0.1:9080/passive-failures").stdout)["security"]
     logged = [event for event in events if event["reason_code"] == "custom_rule_log"]
     assert len(logged) == 1 and logged[0]["domain_id"] == 27 and logged[0]["count"] == 1, events
+    # a log-only rate limit lets every request through and records one event type for the domain
+    for _ in range(5):
+        expect(get("ratelog.example", "/watched"), 200)
+    events = json.loads(run("docker", "exec", NAME, "wget", "-q", "-O-", "--header=X-Edge-Status-Token: runtime-test-token", "http://127.0.0.1:9080/passive-failures").stdout)["security"]
+    limited = [event for event in events if event["reason_code"] == "custom_rule_rate_limited"]
+    assert len(limited) == 1 and limited[0]["domain_id"] == 36, events
     # hostname
     expect(get("hostname.example"), 403, blocked)
     # path: prefix, suffix, substring, list, and a log action that does not block
@@ -326,6 +347,40 @@ def qualify(directory: pathlib.Path) -> None:
     # a skip_managed rule lets the same payload through
     expect(get("scoreskip.example", sqli), 403, "waf_block")
     expect(get("scoreskip.example", sqli, "X-Trusted: yes"), 200)
+
+    # rate-limit rules: counted per key and per cell, over fixed windows, then released after their duration
+    rate_reason = "custom_rule_rate_limited"
+    for _ in range(5):
+        expect(get("ratepath.example", "/limited"), 200)
+    expect(get("ratepath.example", "/limited"), 429, rate_reason)
+    expect(get("ratepath.example", "/limited"), 429, rate_reason)
+    expect(get("ratepath.example", "/other"), 200)                              # another path is another key
+    expect(get("ratepath.example", "/limited", xff("203.0.113.9")), 200)        # another client is another key
+    # a header key counts each value separately, and a request without the header is never counted
+    for _ in range(5):
+        expect(get("rateheader.example", "/", "X-Api-Key: alpha"), 200)
+    expect(get("rateheader.example", "/", "X-Api-Key: alpha"), 429, rate_reason)
+    expect(get("rateheader.example", "/", "X-Api-Key: beta"), 200)
+    for _ in range(8):
+        expect(get("rateheader.example"), 200)
+    # a rule with no conditions counts every request of the domain
+    for _ in range(3):
+        expect(get("rateall.example"), 200)
+    expect(get("rateall.example", "/anywhere"), 429, rate_reason)
+    # a client an allow rule trusts is never counted
+    for _ in range(4):
+        expect(get("rateallow.example", "/", xff("198.51.100.77")), 200)
+    expect(get("rateallow.example", "/", xff("198.51.100.78")), 200)
+    expect(get("rateallow.example", "/", xff("198.51.100.78")), 429, rate_reason)
+    # log counts and records an event but never blocks; challenge asks a browser for the proof of work
+    for _ in range(2):
+        expect(get("ratechallenge.example", "/members", "Accept: text/html", f"Cookie: x={_}"), 200)
+    code, head, body = get("ratechallenge.example", "/members", "Accept: text/html")
+    assert code == 403 and "Checking your browser" in body, (code, head)
+    # the mitigation lasts its duration and the client then starts again with a fresh allowance
+    time.sleep(11)
+    expect(get("ratepath.example", "/limited"), 200)
+    expect(get("rateheader.example", "/", "X-Api-Key: alpha"), 200)
 
     # a malformed or oversized rule never matches and never takes the cell down
     expect(get("unsafe.example"), 200)
