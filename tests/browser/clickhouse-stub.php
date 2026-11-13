@@ -5,6 +5,24 @@
 // refused with 503, so the screens that expect an unavailable telemetry store still see one.
 
 $sql = (string) file_get_contents('php://input');
+// Security analytics: the same fixed numbers for every domain and range.
+$security = [
+    'GROUP BY attack_band' => [['attack_band' => 0, 'requests' => 52000, 'mitigated' => 120], ['attack_band' => 1, 'requests' => 640, 'mitigated' => 640], ['attack_band' => 3, 'requests' => 85, 'mitigated' => 85], ['attack_band' => 5, 'requests' => 410000, 'mitigated' => 0]],
+    'GROUP BY action' => [['action' => 'allowed', 'requests' => 461000, 'mitigated' => 0], ['action' => 'blocked', 'requests' => 725, 'mitigated' => 725], ['action' => 'logged', 'requests' => 100, 'mitigated' => 100]],
+    'GROUP BY country' => [['country' => 'US', 'requests' => 300000, 'mitigated' => 540], ['country' => 'DE', 'requests' => 160000, 'mitigated' => 285]],
+    'GROUP BY asn' => [['asn' => 15169, 'requests' => 300000, 'mitigated' => 540], ['asn' => 0, 'requests' => 900, 'mitigated' => 20]],
+    'GROUP BY path' => [['path' => '/wp-login.php', 'requests' => 400, 'mitigated' => 400], ['path' => '/', 'requests' => 9000, 'mitigated' => 3]],
+    'GROUP BY user_agent' => [['user_agent' => 'sqlmap/1.7.2#stable (https://sqlmap.org)', 'requests' => 320, 'mitigated' => 320], ['user_agent' => '', 'requests' => 15, 'mitigated' => 2]],
+];
+foreach ($security as $marker => $rows) {
+    if (str_contains($sql, $marker) && (str_contains($sql, 'cdnf.security_hourly') || str_contains($sql, "event_type = 'request'"))) {
+        foreach ($rows as $row) {
+            echo json_encode($row)."\n";
+        }
+
+        return;
+    }
+}
 if (! str_contains($sql, 'FROM cdnf.edge_events') || ! str_contains($sql, "security_rule != ''")) {
     http_response_code(503);
     echo 'unavailable';
