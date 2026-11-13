@@ -34,6 +34,7 @@ alerts such as a stale edge heartbeat never reach a domain user.
 | Incident profile started or ended | A domain's [incident profile](incident-response.md#incident-profile-on-a-domain) turned on or off |
 | Security state changed | The automatic security state of a domain changed |
 | Origin errors above threshold | Origin errors reached the platform threshold over five minutes |
+| Mitigated requests above threshold | The domain's [security alert](security.md#security-alerts) threshold was reached |
 | Log push failing | A [log push](log-push.md) destination failed several deliveries in a row |
 | Platform alert (administrators only) | Alertmanager sent an alert |
 

@@ -271,6 +271,27 @@ that is a sample, not every request. The counts in **Analytics and logs** and th
 event counters that drive alerts come from the cells' own counters and rollups and
 are not limited to 500. The client address is shown masked to the network.
 
+### Security alerts
+
+**You need:** update rights on the domain, and a notification channel that receives
+the event (see [Notifications](notifications.md)).
+
+An alert tells you when your rules and the managed firewall block a lot of
+requests. Open the domain, choose **Security, Security alert**, enter how many
+blocked requests should trigger it and over 5, 10, or 15 minutes, and save. The API
+is `PUT /api/domains/{domain}/security/alert` with `threshold` (1 to 1,000,000) and
+`period_minutes`; `DELETE` removes it and `GET` reads it.
+
+- The count is the blocked, challenged, and rate-limited requests that all cells
+  report for the domain, from custom rules, platform rulesets, and the managed
+  firewall. Requests that a rule only logs are not counted.
+- **One alert per attack.** After an alert the domain stays quiet for an hour, even
+  while the attack continues, then alerts again if the count is still over the
+  threshold. The check runs every minute.
+- The notification names the domain, the count, and the period. It goes to
+  administrator channels and to the channels of users assigned to the domain that
+  chose the event **Mitigated requests above threshold**.
+
 ### Actions
 
 | Action | Effect |
