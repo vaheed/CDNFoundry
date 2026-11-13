@@ -18,6 +18,7 @@ use App\Models\SystemSetting;
 use App\Models\SecurityEvent;
 use App\Models\User;
 use App\Support\DnsRecordData;
+use App\Support\SecurityRuleData;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
@@ -164,6 +165,16 @@ foreach ([
         'consecutive_failures' => $status === 'paused' ? 10 : 0, 'paused_reason' => $reason, 'last_error' => $reason === null ? null : 'Discord answered HTTP 404.']);
     $channel->storeSecrets(['webhook_url' => 'https://example.invalid/never-used', 'bot_token' => 'x', 'chat_id' => '1']);
     $channel->save();
+}
+
+// Custom rules on the first assigned domain: a long name, IPv6, a list, and a five-condition rule, each with a different action.
+$rulesDomain = Domain::query()->whereHas('users', fn ($users) => $users->whereKey($user->id))->orderBy('id')->firstOrFail();
+foreach ([
+    ['Block the admin area for visitors from outside the European Union with a deliberately long name', 'block', 10, [['field' => 'path', 'operator' => 'starts_with', 'value' => '/admin'], ['field' => 'continent', 'operator' => 'not_equals', 'value' => 'EU']]],
+    ['Allow the office network', 'allow', 20, [['field' => 'client_ip', 'operator' => 'in_list', 'value' => ['203.0.113.0/24', '2001:db8:abcd::/48']]]],
+    [null, 'challenge', 30, [['field' => 'path', 'operator' => 'starts_with', 'value' => '/login'], ['field' => 'method', 'operator' => 'equals', 'value' => 'POST'], ['field' => 'header', 'name' => 'x-api-key', 'operator' => 'equals', 'value' => 'none'], ['field' => 'cookie_present', 'operator' => 'equals', 'name' => 'session', 'value' => false], ['field' => 'body_size', 'operator' => 'less_than', 'value' => 4096]]],
+] as [$name, $action, $priority, $conditions]) {
+    $rulesDomain->securityRules()->create(['name' => $name, 'action' => $action, 'priority' => $priority, 'conditions' => $conditions, 'fingerprint' => SecurityRuleData::fingerprint($conditions, $action)]);
 }
 
 // Log push: the switch is on, and the first assigned domain has a healthy destination and a failing one with a long error.
