@@ -1364,6 +1364,22 @@ a.cdn-kpi-body:hover {
     gap: var(--cdn-space-6);
 }
 
+/* A quiet label above a strip of figures, saying what they cover. */
+.cdn-section-label {
+    margin-bottom: var(--cdn-space-2);
+    color: var(--cdn-text-subtle);
+    font-size: 0.8125rem;
+    font-weight: 500;
+}
+
+/* A long name in a table cell ends with an ellipsis instead of widening the table; its title holds the full name. */
+.cdn-cell-truncate {
+    max-width: 18rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .cdn-dashboard-columns {
     display: grid;
     align-items: start;
