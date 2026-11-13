@@ -4,9 +4,9 @@
             @if ($scope['domains'] === [])
                 No assigned domains match this filter.
             @else
-                <span class="font-medium">{{ $label }}</span>,
-                {{ $this->displayTime($range['from']->toIso8601String()) }} to {{ $this->displayTime($range['to']->toIso8601String()) }}.
-                @if ($meta['partial'] ?? false) The latest {{ $meta['finalization_delay_minutes'] ?? 15 }} minutes are provisional. @endif
+                <span class="block"><span class="font-medium">{{ $label }}</span>,
+                {{ $this->displayTime($range['from']->toIso8601String()) }} to {{ $this->displayTime($range['to']->toIso8601String()) }}.</span>
+                @if ($meta['partial'] ?? false)<span class="block">The latest {{ $meta['finalization_delay_minutes'] ?? 15 }} minutes are provisional.</span>@endif
             @endif
         </p>
         @if ($range['error'])
