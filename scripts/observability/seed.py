@@ -205,8 +205,16 @@ def backfill_prometheus(hours: int = 48) -> None:
 def backfill_loki(hours: int = 6) -> None:
     os.environ["LOKI_URL"] = LOKI  # the exporter container uses the Compose name; the host uses the published port
     now = int(time.time() // 60)
+    skipped = 0
     for minute in range(now - hours * 60, now):
-        exporter.loki_lines(minute, model.Scenarios())
+        try:
+            exporter.loki_lines(minute, model.Scenarios())
+        except urllib.error.HTTPError as error:
+            # Loki refuses lines far behind the newest one of a stream; the live feeder has already written those streams.
+            if error.code != 400 or b"too far behind" not in error.read():
+                raise
+            skipped += 1
+    print(f"loki: {hours * 60 - skipped} minutes written, {skipped} already behind the live feed")
 
 
 def activate(name: str) -> None:
