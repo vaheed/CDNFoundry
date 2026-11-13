@@ -22,6 +22,7 @@ const OBVIOUS_LABELS = new Set([
     'continent', 'method', 'type', 'content', 'hostname', 'host', 'search', 'reason', 'comment', 'url', 'urls (one per line)', 'username field',
     'password field', 'format', 'mode', 'role', 'user', 'users', 'domains', 'events', 'channel', 'header name', 'match', 'per', 'count by',
     'requests', 'token name', 'expires', 'ttl', 'priority', 'name (optional)', 'revision', 'certificate', 'region', 'location', 'port',
+    'time range', 'edge', 'from', 'to', 'domain (optional)', 'first hostname', 'second hostname', 'first ipv4', 'second ipv4', 'first ipv6', 'second ipv6',
 ]);
 
 /** Inputs without an example and complex labels without help inside one open dialog or form. */
@@ -45,8 +46,12 @@ async function auditForm(scope: Locator, where: string, problems: Problem[]): Pr
         for (const label of root.querySelectorAll('.fi-fo-field-label-content')) {
             if (!visible(label)) continue;
             const text = (label.textContent ?? '').replace(/\*/g, '').trim();
-            if (text === '' || obvious.includes(text.toLowerCase())) continue;
-            if (!label.querySelector('[x-tooltip]') && !label.closest('label')?.querySelector('[x-tooltip]')) out.push(`field "${text}" has no help tooltip`);
+            // A label that is a whole sentence (a confirmation checkbox) explains itself.
+            if (text === '' || obvious.includes(text.toLowerCase()) || text.length > 60) continue;
+            // A tooltip on the label, or a description line under the field (the settings pattern), is help.
+            const field = label.closest('.fi-fo-field');
+            const described = Array.from(field?.querySelectorAll('.fi-sc-text') ?? []).some((line) => (line.textContent ?? '').trim().length > 10);
+            if (!label.querySelector('[x-tooltip]') && !label.closest('label')?.querySelector('[x-tooltip]') && !described) out.push(`field "${text}" has no help tooltip`);
         }
         return out;
     }, [...OBVIOUS_LABELS]);
