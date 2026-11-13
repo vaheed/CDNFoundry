@@ -846,6 +846,29 @@ local function rate_limit_exceeded(config, rule, limit)
     return false
 end
 
+-- The rules a cell runs for a domain: the platform rulesets first, then the domain's own rules. The joined list is built once
+-- per loaded state and discarded with it.
+local joined_rules = setmetatable({}, {__mode = "k"})
+
+local function rules_for(security)
+    local platform = security.platform_rules
+    if type(platform) ~= "table" or #platform == 0 then return security.rules or {} end
+    local cached = joined_rules[security]
+    if cached then return cached end
+    cached = {}
+    for index, rule in ipairs(platform) do
+        if index > 1000 then break end
+        rule.platform = true
+        cached[#cached + 1] = rule
+    end
+    for index, rule in ipairs(security.rules or {}) do
+        if index > 1000 then break end
+        cached[#cached + 1] = rule
+    end
+    joined_rules[security] = cached
+    return cached
+end
+
 local function security_has_challenge_rule(rules)
     for index, rule in ipairs(rules) do
         if index > 1000 then break end
@@ -1162,7 +1185,7 @@ function M.access()
     ngx.var.cdn_continent = continent or "ZZ"
     ngx.var.cdn_asn = tostring(autonomous_system(client))
     local trusted = false
-    local rules = security.rules or {}
+    local rules = rules_for(security)
     local request = {
         host = host, path = ngx.var.uri or "/", query_present = (ngx.var.args or "") ~= "", method = method,
         country = country, continent = continent, asn = tonumber(ngx.var.cdn_asn) or 0, client = client,
@@ -1205,10 +1228,10 @@ function M.access()
     for index, rule in ipairs(rules) do
         if index > 1000 then break end
         if type(rule.rate_limit) ~= "table" and rule_matches(rule, request) then
-            if rule.action == "block" then return security_reject(403, "custom_rule_block") end
+            if rule.action == "block" then return security_reject(403, rule.platform and "platform_rule_block" or "custom_rule_block") end
             -- A client the domain's own rules allow is trusted: later rules and the challenge do not apply.
             if rule.action == "allow" then trusted = true; break end
-            if rule.action == "log" then record_security_event("custom_rule_log") end
+            if rule.action == "log" then record_security_event(rule.platform and "platform_rule_log" or "custom_rule_log") end
             if rule.action == "skip_managed" then skip_managed = true end
             if rule.action == "challenge" and not rule_challenge then rule_challenge = rule end
         end
@@ -1219,9 +1242,9 @@ function M.access()
         for index, rule in ipairs(rules) do
             if index > 1000 then break end
             if type(rule.rate_limit) == "table" and rule_matches(rule, request) and rate_limit_exceeded(config, rule, rule.rate_limit) then
-                if rule.action == "block" then return security_reject(429, "custom_rule_rate_limited") end
+                if rule.action == "block" then return security_reject(429, rule.platform and "platform_rule_rate_limited" or "custom_rule_rate_limited") end
                 if rule.action == "challenge" and not rule_challenge then rule_challenge = rule end
-                if rule.action == "log" then record_security_event("custom_rule_rate_limited") end
+                if rule.action == "log" then record_security_event(rule.platform and "platform_rule_rate_limited" or "custom_rule_rate_limited") end
             end
         end
     end
@@ -1244,7 +1267,7 @@ function M.access()
         local rule_incident = {expires_at = ngx.time() + CHALLENGE_TOKEN_SECONDS, challenge_bypass_prefixes = {}}
         local challenged = enforce_challenge(config, rule_challenge and rule_incident or (incident or rule_incident), client, trusted)
         if challenged then
-            if rule_challenge then record_security_event("custom_rule_challenge") end
+            if rule_challenge then record_security_event(rule_challenge.platform and "platform_rule_challenge" or "custom_rule_challenge") end
             return challenged
         end
     end
