@@ -23,6 +23,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
@@ -78,7 +79,7 @@ class SecurityRulesRelationManager extends RelationManager
             TextColumn::make('priority')->label(FilamentHelp::label('Order', 'Rules run from the lowest number up. Allow stops the check; Block ends the request; Log, Challenge and Skip managed rules let later rules run.'))->sortable(),
             TextColumn::make('name')->label('Rule')
                 ->state(fn (SecurityRule $record): string => $record->name ?? SecurityRuleData::describe($record->conditions))
-                ->description(fn (SecurityRule $record): ?string => $record->name === null ? null : SecurityRuleData::describe($record->conditions))->wrap(),
+                ->description(fn (SecurityRule $record): ?string => collect([$record->name === null ? null : SecurityRuleData::describe($record->conditions), $record->rate_limit === null ? null : 'Limit: '.SecurityRuleData::describeRateLimit($record->rate_limit, $record->action).'.'])->filter()->implode(' ') ?: null)->wrap(),
             TextColumn::make('action')->badge()
                 ->formatStateUsing(fn (string $state): string => SecurityRuleData::ACTION_LABELS[$state] ?? $state)
                 ->color(fn (string $state): string => match ($state) {
@@ -110,10 +111,13 @@ class SecurityRulesRelationManager extends RelationManager
         $fields = [
             TextInput::make('name')->label('Name')->maxLength(100)->placeholder('Block the admin area from abroad'),
             Repeater::make('conditions')->label(FilamentHelp::label('Conditions', 'Every condition must match for the rule to apply. Up to five.'))
-                ->minItems(1)->maxItems(SecurityRuleData::MAXIMUM_CONDITIONS)->defaultItems(1)->addActionLabel('Add condition')->live()
-                ->schema($this->conditionFields())->columns(2)->required(),
-            Select::make('action')->label(FilamentHelp::label('Action', 'Block answers 403. Challenge asks a browser for a short proof of work. Log records an event and continues. Allow stops all later rules and skips the challenge. Skip managed rules turns the managed WAF off for the request.'))
-                ->options(SecurityRuleData::ACTION_LABELS)->required()->placeholder('Choose what happens'),
+                ->minItems(fn (Get $get): int => $get('rate_limited') ? 0 : 1)->maxItems(SecurityRuleData::MAXIMUM_CONDITIONS)->defaultItems(1)->addActionLabel('Add condition')->live()
+                ->schema($this->conditionFields())->columns(2)->required(fn (Get $get): bool => ! $get('rate_limited')),
+            Toggle::make('rate_limited')->label(FilamentHelp::label('Limit the request rate', 'Count the requests that match, and apply the action only once a client goes over the limit. Counted separately on each cell, not as one global count across locations.'))->live()
+                ->afterStateHydrated(fn (Toggle $component, ?SecurityRule $record) => $component->state(filled($record?->rate_limit)))->dehydrated(false)->default(false),
+            Group::make($this->rateLimitFields())->statePath('rate_limit')->visible(fn (Get $get): bool => (bool) $get('rate_limited')),
+            Select::make('action')->label(FilamentHelp::label('Action', 'Block answers 403 (429 for a rate limit). Challenge asks a browser for a short proof of work. Log records an event and continues. Allow stops all later rules and skips the challenge. Skip managed rules turns the managed WAF off for the request.'))
+                ->options(fn (Get $get): array => $get('rate_limited') ? array_intersect_key(SecurityRuleData::ACTION_LABELS, array_flip(SecurityRuleData::RATE_ACTIONS)) : SecurityRuleData::ACTION_LABELS)->required()->placeholder('Choose what happens'),
             TextInput::make('priority')->label(FilamentHelp::label('Order', 'Lower numbers run first. Use the move buttons in the list to change it later.'))->numeric()->default(100)
                 ->minValue(-1000000)->maxValue(1000000)->required()->placeholder('100'),
             Toggle::make('enabled')->label('Enabled')->default(true),
@@ -130,6 +134,20 @@ class SecurityRulesRelationManager extends RelationManager
         }
 
         return $fields;
+    }
+
+    private function rateLimitFields(): array
+    {
+        return [
+            Select::make('key')->label(FilamentHelp::label('Count by', 'What one client is: its address, its address on one path, or the value of a header such as an API key.'))
+                ->options(SecurityRuleData::RATE_KEYS)->default('client_ip')->required()->live()->placeholder('Choose what to count by'),
+            TextInput::make('header_name')->label('Header name')->maxLength(64)->required()->placeholder('X-Api-Key')
+                ->visible(fn (Get $get): bool => $get('key') === 'header'),
+            TextInput::make('threshold')->label(FilamentHelp::label('Requests', 'The most requests one client may send in the period before the action applies.'))->numeric()->required()->minValue(1)->maxValue(100000)->placeholder('100'),
+            Select::make('period_seconds')->label('Per')->options(SecurityRuleData::RATE_PERIODS)->default(60)->required()->placeholder('Choose a period'),
+            TextInput::make('duration_seconds')->label(FilamentHelp::label('Then for (seconds)', 'How long the action keeps applying to that client after it goes over the limit. The client is released when the time is up.'))
+                ->numeric()->required()->minValue(10)->maxValue(86400)->default(300)->placeholder('300'),
+        ];
     }
 
     private function conditionFields(): array
@@ -176,6 +194,7 @@ class SecurityRulesRelationManager extends RelationManager
         abort_if($domain->securityRules()->count() >= config('security.maximum_rules_per_domain'), 409, 'The per-domain security-rule limit has been reached.');
         $data = SecurityRuleData::validate($input);
         $this->refuseDuplicate($domain, $data);
+        SecurityRuleData::assertRateLimitCapacity($domain, $data['rate_limit'] === null ? 0 : 1);
         $rule = DB::transaction(function () use ($data, $domain): SecurityRule {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
             $rule = $locked->securityRules()->create($data);
@@ -193,6 +212,7 @@ class SecurityRulesRelationManager extends RelationManager
         $data = SecurityRuleData::validate($input);
         $domain = $this->getOwnerRecord();
         $this->refuseDuplicate($domain, $data, $rule);
+        SecurityRuleData::assertRateLimitCapacity($domain, $data['rate_limit'] === null ? 0 : 1, false, $rule->id);
         DB::transaction(function () use ($data, $domain, $rule): void {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
             $rule->update($data);
@@ -226,13 +246,14 @@ class SecurityRulesRelationManager extends RelationManager
         }
         $replace = (bool) ($input['replace_existing'] ?? false);
         abort_if(! $replace && $domain->securityRules()->count() + $rules->count() > config('security.maximum_rules_per_domain'), 409, 'The import exceeds the per-domain rule limit.');
+        SecurityRuleData::assertRateLimitCapacity($domain, $rules->whereNotNull('rate_limit')->count(), $replace);
         DB::transaction(function () use ($domain, $replace, $rules): void {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
             if ($replace) {
                 $locked->securityRules()->delete();
             }
             $now = now();
-            $locked->securityRules()->insert($rules->map(fn (array $rule): array => [...$rule, 'conditions' => json_encode($rule['conditions'], JSON_THROW_ON_ERROR), 'domain_id' => $locked->id, 'created_at' => $now, 'updated_at' => $now])->all());
+            $locked->securityRules()->insert($rules->map(fn (array $rule): array => [...SecurityRuleData::row($rule), 'domain_id' => $locked->id, 'created_at' => $now, 'updated_at' => $now])->all());
             $locked->update(['revision' => $locked->revision + 1]);
             AuditLog::record(auth()->user(), 'security.rules_imported', $locked, ['count' => $rules->count(), 'replace_existing' => $replace, 'revision' => $locked->revision], request()->ip());
         });
