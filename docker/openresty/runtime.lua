@@ -795,6 +795,38 @@ local function condition_matches(condition, request)
     return false
 end
 
+-- Rate-limit rules count the requests that match a rule by a key, per cell, in fixed windows. A key over its threshold is
+-- mitigated for the rule's duration without counting further, and is released when the duration ends.
+local RATE_PERIODS = {[10] = true, [60] = true, [600] = true}
+
+local function rate_key_value(limit, request)
+    if limit.key == "client_ip" then return request.client end
+    if limit.key == "client_ip_path" then return tostring(request.client) .. "|" .. tostring(request.path) end
+    if limit.key == "header" then return header_value(request, tostring(limit.header_name or ""):lower()) end
+    return nil
+end
+
+local function rate_limit_exceeded(config, rule, limit)
+    local dictionary = ngx.shared.rate_rules
+    local value = dictionary and rate_key_value(limit, ngx.ctx.rate_request)
+    if not value or value == "" then return false end
+    local threshold, period, duration = tonumber(limit.threshold), tonumber(limit.period_seconds), tonumber(limit.duration_seconds)
+    if not threshold or threshold < 1 or not RATE_PERIODS[period] or not duration or duration < 10 or duration > 86400 then return false end
+    local id = tostring(config.domain_id or config.domain) .. ":" .. tostring(rule.id) .. ":" .. ngx.md5(tostring(value))
+    if dictionary:get("m:" .. id) then return true end
+    local counter = "c:" .. id .. ":" .. math.floor(ngx.time() / period)
+    local count = dictionary:incr(counter, 1, 0, period * 2)
+    -- A full dictionary never blocks anyone: no count means no decision.
+    if not count then return false end
+    if count > threshold then
+        -- The count restarts when the mitigation ends, so a released client gets a fresh allowance.
+        dictionary:set("m:" .. id, true, duration)
+        dictionary:delete(counter)
+        return true
+    end
+    return false
+end
+
 local function security_has_challenge_rule(rules)
     for index, rule in ipairs(rules) do
         if index > 1000 then break end
@@ -806,7 +838,9 @@ end
 -- A rule matches only when every one of its conditions matches. A malformed rule never matches.
 local function rule_matches(rule, request)
     local conditions = rule.conditions
-    if type(conditions) ~= "table" or #conditions == 0 or #conditions > RULE_MAX_CONDITIONS then return false end
+    if type(conditions) ~= "table" or #conditions > RULE_MAX_CONDITIONS then return false end
+    -- Only a rate-limit rule may have no conditions: it counts every request of the domain.
+    if #conditions == 0 then return type(rule.rate_limit) == "table" end
     for _, condition in ipairs(conditions) do
         if type(condition) ~= "table" or not condition_matches(condition, request) then return false end
     end
@@ -1137,13 +1171,25 @@ function M.access()
     end
     for index, rule in ipairs(rules) do
         if index > 1000 then break end
-        if rule_matches(rule, request) then
+        if type(rule.rate_limit) ~= "table" and rule_matches(rule, request) then
             if rule.action == "block" then return security_reject(403, "custom_rule_block") end
             -- A client the domain's own rules allow is trusted: later rules and the challenge do not apply.
             if rule.action == "allow" then trusted = true; break end
             if rule.action == "log" then record_security_event("custom_rule_log") end
             if rule.action == "skip_managed" then skip_managed = true end
             if rule.action == "challenge" and not rule_challenge then rule_challenge = rule end
+        end
+    end
+    -- Rate-limit rules come after the domain's own rules and before the managed rules. A client an allow rule trusts is not counted.
+    if not trusted then
+        ngx.ctx.rate_request = request
+        for index, rule in ipairs(rules) do
+            if index > 1000 then break end
+            if type(rule.rate_limit) == "table" and rule_matches(rule, request) and rate_limit_exceeded(config, rule, rule.rate_limit) then
+                if rule.action == "block" then return security_reject(429, "custom_rule_rate_limited") end
+                if rule.action == "challenge" and not rule_challenge then rule_challenge = rule end
+                if rule.action == "log" then record_security_event("custom_rule_rate_limited") end
+            end
         end
     end
     if skip_managed then
