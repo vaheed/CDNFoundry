@@ -43,12 +43,8 @@ class SecurityController extends Controller
     public function platformRulesets(Domain $domain): JsonResponse
     {
         Gate::authorize('view', $domain);
-        $reasons = ['platform_rule_block', 'platform_rule_challenge', 'platform_rule_log', 'platform_rule_rate_limited'];
 
-        return response()->json(['data' => [
-            'rulesets' => PlatformRulesets::namesFor($domain),
-            'matches_last_24_hours' => $domain->securityEvents()->whereIn('reason_code', $reasons)->where('occurred_at', '>=', now()->subDay())->get(['details'])->sum(fn ($event): int => (int) ($event->details['count'] ?? 0)),
-        ]]);
+        return response()->json(['data' => ['rulesets' => PlatformRulesets::namesFor($domain), 'matches_last_24_hours' => PlatformRulesets::matchesLast24Hours($domain)]]);
     }
 
     public function rules(Domain $domain): JsonResponse
