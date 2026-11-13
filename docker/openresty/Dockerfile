@@ -59,6 +59,7 @@ COPY --from=module-builder /tmp/ModSecurity/unicode.mapping /etc/cdnfoundry/unic
 COPY --from=module-builder /tmp/coreruleset/crs-setup.conf.example /etc/cdnfoundry/crs-setup.conf
 COPY --from=module-builder /tmp/coreruleset/rules /etc/cdnfoundry/crs/rules
 COPY docker/openresty/waf.conf /etc/cdnfoundry/waf.conf
+COPY docker/openresty/waf-score.conf /etc/cdnfoundry/waf-score.conf
 RUN sed -i 's/^SecRuleEngine .*/SecRuleEngine On/' /etc/cdnfoundry/modsecurity.conf \
     && sed -i 's/^SecAuditEngine .*/SecAuditEngine RelevantOnly/' /etc/cdnfoundry/modsecurity.conf \
     && sed -i 's/^SecAuditLogParts .*/SecAuditLogParts AHZ/' /etc/cdnfoundry/modsecurity.conf \

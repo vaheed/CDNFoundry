@@ -596,6 +596,86 @@ local function autonomous_system(ip)
     return math.floor(number)
 end
 
+-- The attack score runs from 1 (attack) to 99 (clean): 99 minus five points for every CRS anomaly point, never below 1.
+local ATTACK_POINT_WEIGHT = 5
+local SCORE_FIELDS = {attack_score = "total", attack_score_sqli = "sqli", attack_score_xss = "xss", attack_score_rce = "rce"}
+
+local function points_to_score(points)
+    return math.max(1, math.min(99, 99 - ATTACK_POINT_WEIGHT * (tonumber(points) or 0)))
+end
+
+local function has_score_rule(rules)
+    for index, rule in ipairs(rules) do
+        if index > 1000 then break end
+        if type(rule.conditions) == "table" then
+            for _, condition in ipairs(rule.conditions) do
+                if type(condition) == "table" and SCORE_FIELDS[condition.field] then return true end
+            end
+        end
+    end
+    return false
+end
+
+local SCORE_HOP_HEADERS = {
+    connection = true, ["keep-alive"] = true, ["transfer-encoding"] = true, te = true, trailer = true, upgrade = true,
+    expect = true, ["content-length"] = true, ["proxy-authorization"] = true, ["proxy-connection"] = true,
+}
+
+-- The request body as text, or nil when it is too large to forward or cannot be read.
+local function request_body_text(limit)
+    local length = tonumber(ngx.var.http_content_length) or 0
+    if length <= 0 or length > limit then return nil end
+    ngx.req.read_body()
+    local data = ngx.req.get_body_data()
+    if data then return data end
+    local path = ngx.req.get_body_file()
+    if not path then return nil end
+    local file = io.open(path, "rb")
+    if not file then return nil end
+    data = file:read(limit)
+    file:close()
+    return data
+end
+
+-- Asks ModSecurity for the CRS anomaly points of this request without blocking it: the request goes to the loopback
+-- scoring listener, which answers with a redirect whose address carries the points. Returns nil when no score could be read,
+-- and the request is then never scored. A body larger than the limit is not forwarded, so only its headers and address count.
+local function score_request(body_limit)
+    local socket = ngx.socket.tcp()
+    socket:settimeouts(200, 1000, 2000)
+    if not socket:connect("127.0.0.1", 9082) then return nil end
+    local body = request_body_text(body_limit)
+    local lines = {ngx.req.get_method() .. " " .. (ngx.var.request_uri or "/") .. " HTTP/1.1", "Connection: close"}
+    for name, value in pairs(ngx.req.get_headers(100, true)) do
+        local lowered = name:lower()
+        if not SCORE_HOP_HEADERS[lowered] then
+            if type(value) ~= "table" then value = {value} end
+            for _, item in ipairs(value) do
+                if not tostring(item):find("[\r\n]") then lines[#lines + 1] = name .. ": " .. tostring(item) end
+            end
+        end
+    end
+    lines[#lines + 1] = "Content-Length: " .. tostring(body and #body or 0)
+    local sent = socket:send(table.concat(lines, "\r\n") .. "\r\n\r\n" .. (body or ""))
+    if not sent then socket:close(); return nil end
+    local status_line = socket:receive("*l")
+    local location
+    while status_line do
+        local line = socket:receive("*l")
+        if not line or line == "" then break end
+        local name, value = line:match("^([^:]+):%s*(.*)$")
+        if name and name:lower() == "location" then location = value end
+    end
+    socket:close()
+    if not status_line or not status_line:find(" 302 ", 1, true) or not location then return nil end
+    local total, sqli, xss, rce = location:match("total=(%d*)&sqli=(%d*)&xss=(%d*)&rce=(%d*)")
+    if not total then return nil end
+    return {
+        total = tonumber(total) or 0, attack_score = points_to_score(total), attack_score_sqli = points_to_score(sqli),
+        attack_score_xss = points_to_score(xss), attack_score_rce = points_to_score(rce),
+    }
+end
+
 -- Typed custom rules. A rule holds up to five conditions that must all match; each condition is a field from a fixed
 -- list, an operator from a fixed list, and a value. There is no expression language and no regular expression.
 local RULE_MAX_CONDITIONS = 5
@@ -711,6 +791,7 @@ local function condition_matches(condition, request)
     if field == "content_type" then return text_matches(operator, request.content_type, expected, true) end
     if field == "body_size" then return number_matches(operator, request.body_size, expected) end
     if field == "tls_version" then return text_matches(operator, request.tls_version, expected, false) end
+    if SCORE_FIELDS[field] then return number_matches(operator, request.scores and request.scores[field], expected) end
     return false
 end
 
@@ -1038,6 +1119,22 @@ function M.access()
     }
     local skip_managed = false
     local rule_challenge = nil
+    -- The managed WAF scores the request for its own profile; a custom rule on the attack score asks for a score even when
+    -- the profile is off, and then the request is scored at paranoia level 1 and never blocked by the managed rules.
+    local waf_settings = config.waf or {}
+    local waf_mode = ngx.req.get_headers()["x-cdnf-internal-waf-mode"]
+    local scoring = waf_mode == "block" or waf_mode == "monitor"
+    if scoring or has_score_rule(rules) then
+        if not scoring then ngx.req.set_header("X-CDNF-Internal-WAF-Paranoia", "1") end
+        local scores = score_request(math.max(1024, math.min(1048576, tonumber(waf_settings.body_limit_bytes) or 1048576)))
+        if scores then
+            request.scores = scores
+            ngx.var.cdn_attack_score = tostring(scores.attack_score)
+            ngx.var.cdn_attack_score_sqli = tostring(scores.attack_score_sqli)
+            ngx.var.cdn_attack_score_xss = tostring(scores.attack_score_xss)
+            ngx.var.cdn_attack_score_rce = tostring(scores.attack_score_rce)
+        end
+    end
     for index, rule in ipairs(rules) do
         if index > 1000 then break end
         if rule_matches(rule, request) then
@@ -1052,6 +1149,16 @@ function M.access()
     if skip_managed then
         ngx.req.set_header("X-CDNF-Internal-WAF-Mode", "off")
         ngx.var.cdn_waf_action = "off"
+    elseif waf_mode == "block" and request.scores then
+        local threshold = math.max(1, math.min(100, tonumber(waf_settings.inbound_threshold) or 5))
+        local incident_block = incident_for(config)
+        if incident_block and type(incident_block.waf) == "table" and incident_block.waf.mode == "block" then threshold = math.min(threshold, 3) end
+        if request.scores.total >= threshold then
+            ngx.var.cdn_waf_action = "block"
+            ngx.var.cdn_waf_rule_id = "949110"
+            ngx.var.cdn_waf_score = tostring(math.min(100, request.scores.total))
+            return security_reject(403, "waf_block")
+        end
     end
     if rule_challenge or ((ngx.var.uri or "/") == CHALLENGE_PATH and security_has_challenge_rule(rules)) then
         -- A matching challenge rule asks for the same proof of work as the incident profile, valid for a short while.
