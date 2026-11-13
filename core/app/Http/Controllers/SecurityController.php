@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\Domain;
 use App\Models\Operation;
 use App\Models\SecurityRule;
+use App\Support\DomainSecurityRules;
 use App\Support\PlatformRulesets;
 use App\Support\SecurityConfig;
 use App\Support\SecurityRuleData;
@@ -57,21 +58,8 @@ class SecurityController extends Controller
     public function storeRule(Request $request, Domain $domain): JsonResponse
     {
         Gate::authorize('update', $domain);
-        $data = SecurityRuleData::validate($request->all());
-        abort_if($domain->securityRules()->count() >= config('security.maximum_rules_per_domain'), 409, 'The per-domain security-rule limit has been reached.');
-        $this->refuseDuplicate($domain, $data);
-        SecurityRuleData::assertRateLimitCapacity($domain, $data['rate_limit'] === null ? 0 : 1);
-        $rule = DB::transaction(function () use ($data, $domain, $request): SecurityRule {
-            $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
-            $rule = $locked->securityRules()->create($data);
-            $locked->update(['revision' => $locked->revision + 1]);
-            AuditLog::record($request->user(), 'security.rule_created', $rule, ['revision' => $locked->revision], $request->ip());
 
-            return $rule;
-        });
-        $this->dispatch($request, $domain);
-
-        return response()->json(['data' => $rule], 201);
+        return response()->json(['data' => DomainSecurityRules::create($domain, $request->all(), $request->user(), $request->ip())], 201);
     }
 
     public function updateRule(Request $request, Domain $domain, SecurityRule $rule): JsonResponse
