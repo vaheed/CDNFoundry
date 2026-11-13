@@ -125,6 +125,8 @@ Route::middleware(['auth:sanctum', 'account.active', 'token.scope', 'throttle:ac
     Route::post('/domains/{domain}/security/rules', [SecurityController::class, 'storeRule'])->middleware('idempotent');
     Route::patch('/domains/{domain}/security/rules/{rule}', [SecurityController::class, 'updateRule'])->middleware('idempotent');
     Route::delete('/domains/{domain}/security/rules/{rule}', [SecurityController::class, 'destroyRule'])->middleware('idempotent');
+    Route::post('/domains/{domain}/security/rules/preview', [SecurityController::class, 'previewRule']);
+    Route::put('/domains/{domain}/security/rules/order', [SecurityController::class, 'reorderRules'])->middleware('idempotent');
     Route::post('/domains/{domain}/security/rules/import', [SecurityController::class, 'importRules'])->middleware(['throttle:bulk', 'idempotent']);
     Route::get('/domains/{domain}/security/ddos', [SecurityController::class, 'ddos']);
     Route::patch('/domains/{domain}/security/ddos', [SecurityController::class, 'updateDdos'])->middleware('idempotent');

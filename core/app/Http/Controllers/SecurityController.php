@@ -8,8 +8,10 @@ use App\Models\Domain;
 use App\Models\Operation;
 use App\Models\SecurityRule;
 use App\Support\SecurityConfig;
+use App\Support\SecurityRuleData;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
@@ -46,8 +48,9 @@ class SecurityController extends Controller
     public function storeRule(Request $request, Domain $domain): JsonResponse
     {
         Gate::authorize('update', $domain);
-        $data = SecurityConfig::validateRule($request->all());
+        $data = SecurityRuleData::validate($request->all());
         abort_if($domain->securityRules()->count() >= config('security.maximum_rules_per_domain'), 409, 'The per-domain security-rule limit has been reached.');
+        $this->refuseDuplicate($domain, $data);
         $rule = DB::transaction(function () use ($data, $domain, $request): SecurityRule {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
             $rule = $locked->securityRules()->create($data);
@@ -65,7 +68,8 @@ class SecurityController extends Controller
     {
         $this->rule($domain, $rule);
         Gate::authorize('update', $domain);
-        $data = SecurityConfig::validateRule($request->all());
+        $data = SecurityRuleData::validate($request->all());
+        $this->refuseDuplicate($domain, $data, $rule);
         DB::transaction(function () use ($data, $domain, $request, $rule): void {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
             $rule->update($data);
@@ -91,6 +95,42 @@ class SecurityController extends Controller
         return $this->queue($request, $domain);
     }
 
+    /** Checks a rule without saving it: returns the normalized rule and the position it would take in the evaluation order. */
+    public function previewRule(Request $request, Domain $domain): JsonResponse
+    {
+        Gate::authorize('update', $domain);
+        $data = SecurityRuleData::validate($request->all());
+        $position = $domain->securityRules()->where('enabled', true)->where('priority', '<=', $data['priority'])->count() + 1;
+        $duplicate = $domain->securityRules()->where('fingerprint', $data['fingerprint'])->value('id');
+
+        return response()->json(['data' => [
+            'rule' => Arr::only($data, ['name', 'conditions', 'action', 'priority', 'enabled', 'note']),
+            'position' => $data['enabled'] ? $position : null, 'duplicate_of' => $duplicate,
+            'rules_in_use' => $domain->securityRules()->count(), 'maximum_rules' => config('security.maximum_rules_per_domain'),
+        ]]);
+    }
+
+    /** Sets the evaluation order: the listed rule ids, first to last, must be exactly the domain's rules. */
+    public function reorderRules(Request $request, Domain $domain): JsonResponse
+    {
+        Gate::authorize('update', $domain);
+        $data = $request->validate(['order' => ['required', 'array', 'min:1', 'max:'.config('security.maximum_rules_per_domain')], 'order.*' => ['required', 'integer', 'distinct']]);
+        DB::transaction(function () use ($data, $domain, $request): void {
+            $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
+            $existing = $locked->securityRules()->pluck('id')->all();
+            if (array_diff($existing, $data['order']) !== [] || array_diff($data['order'], $existing) !== []) {
+                throw ValidationException::withMessages(['order' => 'The order must list every rule of the domain exactly once.']);
+            }
+            foreach (array_values($data['order']) as $index => $id) {
+                $locked->securityRules()->whereKey($id)->update(['priority' => ($index + 1) * 10]);
+            }
+            $locked->update(['revision' => $locked->revision + 1]);
+            AuditLog::record($request->user(), 'security.rules_reordered', $locked, ['count' => count($data['order']), 'revision' => $locked->revision], $request->ip());
+        });
+
+        return $this->queue($request, $domain);
+    }
+
     public function importRules(Request $request, Domain $domain): JsonResponse
     {
         Gate::authorize('update', $domain);
@@ -98,8 +138,8 @@ class SecurityController extends Controller
             'rules' => ['required', 'array', 'min:1', 'max:'.config('security.maximum_import_rules')],
             'rules.*' => ['required', 'array'], 'replace_existing' => ['sometimes', 'boolean'],
         ]);
-        $rules = collect($data['rules'])->map(fn (array $rule): array => SecurityConfig::validateRule($rule));
-        $duplicates = $rules->map(fn (array $rule): string => implode('|', [$rule['match_type'], $rule['value'], $rule['action']]))->duplicates();
+        $rules = collect($data['rules'])->map(fn (array $rule): array => SecurityRuleData::validate($rule));
+        $duplicates = $rules->pluck('fingerprint')->duplicates();
         if ($duplicates->isNotEmpty()) {
             throw ValidationException::withMessages(['rules' => 'The import contains duplicate normalized rules.']);
         }
@@ -111,7 +151,7 @@ class SecurityController extends Controller
                 $locked->securityRules()->delete();
             }
             $now = now();
-            $locked->securityRules()->insert($rules->map(fn (array $rule): array => [...$rule, 'domain_id' => $locked->id, 'created_at' => $now, 'updated_at' => $now])->all());
+            $locked->securityRules()->insert($rules->map(fn (array $rule): array => [...$rule, 'conditions' => json_encode($rule['conditions'], JSON_THROW_ON_ERROR), 'domain_id' => $locked->id, 'created_at' => $now, 'updated_at' => $now])->all());
             $locked->update(['revision' => $locked->revision + 1]);
             AuditLog::record($request->user(), 'security.rules_imported', $locked, ['count' => $rules->count(), 'replace_existing' => $replace, 'revision' => $locked->revision], $request->ip());
         });
@@ -168,6 +208,14 @@ class SecurityController extends Controller
         ReconcileEdgeDomain::dispatch($domain->id)->afterCommit();
 
         return $operation;
+    }
+
+    private function refuseDuplicate(Domain $domain, array $data, ?SecurityRule $except = null): void
+    {
+        $duplicate = $domain->securityRules()->where('fingerprint', $data['fingerprint'])->when($except, fn ($query) => $query->whereKeyNot($except->id))->exists();
+        if ($duplicate) {
+            throw ValidationException::withMessages(['conditions' => 'The domain already has a rule with the same conditions and action.']);
+        }
     }
 
     private function rule(Domain $domain, SecurityRule $rule): void
