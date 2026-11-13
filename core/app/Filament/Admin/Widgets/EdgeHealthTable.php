@@ -38,7 +38,7 @@ class EdgeHealthTable extends TableWidget
             ->columns([
                 TextColumn::make('name')->label('PoP')->weight('medium')->limit(24)->tooltip(fn (Edge $record): ?string => strlen($record->name) > 24 ? $record->name : null)
                     ->url(fn (Edge $record): string => EdgeResource::getUrl('view', ['record' => $record], panel: 'admin')),
-                TextColumn::make('country_code')->label('Region'),
+                TextColumn::make('country_code')->label('Region')->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('operational_state')->label('State')->state(fn (Edge $record): string => $this->edgeState($record))->badge()
                     ->tooltip(fn (Edge $record): ?string => data_get($record->capacity, 'last_rejection.reason'))
                     ->color(fn (string $state): string => match ($state) {
@@ -51,7 +51,7 @@ class EdgeHealthTable extends TableWidget
                     }),
                 TextColumn::make('capacity_percent')->label('Peak resource')->state(fn (Edge $record): string => $this->capacitySummary($record)['label'])->badge()
                     ->tooltip(fn (Edge $record): string => $this->capacitySummary($record)['detail'])
-                    ->color(fn (string $state): string => $this->capacityTone($state)),
+                    ->color(fn (string $state): string => $this->capacityTone($state))->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('last_heartbeat_at')->label('Heartbeat')->since()->dateTimeTooltip('Y-m-d H:i:s')->placeholder('Never'),
             ])
             ->headerActions([

@@ -59,7 +59,7 @@ class LogPushRelationManager extends RelationManager
 
         return $table->columns([
             $columns::make('name')->limit(40)->tooltip(fn ($record): ?string => mb_strlen($record->name) > 40 ? $record->name : null),
-            $columns::make('destination_hint')->label('Destination')->limit(36)->tooltip(fn ($record): ?string => mb_strlen($record->destination_hint) > 36 ? $record->destination_hint : null),
+            $columns::make('destination_hint')->label('Destination')->limit(28)->tooltip(fn ($record): ?string => mb_strlen($record->destination_hint) > 28 ? $record->destination_hint : null),
             $columns::make('datasets')->label('Logs')->badge()->color('gray')->formatStateUsing(fn (string $state): string => LogDatasets::ALL[$state] ?? $state),
             $columns::make('status')->badge()->formatStateUsing(fn (string $state, $record): string => $record->consecutive_failures > 0 ? 'Failing' : ucfirst($state))
                 ->color(fn (string $state, $record): string => $record->consecutive_failures > 0 ? 'danger' : ($state === 'active' ? 'success' : 'gray')),
@@ -68,7 +68,7 @@ class LogPushRelationManager extends RelationManager
                 ->formatStateUsing(fn ($state): string => $state === null ? 'None' : Number::format((int) $state).' s')->alignEnd(),
             $columns::make('consecutive_failures')->label(FilamentHelp::label('Failures', 'Deliveries that failed in a row. It returns to 0 after a success. The last error appears on hover.'))
                 ->tooltip(fn ($record): ?string => $record->last_error)->alignEnd(),
-            $columns::make('bytes_pushed')->label(FilamentHelp::label('Sent', 'Compressed bytes delivered so far.'))->formatStateUsing(fn ($state): string => Number::fileSize((int) $state))->alignEnd(),
+            $columns::make('bytes_pushed')->label(FilamentHelp::label('Sent', 'Compressed bytes delivered so far.'))->formatStateUsing(fn ($state): string => Number::fileSize((int) $state))->alignEnd()->toggleable(isToggledHiddenByDefault: true),
         ])->headerActions([
             Action::make('addDestination')->label('Add destination')->icon('phosphor-plus')->visible(fn (): bool => self::enabled())->modalWidth('lg')
                 ->modalDescription('Rows of this domain only. Delivery starts with the next new row.')

@@ -30,7 +30,6 @@ class CacheEfficiencyWidget extends Widget
             'ratio' => $formatter->percent($summary['cache_ratio'] ?? null),
             'cacheBytes' => $formatter->bytes($summary['cache_bytes_out'] ?? null),
             'comparison' => $formatter->change($summary['cache_ratio'] ?? null, $previous['cache_ratio'] ?? null),
-            'telemetryUrl' => $this->telemetryUrl(['view' => 'cache']),
         ];
     }
 }

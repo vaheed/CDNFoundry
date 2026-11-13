@@ -194,7 +194,7 @@ class OpsDashboardTest extends TestCase
             ->assertSee('Traffic aggregates could not be queried');
     }
 
-    public function test_chart_marks_stale_data_and_preserves_context_in_its_drilldown(): void
+    public function test_chart_marks_stale_data_without_a_drilldown_link(): void
     {
         CarbonImmutable::setTestNow('2026-08-01T12:34:56Z');
         Cache::flush();
@@ -208,9 +208,7 @@ class OpsDashboardTest extends TestCase
             'range' => '24h', 'compare' => false, 'domain_id' => $domain->id,
         ]])
             ->assertDontSee('Data is stale')
-            ->assertSee('Open detailed analytics')
-            ->assertSee('range=24h', false)
-            ->assertSee('domain='.$domain->id, false);
+            ->assertDontSee('Open detailed analytics');
 
         $this->actingAs($admin)->get('/admin/telemetry')->assertOk()
             ->assertSeeInOrder(['Telemetry status', 'Data is stale', 'Traffic and egress'])
@@ -291,7 +289,7 @@ class OpsDashboardTest extends TestCase
         Livewire::actingAs($admin)->test(DnsHealthWidget::class, ['pageFilters' => ['range' => '24h', 'compare' => false]])
             ->assertSee('No DNS traffic in this range')
             ->assertSee('Healthy clusters')
-            ->assertSee('DNS clusters')
+            ->assertDontSee('DNS clusters')
             ->assertSeeHtml('cdn-widget-state--compact');
     }
 

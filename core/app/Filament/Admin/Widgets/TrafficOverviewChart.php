@@ -30,11 +30,6 @@ class TrafficOverviewChart extends ChartWidget
         return app(OpsDashboardService::class)->traffic($this->opsContext());
     }
 
-    public function getDrilldownUrl(): string
-    {
-        return $this->telemetryUrl(['view' => 'traffic']);
-    }
-
     protected function getData(): array
     {
         $state = $this->getDisplayState();

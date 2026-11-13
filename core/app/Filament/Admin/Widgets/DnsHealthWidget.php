@@ -2,7 +2,6 @@
 
 namespace App\Filament\Admin\Widgets;
 
-use App\Filament\Admin\Resources\DnsClusters\DnsClusterResource;
 use App\Filament\Admin\Widgets\Concerns\UsesOpsDashboardContext;
 use App\Ops\Services\OpsDashboardService;
 use App\Ops\Support\MetricFormatter;
@@ -29,8 +28,6 @@ class DnsHealthWidget extends Widget
             'summary' => $summary,
             'successRatio' => $formatter->percent($summary['success_ratio'] ?? null),
             'servfailRatio' => $formatter->percent($summary['servfail_ratio'] ?? null),
-            'clustersUrl' => DnsClusterResource::getUrl(panel: 'admin'),
-            'telemetryUrl' => $this->telemetryUrl(['view' => 'dns']),
         ];
     }
 }
