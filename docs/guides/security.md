@@ -97,11 +97,37 @@ receive a new signed revision.
 | `client_ip` | equals, not equals, in list | An IPv4 or IPv6 address or CIDR |
 | `body_size` | equals, not equals, greater than, less than | Bytes, up to 1 GiB |
 | `tls_version` | equals, not equals, in list | `TLSv1`, `TLSv1.1`, `TLSv1.2`, `TLSv1.3`, or `none` for plain HTTP |
+| `attack_score`, `attack_score_sqli`, `attack_score_xss`, `attack_score_rce` | equals, not equals, in list, greater than, less than | 1 to 99 |
 
 Hostname, user agent, referer, header, and content type compare without regard to
 case. Path compares exactly and uses the decoded request path without the query
 string. A visitor whose country, continent, or ASN is unknown never matches
 "equals" or a comparison, and does match "not equals".
+
+### Attack score
+
+Every request the managed WAF inspects gets a score from 1 (attack) to 99 (clean).
+It is 99 minus five points for each anomaly point the OWASP Core Rule Set adds,
+never below 1, so a request that trips several rules scores near 1 and a clean
+request scores 99. `attack_score` counts every category. The three other fields
+count only SQL injection, cross-site scripting, or command injection signs.
+
+- A custom rule on `attack_score < 20` blocks requests that are very likely
+  attacks, in any profile. It runs before the managed rules and can also `log`
+  or `challenge`.
+- The Observe profile scores and logs without blocking. The score is stored on
+  every request event as `attack_score` and its three category fields (0 means the
+  request was not scored).
+- A domain whose WAF profile is Off is scored only while a custom rule uses an
+  attack score field, at paranoia level 1, and is never blocked by the managed
+  rules.
+- A request that could not be scored never matches an attack score condition. A
+  body larger than the profile's body limit is not sent for scoring, so only its
+  headers and address count.
+- Scoring happens once per inspected request on the cell, over a loopback
+  listener, and never calls Laravel or any outside service. A blocking profile
+  refuses a request at its anomaly threshold from the same score, before the
+  request is inspected again on its way to the origin.
 
 ### Actions
 
