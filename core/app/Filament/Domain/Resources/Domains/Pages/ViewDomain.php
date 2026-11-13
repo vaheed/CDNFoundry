@@ -11,10 +11,12 @@ use App\Filament\Domain\Resources\Domains\DomainResource;
 use App\Filament\Domain\Resources\Domains\Widgets\DomainIncidentBanner;
 use App\Filament\Domain\Resources\Domains\Widgets\DomainKpiStrip;
 use App\Filament\Domain\Resources\Domains\Widgets\DomainNeedsAttention;
+use App\Http\Controllers\AiProtectionController;
 use App\Http\Controllers\CredentialCheckController;
 use App\Http\Controllers\DnsDeploymentController;
 use App\Http\Controllers\DomainController;
 use App\Http\Controllers\SecurityAlertController;
+use App\Http\Controllers\SensitiveDataController;
 use App\Http\Controllers\WafController;
 use App\Jobs\EnsureManagedCertificates;
 use App\Jobs\ImportDnsZone;
@@ -41,6 +43,7 @@ use App\Support\PlatformSettings;
 use App\Support\ProxyRevisionRollback;
 use App\Support\SecurityAlertData;
 use App\Support\SecurityConfig;
+use App\Support\SensitiveDataCheckData;
 use App\Support\UploadedCertificate;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -541,6 +544,46 @@ class ViewDomain extends ViewRecord
                     $this->record->refresh();
                     Notification::make()->success()->title('Credential check removed')->send();
                 }),
+            Action::make('sensitiveDataCheck')->label('Sensitive data check')->icon('phosphor-eye-slash')->extraAttributes(['data-testid' => 'sensitive-data-action'])
+                ->modalHeading('Watch responses for sensitive data')
+                ->modalDescription('The cell reads the first 16 KB of text responses and records a security event when it finds one of these. It only logs: the response is not changed and the value is never stored.')
+                ->schema([
+                    CheckboxList::make('kinds')->label(FilamentHelp::label('Look for', 'Each kind is matched by a fixed pattern. Card numbers must pass the Luhn check and IBANs the country length and checksum, so ordinary numbers rarely match.'))
+                        ->options(SensitiveDataCheckData::KINDS)->required()->minItems(1),
+                ])->fillForm(fn (): array => $this->record->sensitive_data_check ?? ['kinds' => ['card', 'private_key']])
+                ->action(function (array $data): void {
+                    app(SensitiveDataController::class)->update(request()->merge($data), $this->record);
+                    $this->record->refresh();
+                    Notification::make()->success()->title('Sensitive data check saved')->body('Matches appear in Security events.')->send();
+                }),
+            Action::make('removeSensitiveDataCheck')->label('Remove sensitive data check')->icon('phosphor-eye-slash')->color('danger')->requiresConfirmation()
+                ->visible(fn (): bool => $this->record->sensitive_data_check !== null)
+                ->action(function (): void {
+                    app(SensitiveDataController::class)->destroy(request(), $this->record);
+                    $this->record->refresh();
+                    Notification::make()->success()->title('Sensitive data check removed')->send();
+                }),
+            Action::make('aiProtection')->label('AI protection')->icon('phosphor-chat-circle-text')->extraAttributes(['data-testid' => 'ai-protection-action'])
+                ->modalHeading('Score prompts sent to your AI endpoints')
+                ->modalDescription('Name the paths that take a prompt and the JSON field that holds it. Rules can then act on Prompt injection score and Personal data in prompt. The check is pattern based: it matches known phrases and does not understand a prompt.')
+                ->schema([
+                    TagsInput::make('endpoints')->label(FilamentHelp::label('Endpoint paths', 'Exact paths that receive a prompt by POST or PUT. Up to five.'))
+                        ->required()->placeholder('/v1/chat')->nestedRecursiveRules(['string', 'max:200']),
+                    TextInput::make('prompt_field')->label(FilamentHelp::label('Prompt field', 'The JSON field with the prompt. A field of messages is read as text, or as a list of messages with content. Use dots for a nested field, such as input.prompt.'))
+                        ->required()->maxLength(200)->placeholder('messages'),
+                ])->fillForm(fn (): array => $this->record->ai_protection ?? ['endpoints' => [], 'prompt_field' => ''])
+                ->action(function (array $data): void {
+                    app(AiProtectionController::class)->update(request()->merge($data), $this->record);
+                    $this->record->refresh();
+                    Notification::make()->success()->title('AI protection saved')->body('Add a rule on Prompt injection score or Personal data in prompt to log or block.')->send();
+                }),
+            Action::make('removeAiProtection')->label('Remove AI protection')->icon('phosphor-chat-circle-text')->color('danger')->requiresConfirmation()
+                ->visible(fn (): bool => $this->record->ai_protection !== null)
+                ->action(function (): void {
+                    app(AiProtectionController::class)->destroy(request(), $this->record);
+                    $this->record->refresh();
+                    Notification::make()->success()->title('AI protection removed')->send();
+                }),
             Action::make('startIncident')->icon('phosphor-shield-warning')->label('Start incident profile')->color('danger')->extraAttributes(['data-testid' => 'incident-start-action'])
                 ->modalHeading('Start the incident profile?')
                 ->modalDescription('For the time you choose, the domain gets tighter request limits, the web application firewall in blocking mode, restricted methods and body size, and a browser challenge. It protects your origin and the cells from request floods; it cannot absorb traffic that saturates a host or link.')
@@ -731,7 +774,7 @@ class ViewDomain extends ViewRecord
             }),
         ];
         // Long forms open as a right-side sheet; a form of one or two fields opens as a small centered dialog.
-        $sheets = ['importZone', 'proxyDefaults', 'cacheSettings', 'uploadCertificate', 'securitySettings', 'wafProfile', 'credentialCheck'];
+        $sheets = ['importZone', 'proxyDefaults', 'cacheSettings', 'uploadCertificate', 'securitySettings', 'wafProfile', 'credentialCheck', 'sensitiveDataCheck', 'aiProtection'];
         $dialogs = ['moveEdgePool', 'developmentMode', 'purgeCache', 'tlsMode', 'securityAlert'];
         $group = fn (array $names): array => collect($actions)
             ->keyBy(fn (Action $action): string => $action->getName())
@@ -765,7 +808,7 @@ class ViewDomain extends ViewRecord
                 ->icon('phosphor-lock')
                 ->color('gray')
                 ->button(),
-            ActionGroup::make($group(['securitySettings', 'wafProfile', 'securityAlert', 'removeSecurityAlert', 'credentialCheck', 'removeCredentialCheck', 'startIncident', 'endIncident', 'startMaintenance', 'endMaintenance', 'protectSecurity', 'quarantineSecurity', 'returnSecurityToNormal']))
+            ActionGroup::make($group(['securitySettings', 'wafProfile', 'securityAlert', 'removeSecurityAlert', 'credentialCheck', 'removeCredentialCheck', 'sensitiveDataCheck', 'removeSensitiveDataCheck', 'aiProtection', 'removeAiProtection', 'startIncident', 'endIncident', 'startMaintenance', 'endMaintenance', 'protectSecurity', 'quarantineSecurity', 'returnSecurityToNormal']))
                 ->label('Security')
                 ->icon('phosphor-shield-check')
                 ->color('gray')
