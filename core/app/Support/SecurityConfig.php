@@ -21,7 +21,7 @@ final class SecurityConfig
         // The incident profile working: it never pushes the domain toward a stricter automatic state.
         'incident_method', 'incident_body_size', 'challenge_required', 'challenge_invalid',
         // A domain's own custom rules working: they never push the domain toward a stricter automatic state.
-        'custom_rule_block', 'custom_rule_challenge', 'custom_rule_log',
+        'custom_rule_block', 'custom_rule_challenge', 'custom_rule_log', 'custom_rule_rate_limited',
     ];
 
     /** Automatic escalation looks at the rate over a short window, never at a lifetime counter. */
@@ -148,7 +148,7 @@ final class SecurityConfig
             'configured_limits' => $configured['limits'],
             'limits' => $limits,
             'rules' => $domain->securityRules()->where('enabled', true)->orderBy('priority')->orderBy('id')
-                ->get(['id', 'name', 'conditions', 'action', 'priority'])->toArray(),
+                ->get(['id', 'name', 'conditions', 'rate_limit', 'action', 'priority'])->toArray(),
         ];
     }
 

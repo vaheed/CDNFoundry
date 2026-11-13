@@ -116,7 +116,7 @@ final class ProxyRevisionRollback
         $rules = array_map(function (array $rule): array {
             $valid = SecurityRuleData::validate($rule);
 
-            return ['name' => $valid['name'], 'conditions' => json_encode($valid['conditions'], JSON_THROW_ON_ERROR), 'fingerprint' => $valid['fingerprint'], 'action' => $valid['action'], 'priority' => $valid['priority']];
+            return SecurityRuleData::row(['name' => $valid['name'], 'conditions' => $valid['conditions'], 'rate_limit' => $valid['rate_limit'], 'fingerprint' => $valid['fingerprint'], 'action' => $valid['action'], 'priority' => $valid['priority']]);
         }, $security['rules'] ?? []);
 
         $waf = $snapshot['waf']['name'] ?? 'off';

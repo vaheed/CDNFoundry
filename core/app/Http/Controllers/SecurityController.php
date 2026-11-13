@@ -51,6 +51,7 @@ class SecurityController extends Controller
         $data = SecurityRuleData::validate($request->all());
         abort_if($domain->securityRules()->count() >= config('security.maximum_rules_per_domain'), 409, 'The per-domain security-rule limit has been reached.');
         $this->refuseDuplicate($domain, $data);
+        SecurityRuleData::assertRateLimitCapacity($domain, $data['rate_limit'] === null ? 0 : 1);
         $rule = DB::transaction(function () use ($data, $domain, $request): SecurityRule {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
             $rule = $locked->securityRules()->create($data);
@@ -70,6 +71,7 @@ class SecurityController extends Controller
         Gate::authorize('update', $domain);
         $data = SecurityRuleData::validate($request->all());
         $this->refuseDuplicate($domain, $data, $rule);
+        SecurityRuleData::assertRateLimitCapacity($domain, $data['rate_limit'] === null ? 0 : 1, false, $rule->id);
         DB::transaction(function () use ($data, $domain, $request, $rule): void {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
             $rule->update($data);
@@ -104,7 +106,7 @@ class SecurityController extends Controller
         $duplicate = $domain->securityRules()->where('fingerprint', $data['fingerprint'])->value('id');
 
         return response()->json(['data' => [
-            'rule' => Arr::only($data, ['name', 'conditions', 'action', 'priority', 'enabled', 'note']),
+            'rule' => Arr::only($data, ['name', 'conditions', 'rate_limit', 'action', 'priority', 'enabled', 'note']),
             'position' => $data['enabled'] ? $position : null, 'duplicate_of' => $duplicate,
             'rules_in_use' => $domain->securityRules()->count(), 'maximum_rules' => config('security.maximum_rules_per_domain'),
         ]]);
@@ -145,13 +147,14 @@ class SecurityController extends Controller
         }
         $replace = (bool) ($data['replace_existing'] ?? false);
         abort_if(! $replace && $domain->securityRules()->count() + $rules->count() > config('security.maximum_rules_per_domain'), 409, 'The import would exceed the per-domain security-rule limit.');
+        SecurityRuleData::assertRateLimitCapacity($domain, $rules->whereNotNull('rate_limit')->count(), $replace);
         DB::transaction(function () use ($domain, $replace, $request, $rules): void {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
             if ($replace) {
                 $locked->securityRules()->delete();
             }
             $now = now();
-            $locked->securityRules()->insert($rules->map(fn (array $rule): array => [...$rule, 'conditions' => json_encode($rule['conditions'], JSON_THROW_ON_ERROR), 'domain_id' => $locked->id, 'created_at' => $now, 'updated_at' => $now])->all());
+            $locked->securityRules()->insert($rules->map(fn (array $rule): array => [...SecurityRuleData::row($rule), 'domain_id' => $locked->id, 'created_at' => $now, 'updated_at' => $now])->all());
             $locked->update(['revision' => $locked->revision + 1]);
             AuditLog::record($request->user(), 'security.rules_imported', $locked, ['count' => $rules->count(), 'replace_existing' => $replace, 'revision' => $locked->revision], $request->ip());
         });

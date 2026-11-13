@@ -151,6 +151,49 @@ class SecurityApiTest extends TestCase
         $this->assertSame(19, $domain->securityRules()->where('priority', 1)->firstOrFail()->conditions[0]['value']);
     }
 
+    public function test_rate_limit_rules_validate_their_typed_limit_and_are_bounded(): void
+    {
+        [$user, $domain] = $this->ownedDomain();
+        $rate = ['key' => 'client_ip_path', 'threshold' => 100, 'period_seconds' => 60, 'duration_seconds' => 300];
+        $body = ['name' => 'Login brute force', 'conditions' => [['field' => 'path', 'operator' => 'equals', 'value' => '/login']], 'action' => 'block', 'priority' => 10, 'rate_limit' => $rate];
+        $id = $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", $body)->assertCreated()->json('data.id');
+        $this->assertSame($rate, $domain->securityRules()->findOrFail($id)->rate_limit);
+
+        // Counting every request of the domain is a rate-limit rule with no conditions; any other rule needs a condition.
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", ['conditions' => [], 'action' => 'log', 'priority' => 20, 'rate_limit' => ['key' => 'header', 'header_name' => 'X-Api-Key', 'threshold' => 5, 'period_seconds' => 10, 'duration_seconds' => 10]])
+            ->assertCreated();
+        $this->assertSame('x-api-key', $domain->securityRules()->where('priority', 20)->firstOrFail()->rate_limit['header_name']);
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", ['conditions' => [], 'action' => 'block', 'priority' => 21])->assertUnprocessable()->assertJsonValidationErrors('conditions');
+
+        $bad = [
+            ['rate_limit' => [...$rate, 'period_seconds' => 30], 'field' => 'rate_limit.period_seconds'],
+            ['rate_limit' => [...$rate, 'threshold' => 0], 'field' => 'rate_limit.threshold'],
+            ['rate_limit' => [...$rate, 'duration_seconds' => 5], 'field' => 'rate_limit.duration_seconds'],
+            ['rate_limit' => [...$rate, 'key' => 'country'], 'field' => 'rate_limit.key'],
+            ['rate_limit' => [...$rate, 'key' => 'header'], 'field' => 'rate_limit.header_name'],
+            ['rate_limit' => $rate, 'action' => 'allow', 'field' => 'action'],
+            ['rate_limit' => $rate, 'action' => 'skip_managed', 'field' => 'action'],
+        ];
+        foreach ($bad as $index => $case) {
+            $payload = [...$body, 'priority' => 100 + $index, 'conditions' => [['field' => 'path', 'operator' => 'equals', 'value' => "/p$index"]], 'rate_limit' => $case['rate_limit'], 'action' => $case['action'] ?? 'block'];
+            $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", $payload)->assertUnprocessable()->assertJsonValidationErrors($case['field']);
+        }
+
+        // The same conditions and action with a different limit is a different rule; the cap on rate-limit rules is enforced.
+        config(['security.maximum_rate_limit_rules' => 3]);
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", [...$body, 'priority' => 30, 'rate_limit' => [...$rate, 'threshold' => 200]])->assertCreated();
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", [...$body, 'priority' => 31, 'rate_limit' => [...$rate, 'threshold' => 300]])->assertStatus(409);
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", $this->ruleBody('country', 'DE', 'block', 32))->assertCreated();
+        $this->actingAs($user)->patchJson("/api/domains/{$domain->id}/security/rules/$id", [...$body, 'rate_limit' => [...$rate, 'threshold' => 150]])->assertAccepted();
+        $this->assertSame(150, $domain->securityRules()->findOrFail($id)->rate_limit['threshold']);
+        $this->actingAs($user)->patchJson("/api/domains/{$domain->id}/security/rules/$id", [...$body, 'rate_limit' => null])->assertAccepted();
+        $this->assertNull($domain->securityRules()->findOrFail($id)->rate_limit);
+
+        (new ReconcileEdgeDomain($domain->id))->handle();
+        $snapshot = EdgeRevision::query()->where('domain_id', $domain->id)->latest('revision')->firstOrFail()->snapshot;
+        $this->assertContains(200, collect($snapshot['security']['rules'])->pluck('rate_limit.threshold')->all());
+    }
+
     public function test_rule_bounds_duplicates_and_permissions(): void
     {
         [$user, $domain] = $this->ownedDomain();

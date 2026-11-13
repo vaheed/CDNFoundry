@@ -10,6 +10,8 @@ return [
     ],
     'maximum_rules_per_domain' => 1000,
     'maximum_import_rules' => 500,
+    // Rate-limit rules per domain. The hard ceiling is 50; a lower value here tightens it.
+    'maximum_rate_limit_rules' => env('SECURITY_RATE_LIMIT_RULES', 20),
     // Values in one in_list condition. The hard ceiling is 100; a lower value here tightens it.
     'maximum_rule_list_values' => env('SECURITY_RULE_LIST_VALUES', 100),
     'trusted_proxy_cidrs_maximum' => 32,

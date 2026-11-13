@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Models\Domain;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -20,6 +21,14 @@ final class SecurityRuleData
 
     /** Hard ceiling for values in one in_list condition; the platform setting can only lower it. */
     public const LIST_VALUES_CEILING = 100;
+
+    public const RATE_KEYS = ['client_ip' => 'Client IP', 'client_ip_path' => 'Client IP and path', 'header' => 'Header value'];
+
+    public const RATE_PERIODS = [10 => '10 seconds', 60 => '1 minute', 600 => '10 minutes'];
+
+    public const RATE_ACTIONS = ['block', 'challenge', 'log'];
+
+    public const RATE_LIMIT_RULES_CEILING = 50;
 
     public const HTTP_METHODS = ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'];
 
@@ -76,6 +85,10 @@ final class SecurityRuleData
     /** One readable line for a stored or submitted rule: "Path starts with /admin and Method equals POST". */
     public static function describe(array $conditions): string
     {
+        if ($conditions === []) {
+            return 'All requests';
+        }
+
         return collect($conditions)->map(function (array $condition): string {
             $field = $condition['field'] ?? '';
             $label = self::FIELD_LABELS[$field] ?? $field;
@@ -94,6 +107,11 @@ final class SecurityRuleData
         })->implode(' and ');
     }
 
+    public static function maximumRateLimitRules(): int
+    {
+        return min(self::RATE_LIMIT_RULES_CEILING, (int) config('security.maximum_rate_limit_rules', 20));
+    }
+
     public static function listValuesLimit(): int
     {
         return min(self::LIST_VALUES_CEILING, (int) config('security.maximum_rule_list_values', self::LIST_VALUES_CEILING));
@@ -105,9 +123,12 @@ final class SecurityRuleData
      */
     public static function validate(array $input): array
     {
+        $rateLimited = ($input['rate_limit'] ?? null) !== null;
         $data = Validator::make($input, [
             'name' => ['nullable', 'string', 'max:100'],
-            'conditions' => ['required', 'array', 'min:1', 'max:'.self::MAXIMUM_CONDITIONS],
+            'rate_limit' => ['nullable', 'array'],
+            // Only a rate-limit rule may count every request of the domain, which is a rule with no conditions.
+            'conditions' => $rateLimited ? ['present', 'array', 'max:'.self::MAXIMUM_CONDITIONS] : ['required', 'array', 'min:1', 'max:'.self::MAXIMUM_CONDITIONS],
             'conditions.*' => ['required', 'array'],
             'action' => ['required', Rule::in(self::ACTIONS)],
             'priority' => ['required', 'integer', 'between:-1000000,1000000'],
@@ -122,14 +143,80 @@ final class SecurityRuleData
         $data['conditions'] = $conditions;
         $data['enabled'] = (bool) ($data['enabled'] ?? true);
         $data['name'] = isset($data['name']) && trim($data['name']) !== '' ? trim($data['name']) : null;
-        $data['fingerprint'] = self::fingerprint($conditions, $data['action']);
+        $data['rate_limit'] = $rateLimited ? self::rateLimit($data['rate_limit'], $data['action']) : null;
+        $data['fingerprint'] = self::fingerprint($conditions, $data['action'], $data['rate_limit']);
 
         return $data;
     }
 
-    public static function fingerprint(array $conditions, string $action): string
+    /** A rule without a rate limit keeps the fingerprint it had before rate limits existed. */
+    public static function fingerprint(array $conditions, string $action, ?array $rateLimit = null): string
     {
-        return hash('sha256', json_encode([$conditions, $action], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        $payload = $rateLimit === null ? [$conditions, $action] : [$conditions, $action, $rateLimit];
+
+        return hash('sha256', json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+    }
+
+    /** The row to insert for a validated rule: the typed structures are stored as JSON text. */
+    public static function row(array $rule): array
+    {
+        return [...$rule, 'conditions' => json_encode($rule['conditions'], JSON_THROW_ON_ERROR),
+            'rate_limit' => ($rule['rate_limit'] ?? null) === null ? null : json_encode($rule['rate_limit'], JSON_THROW_ON_ERROR)];
+    }
+
+    /**
+     * A rate limit counts the requests that match the rule's conditions by a key, per cell, over a fixed period. Past the
+     * threshold the rule's action applies to that key for the duration, then the key is released.
+     */
+    private static function rateLimit(array $input, string $action): array
+    {
+        if (! in_array($action, self::RATE_ACTIONS, true)) {
+            throw ValidationException::withMessages(['action' => 'A rate-limit rule can block, challenge, or log.']);
+        }
+        try {
+            $data = self::validateRateLimit($input);
+        } catch (ValidationException $exception) {
+            throw ValidationException::withMessages(collect($exception->errors())->mapWithKeys(fn (array $messages, string $key): array => ["rate_limit.$key" => $messages])->all());
+        }
+        $rate = ['key' => $data['key'], 'threshold' => (int) $data['threshold'], 'period_seconds' => (int) $data['period_seconds'], 'duration_seconds' => (int) $data['duration_seconds']];
+        if ($data['key'] === 'header') {
+            if (! is_string($data['header_name'] ?? null) || ! preg_match('/^[A-Za-z0-9!#$%&\'*+.^_`|~-]{1,64}$/', $data['header_name'])) {
+                throw ValidationException::withMessages(['rate_limit.header_name' => 'The header name must be 1 to 64 header name characters.']);
+            }
+            $rate['header_name'] = strtolower($data['header_name']);
+        }
+
+        return $rate;
+    }
+
+    private static function validateRateLimit(array $input): array
+    {
+        return Validator::make($input, [
+            'key' => ['required', Rule::in(array_keys(self::RATE_KEYS))],
+            'header_name' => ['nullable', 'string'],
+            'threshold' => ['required', 'integer', 'between:1,100000'],
+            'period_seconds' => ['required', 'integer', Rule::in(array_keys(self::RATE_PERIODS))],
+            'duration_seconds' => ['required', 'integer', 'between:10,86400'],
+        ], [], ['key' => 'counting key', 'period_seconds' => 'period', 'duration_seconds' => 'duration'])->validate();
+    }
+
+    /** One readable clause for a rate limit: "100 requests per 1 minute per Client IP, then Block for 300 seconds". */
+    public static function describeRateLimit(array $rate, string $action): string
+    {
+        $key = strtolower(self::RATE_KEYS[$rate['key']] ?? $rate['key']).(isset($rate['header_name']) ? " {$rate['header_name']}" : '');
+        $minutes = $rate['duration_seconds'] % 60 === 0 ? ($rate['duration_seconds'] / 60).' min' : $rate['duration_seconds'].' s';
+
+        return "{$rate['threshold']} requests per ".self::RATE_PERIODS[$rate['period_seconds']]." per $key, then ".strtolower(self::ACTION_LABELS[$action] ?? $action)." for $minutes";
+    }
+
+    /** Refuses a change that would leave the domain with more rate-limit rules than the platform allows. */
+    public static function assertRateLimitCapacity(Domain $domain, int $incoming, bool $replace = false, ?int $exceptRuleId = null): void
+    {
+        if ($incoming === 0) {
+            return;
+        }
+        $existing = $replace ? 0 : $domain->securityRules()->whereNotNull('rate_limit')->when($exceptRuleId, fn ($query) => $query->whereKeyNot($exceptRuleId))->count();
+        abort_if($existing + $incoming > self::maximumRateLimitRules(), 409, 'The per-domain rate-limit rule limit ('.self::maximumRateLimitRules().') has been reached.');
     }
 
     private static function condition(array $input, string $path): array
