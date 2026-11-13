@@ -33,13 +33,16 @@ use App\Support\DnsZoneImporter;
 use App\Support\DomainNameserverVerification;
 use App\Support\FilamentHelp;
 use App\Support\IncidentProfile;
+use App\Support\ManagedWafTuning;
 use App\Support\PlatformSettings;
 use App\Support\ProxyRevisionRollback;
 use App\Support\SecurityConfig;
 use App\Support\UploadedCertificate;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
+use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\KeyValue;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
@@ -56,6 +59,7 @@ use Filament\Support\Enums\Width;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -96,6 +100,12 @@ class ViewDomain extends ViewRecord
 
     /** A tab or the polling KPI strip saw the domain change: re-read it and refresh the other views. */
     #[On('domain-updated')]
+    /** @return array<int, string> rule id => "942100 SQL Injection Attack Detected via libinjection" */
+    private static function wafRuleOptions(): array
+    {
+        return collect(ManagedWafTuning::catalog()['rules'])->mapWithKeys(fn (array $rule): array => [$rule['id'] => $rule['id'].' '.$rule['message']])->all();
+    }
+
     public function refreshDomain(bool $includeTabs = false): void
     {
         try {
@@ -441,7 +451,7 @@ class ViewDomain extends ViewRecord
                     ReconcileEdgeDomain::dispatch($this->record->id)->afterCommit();
                     Notification::make()->success()->title('Security profile saved')->body('The bounded policy is queued in the normal signed edge revision.')->send();
                 }),
-            Action::make('wafProfile')->label('Web application firewall (WAF)')->icon('phosphor-shield-warning')
+            Action::make('wafProfile')->label('Web application firewall (WAF)')->icon('phosphor-shield-warning')->extraAttributes(['data-testid' => 'waf-profile-action'])
                 ->modalHeading('Choose web application firewall protection')
                 ->modalDescription('WAF inspects web requests for common application attacks. It is separate from rate limits and emergency incident protection.')
                 ->schema([
@@ -451,9 +461,22 @@ class ViewDomain extends ViewRecord
                         'balanced' => 'Recommended: block common attacks',
                         'strict' => 'High sensitivity: stronger blocking, more false positives',
                     ])->helperText('Start with Observe. After checking security events, choose Recommended. Use High sensitivity only after application testing.')->required(),
-                ])->fillForm(fn (): array => ['profile' => $this->record->waf_profile])
+                    Section::make('Adjust managed rules')->collapsed()->compact()->schema([
+                        Placeholder::make('ruleset')->label('Ruleset')->content(fn (): string => (string) config('security.waf.ruleset')),
+                        Select::make('paranoia_level')->label(FilamentHelp::label('Paranoia level', 'Higher levels add stricter rules and more false positives. Leave it on the default of the protection level unless testing showed a need.'))
+                            ->options([1 => '1 (fewest false positives)', 2 => '2', 3 => '3', 4 => '4 (strictest)'])->placeholder('Use the protection level default'),
+                        TextInput::make('inbound_threshold')->label(FilamentHelp::label('Anomaly threshold', 'The score at which a request is blocked. Each matched rule adds 2 to 5 points. A higher number blocks fewer requests.'))
+                            ->numeric()->minValue(1)->maxValue(100)->placeholder('5'),
+                        CheckboxList::make('disabled_categories')->label(FilamentHelp::label('Turn off categories', 'Every rule in a checked category stops running for this domain. Use it when a whole kind of check does not fit your application.'))
+                            ->options(ManagedWafTuning::categoryLabels())->columns(2),
+                        Select::make('disabled_rules')->label(FilamentHelp::label('Turn off single rules', 'A disabled rule never runs for this domain. Up to '.ManagedWafTuning::MAXIMUM_RULES.' rules.'))
+                            ->multiple()->searchable()->maxItems(ManagedWafTuning::MAXIMUM_RULES)->options(self::wafRuleOptions())->placeholder('Search by number or name, for example 942100'),
+                        Select::make('log_only_rules')->label(FilamentHelp::label('Log only', 'A log-only rule still runs but never counts toward blocking. The security events show when one matched.'))
+                            ->multiple()->searchable()->maxItems(ManagedWafTuning::MAXIMUM_RULES)->options(self::wafRuleOptions())->placeholder('Search by number or name, for example 941100'),
+                    ]),
+                ])->fillForm(fn (): array => ['profile' => $this->record->waf_profile, ...ManagedWafTuning::normalize($this->record->waf_tuning)])
                 ->action(function (array $data): void {
-                    $response = app(WafController::class)->update(request()->merge(['profile' => $data['profile']]), $this->record);
+                    $response = app(WafController::class)->update(request()->merge(['profile' => $data['profile'], 'tuning' => Arr::only($data, ['paranoia_level', 'inbound_threshold', 'disabled_categories', 'disabled_rules', 'log_only_rules'])]), $this->record);
                     if ($response->getStatusCode() === 409) {
                         Notification::make()->danger()->title('WAF protection is unavailable')->body('No enabled pool offers the managed WAF yet. Ask an administrator to enable a WAF-capable shared pool; nothing was changed.')->send();
 

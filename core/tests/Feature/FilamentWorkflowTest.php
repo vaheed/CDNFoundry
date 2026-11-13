@@ -553,6 +553,37 @@ class FilamentWorkflowTest extends TestCase
         Queue::assertPushed(ReconcileEdgeDomain::class, fn (ReconcileEdgeDomain $job): bool => $job->domainId === $domain->id);
     }
 
+    public function test_the_waf_dialog_saves_adjustments_to_the_managed_rules(): void
+    {
+        Queue::fake();
+        EdgePool::query()->where('kind', 'shared')->update(['waf_capable' => true, 'waf_runtime_version' => 'sha256:test']);
+        $admin = User::factory()->admin()->create();
+        $domain = Domain::query()->create(['name' => 'waf-ui.example.test', 'display_name' => 'WAF UI', 'revision' => 1]);
+        Filament::setCurrentPanel(Filament::getPanel('admin'));
+        $this->actingAs($admin);
+
+        Livewire::test(ViewDomain::class, ['record' => $domain->id])
+            ->mountAction('wafProfile')
+            ->assertSet('mountedActions.0.data.profile', 'off')
+            ->fillForm(['profile' => 'balanced', 'paranoia_level' => 2, 'inbound_threshold' => 7, 'disabled_categories' => ['xss'], 'disabled_rules' => [942100], 'log_only_rules' => [913100]])
+            ->callMountedAction()
+            ->assertHasNoActionErrors();
+
+        $domain->refresh();
+        $this->assertSame('balanced', $domain->waf_profile);
+        $this->assertSame(['paranoia_level' => 2, 'inbound_threshold' => 7, 'disabled_categories' => ['xss'], 'disabled_rules' => [942100], 'log_only_rules' => [913100]], $domain->waf_tuning);
+        Queue::assertPushed(ReconcileEdgeDomain::class);
+
+        // The dialog opens with the saved adjustments, and clearing every field clears the tuning.
+        Livewire::test(ViewDomain::class, ['record' => $domain->id])
+            ->mountAction('wafProfile')
+            ->assertSet('mountedActions.0.data.disabled_rules', [942100])
+            ->fillForm(['paranoia_level' => null, 'inbound_threshold' => null, 'disabled_categories' => [], 'disabled_rules' => [], 'log_only_rules' => []])
+            ->callMountedAction()
+            ->assertHasNoActionErrors();
+        $this->assertNull($domain->refresh()->waf_tuning);
+    }
+
     public function test_domain_can_be_deleted_from_the_domain_page_and_the_action_then_disappears(): void
     {
         Queue::fake();
