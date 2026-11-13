@@ -23,7 +23,8 @@ test.describe('interaction', () => {
         await page.goto(`/explore?schemaVersion=1&panes=${encodeURIComponent(panes)}&orgId=1`);
         // The button reads Live; its accessible name is "Start live stream your logs".
         await page.getByTestId('data-testid explore-toolbar-live-button').click();
-        await expect(page.getByText(/sample|info|error/i).first()).toBeVisible({ timeout: 60_000 });
+        // A streamed line is a JSON log record; matching its level key cannot hit a menu label that happens to say "info".
+        await expect(page.getByText(/"level":"(info|error|warning)"/).first()).toBeVisible({ timeout: 60_000 });
         await page.getByRole('button', { name: /Stop|Pause/i }).first().click();
     });
 
