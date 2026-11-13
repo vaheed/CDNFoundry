@@ -1,12 +1,12 @@
 ---
 title: Security and DDoS readiness
-description: Set ordered allow and block rules, choose a limit profile, and use the incident controls, with their bounds and recovery steps.
+description: Write typed custom rules, choose a limit profile, and use the incident controls, with their bounds and recovery steps.
 ---
 
 # Security and DDoS readiness
 
-CDNFoundry gives each domain bounded application-layer controls: allow and block
-rules, rate and connection limits, and incident actions. This page shows how to
+CDNFoundry gives each domain bounded application-layer controls: custom rules,
+rate and connection limits, and incident actions. This page shows how to
 use them and what each one does.
 
 ::: warning Not volumetric scrubbing
@@ -21,7 +21,7 @@ flowchart TD
       Maintenance -- Yes --> Response["Bounded HTTP 503"]
     end
     subgraph Enforce["Layered enforcement"]
-      Maintenance -- No --> Client["Trusted client IP"] --> Rules["Allow/block rules"]
+      Maintenance -- No --> Client["Trusted client IP"] --> Rules["Custom rules"]
       Rules --> Profile["Profile ceilings"] --> Limits["Rate + concurrency"]
       Limits --> Method["Method + size bounds"] --> Serve["Cache or origin"]
     end
@@ -34,22 +34,27 @@ flowchart TD
 | Layer | Purpose |
 | --- | --- |
 | Trusted-client parsing | Trust forwarded addresses only from configured proxies |
-| Ordered rules | Allow or block by IP, CIDR range, country, or continent |
+| Custom rules | Up to five typed conditions and one action per rule |
 | Profiles | Fixed presets or bounded manual values |
 | Readiness | Remove stale, drained, failed, or overloaded targets |
 | Incident controls | Explicit actions for a domain, pool, cell, or edge |
 
 For application attack detection, see [Managed WAF](managed-waf.md).
 
-## Ordered rules
+## Custom rules
 
 **You need:** update rights on the domain.
+
+A rule is up to five conditions that must all match, and one action. Rules are
+typed: every condition is a field from a fixed list, an operator from a fixed
+list, and a value. There are no regular expressions and no expression language.
 
 <DocTabs :labels="['Domain panel', 'API']">
 <template #tab-1>
 
-Open the domain, then its security rules. Choose the create action to add a rule,
-or **Import rules** to add many.
+Open the domain, then **Custom rules**. **Add rule** opens a sheet with the
+conditions, the action, and a "Reads as" line that shows the rule in words.
+**Move up** and **Move down** change the order, and **Import rules** adds many.
 
 </template>
 <template #tab-2>
@@ -59,10 +64,19 @@ curl -X POST "$CDNF_URL/api/domains/$DOMAIN_ID/security/rules" \
   -H "Authorization: Bearer $CDNF_TOKEN" \
   -H "Idempotency-Key: $(uuidgen)" \
   -H "Content-Type: application/json" \
-  -d '{"match_type": "cidr", "value": "203.0.113.0/24", "action": "block", "priority": 100}'
+  -d '{
+    "name": "Admin from abroad",
+    "conditions": [
+      {"field": "path", "operator": "starts_with", "value": "/admin"},
+      {"field": "country", "operator": "not_equals", "value": "DE"}
+    ],
+    "action": "block", "priority": 100
+  }'
 ```
 
-Bulk import is `POST .../security/rules/import`.
+`POST .../security/rules/preview` validates a rule and returns it normalized with
+its position, without saving it. `PUT .../security/rules/order` takes the full
+list of rule IDs in the new order. Bulk import is `POST .../security/rules/import`.
 
 </template>
 </DocTabs>
@@ -70,16 +84,58 @@ Bulk import is `POST .../security/rules/import`.
 **Expected result:** the rule is saved, the domain revision rises, and the edges
 receive a new signed revision.
 
-How rules work:
+### Fields and operators
 
-- A rule matches `ip`, `cidr`, `country`, or `continent`, and takes `allow` or
-  `block`. It has an integer `priority` and an optional note (250 characters).
+| Field | Operators | Value |
+| --- | --- | --- |
+| `hostname`, `path`, `user_agent`, `referer`, `content_type` | equals, not equals, starts with, ends with, contains, in list | Text, up to 512 characters |
+| `header` (with `name`) | the same | Text. The header name is case-insensitive |
+| `query_present`, `cookie_present` (with `name` for the cookie) | equals | `true` or `false` |
+| `method` | equals, not equals, in list | `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS` |
+| `country`, `continent` | equals, not equals, in list | A supported code |
+| `asn` | equals, not equals, in list, greater than, less than | 0 to 4294967295 |
+| `client_ip` | equals, not equals, in list | An IPv4 or IPv6 address or CIDR |
+| `body_size` | equals, not equals, greater than, less than | Bytes, up to 1 GiB |
+| `tls_version` | equals, not equals, in list | `TLSv1`, `TLSv1.1`, `TLSv1.2`, `TLSv1.3`, or `none` for plain HTTP |
+
+Hostname, user agent, referer, header, and content type compare without regard to
+case. Path compares exactly and uses the decoded request path without the query
+string. A visitor whose country, continent, or ASN is unknown never matches
+"equals" or a comparison, and does match "not equals".
+
+### Actions
+
+| Action | Effect |
+| --- | --- |
+| `block` | Answers 403 (`custom_rule_block`). |
+| `challenge` | Asks a browser for the same short proof of work as the incident profile. A solved challenge lasts one hour. Scripts without a token get 403. |
+| `log` | Records a `custom_rule_log` security event and continues. |
+| `allow` | Stops evaluating custom rules and skips the challenge. |
+| `skip_managed` | Turns the managed WAF off for matching requests. Body size limits still apply. |
+
+### How rules run
+
 - A lower priority number runs first. The rule ID breaks ties. Disabled rules are
-  ignored.
-- An allow match ends evaluation. It overrides later rules, not earlier ones.
-- A domain may have up to 1,000 rules. One import accepts at most 500.
-- An import normalizes every rule, rejects duplicates, and can append to or
-  replace the existing set in one revision.
+  ignored. Only `block` and `allow` end evaluation; the other actions let later
+  rules run.
+- A domain may have up to 1,000 rules, a list condition up to 100 values, and one
+  import up to 500 rules. The list limit is a platform setting that can only be
+  lowered.
+- A rule with the same conditions and action as another rule of the domain is
+  refused. An import normalizes every rule, rejects duplicates, and can append to
+  or replace the existing set in one revision.
+- A rule the cell cannot read (no conditions, more than five, or an unknown field)
+  never matches and never stops the cell.
+- Custom rules never count against the domain: `custom_rule_block`,
+  `custom_rule_challenge`, and `custom_rule_log` are recorded but do not raise the
+  automatic security state.
+
+::: warning Upgrading from 1.x
+The old IP, CIDR, country, and continent rules are converted in place by one
+migration, keep their IDs and priorities, and become one condition each. The old
+rule shape is gone from the API. The migration cannot be reversed, so run it as
+an explicit upgrade step with a database backup.
+:::
 
 ## Profiles
 
@@ -127,7 +183,7 @@ to `normal`) after ten minutes without a new event. A domain an operator has
 restricted or quarantined is never changed automatically.
 
 A domain's own protections never count against it. A request refused by a customer
-block rule (`domain_restricted`), a method restriction (`invalid_method`), an
+custom rule (`custom_rule_block`) or an operator restriction (`domain_restricted`), a method restriction (`invalid_method`), an
 emergency mode (`edge_emergency_mode`), an incident profile refusal (`incident_method`,
 `incident_body_size`, `challenge_required`, `challenge_invalid`), or an unknown host or SNI is
 still recorded as an event, but it does not raise the rate.
