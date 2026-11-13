@@ -74,7 +74,8 @@ class SecurityController extends Controller
         SecurityRuleData::assertRateLimitCapacity($domain, $data['rate_limit'] === null ? 0 : 1, false, $rule->id);
         DB::transaction(function () use ($data, $domain, $request, $rule): void {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
-            $rule->update($data);
+            // A preset rule edited by hand is an ordinary rule from then on, so the preset never describes a rule it did not write.
+            $rule->update([...$data, 'preset' => null]);
             $locked->update(['revision' => $locked->revision + 1]);
             AuditLog::record($request->user(), 'security.rule_updated', $rule, ['revision' => $locked->revision], $request->ip());
         });

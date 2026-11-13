@@ -150,7 +150,7 @@ final class SecurityConfig
             'configured_limits' => $configured['limits'],
             'limits' => $limits,
             'rules' => $domain->securityRules()->where('enabled', true)->orderBy('priority')->orderBy('id')
-                ->get(['id', 'name', 'conditions', 'rate_limit', 'action', 'priority'])->toArray(),
+                ->get(['id', 'name', 'preset', 'conditions', 'rate_limit', 'action', 'priority'])->toArray(),
         ];
     }
 
