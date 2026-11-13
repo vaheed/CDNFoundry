@@ -107,4 +107,26 @@ class SecurityRulesPanelTest extends TestCase
         ])->assertHasNoTableActionErrors();
         $this->assertNull($rule->refresh()->rate_limit);
     }
+
+    public function test_the_presets_menu_saves_and_removes_both_presets(): void
+    {
+        Queue::fake();
+        Filament::setCurrentPanel(Filament::getPanel('app'));
+        $user = User::factory()->create();
+        $domain = Domain::query()->create(['name' => 'presets-panel.example', 'display_name' => 'Presets', 'revision' => 1, 'lifecycle_state' => 'active']);
+        $domain->users()->attach($user->id);
+        $this->actingAs($user);
+
+        $this->manager($domain)->callTableAction('userAgentPreset', data: ['values' => ['sqlmap', 'nikto'], 'action' => 'block'])->assertHasNoTableActionErrors();
+        $this->assertSame(2, $domain->securityRules()->where('preset', 'user_agent')->count());
+        $this->manager($domain)->callTableAction('hotlinkPreset', data: ['extensions' => ['jpg'], 'allowed_hosts' => ['partner.example']])->assertHasNoTableActionErrors();
+        $this->assertSame(1, $domain->securityRules()->where('preset', 'hotlink')->count());
+        $this->manager($domain)->assertTableActionVisible('removeUserAgentPreset')->assertTableActionVisible('removeHotlinkPreset')->assertSee('User agent: sqlmap')->assertSee('Hotlink protection');
+
+        $this->manager($domain)->callTableAction('userAgentPreset', data: ['values' => [], 'action' => 'block'])->assertHasTableActionErrors(['values']);
+        $this->manager($domain)->callTableAction('removeUserAgentPreset');
+        $this->manager($domain)->callTableAction('removeHotlinkPreset');
+        $this->assertSame(0, $domain->securityRules()->count());
+        $this->manager($domain)->assertTableActionHidden('removeUserAgentPreset');
+    }
 }

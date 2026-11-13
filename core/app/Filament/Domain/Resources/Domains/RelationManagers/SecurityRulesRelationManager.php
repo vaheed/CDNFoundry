@@ -10,8 +10,10 @@ use App\Models\Operation;
 use App\Models\SecurityRule;
 use App\Support\FilamentHelp;
 use App\Support\GeoVocabulary;
+use App\Support\SecurityPresets;
 use App\Support\SecurityRuleData;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -48,7 +50,7 @@ class SecurityRulesRelationManager extends RelationManager
 
     private const EXAMPLES = [
         'hostname' => 'www.example.com', 'path' => '/admin', 'user_agent' => 'BadBot', 'referer' => 'https://evil.example',
-        'header' => 'secret-value', 'content_type' => 'application/json', 'client_ip' => '203.0.113.0/24',
+        'header' => 'secret-value', 'content_type' => 'application/json', 'client_ip' => '203.0.113.0/24', 'referer_host' => 'www.example.com', 'file_extension' => 'jpg',
     ];
 
     private const HELP = [
@@ -58,6 +60,9 @@ class SecurityRulesRelationManager extends RelationManager
         'asn' => 'The visitor\'s network number. Unknown networks never match "equals" or a comparison.',
         'client_ip' => 'One address or a network such as 203.0.113.0/24. IPv4 and IPv6 both work.',
         'user_agent' => 'The browser or client name the visitor sends. Case does not matter.',
+        'referer_host' => 'Only the host of the Referer header, such as www.example.com. A request without a Referer has none.',
+        'referer_present' => 'Whether the request carries a Referer header with an address.',
+        'file_extension' => 'The extension of the requested path in lower case, without the dot: jpg for /a/photo.JPG.',
         'referer' => 'The page the visitor came from. Case does not matter.', 'header' => 'The value of one request header. Case does not matter.',
         'cookie_present' => 'Whether the request carries a cookie with this name. The value is never read.',
         'content_type' => 'The Content-Type header of the request.', 'body_size' => 'The request body size in bytes.',
@@ -90,6 +95,32 @@ class SecurityRulesRelationManager extends RelationManager
                 ->color(fn (bool $state): string => $state ? 'success' : 'gray'),
         ])->headerActions([
             CreateAction::make()->label('Add rule')->createAnother(false)->using(fn (array $data): SecurityRule => $this->createRule($data)),
+            ActionGroup::make([
+                Action::make('userAgentPreset')->label('Block user agents')->icon('phosphor-robot')->modalHeading('Block or challenge user agents')
+                    ->modalDescription('Each word becomes one custom rule. They are saved together, and saving again replaces them.')
+                    ->schema([
+                        TagsInput::make('values')->label(FilamentHelp::label('User agents', 'A request is handled when its user agent contains one of these words. Case does not matter. Up to '.SecurityPresets::MAXIMUM_USER_AGENTS.'.'))
+                            ->required()->placeholder('sqlmap')->helperText('Type a word and press Enter.'),
+                        Select::make('action')->label(FilamentHelp::label('Action', 'Block answers 403. Challenge asks a browser for a short proof of work and refuses scripts.'))
+                            ->options(['block' => 'Block', 'challenge' => 'Challenge'])->default('block')->required()->placeholder('Choose what happens'),
+                    ])->fillForm(fn (): array => SecurityPresets::current($this->getOwnerRecord(), SecurityPresets::USER_AGENT) ?? ['action' => 'block'])
+                    ->action(fn (array $data) => $this->savePreset(SecurityPresets::USER_AGENT, SecurityPresets::userAgentRules($data), 'User agent rules saved')),
+                Action::make('removeUserAgentPreset')->label('Remove user agent rules')->icon('phosphor-trash')->color('danger')->requiresConfirmation()
+                    ->visible(fn (): bool => $this->getOwnerRecord()->securityRules()->where('preset', SecurityPresets::USER_AGENT)->exists())
+                    ->action(fn () => $this->savePreset(SecurityPresets::USER_AGENT, null, 'User agent rules removed')),
+                Action::make('hotlinkPreset')->label('Hotlink protection')->icon('phosphor-image')->modalHeading('Protect files from hotlinking')
+                    ->modalDescription('Pages on other sites cannot embed these files. One custom rule blocks them with a 403.')
+                    ->schema([
+                        TagsInput::make('extensions')->label(FilamentHelp::label('File extensions', 'Requests for files that end with these extensions are protected. Type the extension without a dot.'))
+                            ->required()->placeholder('jpg')->helperText('Type an extension and press Enter.'),
+                        TagsInput::make('allowed_hosts')->label(FilamentHelp::label('Allowed referer hosts', 'Sites whose pages may embed the files. Your own domain and its www form are always allowed, and so is a request with no Referer.'))
+                            ->placeholder('www.partner.example')->helperText('Type a host name and press Enter.'),
+                    ])->fillForm(fn (): array => SecurityPresets::current($this->getOwnerRecord(), SecurityPresets::HOTLINK) ?? ['extensions' => ['jpg', 'png', 'gif', 'webp']])
+                    ->action(fn (array $data) => $this->savePreset(SecurityPresets::HOTLINK, SecurityPresets::hotlinkRules($this->getOwnerRecord(), $data), 'Hotlink protection saved')),
+                Action::make('removeHotlinkPreset')->label('Remove hotlink protection')->icon('phosphor-trash')->color('danger')->requiresConfirmation()
+                    ->visible(fn (): bool => $this->getOwnerRecord()->securityRules()->where('preset', SecurityPresets::HOTLINK)->exists())
+                    ->action(fn () => $this->savePreset(SecurityPresets::HOTLINK, null, 'Hotlink protection removed')),
+            ])->label('Presets')->icon('phosphor-sliders-horizontal')->button(),
             Action::make('importPreview')->label('Import rules')->icon('phosphor-upload-simple')->requiresConfirmation()
                 ->modalHeading('Import custom rules')
                 ->modalDescription('Confirming writes every row below in one desired revision.')
@@ -153,8 +184,8 @@ class SecurityRulesRelationManager extends RelationManager
     private function conditionFields(): array
     {
         $kind = fn (Get $get): ?string => SecurityRuleData::FIELDS[$get('field')]['kind'] ?? null;
-        $list = fn (Get $get): bool => $get('operator') === 'in_list';
-        $text = fn (Get $get): bool => in_array($kind($get), ['text', 'address'], true) && ! $list($get);
+        $list = fn (Get $get): bool => in_array($get('operator'), ['in_list', 'not_in_list'], true);
+        $text = fn (Get $get): bool => in_array($kind($get), ['text', 'address', 'host', 'extension'], true) && ! $list($get);
         $choice = fn (string $name) => fn (Get $get): bool => $kind($get) === $name;
 
         return [
@@ -171,7 +202,7 @@ class SecurityRulesRelationManager extends RelationManager
                 ->placeholder(fn (Get $get): string => match ($kind($get)) {
                     'asn' => '64500', 'score' => '20', default => '1048576'
                 })->columnSpanFull(),
-            TagsInput::make('value')->label('Values')->required()->visible(fn (Get $get): bool => $list($get) && in_array($kind($get), ['text', 'address', 'asn', 'score'], true))
+            TagsInput::make('value')->label('Values')->required()->visible(fn (Get $get): bool => $list($get) && in_array($kind($get), ['text', 'address', 'host', 'extension', 'asn', 'score'], true))
                 ->placeholder(fn (Get $get): string => match ($kind($get)) {
                     'asn' => '64500', 'score' => '10', default => self::EXAMPLES[$get('field')] ?? 'Value'
                 })
@@ -215,7 +246,7 @@ class SecurityRulesRelationManager extends RelationManager
         SecurityRuleData::assertRateLimitCapacity($domain, $data['rate_limit'] === null ? 0 : 1, false, $rule->id);
         DB::transaction(function () use ($data, $domain, $rule): void {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
-            $rule->update($data);
+            $rule->update([...$data, 'preset' => null]);
             $this->changed($locked, 'security.rule_updated', $rule);
         });
         $this->reconcile($domain);
@@ -271,6 +302,14 @@ class SecurityRulesRelationManager extends RelationManager
     {
         Operation::coalesceDomain('edge.domain_reconcile', $domain->id, auth()->id());
         ReconcileEdgeDomain::dispatch($domain->id)->afterCommit();
+    }
+
+    private function savePreset(string $preset, ?array $rules, string $title): void
+    {
+        $domain = $this->getOwnerRecord();
+        SecurityPresets::replace($domain, $preset, $rules, auth()->user(), request()->ip());
+        $this->reconcile($domain);
+        Notification::make()->success()->title($title)->body('The change is queued in the next signed edge revision.')->send();
     }
 
     private function refuseDuplicate(Domain $domain, array $data, ?SecurityRule $except = null): void
