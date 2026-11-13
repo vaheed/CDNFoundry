@@ -7,7 +7,6 @@ use App\Models\Domain;
 use App\Models\NotificationChannel;
 use App\Support\PlatformSettings;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Cache;
 
 /**
  * Turns a platform event into one queued delivery per matching channel. Administrator channels receive every event;
@@ -37,16 +36,13 @@ final class EventPublisher
         return $queued;
     }
 
-    /** The active administrator channels, cached for a minute so a burst of alerts reads no database rows. */
+    /**
+     * The active administrator channels: one bounded indexed query. Not cached: the cache store refuses to unserialize
+     * objects (serializable_classes is false), so a cached collection comes back as an incomplete class.
+     */
     private static function platformChannels(): Collection
     {
-        return Cache::remember('notifications:platform-channels', 60, fn () => NotificationChannel::query()->whereNull('user_id')->where('status', 'active')->limit(self::MAX_RECIPIENTS)->get());
-    }
-
-    /** Called when a channel is added, removed, paused, or resumed. */
-    public static function forgetPlatformChannels(): void
-    {
-        Cache::forget('notifications:platform-channels');
+        return NotificationChannel::query()->whereNull('user_id')->where('status', 'active')->limit(self::MAX_RECIPIENTS)->get();
     }
 
     /** @return iterable<NotificationChannel> */

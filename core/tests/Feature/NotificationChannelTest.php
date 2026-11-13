@@ -168,6 +168,18 @@ class NotificationChannelTest extends TestCase
         $this->assertSame(1, EventPublisher::publish('alert.firing', null, 'Alert'));
     }
 
+    public function test_repeated_events_publish_through_a_cache_store_that_refuses_objects(): void
+    {
+        // Production stores serialize and refuse to unserialize objects; an object cached between two events broke the second.
+        config(['cache.default' => 'file', 'cache.serializable_classes' => false, 'cache.stores.file.path' => storage_path('framework/cache/notifier-test')]);
+        Queue::fake();
+        $this->actingAs($this->admin())->postJson('/api/admin/notification-channels', [...self::TELEGRAM, 'name' => 'Admin'])->assertCreated();
+
+        $this->assertSame(1, EventPublisher::publish('alert.firing', null, 'First'));
+        $this->assertSame(1, EventPublisher::publish('alert.firing', null, 'Second'));
+        Cache::store('file')->flush();
+    }
+
     public function test_turning_the_switch_off_stops_user_channels_and_keeps_them(): void
     {
         Http::fake();
