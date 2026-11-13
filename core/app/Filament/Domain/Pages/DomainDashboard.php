@@ -11,10 +11,12 @@ use App\Support\IncidentProfile;
 use Carbon\CarbonImmutable;
 use Filament\Pages\Dashboard;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Collection;
+use Illuminate\Database\Eloquent\Collection;
 use Throwable;
 
 /**
+ * @property-read Collection<int, Domain> $domains
+ *
  * The domain user's landing page: the traffic of their domains over the last 24 hours, what needs their action, and each
  * domain with its state. Traffic comes from the analytics store; when it does not answer, the rest of the page still shows.
  */
@@ -28,12 +30,15 @@ class DomainDashboard extends Dashboard
     /** @return Collection<int, Domain> */
     public function getDomainsProperty(): Collection
     {
-        return $this->domains()->with('activeTlsCertificate')->withCount([
+        /** @var Collection<int, Domain> $domains */
+        $domains = $this->domains()->with('activeTlsCertificate')->withCount([
             'dnsRecords',
             'dnsRecords as proxied_records_count' => fn (Builder $records): Builder => $records->where('mode', 'proxied'),
             'logPushDestinations as failing_destinations_count' => fn (Builder $destinations): Builder => $destinations->where('consecutive_failures', '>=', 3),
             'clientScriptSightings as new_scripts_count' => fn (Builder $scripts): Builder => $scripts->whereNull('approved_at'),
         ])->orderBy('name')->limit(self::LIMIT)->get();
+
+        return $domains;
     }
 
     /** @return array{state: string, items: list<array<string, mixed>>, by_domain: array<int, array<string, mixed>>} */

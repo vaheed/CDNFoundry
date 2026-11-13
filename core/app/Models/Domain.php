@@ -25,6 +25,9 @@ use Illuminate\Validation\ValidationException;
 /**
  * Detection settings added after the schema snapshot that static analysis reads; each is a validated typed array or null.
  *
+ * @property \Carbon\CarbonImmutable|null $incident_expires_at
+ * @property-read int|null $failing_destinations_count
+ * @property-read int|null $new_scripts_count
  * @property array{threshold: int, period_minutes: int}|null $security_alert
  * @property array{login_paths: list<array<string, mixed>>}|null $credential_check
  * @property array{kinds: list<string>}|null $sensitive_data_check
@@ -348,6 +351,7 @@ class Domain extends Model
         return $this->hasMany(UsageRollup::class);
     }
 
+    /** @return BelongsTo<TlsCertificate, $this> */
     public function activeTlsCertificate(): BelongsTo
     {
         return $this->belongsTo(TlsCertificate::class, 'active_tls_certificate_id');

@@ -67,18 +67,6 @@ parameters:
 			path: app/Actions/StartIncidentProfile.php
 
 		-
-			message: '#^Cannot call method toDateTimeString\(\) on string\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: app/Actions/StartIncidentProfile.php
-
-		-
-			message: '#^Cannot call method toIso8601String\(\) on string\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: app/Actions/StartIncidentProfile.php
-
-		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$domain_id\.$#'
 			identifier: property.notFound
 			count: 1
@@ -481,24 +469,6 @@ parameters:
 			path: app/Filament/Admin/Widgets/EdgeHealthTable.php
 
 		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$active\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Filament/Domain/Pages/DomainDashboard.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$pending_delegation\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Filament/Domain/Pages/DomainDashboard.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$total\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Filament/Domain/Pages/DomainDashboard.php
-
-		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$activePool\.$#'
 			identifier: property.notFound
 			count: 2
@@ -535,21 +505,9 @@ parameters:
 			path: app/Filament/Domain/Resources/Domains/DomainDetailSections.php
 
 		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$expires_at\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Filament/Domain/Resources/Domains/DomainDetailSections.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$fingerprint_sha256\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Filament/Domain/Resources/Domains/DomainDetailSections.php
-
-		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$last_error\.$#'
 			identifier: property.notFound
-			count: 4
+			count: 3
 			path: app/Filament/Domain/Resources/Domains/DomainDetailSections.php
 
 		-
@@ -561,7 +519,7 @@ parameters:
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$names\.$#'
 			identifier: property.notFound
-			count: 2
+			count: 1
 			path: app/Filament/Domain/Resources/Domains/DomainDetailSections.php
 
 		-
@@ -591,7 +549,7 @@ parameters:
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$status\.$#'
 			identifier: property.notFound
-			count: 3
+			count: 2
 			path: app/Filament/Domain/Resources/Domains/DomainDetailSections.php
 
 		-
@@ -1093,15 +1051,9 @@ parameters:
 			path: app/Filament/Domain/Resources/Domains/RelationManagers/WafExclusionsRelationManager.php
 
 		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$expires_at\.$#'
-			identifier: property.notFound
-			count: 2
-			path: app/Filament/Domain/Resources/Domains/Widgets/DomainKpiStrip.php
-
-		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$last_error\.$#'
 			identifier: property.notFound
-			count: 2
+			count: 1
 			path: app/Filament/Domain/Resources/Domains/Widgets/DomainNeedsAttention.php
 
 		-
@@ -1371,7 +1323,7 @@ parameters:
 		-
 			message: '#^Cannot call method toIso8601String\(\) on string\.$#'
 			identifier: method.nonObject
-			count: 2
+			count: 1
 			path: app/Http/Controllers/IncidentProfileController.php
 
 		-
@@ -1424,12 +1376,6 @@ parameters:
 
 		-
 			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,Illuminate\\Database\\Eloquent\\Model\>\:\:map\(\) expects callable\(Illuminate\\Database\\Eloquent\\Model, int\)\: array, Closure\(App\\Models\\TlsCertificate\)\: array given\.$#'
-			identifier: argument.type
-			count: 1
-			path: app/Http/Controllers/TlsController.php
-
-		-
-			message: '#^Parameter \#1 \$certificate of method App\\Http\\Controllers\\TlsController\:\:certificateData\(\) expects App\\Models\\TlsCertificate, Illuminate\\Database\\Eloquent\\Model given\.$#'
 			identifier: argument.type
 			count: 1
 			path: app/Http/Controllers/TlsController.php
@@ -2271,7 +2217,7 @@ parameters:
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$expires_at\.$#'
 			identifier: property.notFound
-			count: 2
+			count: 1
 			path: app/Jobs/ReconcileEdgeDomain.php
 
 		-
@@ -2627,18 +2573,6 @@ parameters:
 			identifier: nullsafe.neverNull
 			count: 1
 			path: app/Support/EdgePoolRoutingData.php
-
-		-
-			message: '#^Cannot call method getTimestamp\(\) on string\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: app/Support/IncidentProfile.php
-
-		-
-			message: '#^Cannot call method isFuture\(\) on string\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: app/Support/IncidentProfile.php
 
 		-
 			message: '#^Match expression does not handle remaining value\: string$#'
