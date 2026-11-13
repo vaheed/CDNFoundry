@@ -55,10 +55,18 @@ export async function waitForPanels(page: Page): Promise<void> {
     // Grafana draws a panel only when it is in view, and scrolls the dashboard inside its own container. A viewport as tall
     // as that container's content draws every panel at once, so each is queried, checked, and in the screenshot.
     const width = page.viewportSize()?.width ?? 1440;
-    for (let attempt = 0; attempt < 4; attempt++) {
-        const overflow = await page.evaluate(() => Math.max(0, ...Array.from(document.querySelectorAll<HTMLElement>('body, body *'))
-            .filter((element) => /(auto|scroll)/.test(getComputedStyle(element).overflowY) && element.scrollHeight > element.clientHeight + 1)
-            .map((element) => element.scrollHeight - element.clientHeight)));
+    await page.locator('section h2').first().waitFor({ timeout: 60_000 });
+    // The grid lays out after the first panel exists; wait until the page height stops changing before measuring it.
+    let last = -1;
+    for (let stable = 0; stable < 3;) {
+        await page.waitForTimeout(500);
+        const now = await page.evaluate(() => Math.max(document.body.scrollHeight, document.documentElement.scrollHeight));
+        stable = now === last ? stable + 1 : 0;
+        last = now;
+    }
+    for (let attempt = 0; attempt < 6; attempt++) {
+        // Grafana scrolls the whole page (the body), and panels grow it as they draw, so the height is read again each time.
+        const overflow = await page.evaluate(() => Math.max(0, Math.max(document.body.scrollHeight, document.documentElement.scrollHeight) - window.innerHeight));
         if (overflow === 0) break;
         const height = page.viewportSize()?.height ?? 900;
         await page.setViewportSize({ width, height: Math.min(height + overflow + 40, 16_000) });
