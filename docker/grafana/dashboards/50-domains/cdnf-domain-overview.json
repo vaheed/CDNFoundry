@@ -647,7 +647,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Requests over time by status class.",
+      "description": "Requests per second by status class.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -667,6 +667,7 @@
               "mode": "off"
             }
           },
+          "displayName": "${__field.labels.class}",
           "mappings": [
             {
               "options": {
@@ -689,7 +690,7 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "reqps"
         },
         "overrides": []
       },
@@ -721,7 +722,7 @@
           "editorType": "sql",
           "format": 0,
           "queryType": "timeSeries",
-          "rawSql": "SELECT * FROM (SELECT $__timeInterval(interval_start) AS time, intDiv(status, 100) AS class, sum(requests) AS requests FROM cdnf.edge_traffic_1m WHERE interval_start >= $__fromTime - INTERVAL 1 MINUTE AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 0 AND 172800 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, class UNION ALL SELECT $__timeInterval(interval_start) AS time, intDiv(status, 100) AS class, sum(requests) AS requests FROM cdnf.edge_traffic_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 172801 AND 34560000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, class UNION ALL SELECT $__timeInterval(interval_start) AS time, intDiv(status, 100) AS class, sum(requests) AS requests FROM cdnf.edge_traffic_daily WHERE interval_start >= toStartOfDay($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 34560001 AND 10000000000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, class) ORDER BY time",
+          "rawSql": "SELECT * FROM (SELECT $__timeInterval(interval_start) AS time, concat(toString(intDiv(status, 100)), 'xx') AS class, (sum(requests)) / greatest($__interval_s, 60) AS requests FROM cdnf.edge_traffic_1m WHERE interval_start >= $__fromTime - INTERVAL 1 MINUTE AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 0 AND 172800 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, class UNION ALL SELECT $__timeInterval(interval_start) AS time, concat(toString(intDiv(status, 100)), 'xx') AS class, (sum(requests)) / greatest($__interval_s, 3600) AS requests FROM cdnf.edge_traffic_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 172801 AND 34560000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, class UNION ALL SELECT $__timeInterval(interval_start) AS time, concat(toString(intDiv(status, 100)), 'xx') AS class, (sum(requests)) / greatest($__interval_s, 86400) AS requests FROM cdnf.edge_traffic_daily WHERE interval_start >= toStartOfDay($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 34560001 AND 10000000000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, class) ORDER BY time",
           "refId": "A"
         }
       ],
@@ -733,7 +734,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Requests over time by cache status.",
+      "description": "Requests per second by cache status.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -753,6 +754,7 @@
               "mode": "off"
             }
           },
+          "displayName": "${__field.labels.cache_status}",
           "mappings": [
             {
               "options": {
@@ -775,7 +777,7 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "reqps"
         },
         "overrides": []
       },
@@ -807,7 +809,7 @@
           "editorType": "sql",
           "format": 0,
           "queryType": "timeSeries",
-          "rawSql": "SELECT * FROM (SELECT $__timeInterval(interval_start) AS time, cache_status, sum(requests) AS requests FROM cdnf.edge_traffic_1m WHERE interval_start >= $__fromTime - INTERVAL 1 MINUTE AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 0 AND 172800 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, cache_status UNION ALL SELECT $__timeInterval(interval_start) AS time, cache_status, sum(requests) AS requests FROM cdnf.edge_traffic_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 172801 AND 34560000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, cache_status UNION ALL SELECT $__timeInterval(interval_start) AS time, cache_status, sum(requests) AS requests FROM cdnf.edge_traffic_daily WHERE interval_start >= toStartOfDay($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 34560001 AND 10000000000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, cache_status) ORDER BY time",
+          "rawSql": "SELECT * FROM (SELECT $__timeInterval(interval_start) AS time, if(cache_status = '', 'not recorded', cache_status) AS cache_status, (sum(requests)) / greatest($__interval_s, 60) AS requests FROM cdnf.edge_traffic_1m WHERE interval_start >= $__fromTime - INTERVAL 1 MINUTE AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 0 AND 172800 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, cache_status UNION ALL SELECT $__timeInterval(interval_start) AS time, if(cache_status = '', 'not recorded', cache_status) AS cache_status, (sum(requests)) / greatest($__interval_s, 3600) AS requests FROM cdnf.edge_traffic_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 172801 AND 34560000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, cache_status UNION ALL SELECT $__timeInterval(interval_start) AS time, if(cache_status = '', 'not recorded', cache_status) AS cache_status, (sum(requests)) / greatest($__interval_s, 86400) AS requests FROM cdnf.edge_traffic_daily WHERE interval_start >= toStartOfDay($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 34560001 AND 10000000000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, cache_status) ORDER BY time",
           "refId": "A"
         }
       ],
@@ -918,7 +920,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Blocked and classified requests over time.",
+      "description": "Blocked and classified requests per second.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -938,6 +940,7 @@
               "mode": "off"
             }
           },
+          "displayName": "${__field.labels.security_class}",
           "mappings": [
             {
               "options": {
@@ -960,7 +963,7 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "reqps"
         },
         "overrides": []
       },
@@ -992,7 +995,7 @@
           "editorType": "sql",
           "format": 0,
           "queryType": "timeSeries",
-          "rawSql": "SELECT * FROM (SELECT $__timeInterval(interval_start) AS time, security_class, sum(requests) AS events FROM cdnf.edge_traffic_1m WHERE interval_start >= $__fromTime - INTERVAL 1 MINUTE AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 0 AND 172800 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) AND security_class != '' GROUP BY time, security_class UNION ALL SELECT $__timeInterval(interval_start) AS time, security_class, sum(requests) AS events FROM cdnf.edge_traffic_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 172801 AND 34560000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) AND security_class != '' GROUP BY time, security_class UNION ALL SELECT $__timeInterval(interval_start) AS time, security_class, sum(requests) AS events FROM cdnf.edge_traffic_daily WHERE interval_start >= toStartOfDay($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 34560001 AND 10000000000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) AND security_class != '' GROUP BY time, security_class) ORDER BY time",
+          "rawSql": "SELECT * FROM (SELECT $__timeInterval(interval_start) AS time, if(security_class = '', 'not recorded', security_class) AS security_class, (sum(requests)) / greatest($__interval_s, 60) AS events FROM cdnf.edge_traffic_1m WHERE interval_start >= $__fromTime - INTERVAL 1 MINUTE AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 0 AND 172800 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) AND security_class != '' GROUP BY time, security_class UNION ALL SELECT $__timeInterval(interval_start) AS time, if(security_class = '', 'not recorded', security_class) AS security_class, (sum(requests)) / greatest($__interval_s, 3600) AS events FROM cdnf.edge_traffic_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 172801 AND 34560000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) AND security_class != '' GROUP BY time, security_class UNION ALL SELECT $__timeInterval(interval_start) AS time, if(security_class = '', 'not recorded', security_class) AS security_class, (sum(requests)) / greatest($__interval_s, 86400) AS events FROM cdnf.edge_traffic_daily WHERE interval_start >= toStartOfDay($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 34560001 AND 10000000000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) AND security_class != '' GROUP BY time, security_class) ORDER BY time",
           "refId": "A"
         }
       ],
@@ -1030,18 +1033,7 @@
             },
             "inspect": false
           },
-          "mappings": [
-            {
-              "options": {
-                "match": "null+nan",
-                "result": {
-                  "color": "text",
-                  "text": "No data yet"
-                }
-              },
-              "type": "special"
-            }
-          ],
+          "mappings": [],
           "noValue": "\u2013",
           "thresholds": {
             "mode": "absolute",
@@ -1054,7 +1046,48 @@
           },
           "unit": "short"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(.*_id|rule|domain|asn|id)$"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "status"
+            },
+            "properties": [
+              {
+                "id": "custom.minWidth",
+                "value": 110
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "domain_id"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 90
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
@@ -1091,7 +1124,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "DNS queries over time for the domain's zone.",
+      "description": "DNS queries per hour for the domain's zone over the last 24 hours, whatever range the dashboard shows.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1169,6 +1202,7 @@
           "refId": "A"
         }
       ],
+      "timeFrom": "24h",
       "title": "DNS queries",
       "type": "timeseries"
     },
@@ -1190,18 +1224,7 @@
             },
             "inspect": false
           },
-          "mappings": [
-            {
-              "options": {
-                "match": "null+nan",
-                "result": {
-                  "color": "text",
-                  "text": "No data yet"
-                }
-              },
-              "type": "special"
-            }
-          ],
+          "mappings": [],
           "noValue": "\u2013",
           "thresholds": {
             "mode": "absolute",
@@ -1214,7 +1237,24 @@
           },
           "unit": "short"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(.*_id|rule|domain|asn|id)$"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
@@ -1264,18 +1304,7 @@
             },
             "inspect": false
           },
-          "mappings": [
-            {
-              "options": {
-                "match": "null+nan",
-                "result": {
-                  "color": "text",
-                  "text": "No data yet"
-                }
-              },
-              "type": "special"
-            }
-          ],
+          "mappings": [],
           "noValue": "\u2013",
           "thresholds": {
             "mode": "absolute",
@@ -1288,7 +1317,24 @@
           },
           "unit": "short"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(.*_id|rule|domain|asn|id)$"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
@@ -1338,18 +1384,7 @@
             },
             "inspect": false
           },
-          "mappings": [
-            {
-              "options": {
-                "match": "null+nan",
-                "result": {
-                  "color": "text",
-                  "text": "No data yet"
-                }
-              },
-              "type": "special"
-            }
-          ],
+          "mappings": [],
           "noValue": "\u2013",
           "thresholds": {
             "mode": "absolute",
@@ -1362,7 +1397,24 @@
           },
           "unit": "short"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(.*_id|rule|domain|asn|id)$"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,

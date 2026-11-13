@@ -8,7 +8,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from dashboard_lib import LIBRARY, shared  # noqa: E402
+from dashboard_lib import DASHBOARD_TITLES, LIBRARY, shared  # noqa: E402
 from dashboards_noc import DASHBOARDS as NOC  # noqa: E402
 
 try:
@@ -57,10 +57,22 @@ def share_repeated_panels(documents: list[tuple[str, dict]]) -> None:
             panel.update({**reference, "gridPos": grid, "id": ident})
 
 
+def resolve_dashboard_titles(documents: list[tuple[str, dict]]) -> None:
+    """Replace the DASHBOARD_TITLES marker with value mappings, so a column of dashboard UIDs reads as titles."""
+    mapping = [{"type": "value", "options": {document["uid"]: {"text": document["title"], "index": index} for index, (_, document) in enumerate(sorted(documents, key=lambda item: item[1]["uid"]))}}]
+    panels = list(LIBRARY.values()) + [panel for _, document in documents for panel in document["panels"]]
+    for panel in panels:
+        for override in panel.get("fieldConfig", {}).get("overrides", []):
+            for prop in override["properties"]:
+                if prop["value"] == DASHBOARD_TITLES:
+                    prop["value"] = mapping
+
+
 def build() -> dict[pathlib.Path, str]:
     files: dict[pathlib.Path, str] = {}
     documents = [(folder, factory()) for folder, factory in NOC + SECURITY + PLATFORM]
     share_repeated_panels(documents)
+    resolve_dashboard_titles(documents)
     for folder, document in documents:
         files[ROOT / folder / f"{document['uid']}.json"] = json.dumps(document, indent=2, sort_keys=True) + "\n"
     for uid, model in LIBRARY.items():

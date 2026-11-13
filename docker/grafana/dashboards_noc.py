@@ -9,6 +9,12 @@ def pop_table_query(expr: str, ref_name: str) -> dict:
     return prom(expr, ref_name, instant=True, fmt="table")
 
 
+def with_span(panel: dict, span: str) -> dict:
+    """A panel that always shows `span`: hourly series have no point inside a short range."""
+    panel["timeFrom"] = span
+    return panel
+
+
 def wall(panel: dict) -> dict:
     panel["options"]["text"] = {"valueSize": 52, "titleSize": 18}
     return panel
@@ -28,18 +34,37 @@ def firing_alerts(w: int = 24, h: int = 8, title: str = "Firing alerts") -> dict
     panel = table("Firing alerts", "Every firing alert with its team, severity, and start time. Open the dashboard column to see the cause at the time it started.",
                   [prom(ALERT_TABLE_EXPR, "firing", instant=True, fmt="table")], w=w, h=h, transformations=ALERT_TRANSFORMS, sort="Since",
                   overrides=[
-                      {"matcher": {"id": "byName", "options": "Since"}, "properties": [{"id": "unit", "value": "dateTimeFromNow"}]},
-                      {"matcher": {"id": "byName", "options": "Dashboard"}, "properties": [{"id": "links", "value": [{"title": "Open dashboard at the start time", "url": "/d/${__value.raw}?from=${__data.fields.Since}&to=now"}]}]},
+                      {"matcher": {"id": "byName", "options": "Cause"}, "properties": [{"id": "custom.minWidth", "value": 220}]},
+                      {"matcher": {"id": "byName", "options": "Team"}, "properties": [{"id": "custom.width", "value": 90}]},
+                      {"matcher": {"id": "byName", "options": "Severity"}, "properties": [{"id": "custom.width", "value": 90}]},
+                      {"matcher": {"id": "byName", "options": "PoP"}, "properties": [{"id": "custom.width", "value": 110}]},
+                      {"matcher": {"id": "byName", "options": "Since"}, "properties": [{"id": "unit", "value": "dateTimeFromNow"}, {"id": "custom.width", "value": 130}]},
+                      {"matcher": {"id": "byName", "options": "Dashboard"}, "properties": [
+                          {"id": "mappings", "value": DASHBOARD_TITLES},
+                          {"id": "links", "value": [{"title": "Open dashboard at the start time", "url": "/d/${__value.raw}?from=${__data.fields.Since}&to=now"}]}]},
                   ])
     return shared("cdnf-lib-firing-alerts", panel, w=w, h=h)
+
+
+def firing_alerts_compact(w: int = 6, h: int = 10, title: str = "Alerts") -> dict:
+    """Cause and age only, for a narrow tile on the wall display."""
+    panel = table(title, "Every firing alert with how long it has been firing. The full table with team, severity, and dashboard is on Now.",
+                  [prom(ALERT_TABLE_EXPR, "firing", instant=True, fmt="table")], w=w, h=h, sort="Since", transformations=[
+                      {"id": "filterFieldsByName", "options": {"include": {"names": ["alertname", "Value"]}}},
+                      {"id": "organize", "options": {"excludeByName": {"Time": True}, "renameByName": {"alertname": "Cause", "Value": "Since"}, "indexByName": {"Cause": 0, "Since": 1}}}],
+                  overrides=[{"matcher": {"id": "byName", "options": "Cause"}, "properties": [{"id": "custom.minWidth", "value": 150}]},
+                             {"matcher": {"id": "byName", "options": "Since"}, "properties": [{"id": "unit", "value": "dateTimeFromNow"}, {"id": "custom.width", "value": 110}]}])
+    return shared("cdnf-lib-firing-alerts-compact", panel, w=w, h=h)
 
 
 def probe_table(w: int = 12, h: int = 8) -> dict:
     return shared("cdnf-lib-probe-results", table("Probe results", "The latest result of every synthetic probe, per PoP and IP version. 1 is up, 0 is down.",
                  [prom('probe_success{job=~"blackbox-.*"}', "probe", instant=True, fmt="table")], w=w, h=h, sort="Value",
-                 transformations=[{"id": "organize", "options": {"excludeByName": {"Time": True, "__name__": True, "instance": True, "probe": True},
-                                  "renameByName": {"job": "Probe", "pop": "PoP", "ip_version": "IP", "region": "Region", "Value": "Up"}}}],
-                 overrides=[{"matcher": {"id": "byName", "options": "Up"}, "properties": [
+                 transformations=[{"id": "organize", "options": {"excludeByName": {"Time": True, "__name__": True, "instance": True, "probe": True, "node": True},
+                                  "renameByName": {"job": "Probe", "pop": "PoP", "ip_version": "IP", "region": "Region", "Value": "Up"},
+                                  "indexByName": {"Up": 0, "PoP": 1, "Probe": 2, "IP": 3, "Region": 4}}}],
+                 overrides=[{"matcher": {"id": "byName", "options": "IP"}, "properties": [{"id": "custom.width", "value": 60}, {"id": "mappings", "value": [{"type": "value", "options": {"4": {"text": "IPv4"}, "6": {"text": "IPv6"}}}]}]},
+                     {"matcher": {"id": "byName", "options": "Up"}, "properties": [{"id": "custom.width", "value": 60},
                      {"id": "thresholds", "value": {"mode": "absolute", "steps": THRESHOLDS["health"]}},
                      {"id": "custom.cellOptions", "value": {"type": "color-background"}}]},
                      {"matcher": {"id": "byName", "options": "PoP"}, "properties": [{"id": "links", "value": [{"title": "Open PoP detail", "url": "/d/cdnf-pop-detail?var-pop=${__value.raw}"}]}]}]), w=w, h=h)
@@ -51,7 +76,7 @@ def requests_by_status(w: int = 12, h: int = 8) -> dict:
 
 
 def p95_by_pop(w: int = 12, h: int = 8) -> dict:
-    return shared("cdnf-lib-edge-p95-by-pop", timeseries("Edge p95 by PoP", "95th percentile time to serve a request, per PoP.", [prom(f'1000 * histogram_quantile(0.95, sum by (le, pop) (cdnf:edge_latency_bucket:rate5m{{{S}}}))', "{{pop}}")], "ms"), w=w, h=h)
+    return shared("cdnf-lib-edge-p95-by-pop", timeseries("Edge p95 by PoP", "95th percentile time to serve a request, per PoP.", [prom(f'1000 * histogram_quantile(0.95, sum by (le, pop) (cdnf:edge_latency_bucket:rate5m{{{S}}}))', "{{pop}}")], "ms", decimals=0, min_value=0), w=w, h=h)
 
 
 HEALTH_STATS = lambda: [
@@ -81,11 +106,12 @@ def now_dashboard() -> dict:
         prom(f'100 * sum by (pop) ({req(",status_class=\"5xx\"")}) / sum by (pop) ({req()})', "5xx", instant=True, fmt="table"),
         prom('max by (pop) (cdnfoundry_edge_heartbeat_age_seconds{pop=~"$pop"})', "Heartbeat", instant=True, fmt="table"),
     ], w=12, h=8, transformations=[{"id": "merge", "options": {}}, {"id": "organize", "options": {"excludeByName": {"Time": True}, "renameByName": {"pop": "PoP", "Value #A": "Requests/s", "Value #B": "5xx %", "Value #C": "Heartbeat age"}}}],
-        overrides=[{"matcher": {"id": "byName", "options": "Requests/s"}, "properties": [{"id": "unit", "value": "reqps"}, {"id": "decimals", "value": 1}]},
-                   {"matcher": {"id": "byName", "options": "5xx %"}, "properties": [{"id": "unit", "value": "percent"}, {"id": "decimals", "value": 2}]},
-                   {"matcher": {"id": "byName", "options": "Heartbeat age"}, "properties": [{"id": "unit", "value": "s"}]}])
+        overrides=[{"matcher": {"id": "byName", "options": "PoP"}, "properties": [{"id": "custom.width", "value": 120}]},
+                   {"matcher": {"id": "byName", "options": "Requests/s"}, "properties": [{"id": "unit", "value": "reqps"}, {"id": "decimals", "value": 1}, {"id": "custom.width", "value": 110}]},
+                   {"matcher": {"id": "byName", "options": "5xx %"}, "properties": [{"id": "unit", "value": "percent"}, {"id": "decimals", "value": 2}, {"id": "custom.width", "value": 80}]},
+                   {"matcher": {"id": "byName", "options": "Heartbeat age"}, "properties": [{"id": "unit", "value": "s"}, {"id": "custom.minWidth", "value": 130}]}])
     rows = [
-        [status], [firing_alerts()],
+        [status], [firing_alerts(24, 12)],
         row("Health"), HEALTH_STATS(),
         row("Global traffic"), TRAFFIC_STATS(), [requests_by_status(), p95_by_pop()],
         row("PoPs"), [pops, timeseries("Requests by PoP", "Requests per second for each PoP.", [prom(f"sum by (pop) ({req()})", "{{pop}}")], "reqps", stack=True)],
@@ -103,7 +129,7 @@ def now_dashboard() -> dict:
 
 def noc_wall() -> dict:
     pop_map = geomap("PoPs by health", "Every enabled PoP by country, green when its heartbeat is fresh and red when it is not.", [pg(
-        "SELECT country_code AS country, name AS pop, CASE WHEN last_heartbeat_at > now() - interval '3 minutes' THEN 1 ELSE 0 END AS healthy FROM grafana_edges WHERE enabled = true")], w=12, h=10)
+        "SELECT country_code AS country, name AS pop, CASE WHEN last_heartbeat_at > now() - interval '3 minutes' THEN 1 ELSE 0 END AS healthy FROM grafana_edges WHERE enabled = true")], w=8, h=10)
     stats = [
         wall(stat("Requests", "Requests per second across all PoPs.", [prom(RPS, "requests", instant=True)], "reqps", decimals=0, h=5)),
         wall(stat("Bandwidth", "Bits per second sent to clients.", [prom(BYTES, "bandwidth", instant=True)], "bps", decimals=1, h=5)),
@@ -112,7 +138,7 @@ def noc_wall() -> dict:
         wall(stat("Edge p95", "95th percentile time to serve a request.", [prom(P95_MS, "p95", instant=True)], "ms", "latency_ms", decimals=0, h=5)),
         wall(stat("Alerts", "Alerts firing now.", [prom(FIRING, "firing", instant=True)], "short", "zero_warn", h=5)),
     ]
-    rows = [stats, [pop_map, probe_table(6, 10), firing_alerts(6, 10, "Alerts")], [requests_by_status(12, 8), timeseries("5xx and p95", "5xx ratio and edge p95 on one axis pair.", [prom(ERR_PCT, "5xx %"), prom(P95_MS, "p95 ms")], "short", w=12, h=8)]]
+    rows = [stats, [pop_map, probe_table(8, 10), firing_alerts_compact(8, 10)], [requests_by_status(12, 8), timeseries("5xx and p95", "5xx ratio and edge p95 on one axis pair.", [prom(ERR_PCT, "5xx %"), prom(P95_MS, "p95 ms")], "short", w=12, h=8)]]
     return dashboard("cdnf-noc-wall", "NOC wall", "cdnf-noc", "Built for a kiosk on a large screen: global traffic, a map of PoPs, probes, and alerts, with no scrolling.", rows,
                      runbook="edge-5xx-ratio-high", refresh="10s", time_from="now-1h", tags=["kiosk"])
 
@@ -122,17 +148,17 @@ def global_traffic() -> dict:
         TRAFFIC_STATS(),
         [timeseries("Requests by region", "Requests per second by region.", [prom(f"sum by (region) ({req()})", "{{region}}")], "reqps", stack=True),
          timeseries("Requests by PoP", "Requests per second by PoP.", [prom(f"sum by (pop) ({req()})", "{{pop}}")], "reqps", stack=True)],
-        [timeseries("Requests by pool", "Requests per second by pool, from the 1-minute, hourly, or daily rollup.", [ch(split("pop", CH_REQUESTS, "requests"))], "short", stack=True),
-         timeseries("Requests by protocol", "Requests by HTTP version.", [ch(split("protocol", CH_REQUESTS, "requests"))], "short", stack=True)],
-        [timeseries("Requests by IP version", "Requests from IPv4 and IPv6 clients.", [ch(split("ip_version", CH_REQUESTS, "requests"))], "short", stack=True, w=8),
+        [timeseries("Bandwidth by PoP", "Bits per second sent to clients, per PoP.", [prom(f"8 * sum by (pop) (cdnf:edge_bytes_sent:rate5m{{{S}}})", "{{pop}}")], "bps", stack=True),
+         timeseries("Requests by protocol", "Requests per second by HTTP version.", [ch(split("protocol", CH_REQUESTS, "requests", per_second=True))], "reqps", stack=True)],
+        [timeseries("Requests by IP version", "Requests per second from IPv4 and IPv6 clients.", [ch(split("if(ip_version = '', 'not recorded', concat('IPv', ip_version)) AS ip_version", CH_REQUESTS, "requests", per_second=True))], "reqps", stack=True, w=8),
          bargauge("Top countries", "Countries sending the most requests.", [ch(top("country", CH_REQUESTS, "requests"), table=True)], "short", w=8),
          bargauge("Top ASNs (last 7 days)", "Client networks sending the most requests. ASNs are kept in raw events only, so this covers at most 7 days.",
-                  [ch("SELECT toString(asn) AS asn_label, count() AS request_count FROM cdnf.edge_events WHERE $__timeFilter(occurred_at) AND occurred_at > now() - INTERVAL 7 DAY AND asn != 0 AND event_type = 'request' GROUP BY asn_label ORDER BY request_count DESC LIMIT 10", table=True)], "short", w=8)],
+                  [ch("SELECT concat('AS', toString(asn)) AS asn_label, count() AS request_count FROM cdnf.edge_events WHERE $__timeFilter(occurred_at) AND occurred_at > now() - INTERVAL 7 DAY AND asn != 0 AND event_type = 'request' GROUP BY asn_label ORDER BY request_count DESC LIMIT 10", table=True)], "short", w=8)],
         [bargauge("Top domains by requests", "Hostnames with the most requests.", [ch(top("hostname", CH_REQUESTS, "requests", hostname=True), table=True)], "short", w=8),
          bargauge("Top domains by bandwidth", "Hostnames that sent the most bytes.", [ch(top("hostname", CH_BYTES, "bytes", hostname=True), table=True)], "bytes", w=8),
          bargauge("Top domains by errors", "Hostnames with the most 5xx responses.", [ch(top("hostname", "sumIf(requests, status >= 500)", "errors", hostname=True), table=True)], "short", "zero_warn", w=8)],
     ]
-    return dashboard("cdnf-global-traffic", "Global traffic", "cdnf-noc", "Every traffic measure summed across all PoPs, then split by region, PoP, pool, protocol, IP version, country, and ASN.", rows, runbook="edge-5xx-ratio-high")
+    return dashboard("cdnf-global-traffic", "Global traffic", "cdnf-noc", "Every traffic measure summed across all PoPs, then split by region, PoP, protocol, IP version, country, ASN, and domain.", rows, runbook="edge-5xx-ratio-high")
 
 
 def pop_fleet() -> dict:
@@ -149,9 +175,10 @@ def pop_fleet() -> dict:
         prom(node_pop('100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)'), "Memory", instant=True, fmt="table"),
         prom(node_pop('100 * (1 - node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay"})'), "Disk", instant=True, fmt="table"),
         prom('100 * max by (pop) (cdnfoundry_cell_capacity_ratio{resource="cache",pop=~"$pop"})', "Cache", instant=True, fmt="table"),
-    ], w=24, h=10, transformations=[{"id": "merge", "options": {}}, {"id": "organize", "options": {"excludeByName": {"Time": True},
+    ], w=24, h=10, transformations=[{"id": "merge", "options": {}}, {"id": "organize", "options": {"excludeByName": {"Time": True, "node": True},
         "renameByName": {"pop": "PoP", **{f"Value #{chr(65 + i)}": name for i, name in enumerate(["Heartbeat age", "Applied revision", "Latest revision", "Requests/s", "5xx %", "p95 ms", "CPU %", "Memory %", "Disk %", "Cache fill %"])}}}}],
         overrides=[{"matcher": {"id": "byName", "options": "Heartbeat age"}, "properties": [{"id": "unit", "value": "s"}, {"id": "thresholds", "value": {"mode": "absolute", "steps": THRESHOLDS["age_seconds"]}}, {"id": "custom.cellOptions", "value": {"type": "color-text"}}]},
+                   {"matcher": {"id": "byRegexp", "options": "(Applied|Latest) revision"}, "properties": [{"id": "unit", "value": "none"}, {"id": "decimals", "value": 0}]},
                    {"matcher": {"id": "byName", "options": "Requests/s"}, "properties": [{"id": "unit", "value": "reqps"}, {"id": "decimals", "value": 1}]},
                    {"matcher": {"id": "byName", "options": "5xx %"}, "properties": [{"id": "unit", "value": "percent"}, {"id": "decimals", "value": 2}]},
                    {"matcher": {"id": "byName", "options": "p95 ms"}, "properties": [{"id": "unit", "value": "ms"}, {"id": "decimals", "value": 0}]},
@@ -163,7 +190,7 @@ def pop_fleet() -> dict:
          stat("Paused", "Fleet rollouts paused on a safety threshold.", [prom("cdnfoundry_fleet_rollouts_paused", "paused", instant=True)], "short", "zero_warn", w=6),
          stat("Gateways unready", "Enabled gateways that are not ready.", [prom("cdnfoundry_edge_gateways_unready", "unready", instant=True)], "short", "zero_good", w=6)],
         [timeseries("Heartbeat age by PoP", "Seconds since each PoP last reported.", [prom('max by (pop) (cdnfoundry_edge_heartbeat_age_seconds{pop=~"$pop"})', "{{pop}}")], "s", threshold="age_seconds"),
-         timeseries("Applied revision by PoP", "The configuration revision each PoP serves.", [prom('max by (pop) (cdnfoundry_edge_gateway_active_revision{pop=~"$pop"})', "{{pop}}")], "short")],
+         timeseries("Applied revision by PoP", "The configuration revision each PoP serves.", [prom('max by (pop) (cdnfoundry_edge_gateway_active_revision{pop=~"$pop"})', "{{pop}}")], "none", decimals=0)],
     ]
     return dashboard("cdnf-pop-fleet", "PoP fleet", "cdnf-noc", "One row per PoP: health, heartbeat, applied revision, traffic, errors, latency, host load, and cache fill.", rows, runbook="stale-edge-heartbeat")
 
@@ -198,7 +225,7 @@ def origin_health() -> dict:
         [bargauge("Slowest origins", "Hostnames with the slowest origin responses.", [ch(top("hostname", CH_ORIGIN_P95, "p95", hostname=True), table=True)], "ms", "latency_ms", w=8),
          bargauge("Failing origins", "Hostnames with the most origin failures.", [ch(top("hostname", "sum(origin_errors)", "failures", hostname=True), table=True)], "short", "zero_warn", w=8),
          bargauge("Status codes at the edge", "Response codes returned to clients.", [ch(top("toString(status) AS code", CH_REQUESTS, "requests", limit=12), table=True)], "short", w=8)],
-        [timeseries("Failover events", "Requests per minute that moved between primary and backup origin.", [ch("SELECT toStartOfInterval(occurred_at, INTERVAL 5 minute) AS time, origin_transition, count() AS events FROM cdnf.edge_events WHERE $__timeFilter(occurred_at) AND origin_transition != 'none' GROUP BY time, origin_transition ORDER BY time")], "short", w=24)],
+        [with_span(timeseries("Failover events", "Requests per minute that moved between primary and backup origin.", [ch("SELECT toStartOfInterval(occurred_at, INTERVAL 5 minute) AS time, origin_transition, count() AS events FROM cdnf.edge_events WHERE $__timeFilter(occurred_at) AND origin_transition != 'none' GROUP BY time, origin_transition ORDER BY time")], "short", w=24), "6h")],
     ]
     return dashboard("cdnf-origin-health", "Origin health", "cdnf-noc", "Origin latency percentiles, error codes, connect failures, failover events, and the slowest and failing origins.", rows, runbook="origin-failure")
 
@@ -212,9 +239,9 @@ def cache() -> dict:
         [timeseries("Cache status mix", "Requests per second by cache status.", [prom(f"sum by (cache_status) ({req()})", "{{cache_status}}")], "reqps", stack=True),
          timeseries("Hit ratio over time", "Requests served from cache, as a share of all requests.", [prom(HIT_PCT, "hit %")], "percent", threshold="hit_percent", max_value=100)],
         [timeseries("Cache fill by PoP", "How full the cache volume of each cell is.", [prom('max by (pop) (cdnfoundry_cell_capacity_ratio{resource="cache",pop=~"$pop"})', "{{pop}}")], "percentunit", threshold="ratio_utilization", max_value=1),
-         timeseries("Purge volume", "Cache purge requests per hour.", [pg("SELECT t AS time, count(c.id) AS purges FROM generate_series(date_trunc('hour', $__timeFrom()::timestamptz), $__timeTo()::timestamptz, interval '1 hour') AS t LEFT JOIN grafana_cache_purges c ON c.created_at >= t AND c.created_at < t + interval '1 hour' GROUP BY t ORDER BY t", table=False)], "short")],
+         with_span(timeseries("Purge volume", "Cache purge requests per hour over the last 7 days, whatever range the dashboard shows.", [pg("SELECT t AS time, count(c.id) AS purges FROM generate_series(date_trunc('hour', $__timeFrom()::timestamptz), $__timeTo()::timestamptz, interval '1 hour') AS t LEFT JOIN grafana_cache_purges c ON c.created_at >= t AND c.created_at < t + interval '1 hour' GROUP BY t ORDER BY t", table=False)], "short"), "7d")],
         [timeseries("Purge propagation time", "Longest time a purge took to apply on every PoP, over the last hour.", [prom("cdnfoundry_purge_propagation_seconds_max", "slowest purge")], "s"),
-         timeseries("Evictions", "Cache evictions are not exported by the cells; this shows the cache volume ratio that precedes them.", [prom('max by (pop, cell) (cdnfoundry_cell_capacity_ratio{resource="cache",pop=~"$pop"})', "{{pop}} {{cell}}")], "percentunit", threshold="ratio_utilization", max_value=1)],
+         timeseries("Cache fill by cell", "How full each cell's cache volume is. The cells do not count evictions, so a volume near full is the signal.", [prom('max by (pop, cell) (cdnfoundry_cell_capacity_ratio{resource="cache",pop=~"$pop"})', "{{pop}} {{cell}}")], "percentunit", threshold="ratio_utilization", max_value=1)],
     ]
     return dashboard("cdnf-cache", "Cache", "cdnf-noc", "Hit ratio by requests and by bytes, status mix, egress saved, cache fill, purge volume, and purge propagation time.", rows, runbook="cache-hit-collapse")
 
@@ -223,7 +250,7 @@ def edge_latency() -> dict:
     rows = [
         [stat("Edge p50", "Median time to serve a request.", [prom(P50_MS, "p50", instant=True)], "ms", "latency_ms", w=6, decimals=0),
          stat("Edge p95", "95th percentile time to serve a request.", [prom(P95_MS, "p95", instant=True)], "ms", "latency_ms", w=6, decimals=0),
-         stat("Origin share", "How much of the edge p95 is the origin's p95.", [prom(f"100 * ({ORIGIN_P95_MS}) / ({P95_MS})", "share", instant=True)], "percent", "neutral", w=6, decimals=0),
+         stat("Origin p95 vs edge p95", "The origin p95 divided by the edge p95. Above 1 means the origins are slower than the edge answers, which is expected when most requests are cache hits.", [prom(f"({ORIGIN_P95_MS}) / ({P95_MS})", "ratio", instant=True)], "suffix: x", "neutral", w=6, decimals=1),
          stat("TTFB p95", "95th percentile time for an origin to send its first byte.", [ch(traffic_sql(f"{CH_TTFB_P95} AS ttfb"), table=True)], "ms", "latency_ms", w=6, decimals=0)],
         [timeseries("Edge latency by PoP", "95th percentile edge time per PoP.", [ch(split("pop", CH_P95, "p95"))], "ms"),
          timeseries("Edge latency by protocol", "95th percentile edge time per HTTP version.", [ch(split("protocol", CH_P95, "p95"))], "ms")],

@@ -742,7 +742,7 @@
         "type": "postgres",
         "uid": "control-db"
       },
-      "description": "Cache purge requests per hour.",
+      "description": "Cache purge requests per hour over the last 7 days, whatever range the dashboard shows.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -820,6 +820,7 @@
           "refId": "A"
         }
       ],
+      "timeFrom": "7d",
       "title": "Purge volume",
       "type": "timeseries"
     },
@@ -914,7 +915,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Cache evictions are not exported by the cells; this shows the cache volume ratio that precedes them.",
+      "description": "How full each cell's cache volume is. The cells do not count evictions, so a volume near full is the signal.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1001,7 +1002,7 @@
           "refId": "A"
         }
       ],
-      "title": "Evictions",
+      "title": "Cache fill by cell",
       "type": "timeseries"
     }
   ],

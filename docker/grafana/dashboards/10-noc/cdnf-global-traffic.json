@@ -109,7 +109,7 @@
       }
     ]
   },
-  "description": "Every traffic measure summed across all PoPs, then split by region, PoP, pool, protocol, IP version, country, and ASN.",
+  "description": "Every traffic measure summed across all PoPs, then split by region, PoP, protocol, IP version, country, ASN, and domain.",
   "editable": false,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -344,10 +344,10 @@
     },
     {
       "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "clickhouse"
+        "type": "prometheus",
+        "uid": "prometheus"
       },
-      "description": "Requests per second by pool, from the 1-minute, hourly, or daily rollup.",
+      "description": "Bits per second sent to clients, per PoP.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -389,7 +389,7 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "bps"
         },
         "overrides": []
       },
@@ -415,17 +415,17 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "clickhouse"
+            "type": "prometheus",
+            "uid": "prometheus"
           },
-          "editorType": "sql",
-          "format": 0,
-          "queryType": "timeSeries",
-          "rawSql": "SELECT * FROM (SELECT $__timeInterval(interval_start) AS time, pop, sum(requests) AS requests FROM cdnf.edge_traffic_1m WHERE interval_start >= $__fromTime - INTERVAL 1 MINUTE AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 0 AND 172800 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, pop UNION ALL SELECT $__timeInterval(interval_start) AS time, pop, sum(requests) AS requests FROM cdnf.edge_traffic_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 172801 AND 34560000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, pop UNION ALL SELECT $__timeInterval(interval_start) AS time, pop, sum(requests) AS requests FROM cdnf.edge_traffic_daily WHERE interval_start >= toStartOfDay($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 34560001 AND 10000000000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, pop) ORDER BY time",
+          "expr": "8 * sum by (pop) (cdnf:edge_bytes_sent:rate5m{region=~\"$region\",pop=~\"$pop\",edge=~\"$edge\"})",
+          "instant": false,
+          "legendFormat": "{{pop}}",
+          "range": true,
           "refId": "A"
         }
       ],
-      "title": "Requests by pool",
+      "title": "Bandwidth by PoP",
       "type": "timeseries"
     },
     {
@@ -433,7 +433,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Requests by HTTP version.",
+      "description": "Requests per second by HTTP version.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -453,6 +453,7 @@
               "mode": "off"
             }
           },
+          "displayName": "${__field.labels.protocol}",
           "mappings": [
             {
               "options": {
@@ -475,7 +476,7 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "reqps"
         },
         "overrides": []
       },
@@ -507,7 +508,7 @@
           "editorType": "sql",
           "format": 0,
           "queryType": "timeSeries",
-          "rawSql": "SELECT * FROM (SELECT $__timeInterval(interval_start) AS time, protocol, sum(requests) AS requests FROM cdnf.edge_traffic_1m WHERE interval_start >= $__fromTime - INTERVAL 1 MINUTE AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 0 AND 172800 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, protocol UNION ALL SELECT $__timeInterval(interval_start) AS time, protocol, sum(requests) AS requests FROM cdnf.edge_traffic_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 172801 AND 34560000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, protocol UNION ALL SELECT $__timeInterval(interval_start) AS time, protocol, sum(requests) AS requests FROM cdnf.edge_traffic_daily WHERE interval_start >= toStartOfDay($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 34560001 AND 10000000000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, protocol) ORDER BY time",
+          "rawSql": "SELECT * FROM (SELECT $__timeInterval(interval_start) AS time, if(protocol = '', 'not recorded', protocol) AS protocol, (sum(requests)) / greatest($__interval_s, 60) AS requests FROM cdnf.edge_traffic_1m WHERE interval_start >= $__fromTime - INTERVAL 1 MINUTE AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 0 AND 172800 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, protocol UNION ALL SELECT $__timeInterval(interval_start) AS time, if(protocol = '', 'not recorded', protocol) AS protocol, (sum(requests)) / greatest($__interval_s, 3600) AS requests FROM cdnf.edge_traffic_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 172801 AND 34560000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, protocol UNION ALL SELECT $__timeInterval(interval_start) AS time, if(protocol = '', 'not recorded', protocol) AS protocol, (sum(requests)) / greatest($__interval_s, 86400) AS requests FROM cdnf.edge_traffic_daily WHERE interval_start >= toStartOfDay($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 34560001 AND 10000000000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, protocol) ORDER BY time",
           "refId": "A"
         }
       ],
@@ -519,7 +520,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Requests from IPv4 and IPv6 clients.",
+      "description": "Requests per second from IPv4 and IPv6 clients.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -539,6 +540,7 @@
               "mode": "off"
             }
           },
+          "displayName": "${__field.labels.ip_version}",
           "mappings": [
             {
               "options": {
@@ -561,7 +563,7 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "reqps"
         },
         "overrides": []
       },
@@ -593,7 +595,7 @@
           "editorType": "sql",
           "format": 0,
           "queryType": "timeSeries",
-          "rawSql": "SELECT * FROM (SELECT $__timeInterval(interval_start) AS time, ip_version, sum(requests) AS requests FROM cdnf.edge_traffic_1m WHERE interval_start >= $__fromTime - INTERVAL 1 MINUTE AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 0 AND 172800 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, ip_version UNION ALL SELECT $__timeInterval(interval_start) AS time, ip_version, sum(requests) AS requests FROM cdnf.edge_traffic_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 172801 AND 34560000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, ip_version UNION ALL SELECT $__timeInterval(interval_start) AS time, ip_version, sum(requests) AS requests FROM cdnf.edge_traffic_daily WHERE interval_start >= toStartOfDay($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 34560001 AND 10000000000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, ip_version) ORDER BY time",
+          "rawSql": "SELECT * FROM (SELECT $__timeInterval(interval_start) AS time, if(ip_version = '', 'not recorded', concat('IPv', ip_version)) AS ip_version, (sum(requests)) / greatest($__interval_s, 60) AS requests FROM cdnf.edge_traffic_1m WHERE interval_start >= $__fromTime - INTERVAL 1 MINUTE AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 0 AND 172800 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, ip_version UNION ALL SELECT $__timeInterval(interval_start) AS time, if(ip_version = '', 'not recorded', concat('IPv', ip_version)) AS ip_version, (sum(requests)) / greatest($__interval_s, 3600) AS requests FROM cdnf.edge_traffic_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 172801 AND 34560000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, ip_version UNION ALL SELECT $__timeInterval(interval_start) AS time, if(ip_version = '', 'not recorded', concat('IPv', ip_version)) AS ip_version, (sum(requests)) / greatest($__interval_s, 86400) AS requests FROM cdnf.edge_traffic_daily WHERE interval_start >= toStartOfDay($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 34560001 AND 10000000000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, ip_version) ORDER BY time",
           "refId": "A"
         }
       ],
@@ -662,7 +664,7 @@
       "id": 13,
       "options": {
         "displayMode": "gradient",
-        "namePlacement": "left",
+        "namePlacement": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
           "calcs": [
@@ -682,7 +684,7 @@
           "editorType": "sql",
           "format": 1,
           "queryType": "table",
-          "rawSql": "SELECT toString(asn) AS asn_label, count() AS request_count FROM cdnf.edge_events WHERE $__timeFilter(occurred_at) AND occurred_at > now() - INTERVAL 7 DAY AND asn != 0 AND event_type = 'request' GROUP BY asn_label ORDER BY request_count DESC LIMIT 10",
+          "rawSql": "SELECT concat('AS', toString(asn)) AS asn_label, count() AS request_count FROM cdnf.edge_events WHERE $__timeFilter(occurred_at) AND occurred_at > now() - INTERVAL 7 DAY AND asn != 0 AND event_type = 'request' GROUP BY asn_label ORDER BY request_count DESC LIMIT 10",
           "refId": "A"
         }
       ],
@@ -736,7 +738,7 @@
       "id": 14,
       "options": {
         "displayMode": "gradient",
-        "namePlacement": "left",
+        "namePlacement": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
           "calcs": [
@@ -810,7 +812,7 @@
       "id": 15,
       "options": {
         "displayMode": "gradient",
-        "namePlacement": "left",
+        "namePlacement": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
           "calcs": [
@@ -888,7 +890,7 @@
       "id": 16,
       "options": {
         "displayMode": "gradient",
-        "namePlacement": "left",
+        "namePlacement": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
           "calcs": [

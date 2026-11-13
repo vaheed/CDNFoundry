@@ -646,18 +646,7 @@
             },
             "inspect": false
           },
-          "mappings": [
-            {
-              "options": {
-                "match": "null+nan",
-                "result": {
-                  "color": "text",
-                  "text": "No data yet"
-                }
-              },
-              "type": "special"
-            }
-          ],
+          "mappings": [],
           "noValue": "\u2013",
           "thresholds": {
             "mode": "absolute",
@@ -670,11 +659,28 @@
           },
           "unit": "short"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(.*_id|rule|domain|asn|id)$"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
-        "w": 11,
+        "w": 12,
         "x": 0,
         "y": 12
       },
@@ -720,18 +726,7 @@
             },
             "inspect": false
           },
-          "mappings": [
-            {
-              "options": {
-                "match": "null+nan",
-                "result": {
-                  "color": "text",
-                  "text": "No data yet"
-                }
-              },
-              "type": "special"
-            }
-          ],
+          "mappings": [],
           "noValue": "\u2013",
           "thresholds": {
             "mode": "absolute",
@@ -744,12 +739,29 @@
           },
           "unit": "short"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(.*_id|rule|domain|asn|id)$"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
-        "w": 13,
-        "x": 11,
+        "w": 12,
+        "x": 12,
         "y": 12
       },
       "id": 8,
@@ -773,7 +785,7 @@
           "refId": "A"
         }
       ],
-      "title": "Settings, domain, and security-rule changes",
+      "title": "Settings and rule changes",
       "type": "table"
     },
     {
@@ -781,7 +793,7 @@
         "type": "postgres",
         "uid": "control-db"
       },
-      "description": "All audit entries per hour.",
+      "description": "All audit entries per hour over the last 7 days, whatever range the dashboard shows.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -859,6 +871,7 @@
           "refId": "A"
         }
       ],
+      "timeFrom": "7d",
       "title": "Audit entries per hour",
       "type": "timeseries"
     }

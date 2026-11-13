@@ -169,18 +169,7 @@
             },
             "inspect": false
           },
-          "mappings": [
-            {
-              "options": {
-                "match": "null+nan",
-                "result": {
-                  "color": "text",
-                  "text": "No data yet"
-                }
-              },
-              "type": "special"
-            }
-          ],
+          "mappings": [],
           "noValue": "\u2013",
           "thresholds": {
             "mode": "absolute",
@@ -196,8 +185,24 @@
         "overrides": [
           {
             "matcher": {
+              "id": "byRegexp",
+              "options": "^(.*_id|rule|domain|asn|id)$"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
               "id": "byName",
-              "options": "bytes"
+              "options": "Bytes sent"
             },
             "properties": [
               {
@@ -209,7 +214,7 @@
           {
             "matcher": {
               "id": "byRegexp",
-              "options": ".*_percent"
+              "options": ".* %"
             },
             "properties": [
               {
@@ -225,7 +230,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "p95_ms"
+              "options": "p95"
             },
             "properties": [
               {
@@ -268,6 +273,21 @@
         }
       ],
       "title": "Domains side by side",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": {
+              "bytes": "Bytes sent",
+              "error_percent": "5xx %",
+              "hit_percent": "Cache hit %",
+              "hostname": "Domain",
+              "p95_ms": "p95",
+              "request_count": "Requests"
+            }
+          }
+        }
+      ],
       "type": "table"
     },
     {
@@ -275,7 +295,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Requests over time for the selected hostnames.",
+      "description": "Requests per second for the selected hostnames.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -295,6 +315,7 @@
               "mode": "off"
             }
           },
+          "displayName": "${__field.labels.hostname}",
           "mappings": [
             {
               "options": {
@@ -317,7 +338,7 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "reqps"
         },
         "overrides": []
       },
@@ -349,10 +370,11 @@
           "editorType": "sql",
           "format": 0,
           "queryType": "timeSeries",
-          "rawSql": "SELECT * FROM (SELECT $__timeInterval(interval_start) AS time, hostname, sum(requests) AS requests FROM cdnf.edge_traffic_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 0 AND 34560000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) AND $__conditionalAll(hostname IN (${hostname:singlequote}), $hostname) GROUP BY time, hostname UNION ALL SELECT $__timeInterval(interval_start) AS time, hostname, sum(requests) AS requests FROM cdnf.edge_traffic_daily WHERE interval_start >= toStartOfDay($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 34560001 AND 10000000000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) AND $__conditionalAll(hostname IN (${hostname:singlequote}), $hostname) GROUP BY time, hostname) ORDER BY time",
+          "rawSql": "SELECT * FROM (SELECT $__timeInterval(interval_start) AS time, if(hostname = '', 'not recorded', hostname) AS hostname, (sum(requests)) / greatest($__interval_s, 3600) AS requests FROM cdnf.edge_traffic_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 0 AND 34560000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) AND $__conditionalAll(hostname IN (${hostname:singlequote}), $hostname) GROUP BY time, hostname UNION ALL SELECT $__timeInterval(interval_start) AS time, if(hostname = '', 'not recorded', hostname) AS hostname, (sum(requests)) / greatest($__interval_s, 86400) AS requests FROM cdnf.edge_traffic_daily WHERE interval_start >= toStartOfDay($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 34560001 AND 10000000000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) AND $__conditionalAll(hostname IN (${hostname:singlequote}), $hostname) GROUP BY time, hostname) ORDER BY time",
           "refId": "A"
         }
       ],
+      "timeFrom": "24h",
       "title": "Requests by domain",
       "type": "timeseries"
     },
@@ -361,7 +383,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Server errors over time for the selected hostnames.",
+      "description": "Server errors per second for the selected hostnames.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -381,6 +403,7 @@
               "mode": "off"
             }
           },
+          "displayName": "${__field.labels.hostname}",
           "mappings": [
             {
               "options": {
@@ -407,7 +430,7 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "reqps"
         },
         "overrides": []
       },
@@ -439,10 +462,11 @@
           "editorType": "sql",
           "format": 0,
           "queryType": "timeSeries",
-          "rawSql": "SELECT * FROM (SELECT $__timeInterval(interval_start) AS time, hostname, sumIf(requests, status >= 500) AS errors FROM cdnf.edge_traffic_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 0 AND 34560000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) AND $__conditionalAll(hostname IN (${hostname:singlequote}), $hostname) GROUP BY time, hostname UNION ALL SELECT $__timeInterval(interval_start) AS time, hostname, sumIf(requests, status >= 500) AS errors FROM cdnf.edge_traffic_daily WHERE interval_start >= toStartOfDay($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 34560001 AND 10000000000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) AND $__conditionalAll(hostname IN (${hostname:singlequote}), $hostname) GROUP BY time, hostname) ORDER BY time",
+          "rawSql": "SELECT * FROM (SELECT $__timeInterval(interval_start) AS time, if(hostname = '', 'not recorded', hostname) AS hostname, (sumIf(requests, status >= 500)) / greatest($__interval_s, 3600) AS errors FROM cdnf.edge_traffic_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 0 AND 34560000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) AND $__conditionalAll(hostname IN (${hostname:singlequote}), $hostname) GROUP BY time, hostname UNION ALL SELECT $__timeInterval(interval_start) AS time, if(hostname = '', 'not recorded', hostname) AS hostname, (sumIf(requests, status >= 500)) / greatest($__interval_s, 86400) AS errors FROM cdnf.edge_traffic_daily WHERE interval_start >= toStartOfDay($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 34560001 AND 10000000000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) AND $__conditionalAll(hostname IN (${hostname:singlequote}), $hostname) GROUP BY time, hostname) ORDER BY time",
           "refId": "A"
         }
       ],
+      "timeFrom": "24h",
       "title": "5xx by domain",
       "type": "timeseries"
     },
@@ -471,6 +495,7 @@
               "mode": "off"
             }
           },
+          "displayName": "${__field.labels.hostname}",
           "mappings": [
             {
               "options": {
@@ -529,10 +554,11 @@
           "editorType": "sql",
           "format": 0,
           "queryType": "timeSeries",
-          "rawSql": "SELECT * FROM (SELECT $__timeInterval(interval_start) AS time, hostname, 100 * sumIf(requests, cache_status = 'HIT') / nullIf(sum(requests), 0) AS hit FROM cdnf.edge_traffic_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 0 AND 34560000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) AND $__conditionalAll(hostname IN (${hostname:singlequote}), $hostname) GROUP BY time, hostname UNION ALL SELECT $__timeInterval(interval_start) AS time, hostname, 100 * sumIf(requests, cache_status = 'HIT') / nullIf(sum(requests), 0) AS hit FROM cdnf.edge_traffic_daily WHERE interval_start >= toStartOfDay($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 34560001 AND 10000000000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) AND $__conditionalAll(hostname IN (${hostname:singlequote}), $hostname) GROUP BY time, hostname) ORDER BY time",
+          "rawSql": "SELECT * FROM (SELECT $__timeInterval(interval_start) AS time, if(hostname = '', 'not recorded', hostname) AS hostname, 100 * sumIf(requests, cache_status = 'HIT') / nullIf(sum(requests), 0) AS hit FROM cdnf.edge_traffic_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 0 AND 34560000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) AND $__conditionalAll(hostname IN (${hostname:singlequote}), $hostname) GROUP BY time, hostname UNION ALL SELECT $__timeInterval(interval_start) AS time, if(hostname = '', 'not recorded', hostname) AS hostname, 100 * sumIf(requests, cache_status = 'HIT') / nullIf(sum(requests), 0) AS hit FROM cdnf.edge_traffic_daily WHERE interval_start >= toStartOfDay($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 34560001 AND 10000000000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) AND $__conditionalAll(hostname IN (${hostname:singlequote}), $hostname) GROUP BY time, hostname) ORDER BY time",
           "refId": "A"
         }
       ],
+      "timeFrom": "24h",
       "title": "Cache hit by domain",
       "type": "timeseries"
     },
@@ -561,6 +587,7 @@
               "mode": "off"
             }
           },
+          "displayName": "${__field.labels.hostname}",
           "mappings": [
             {
               "options": {
@@ -623,10 +650,11 @@
           "editorType": "sql",
           "format": 0,
           "queryType": "timeSeries",
-          "rawSql": "SELECT * FROM (SELECT $__timeInterval(interval_start) AS time, hostname, quantilesTDigestMerge(0.5, 0.95, 0.99)(edge_latency_q)[2] AS p95 FROM cdnf.edge_traffic_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 0 AND 34560000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) AND $__conditionalAll(hostname IN (${hostname:singlequote}), $hostname) GROUP BY time, hostname UNION ALL SELECT $__timeInterval(interval_start) AS time, hostname, quantilesTDigestMerge(0.5, 0.95, 0.99)(edge_latency_q)[2] AS p95 FROM cdnf.edge_traffic_daily WHERE interval_start >= toStartOfDay($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 34560001 AND 10000000000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) AND $__conditionalAll(hostname IN (${hostname:singlequote}), $hostname) GROUP BY time, hostname) ORDER BY time",
+          "rawSql": "SELECT * FROM (SELECT $__timeInterval(interval_start) AS time, if(hostname = '', 'not recorded', hostname) AS hostname, quantilesTDigestMerge(0.5, 0.95, 0.99)(edge_latency_q)[2] AS p95 FROM cdnf.edge_traffic_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 0 AND 34560000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) AND $__conditionalAll(hostname IN (${hostname:singlequote}), $hostname) GROUP BY time, hostname UNION ALL SELECT $__timeInterval(interval_start) AS time, if(hostname = '', 'not recorded', hostname) AS hostname, quantilesTDigestMerge(0.5, 0.95, 0.99)(edge_latency_q)[2] AS p95 FROM cdnf.edge_traffic_daily WHERE interval_start >= toStartOfDay($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 34560001 AND 10000000000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) AND $__conditionalAll(hostname IN (${hostname:singlequote}), $hostname) GROUP BY time, hostname) ORDER BY time",
           "refId": "A"
         }
       ],
+      "timeFrom": "24h",
       "title": "Latency by domain",
       "type": "timeseries"
     }

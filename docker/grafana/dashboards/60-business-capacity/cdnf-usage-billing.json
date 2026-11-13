@@ -497,18 +497,7 @@
             },
             "inspect": false
           },
-          "mappings": [
-            {
-              "options": {
-                "match": "null+nan",
-                "result": {
-                  "color": "text",
-                  "text": "No data yet"
-                }
-              },
-              "type": "special"
-            }
-          ],
+          "mappings": [],
           "noValue": "\u2013",
           "thresholds": {
             "mode": "absolute",
@@ -522,6 +511,22 @@
           "unit": "short"
         },
         "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(.*_id|rule|domain|asn|id)$"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
           {
             "matcher": {
               "id": "byName",
@@ -600,18 +605,7 @@
             },
             "inspect": false
           },
-          "mappings": [
-            {
-              "options": {
-                "match": "null+nan",
-                "result": {
-                  "color": "text",
-                  "text": "No data yet"
-                }
-              },
-              "type": "special"
-            }
-          ],
+          "mappings": [],
           "noValue": "\u2013",
           "thresholds": {
             "mode": "absolute",
@@ -625,6 +619,22 @@
           "unit": "short"
         },
         "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(.*_id|rule|domain|asn|id)$"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
           {
             "matcher": {
               "id": "byName",
@@ -694,6 +704,7 @@
               "mode": "off"
             }
           },
+          "displayName": "${__field.labels.pop}",
           "mappings": [
             {
               "options": {
@@ -760,7 +771,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Bytes sent per month.",
+      "description": "Bytes sent per month, over the last year.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -838,6 +849,7 @@
           "refId": "A"
         }
       ],
+      "timeFrom": "1y",
       "title": "Monthly bandwidth",
       "type": "timeseries"
     },
@@ -859,18 +871,7 @@
             },
             "inspect": false
           },
-          "mappings": [
-            {
-              "options": {
-                "match": "null+nan",
-                "result": {
-                  "color": "text",
-                  "text": "No data yet"
-                }
-              },
-              "type": "special"
-            }
-          ],
+          "mappings": [],
           "noValue": "\u2013",
           "thresholds": {
             "mode": "absolute",
@@ -884,6 +885,22 @@
           "unit": "short"
         },
         "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(.*_id|rule|domain|asn|id)$"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
           {
             "matcher": {
               "id": "byName",
@@ -946,7 +963,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Bytes sent to clients, headers included, per edge host. SQL: SELECT edge_id, sum(bytes_sent) FROM cdnf.edge_volume_hourly WHERE $__timeFilter(interval_start) GROUP BY edge_id",
+      "description": "Bytes sent to clients, headers included, per edge host. SQL: SELECT edge_id, sum(bytes_sent) FROM cdnf.edge_volume_hourly WHERE interval_start >= toStartOfHour($__fromTime) GROUP BY edge_id",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -988,7 +1005,7 @@
       "id": 12,
       "options": {
         "displayMode": "gradient",
-        "namePlacement": "left",
+        "namePlacement": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
           "calcs": [
@@ -1008,7 +1025,7 @@
           "editorType": "sql",
           "format": 1,
           "queryType": "table",
-          "rawSql": "SELECT edge_id, sum(bytes_sent) AS bytes FROM cdnf.edge_volume_hourly WHERE $__timeFilter(interval_start) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY edge_id ORDER BY bytes DESC LIMIT 10",
+          "rawSql": "SELECT substring(toString(edge_id), 31) AS edge_id_label, sum(bytes_sent) AS bytes FROM cdnf.edge_volume_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY edge_id_label ORDER BY bytes DESC LIMIT 10",
           "refId": "A"
         }
       ],
@@ -1020,7 +1037,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Bytes sent to clients per serving cell. SQL: SELECT cell, sum(bytes_sent) FROM cdnf.edge_volume_hourly WHERE $__timeFilter(interval_start) GROUP BY cell",
+      "description": "Bytes sent to clients per serving cell. SQL: SELECT cell, sum(bytes_sent) FROM cdnf.edge_volume_hourly WHERE interval_start >= toStartOfHour($__fromTime) GROUP BY cell",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1062,7 +1079,7 @@
       "id": 13,
       "options": {
         "displayMode": "gradient",
-        "namePlacement": "left",
+        "namePlacement": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
           "calcs": [
@@ -1082,7 +1099,7 @@
           "editorType": "sql",
           "format": 1,
           "queryType": "table",
-          "rawSql": "SELECT cell, sum(bytes_sent) AS bytes FROM cdnf.edge_volume_hourly WHERE $__timeFilter(interval_start) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY cell ORDER BY bytes DESC LIMIT 10",
+          "rawSql": "SELECT cell AS cell_label, sum(bytes_sent) AS bytes FROM cdnf.edge_volume_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY cell_label ORDER BY bytes DESC LIMIT 10",
           "refId": "A"
         }
       ],
@@ -1136,7 +1153,7 @@
       "id": 14,
       "options": {
         "displayMode": "gradient",
-        "namePlacement": "left",
+        "namePlacement": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
           "calcs": [
@@ -1156,7 +1173,7 @@
           "editorType": "sql",
           "format": 1,
           "queryType": "table",
-          "rawSql": "SELECT domain_id, sum(bytes_sent) AS bytes FROM cdnf.edge_volume_hourly WHERE $__timeFilter(interval_start) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY domain_id ORDER BY bytes DESC LIMIT 10",
+          "rawSql": "SELECT concat('domain ', toString(domain_id)) AS domain_id_label, sum(bytes_sent) AS bytes FROM cdnf.edge_volume_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY domain_id_label ORDER BY bytes DESC LIMIT 10",
           "refId": "A"
         }
       ],
@@ -1210,7 +1227,7 @@
       "id": 15,
       "options": {
         "displayMode": "gradient",
-        "namePlacement": "left",
+        "namePlacement": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
           "calcs": [
@@ -1230,7 +1247,7 @@
           "editorType": "sql",
           "format": 1,
           "queryType": "table",
-          "rawSql": "SELECT country, sum(bytes_sent) AS bytes FROM cdnf.edge_volume_hourly WHERE $__timeFilter(interval_start) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY country ORDER BY bytes DESC LIMIT 10",
+          "rawSql": "SELECT country AS country_label, sum(bytes_sent) AS bytes FROM cdnf.edge_volume_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY country_label ORDER BY bytes DESC LIMIT 10",
           "refId": "A"
         }
       ],
@@ -1284,7 +1301,7 @@
       "id": 16,
       "options": {
         "displayMode": "gradient",
-        "namePlacement": "left",
+        "namePlacement": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
           "calcs": [
@@ -1304,7 +1321,7 @@
           "editorType": "sql",
           "format": 1,
           "queryType": "table",
-          "rawSql": "SELECT edge_id, sum(bytes_in) AS bytes FROM cdnf.edge_volume_hourly WHERE $__timeFilter(interval_start) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY edge_id ORDER BY bytes DESC LIMIT 10",
+          "rawSql": "SELECT substring(toString(edge_id), 31) AS edge_id_label, sum(bytes_in) AS bytes FROM cdnf.edge_volume_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY edge_id_label ORDER BY bytes DESC LIMIT 10",
           "refId": "A"
         }
       ],
@@ -1358,7 +1375,7 @@
       "id": 17,
       "options": {
         "displayMode": "gradient",
-        "namePlacement": "left",
+        "namePlacement": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
           "calcs": [
@@ -1378,7 +1395,7 @@
           "editorType": "sql",
           "format": 1,
           "queryType": "table",
-          "rawSql": "SELECT cell, sum(bytes_in) AS bytes FROM cdnf.edge_volume_hourly WHERE $__timeFilter(interval_start) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY cell ORDER BY bytes DESC LIMIT 10",
+          "rawSql": "SELECT cell AS cell_label, sum(bytes_in) AS bytes FROM cdnf.edge_volume_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY cell_label ORDER BY bytes DESC LIMIT 10",
           "refId": "A"
         }
       ],
@@ -1432,7 +1449,7 @@
       "id": 18,
       "options": {
         "displayMode": "gradient",
-        "namePlacement": "left",
+        "namePlacement": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
           "calcs": [
@@ -1452,7 +1469,7 @@
           "editorType": "sql",
           "format": 1,
           "queryType": "table",
-          "rawSql": "SELECT domain_id, sum(bytes_in) AS bytes FROM cdnf.edge_volume_hourly WHERE $__timeFilter(interval_start) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY domain_id ORDER BY bytes DESC LIMIT 10",
+          "rawSql": "SELECT concat('domain ', toString(domain_id)) AS domain_id_label, sum(bytes_in) AS bytes FROM cdnf.edge_volume_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY domain_id_label ORDER BY bytes DESC LIMIT 10",
           "refId": "A"
         }
       ],
@@ -1506,7 +1523,7 @@
       "id": 19,
       "options": {
         "displayMode": "gradient",
-        "namePlacement": "left",
+        "namePlacement": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
           "calcs": [
@@ -1526,7 +1543,7 @@
           "editorType": "sql",
           "format": 1,
           "queryType": "table",
-          "rawSql": "SELECT country, sum(bytes_in) AS bytes FROM cdnf.edge_volume_hourly WHERE $__timeFilter(interval_start) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY country ORDER BY bytes DESC LIMIT 10",
+          "rawSql": "SELECT country AS country_label, sum(bytes_in) AS bytes FROM cdnf.edge_volume_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY country_label ORDER BY bytes DESC LIMIT 10",
           "refId": "A"
         }
       ],
@@ -1538,7 +1555,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Bits per second per edge host, live from Prometheus. Origin-side traffic is not measured.",
+      "description": "Bits per second each edge host sent (download) and received (upload), live from Prometheus. Origin-side traffic is not measured.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1627,7 +1644,7 @@
           "refId": "B"
         }
       ],
-      "title": "Bandwidth by edge: download and upload",
+      "title": "Bandwidth by edge",
       "type": "timeseries"
     }
   ],

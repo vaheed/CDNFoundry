@@ -309,6 +309,7 @@
             "uid": "loki"
           },
           "expr": "sum by (level) (count_over_time({service=~\"$service\"} [$__auto]))",
+          "legendFormat": "{{level}}",
           "queryType": "range",
           "refId": "A"
         }
@@ -397,6 +398,7 @@
             "uid": "loki"
           },
           "expr": "sum by (service) (count_over_time({service=~\"$service\", level=~\"error|critical\"} [$__auto]))",
+          "legendFormat": "{{service}}",
           "queryType": "range",
           "refId": "A"
         }

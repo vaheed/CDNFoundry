@@ -39,7 +39,7 @@
     },
     "options": {
       "displayMode": "gradient",
-      "namePlacement": "left",
+      "namePlacement": "auto",
       "orientation": "horizontal",
       "reduceOptions": {
         "calcs": [

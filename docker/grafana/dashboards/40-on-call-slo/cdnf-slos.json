@@ -169,18 +169,7 @@
             },
             "inspect": false
           },
-          "mappings": [
-            {
-              "options": {
-                "match": "null+nan",
-                "result": {
-                  "color": "text",
-                  "text": "No data yet"
-                }
-              },
-              "type": "special"
-            }
-          ],
+          "mappings": [],
           "noValue": "\u2013",
           "thresholds": {
             "mode": "absolute",
@@ -194,6 +183,22 @@
           "unit": "short"
         },
         "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(.*_id|rule|domain|asn|id)$"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
           {
             "matcher": {
               "id": "byName",
@@ -304,7 +309,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "label_replace({__name__=~\"slo:.*:objective\"}, \"slo\", \"$1\", \"__name__\", \"slo:(.*):objective\")",
+          "expr": "max by (slo) (label_replace({__name__=~\"slo:.*:objective\"}, \"slo\", \"$1\", \"__name__\", \"slo:(.*):objective\"))",
           "format": "table",
           "instant": true,
           "legendFormat": "Target",
@@ -316,7 +321,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "label_replace({__name__=~\"slo:.*:bad_ratio_30d\"}, \"slo\", \"$1\", \"__name__\", \"slo:(.*):bad_ratio_30d\")",
+          "expr": "max by (slo) (label_replace({__name__=~\"slo:.*:bad_ratio_30d\"}, \"slo\", \"$1\", \"__name__\", \"slo:(.*):bad_ratio_30d\"))",
           "format": "table",
           "instant": true,
           "legendFormat": "Bad",
@@ -328,7 +333,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "label_replace({__name__=~\"slo:.*:budget_remaining\"}, \"slo\", \"$1\", \"__name__\", \"slo:(.*):budget_remaining\")",
+          "expr": "max by (slo) (label_replace({__name__=~\"slo:.*:budget_remaining\"}, \"slo\", \"$1\", \"__name__\", \"slo:(.*):budget_remaining\"))",
           "format": "table",
           "instant": true,
           "legendFormat": "Budget",
@@ -340,7 +345,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "label_replace({__name__=~\"slo:.*:bad_ratio_rate1h\"}, \"slo\", \"$1\", \"__name__\", \"slo:(.*):bad_ratio_rate1h\") / on(slo) label_replace({__name__=~\"slo:.*:error_budget\"}, \"slo\", \"$1\", \"__name__\", \"slo:(.*):error_budget\")",
+          "expr": "max by (slo) (label_replace({__name__=~\"slo:.*:bad_ratio_rate1h\"}, \"slo\", \"$1\", \"__name__\", \"slo:(.*):bad_ratio_rate1h\")) / on(slo) max by (slo) (label_replace({__name__=~\"slo:.*:error_budget\"}, \"slo\", \"$1\", \"__name__\", \"slo:(.*):error_budget\"))",
           "format": "table",
           "instant": true,
           "legendFormat": "Burn",
@@ -355,10 +360,31 @@
           "options": {}
         },
         {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "slo",
+                "Value #A",
+                "Value #B",
+                "Value #C",
+                "Value #D"
+              ]
+            }
+          }
+        },
+        {
           "id": "organize",
           "options": {
             "excludeByName": {
               "Time": true
+            },
+            "indexByName": {
+              "Bad ratio (30d)": 2,
+              "Budget left": 3,
+              "Burn rate (1h)": 4,
+              "SLO": 0,
+              "Target": 1
             },
             "renameByName": {
               "Value #A": "Target",
@@ -428,7 +454,7 @@
       "id": 2,
       "options": {
         "displayMode": "gradient",
-        "namePlacement": "left",
+        "namePlacement": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
           "calcs": [
@@ -445,7 +471,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "label_replace({__name__=~\"slo:.*:budget_remaining\"}, \"slo\", \"$1\", \"__name__\", \"slo:(.*):budget_remaining\")",
+          "expr": "max by (slo) (label_replace({__name__=~\"slo:.*:budget_remaining\"}, \"slo\", \"$1\", \"__name__\", \"slo:(.*):budget_remaining\"))",
           "instant": true,
           "legendFormat": "{{slo}}",
           "range": false,
@@ -531,7 +557,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "label_replace({__name__=~\"slo:.*:bad_ratio_rate1h\"}, \"slo\", \"$1\", \"__name__\", \"slo:(.*):bad_ratio_rate1h\") / on(slo) label_replace({__name__=~\"slo:.*:error_budget\"}, \"slo\", \"$1\", \"__name__\", \"slo:(.*):error_budget\")",
+          "expr": "max by (slo) (label_replace({__name__=~\"slo:.*:bad_ratio_rate1h\"}, \"slo\", \"$1\", \"__name__\", \"slo:(.*):bad_ratio_rate1h\")) / on(slo) max by (slo) (label_replace({__name__=~\"slo:.*:error_budget\"}, \"slo\", \"$1\", \"__name__\", \"slo:(.*):error_budget\"))",
           "instant": false,
           "legendFormat": "{{slo}}",
           "range": true,

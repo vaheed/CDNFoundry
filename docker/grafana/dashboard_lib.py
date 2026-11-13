@@ -63,11 +63,27 @@ def _clickhouse_scope(table: str, hostname: bool) -> str:
     return " AND ".join(parts)
 
 
-def traffic_sql(select: str, *, dims: str = "", time: bool = False, where: str = "", hostname: bool = False, coarse: bool = False, order: str = "", limit: int | None = None) -> str:
-    """One query over the rollup that matches the selected range. Only one of the three branches returns rows."""
+BUCKET_SECONDS = {"edge_traffic_1m": 60, "edge_traffic_hourly": 3600, "edge_traffic_daily": 86400}
+
+
+class SeriesSQL(str):
+    """SQL whose rows are one series per value of `label`, so the panel names each series by that value."""
+    label: str = ""
+
+
+def traffic_sql(select: str, *, dims: str = "", time: bool = False, where: str = "", hostname: bool = False, coarse: bool = False, order: str = "", limit: int | None = None, per_second: bool = False) -> str:
+    """One query over the rollup that matches the selected range. Only one of the three branches returns rows.
+
+    `per_second` divides a count by the time each point covers: the panel interval, or the rollup bucket when the
+    interval is shorter than one bucket.
+    """
     branches = []
     for table, low, high in (COARSE_ROLLUPS if hostname or coarse else ROLLUPS):
-        columns = ([ "$__timeInterval(interval_start) AS time" ] if time else []) + ([dims] if dims else []) + [select]
+        measure = select
+        if per_second:
+            expr, alias = select.rsplit(" AS ", 1)
+            measure = f"({expr}) / greatest($__interval_s, {BUCKET_SECONDS[table]}) AS {alias}"
+        columns = ([ "$__timeInterval(interval_start) AS time" ] if time else []) + ([dims] if dims else []) + [measure]
         dim_group = dims.split(" AS ")[-1] if dims else ""
         group = ", ".join((["time"] if time else []) + ([dim_group] if dim_group else []))
         # A bucket is stamped with its start, so a short range inside an hour needs the bucket that holds it.
@@ -87,6 +103,10 @@ def traffic_sql(select: str, *, dims: str = "", time: bool = False, where: str =
     return sql
 
 
+# Stands in for the value mappings from dashboard UID to title; build_dashboards.py fills it once every dashboard exists.
+DASHBOARD_TITLES = "@dashboard-titles"
+
+
 # --- targets ---------------------------------------------------------------------------------------------
 
 def prom(expr: str, legend: str, *, instant: bool = False, ref: str = "A", fmt: str | None = None) -> dict[str, Any]:
@@ -97,19 +117,26 @@ def prom(expr: str, legend: str, *, instant: bool = False, ref: str = "A", fmt: 
 
 
 def ch(sql: str, *, table: bool = False, ref: str = "A") -> dict[str, Any]:
-    return {"datasource": CH, "editorType": "sql", "format": 1 if table else 0, "queryType": "table" if table else "timeSeries", "rawSql": sql, "refId": ref}
+    target = {"datasource": CH, "editorType": "sql", "format": 1 if table else 0, "queryType": "table" if table else "timeSeries", "rawSql": str(sql), "refId": ref}
+    if isinstance(sql, SeriesSQL) and sql.label:
+        target["_series"] = sql.label
+    return target
 
 
 def pg(sql: str, *, table: bool = True, ref: str = "A") -> dict[str, Any]:
     return {"datasource": PG, "editorMode": "code", "format": "table" if table else "time_series", "rawQuery": True, "rawSql": sql, "refId": ref}
 
 
-def loki(expr: str, *, ref: str = "A", instant: bool = False) -> dict[str, Any]:
-    return {"datasource": LOKI, "expr": expr, "queryType": "instant" if instant else "range", "refId": ref}
+def loki(expr: str, *, ref: str = "A", instant: bool = False, legend: str | None = None) -> dict[str, Any]:
+    target = {"datasource": LOKI, "expr": expr, "queryType": "instant" if instant else "range", "refId": ref}
+    if legend:
+        target["legendFormat"] = legend
+    return target
 
 
 def refs(targets: list[dict[str, Any]]) -> list[dict[str, Any]]:
     for index, target in enumerate(targets):
+        target.pop("_series", None)
         target["refId"] = chr(ord("A") + index)
     return targets
 
@@ -138,7 +165,8 @@ def _defaults(unit: str, threshold: str, decimals: int | None, min_value: float 
     return defaults
 
 
-def stat(title: str, description: str, targets: list[dict[str, Any]], unit: str = "short", threshold: str = "neutral", *, w: int = 4, h: int = 4, decimals: int | None = None, text: bool = False, link: str | None = None) -> dict[str, Any]:
+def stat(title: str, description: str, targets: list[dict[str, Any]], unit: str = "short", threshold: str = "neutral", *, w: int = 4, h: int = 4, decimals: int | None = None, text: bool = False, link: str | None = None, idle: str | None = None) -> dict[str, Any]:
+    """`idle` names the state where nothing was measured because nothing happened, such as a quantile over no requests."""
     panel = {
         "type": "stat", "title": title, "description": description, "datasource": _source(targets), "targets": refs(targets),
         "gridPos": {"w": w, "h": h, "x": 0, "y": 0},
@@ -148,11 +176,18 @@ def stat(title: str, description: str, targets: list[dict[str, Any]], unit: str 
     }
     if link:
         panel["fieldConfig"]["defaults"]["links"] = [{"title": "Open details", "url": link}]
+    if idle:
+        panel["fieldConfig"]["defaults"]["noValue"] = idle
+        panel["fieldConfig"]["defaults"]["mappings"] = [{"type": "special", "options": {"match": "null+nan", "result": {"text": idle, "color": NEUTRAL}}}]
     return panel
 
 
 def timeseries(title: str, description: str, targets: list[dict[str, Any]], unit: str = "short", *, w: int = 12, h: int = 8, stack: bool = False, threshold: str = "neutral", decimals: int | None = None, fill: int = 12, min_value: float | None = None, max_value: float | None = None) -> dict[str, Any]:
     defaults = _defaults(unit, threshold, decimals, min_value, max_value)
+    labels = [target["_series"] for target in targets if "_series" in target]
+    if len(targets) == 1 and labels:
+        # A rollup split arrives as "<measure> <value>"; the value alone is the series name.
+        defaults["displayName"] = "${__field.labels.%s}" % labels[0]
     defaults["color"] = {"mode": "palette-classic"}
     defaults["custom"] = {"drawStyle": "line", "lineWidth": 1, "fillOpacity": fill, "showPoints": "never", "spanNulls": True,
                           "stacking": {"mode": "normal" if stack else "none", "group": "A"}, "thresholdsStyle": {"mode": "off"}}
@@ -164,14 +199,20 @@ def timeseries(title: str, description: str, targets: list[dict[str, Any]], unit
     }
 
 
+IDENTIFIER_COLUMNS = {"matcher": {"id": "byRegexp", "options": "^(.*_id|rule|domain|asn|id)$"}, "properties": [{"id": "unit", "value": "none"}, {"id": "decimals", "value": 0}]}
+
+
 def table(title: str, description: str, targets: list[dict[str, Any]], unit: str = "short", *, w: int = 12, h: int = 8, overrides: list[dict[str, Any]] | None = None, transformations: list[dict[str, Any]] | None = None, sort: str | None = None) -> dict[str, Any]:
     defaults = _defaults(unit, "neutral", None)
     defaults["noValue"] = "–"
+    # An empty cell is a value the row does not have (an alert without a PoP), not data still to come.
+    defaults["mappings"] = []
     defaults["custom"] = {"align": "auto", "cellOptions": {"type": "auto"}, "inspect": False}
     panel = {
         "type": "table", "title": title, "description": description, "datasource": _source(targets), "targets": refs(targets),
         "gridPos": {"w": w, "h": h, "x": 0, "y": 0},
-        "fieldConfig": {"defaults": defaults, "overrides": overrides or []},
+        # Identifiers are labels, not quantities: 942100 must not read as "942 K" and a domain id must not read as "4.00 Mil".
+        "fieldConfig": {"defaults": defaults, "overrides": [IDENTIFIER_COLUMNS, *(overrides or [])]},
         "options": {"showHeader": True, "cellHeight": "sm", "footer": {"show": False}, **({"sortBy": [{"displayName": sort, "desc": True}]} if sort else {})},
     }
     if transformations:
@@ -184,7 +225,7 @@ def bargauge(title: str, description: str, targets: list[dict[str, Any]], unit: 
         "type": "bargauge", "title": title, "description": description, "datasource": _source(targets), "targets": refs(targets),
         "gridPos": {"w": w, "h": h, "x": 0, "y": 0},
         "fieldConfig": {"defaults": {**_defaults(unit, threshold, decimals, 0, max_value), "color": {"mode": "continuous-BlPu" if threshold == "neutral" else "thresholds"}}, "overrides": []},
-        "options": {"displayMode": "gradient", "orientation": "horizontal", "showUnfilled": True, "namePlacement": "left", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": True}},
+        "options": {"displayMode": "gradient", "orientation": "horizontal", "showUnfilled": True, "namePlacement": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": True}},
     }
 
 

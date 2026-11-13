@@ -11,8 +11,30 @@ SLOS = {
 }
 
 
+def last_30_days(panel: dict) -> dict:
+    return over(panel, "30d")
+
+
+def label_by(panel: dict, label: str) -> dict:
+    """Name each series by one label, not by the measure and the label together."""
+    panel["fieldConfig"]["defaults"]["displayName"] = "${__field.labels.%s}" % label
+    return panel
+
+
+def first_to_run_out(panel: dict) -> dict:
+    panel["fieldConfig"]["defaults"]["mappings"].append({"type": "range", "options": {"from": 365, "to": 1e9, "result": {"text": "Not within a year"}}})
+    return panel
+
+
+def over(panel: dict, span: str) -> dict:
+    """A panel that always shows `span`, whatever range the dashboard shows: monthly and daily series have no point inside six hours."""
+    panel["timeFrom"] = span
+    return panel
+
+
 def slo_expr(kind: str) -> str:
-    return f'label_replace({{__name__=~"slo:.*:{kind}"}}, "slo", "$1", "__name__", "slo:(.*):{kind}")'
+    # One series per SLO and nothing else, so tables can join the measures on the SLO name.
+    return f'max by (slo) (label_replace({{__name__=~"slo:.*:{kind}"}}, "slo", "$1", "__name__", "slo:(.*):{kind}"))'
 
 
 def control_plane() -> dict:
@@ -21,13 +43,13 @@ def control_plane() -> dict:
                    overrides=[{"matcher": {"id": "byName", "options": "Healthy"}, "properties": [{"id": "thresholds", "value": {"mode": "absolute", "steps": THRESHOLDS["health"]}}, {"id": "custom.cellOptions", "value": {"type": "color-background"}}]}])
     slow = table("Slowest routes", "The ten routes with the highest 95th percentile time.", [prom("topk(10, histogram_quantile(0.95, sum by (le, route) (cdnf:http_latency_bucket:rate5m)))", "p95", instant=True, fmt="table")], "s", w=12, h=10, sort="Value",
                  transformations=[{"id": "organize", "options": {"excludeByName": {"Time": True}, "renameByName": {"route": "Route", "Value": "p95"}}}],
-                 overrides=[{"matcher": {"id": "byName", "options": "p95"}, "properties": [{"id": "unit", "value": "s"}, {"id": "decimals", "value": 3}]}])
+                 overrides=[{"matcher": {"id": "byName", "options": "p95"}, "properties": [{"id": "unit", "value": "s"}, {"id": "decimals", "value": 0}]}])
     rows = [
         [stat("Unhealthy", "Components reporting degraded or unavailable.", [prom("count(cdnfoundry_component_health == 0) or vector(0)", "unhealthy", instant=True)], "short", "zero_good", w=4),
          stat("Failed ops", "Operations that failed in the failed-operations window.", [prom("cdnfoundry_operations_failed_recent", "failed", instant=True)], "short", "zero_warn", w=4),
          stat("Bad jobs", "Queue jobs that failed in the same window.", [prom("cdnfoundry_failed_jobs_recent", "jobs", instant=True)], "short", "zero_warn", w=4),
-         stat("API p95", "95th percentile API request time.", [prom('histogram_quantile(0.95, sum by (le) (cdnf:http_latency_bucket:rate5m{route=~"/api/.*"}))', "p95", instant=True)], "s", "latency_s", w=4, decimals=3),
-         stat("Panel p95", "95th percentile panel request time.", [prom('histogram_quantile(0.95, sum by (le) (cdnf:http_latency_bucket:rate5m{route!~"/api/.*"}))', "p95", instant=True)], "s", "latency_s", w=4, decimals=3),
+         stat("API p95", "95th percentile API request time over the last 5 minutes.", [prom('histogram_quantile(0.95, sum by (le) (cdnf:http_latency_bucket:rate5m{route=~"/api/.*"}))', "p95", instant=True)], "s", "latency_s", w=4, decimals=3, idle="No API requests"),
+         stat("Panel p95", "95th percentile panel request time.", [prom('histogram_quantile(0.95, sum by (le) (cdnf:http_latency_bucket:rate5m{route!~"/api/.*"}))', "p95", instant=True)], "s", "latency_s", w=4, decimals=0),
          stat("ACME fail", "Managed certificate orders that failed in the last 24 hours.", [prom('cdnfoundry_acme_orders_day{status="failed"}', "failed", instant=True)], "short", "zero_warn", w=4)],
         [health, slow],
         [timeseries("API and panel latency", "95th percentile request time for API routes and for panel routes.", [prom('histogram_quantile(0.95, sum by (le) (cdnf:http_latency_bucket:rate5m{route=~"/api/.*"}))', "API p95"), prom('histogram_quantile(0.95, sum by (le) (cdnf:http_latency_bucket:rate5m{route!~"/api/.*"}))', "panel p95")], "s", threshold="latency_s"),
@@ -37,6 +59,8 @@ def control_plane() -> dict:
         [timeseries("Scheduler", "1 while the scheduler's durable heartbeat is fresh.", [prom('cdnfoundry_component_health{component="scheduler"}', "scheduler")], "short", threshold="health", w=8, min_value=0, max_value=1),
          timeseries("ACME orders", "Managed certificate orders that finished in the last 24 hours.", [prom("cdnfoundry_acme_orders_day", "{{status}}")], "short", w=8),
          timeseries("ACME issuance time", "Longest managed certificate issuance in the last 24 hours.", [prom("cdnfoundry_acme_issuance_seconds_max", "slowest")], "s", w=8)],
+        [timeseries("Alert deliveries", "Alerts Alertmanager sent to the notifier and receivers each second, and the ones that failed. Platform notification channels (webhooks, Slack, and so on) report in the panel under Notification channels.",
+                    [prom("sum by (integration) (rate(alertmanager_notifications_total[5m])) > 0", "sent {{integration}}"), prom("sum by (integration) (rate(alertmanager_notifications_failed_total[5m])) > 0", "failed {{integration}}")], "ops", threshold="zero_warn", w=24)],
     ]
     return dashboard("cdnf-control-plane", "Control plane", "cdnf-platform", "Component health, API and panel latency, Horizon lanes, scheduler runs, failed jobs, and ACME orders.", rows, runbook="component-unhealthy")
 
@@ -52,7 +76,13 @@ def fleet_rollouts() -> dict:
         [bargauge("Edge tasks by status", "Tasks sent to PoPs in the last 24 hours, by state.", [pg("SELECT s AS status, count(t.id) AS tasks FROM unnest(ARRAY['pending', 'running', 'succeeded', 'failed']) AS s LEFT JOIN grafana_edge_tasks t ON t.status = s AND t.created_at > now() - interval '24 hours' GROUP BY s ORDER BY s")], w=8),
          timeseries("Pool endpoints published", "Pool endpoints DNS publishes (1) and withholds (0).", [prom("sum by (reason) (cdnfoundry_pool_endpoint_published)", "{{reason}}")], "short", w=8),
          timeseries("Endpoint revision mismatches", "Endpoints that have not acknowledged their desired map.", [prom("sum(cdnfoundry_pool_endpoint_revision_mismatch)", "mismatched")], "short", threshold="zero_warn", w=8)],
-        [table("Edges", "Every PoP with its heartbeat, version, and applied sequence.", [pg("SELECT name AS pop, country_code, enabled, drained, last_heartbeat_at, agent_version, active_sequence FROM grafana_edges ORDER BY name LIMIT 100")], w=24)],
+        [table("Edges", "Every PoP with its heartbeat, version, and applied sequence.", [pg("SELECT name AS pop, country_code, enabled, drained, last_heartbeat_at, agent_version, active_sequence FROM grafana_edges ORDER BY name LIMIT 100")], w=24,
+               overrides=[{"matcher": {"id": "byName", "options": "country_code"}, "properties": [{"id": "custom.width", "value": 110}]},
+                          {"matcher": {"id": "byName", "options": "enabled"}, "properties": [{"id": "custom.width", "value": 80}]},
+                          {"matcher": {"id": "byName", "options": "drained"}, "properties": [{"id": "custom.width", "value": 80}]},
+                          {"matcher": {"id": "byName", "options": "agent_version"}, "properties": [{"id": "custom.width", "value": 110}]},
+                          {"matcher": {"id": "byName", "options": "last_heartbeat_at"}, "properties": [{"id": "custom.width", "value": 200}]},
+                          {"matcher": {"id": "byName", "options": "active_sequence"}, "properties": [{"id": "unit", "value": "none"}, {"id": "decimals", "value": 0}]}])],
     ]
     return dashboard("cdnf-fleet-rollouts", "Fleet and rollouts", "cdnf-platform", "Edges, cells, placements, pool endpoints, FleetRollout progress and pauses, and edge tasks.", rows, runbook="paused-fleet-rollout")
 
@@ -84,7 +114,8 @@ def telemetry_pipeline() -> dict:
          timeseries("Buffer size", "Bytes waiting in each disk buffer.", [prom("sum by (instance, component_id) (vector_buffer_size_bytes)", "{{instance}} {{component_id}}")], "bytes")],
         [timeseries("Dropped events", "Events dropped per second by component.", [prom('sum by (component_id) (rate(vector_component_discarded_events_total{intentional!="true"}[5m]))', "{{component_id}}")], "ops", threshold="zero_warn"),
          timeseries("Sink errors", "Delivery errors per second by component.", [prom("sum by (component_id) (rate(vector_component_errors_total[5m]))", "{{component_id}}")], "ops", threshold="zero_warn")],
-        [table("Ingest delay by PoP", "Seconds between now and the newest event each PoP delivered.", [ch("SELECT pop, dateDiff('second', max(occurred_at), now()) AS delay_seconds FROM cdnf.edge_events WHERE occurred_at > now() - INTERVAL 1 DAY GROUP BY pop ORDER BY delay_seconds DESC", table=True)], w=24, h=6)],
+        [table("Ingest delay by PoP", "Seconds between now and the newest event each PoP delivered.", [ch("SELECT pop, dateDiff('second', max(occurred_at), now()) AS delay_seconds FROM cdnf.edge_events WHERE occurred_at > now() - INTERVAL 1 DAY GROUP BY pop ORDER BY delay_seconds DESC", table=True)], w=24, h=6,
+               overrides=[{"matcher": {"id": "byName", "options": "delay_seconds"}, "properties": [{"id": "unit", "value": "s"}, {"id": "decimals", "value": 0}]}])],
     ]
     return dashboard("cdnf-telemetry-pipeline", "Telemetry pipeline", "cdnf-platform", "Vector per role, buffers, drops, sink errors, and ingest delay from edge to ClickHouse.", rows, runbook="clickhouse-or-vector-outage")
 
@@ -95,8 +126,10 @@ def backups() -> dict:
          stat("Last backup size", "Size of the newest verified backup.", [pg("SELECT size_bytes AS size FROM grafana_backups WHERE status = 'succeeded' ORDER BY verified_at DESC LIMIT 1")], "bytes", w=6),
          stat("Backups healthy", "1 when the backup component reports healthy: a fresh backup, a passing restic check, and a passing restore preflight.", [prom('cdnfoundry_component_health{component="backups"}', "healthy", instant=True)], "short", "health", w=6),
          stat("Failed backups (7d)", "Backups that failed in the last 7 days.", [pg("SELECT count(*) AS failed FROM grafana_backups WHERE status = 'failed' AND created_at > now() - interval '7 days'")], "short", "zero_warn", w=6)],
-        [timeseries("Backup size", "Size of each verified backup.", [pg("SELECT t AS time, COALESCE(max(b.size_bytes), 0) AS size FROM generate_series(date_trunc('day', $__timeFrom()::timestamptz), $__timeTo()::timestamptz, interval '1 day') AS t LEFT JOIN grafana_backups b ON b.status = 'succeeded' AND b.verified_at >= t AND b.verified_at < t + interval '1 day' GROUP BY t ORDER BY t", table=False)], "bytes"),
-         table("Recent backups", "The newest backups with their result.", [pg("SELECT created_at, status, size_bytes, verified_at FROM grafana_backups ORDER BY created_at DESC LIMIT 20")])],
+        [last_30_days(timeseries("Backup size", "Size of each verified backup over the last 30 days, whatever range the dashboard shows, because backups run once a day.", [pg("SELECT t AS time, COALESCE(max(b.size_bytes), 0) AS size FROM generate_series(date_trunc('day', $__timeFrom()::timestamptz), $__timeTo()::timestamptz, interval '1 day') AS t LEFT JOIN grafana_backups b ON b.status = 'succeeded' AND b.verified_at >= t AND b.verified_at < t + interval '1 day' GROUP BY t ORDER BY t", table=False)], "bytes")),
+         table("Recent backups", "The newest backups with their result.", [pg("SELECT created_at, status, size_bytes, verified_at FROM grafana_backups ORDER BY created_at DESC LIMIT 20")],
+               overrides=[{"matcher": {"id": "byName", "options": "size_bytes"}, "properties": [{"id": "unit", "value": "bytes"}, {"id": "decimals", "value": 1}, {"id": "custom.width", "value": 100}]},
+                          {"matcher": {"id": "byName", "options": "status"}, "properties": [{"id": "custom.width", "value": 100}]}])],
     ]
     return dashboard("cdnf-backups", "Backups and recovery", "cdnf-platform", "Last backup age, size, restic check result, and last restore preflight.", rows, runbook="backup-stale")
 
@@ -107,14 +140,14 @@ def hosts_containers() -> dict:
         [stat("Hosts up", "Hosts whose exporter answers.", [prom('count(up{job="node"} == 1)', "up", instant=True)], "short", w=6),
          stat("Hosts down", "Hosts whose exporter does not answer.", [prom('count(up{job="node"} == 0) or vector(0)', "down", instant=True)], "short", "zero_good", w=6),
          stat("OOM kills (24h)", "Processes the kernel killed for memory in the last day.", [prom("sum(increase(node_vmstat_oom_kill[24h])) or vector(0)", "oom", instant=True)], "short", "zero_warn", w=6),
-         stat("Clock offset", "Largest clock offset on any host.", [prom("max(abs(node_timex_offset_seconds))", "offset", instant=True)], "s", "latency_s", w=6, decimals=3)],
+         stat("Clock offset", "Largest clock offset on any host.", [prom("max(abs(node_timex_offset_seconds))", "offset", instant=True)], "s", "latency_s", w=6, decimals=1)],
         [timeseries("CPU", "Share of CPU in use per host.", [prom('100 * (1 - avg by (node) (rate(node_cpu_seconds_total{mode="idle"}[5m])))', "{{node}}")], "percent", max_value=100),
          timeseries("Memory", "Share of memory in use per host.", [prom("100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)", "{{node}}")], "percent", max_value=100)],
         [timeseries("Disk", "Share of the root filesystem in use per host.", [prom('100 * (1 - node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay"})', "{{node}}")], "percent", threshold="utilization", max_value=100),
          timeseries("Network", "Bits per second sent and received per host.", [prom('8 * sum by (node) (rate(node_network_transmit_bytes_total{device!~"lo|veth.*|br-.*|docker.*"}[5m]))', "{{node}} out"), prom('8 * sum by (node) (rate(node_network_receive_bytes_total{device!~"lo|veth.*|br-.*|docker.*"}[5m]))', "{{node}} in")], "bps")],
         [timeseries("Clock offset by host", "Clock offset per host.", [prom("node_timex_offset_seconds", "{{node}}")], "s", w=8),
          timeseries("Uptime", "Time since each host booted; a drop is a restart.", [prom("time() - node_boot_time_seconds", "{{node}}")], "s", w=8),
-         timeseries("OOM kills", "Processes the kernel killed for memory, per hour.", [prom("sum by (node) (increase(node_vmstat_oom_kill[1h]))", "{{node}}")], "short", threshold="zero_warn", w=8)],
+         timeseries("OOM kills", "Processes the kernel killed for memory, per hour.", [prom("sum by (node) (increase(node_vmstat_oom_kill[1h]))", "{{node}}")], "short", threshold="zero_warn", w=8, decimals=0)],
         [text("Containers", "Per-container CPU, memory, and restarts need a container metrics exporter that is not deployed yet.", "Per-container CPU, memory, and restarts need a container metrics exporter that is not deployed yet. Host figures above cover each node.", w=24, h=3)],
     ]
     return dashboard("cdnf-hosts-containers", "Hosts and containers", "cdnf-platform", "CPU, memory, disk, network, clock, restarts, and OOM kills per host.", rows, runbook="host-clock")
@@ -197,7 +230,7 @@ def slos() -> dict:
         prom(slo_expr("objective"), "Target", instant=True, fmt="table"), prom(slo_expr("bad_ratio_30d"), "Bad", instant=True, fmt="table"),
         prom(slo_expr("budget_remaining"), "Budget", instant=True, fmt="table"),
         prom(f'{slo_expr("bad_ratio_rate1h")} / on(slo) {slo_expr("error_budget")}', "Burn", instant=True, fmt="table")], w=24, h=9, sort="Budget",
-        transformations=[{"id": "merge", "options": {}}, {"id": "organize", "options": {"excludeByName": {"Time": True}, "renameByName": {"slo": "SLO", "Value #A": "Target", "Value #B": "Bad ratio (30d)", "Value #C": "Budget left", "Value #D": "Burn rate (1h)"}}}],
+        transformations=[{"id": "merge", "options": {}}, {"id": "filterFieldsByName", "options": {"include": {"names": ["slo", "Value #A", "Value #B", "Value #C", "Value #D"]}}}, {"id": "organize", "options": {"excludeByName": {"Time": True}, "indexByName": {"SLO": 0, "Target": 1, "Bad ratio (30d)": 2, "Budget left": 3, "Burn rate (1h)": 4}, "renameByName": {"slo": "SLO", "Value #A": "Target", "Value #B": "Bad ratio (30d)", "Value #C": "Budget left", "Value #D": "Burn rate (1h)"}}}],
         overrides=[{"matcher": {"id": "byName", "options": "Target"}, "properties": [{"id": "unit", "value": "percentunit"}, {"id": "decimals", "value": 2}]},
                    {"matcher": {"id": "byName", "options": "Bad ratio (30d)"}, "properties": [{"id": "unit", "value": "percentunit"}, {"id": "decimals", "value": 3}]},
                    {"matcher": {"id": "byName", "options": "Budget left"}, "properties": [{"id": "unit", "value": "percentunit"}, {"id": "thresholds", "value": {"mode": "absolute", "steps": THRESHOLDS["budget"]}}, {"id": "custom.cellOptions", "value": {"type": "color-background"}}]},
@@ -237,8 +270,8 @@ def logs_explorer() -> dict:
     rows = [
         [text("Saved queries", "LogQL for each service. Pick a service and level above, or paste one of these into Explore.", saved, w=24, h=6)],
         [logs("Logs", "Operational logs for the selected services and levels. Use the Live button for a live tail.", [loki('{service=~"$service", level=~"$level"}')], h=12)],
-        [timeseries("Log volume by level", "Lines per second by level.", [loki('sum by (level) (count_over_time({service=~"$service"} [$__auto]))')], "short", stack=True, w=12),
-         timeseries("Error lines by service", "Error and critical lines per interval, by service.", [loki('sum by (service) (count_over_time({service=~"$service", level=~"error|critical"} [$__auto]))')], "short", threshold="zero_warn", w=12)],
+        [timeseries("Log volume by level", "Lines per second by level.", [loki('sum by (level) (count_over_time({service=~"$service"} [$__auto]))', legend="{{level}}")], "short", stack=True, w=12),
+         timeseries("Error lines by service", "Error and critical lines per interval, by service.", [loki('sum by (service) (count_over_time({service=~"$service", level=~"error|critical"} [$__auto]))', legend="{{service}}")], "short", threshold="zero_warn", w=12)],
     ]
     return dashboard("cdnf-logs-explorer", "Logs explorer", "cdnf-oncall", "Saved LogQL for each service, with level and service filters and live tail.", rows, runbook="operational-error-logs", extra_variables=[service, level])
 
@@ -252,7 +285,7 @@ def request_trace() -> dict:
         [stat("Edge time", "Time the edge took to serve the request.", [ch("SELECT request_time_ms AS ms FROM cdnf.edge_events WHERE request_id = '${request_id}' AND request_id != '' LIMIT 1", table=True)], "ms", "latency_ms", w=6),
          stat("Origin time", "Time the origin took to answer.", [ch("SELECT origin_latency_ms AS ms FROM cdnf.edge_events WHERE request_id = '${request_id}' AND request_id != '' LIMIT 1", table=True)], "ms", "latency_ms", w=6),
          stat("Status", "The response status the client received.", [ch("SELECT status FROM cdnf.edge_events WHERE request_id = '${request_id}' AND request_id != '' LIMIT 1", table=True)], "none", w=6),
-         stat("Cache", "The cache status of the request.", [ch("SELECT cache_status FROM cdnf.edge_events WHERE request_id = '${request_id}' AND request_id != '' LIMIT 1", table=True)], "none", w=6)],
+         stat("Cache", "The cache status of the request.", [ch("SELECT cache_status FROM cdnf.edge_events WHERE request_id = '${request_id}' AND request_id != '' LIMIT 1", table=True)], "none", w=6, text=True)],
         [logs("Operational logs for the request", "Operational log lines that mention the request ID.", [loki('{service=~".+"} |= "${request_id}" | json | request_id="${request_id}"')], h=10)],
     ]
     return dashboard("cdnf-request-trace", "Request trace", "cdnf-oncall", "One request ID from the edge log to the origin result to operational logs.", rows, runbook="operational-error-logs", extra_variables=[request])
@@ -267,13 +300,14 @@ def domain_overview() -> dict:
          stat("Cache hit", "Share of requests served from cache.", [ch(traffic_sql(f"{CH_HIT_PCT} AS ratio"), table=True)], "percent", "hit_percent", w=4, decimals=1),
          stat("Edge p95", "95th percentile time to serve a request.", [ch(traffic_sql(f"{CH_P95} AS p95"), table=True)], "ms", "latency_ms", w=4, decimals=0),
          stat("Origin p95", "95th percentile origin response time.", [ch(traffic_sql(f"{CH_ORIGIN_P95} AS p95"), table=True)], "ms", "latency_ms", w=4, decimals=0)],
-        row("Traffic and cache"), [timeseries("Requests", "Requests over time by status class.", [ch(split("intDiv(status, 100) AS class", "sum(requests)", "requests"))], "short", stack=True),
-                                  timeseries("Cache status", "Requests over time by cache status.", [ch(split("cache_status", "sum(requests)", "requests"))], "short", stack=True)],
+        row("Traffic and cache"), [timeseries("Requests", "Requests per second by status class.", [ch(split("concat(toString(intDiv(status, 100)), 'xx') AS class", "sum(requests)", "requests", per_second=True))], "reqps", stack=True),
+                                  timeseries("Cache status", "Requests per second by cache status.", [ch(split("cache_status", "sum(requests)", "requests", per_second=True))], "reqps", stack=True)],
         row("Origin and security"), [timeseries("Origin latency", "95th percentile origin time and origin errors.", [ch(traffic_sql(f"{CH_ORIGIN_P95} AS origin_p95", time=True))], "ms"),
-                                    timeseries("Security events", "Blocked and classified requests over time.", [ch(split("security_class", "sum(requests)", "events", where="security_class != ''"))], "short", stack=True)],
+                                    timeseries("Security events", "Blocked and classified requests per second.", [ch(split("security_class", "sum(requests)", "events", where="security_class != ''", per_second=True))], "reqps", stack=True)],
         row("TLS, DNS, purges, and changes"), [
-            table("TLS certificates", "The domain's certificates and when they expire.", [pg(f"SELECT domain_id, kind, status, expires_at FROM grafana_tls_certificates WHERE {d} ORDER BY expires_at LIMIT 20")], w=8),
-            timeseries("DNS queries", "DNS queries over time for the domain's zone.", [ch("SELECT $__timeInterval(interval_start) AS time, rcode, sum(queries) AS queries FROM cdnf.dns_hourly WHERE $__timeFilter(interval_start) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, rcode ORDER BY time")], "short", w=8, stack=True),
+            table("TLS certificates", "The domain's certificates and when they expire.", [pg(f"SELECT domain_id, kind, status, expires_at FROM grafana_tls_certificates WHERE {d} ORDER BY expires_at LIMIT 20")], w=8,
+                  overrides=[{"matcher": {"id": "byName", "options": "status"}, "properties": [{"id": "custom.minWidth", "value": 110}]}, {"matcher": {"id": "byName", "options": "domain_id"}, "properties": [{"id": "custom.width", "value": 90}]}]),
+            over(timeseries("DNS queries", "DNS queries per hour for the domain's zone over the last 24 hours, whatever range the dashboard shows.", [ch("SELECT $__timeInterval(interval_start) AS time, rcode, sum(queries) AS queries FROM cdnf.dns_hourly WHERE $__timeFilter(interval_start) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, rcode ORDER BY time")], "short", w=8, stack=True), "24h"),
             table("Purge history", "Recent cache purges for the domain.", [pg(f"SELECT created_at, type, status FROM grafana_cache_purges WHERE {d} ORDER BY created_at DESC LIMIT 20")], w=8)],
         [table("Configuration changes", "Edge configuration published for the domain, newest first.", [pg(f"SELECT created_at, kind, revision FROM grafana_edge_artifacts WHERE {d} ORDER BY created_at DESC LIMIT 20")], w=12),
          table("Requests by status code", "The status codes the domain returned in the range.", [ch(top("toString(status) AS code", CH_REQUESTS, "requests", limit=15), table=True)], w=12)],
@@ -285,20 +319,23 @@ def domain_comparison() -> dict:
     rows = [
         [table("Domains side by side", "The selected hostnames with requests, errors, cache hit, bytes, and latency, for support to compare.", [ch(traffic_sql(
             f"sum(requests) AS request_count, {CH_ERR_PCT} AS error_percent, {CH_HIT_PCT} AS hit_percent, sum(bytes_sent) AS bytes, {CH_P95} AS p95_ms", dims="hostname", hostname=True, order="request_count DESC", limit=30), table=True)], w=24, h=9,
-            overrides=[{"matcher": {"id": "byName", "options": "bytes"}, "properties": [{"id": "unit", "value": "bytes"}]},
-                       {"matcher": {"id": "byRegexp", "options": ".*_percent"}, "properties": [{"id": "unit", "value": "percent"}, {"id": "decimals", "value": 2}]},
-                       {"matcher": {"id": "byName", "options": "p95_ms"}, "properties": [{"id": "unit", "value": "ms"}, {"id": "decimals", "value": 0}]}])],
-        [timeseries("Requests by domain", "Requests over time for the selected hostnames.", [ch(split("hostname", "sum(requests)", "requests", hostname=True))], "short"),
-         timeseries("5xx by domain", "Server errors over time for the selected hostnames.", [ch(split("hostname", "sumIf(requests, status >= 500)", "errors", hostname=True))], "short", threshold="zero_warn")],
-        [timeseries("Cache hit by domain", "Share of requests served from cache.", [ch(split("hostname", CH_HIT_PCT, "hit", hostname=True))], "percent", threshold="hit_percent"),
-         timeseries("Latency by domain", "95th percentile edge time.", [ch(split("hostname", CH_P95, "p95", hostname=True))], "ms", threshold="latency_ms")],
+            transformations=[{"id": "organize", "options": {"renameByName": {"hostname": "Domain", "request_count": "Requests", "error_percent": "5xx %", "hit_percent": "Cache hit %", "bytes": "Bytes sent", "p95_ms": "p95"}}}],
+            overrides=[{"matcher": {"id": "byName", "options": "Bytes sent"}, "properties": [{"id": "unit", "value": "bytes"}]},
+                       {"matcher": {"id": "byRegexp", "options": ".* %"}, "properties": [{"id": "unit", "value": "percent"}, {"id": "decimals", "value": 2}]},
+                       {"matcher": {"id": "byName", "options": "p95"}, "properties": [{"id": "unit", "value": "ms"}, {"id": "decimals", "value": 0}]}])],
+        [over(timeseries("Requests by domain", "Requests per second for the selected hostnames.", [ch(split("hostname", "sum(requests)", "requests", hostname=True, per_second=True))], "reqps"), "24h"),
+         over(timeseries("5xx by domain", "Server errors per second for the selected hostnames.", [ch(split("hostname", "sumIf(requests, status >= 500)", "errors", hostname=True, per_second=True))], "reqps", threshold="zero_warn"), "24h")],
+        [over(timeseries("Cache hit by domain", "Share of requests served from cache.", [ch(split("hostname", CH_HIT_PCT, "hit", hostname=True))], "percent", threshold="hit_percent"), "24h"),
+         over(timeseries("Latency by domain", "95th percentile edge time.", [ch(split("hostname", CH_P95, "p95", hostname=True))], "ms", threshold="latency_ms"), "24h")],
     ]
     return dashboard("cdnf-domain-comparison", "Domain comparison", "cdnf-domains", "Several domains side by side, for support.", rows, runbook="domain-5xx-ratio-high")
 
 
 def volume(dimension: str, column: str) -> str:
-    return (f"SELECT {dimension}, sum({column}) AS bytes FROM cdnf.edge_volume_hourly WHERE $__timeFilter(interval_start) "
-            f"AND $__conditionalAll(domain_id IN (${{domain:csv}}), $domain) GROUP BY {dimension} ORDER BY bytes DESC LIMIT 10")
+    # A bar needs a text label: a numeric domain id would be read as a second value, and a full edge id is wider than the bar.
+    label = {"domain_id": "concat('domain ', toString(domain_id))", "edge_id": "substring(toString(edge_id), 31)"}.get(dimension, dimension)
+    return (f"SELECT {label} AS {dimension}_label, sum({column}) AS bytes FROM cdnf.edge_volume_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime "
+            f"AND $__conditionalAll(domain_id IN (${{domain:csv}}), $domain) GROUP BY {dimension}_label ORDER BY bytes DESC LIMIT 10")
 
 
 def usage_billing() -> dict:
@@ -316,20 +353,20 @@ def usage_billing() -> dict:
             overrides=[{"matcher": {"id": "byName", "options": "bytes"}, "properties": [{"id": "unit", "value": "bytes"}]}, {"matcher": {"id": "byName", "options": "p95_bps"}, "properties": [{"id": "unit", "value": "bps"}, {"id": "decimals", "value": 1}]}]),
          table("Usage by region", "Bandwidth and requests per region for the selected range.", [ch("SELECT region, sum(bytes_sent) AS bytes, sum(requests) AS requests FROM cdnf.edge_usage_5m WHERE $__timeFilter(interval_start) AND $__conditionalAll(region IN (${region:singlequote}), $region) GROUP BY region ORDER BY bytes DESC", table=True)], w=8,
                overrides=[{"matcher": {"id": "byName", "options": "bytes"}, "properties": [{"id": "unit", "value": "bytes"}]}])],
-        [timeseries("Bandwidth by PoP", "Bits per second sent, per PoP, at 5-minute resolution.", [ch("SELECT $__timeInterval(interval_start) AS time, pop, 8 * sum(bytes_sent) / 300 AS bps FROM cdnf.edge_usage_5m WHERE $__timeFilter(interval_start) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) GROUP BY time, pop ORDER BY time")], "bps", stack=True),
-         timeseries("Monthly bandwidth", "Bytes sent per month.", [ch(f"SELECT {month} AS time, sum(bytes_sent) AS bytes FROM cdnf.edge_traffic_daily WHERE interval_start > now() - INTERVAL 12 MONTH AND " + SCOPE + " GROUP BY time ORDER BY time")], "bytes")],
+        [label_by(timeseries("Bandwidth by PoP", "Bits per second sent, per PoP, at 5-minute resolution.", [ch("SELECT $__timeInterval(interval_start) AS time, pop, 8 * sum(bytes_sent) / 300 AS bps FROM cdnf.edge_usage_5m WHERE $__timeFilter(interval_start) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) GROUP BY time, pop ORDER BY time")], "bps", stack=True), "pop"),
+         over(timeseries("Monthly bandwidth", "Bytes sent per month, over the last year.", [ch(f"SELECT {month} AS time, sum(bytes_sent) AS bytes FROM cdnf.edge_traffic_daily WHERE interval_start > now() - INTERVAL 12 MONTH AND " + SCOPE + " GROUP BY time ORDER BY time")], "bytes"), "1y")],
         [table("Billing rollups", "Hourly usage rollups kept in the control database, which the monthly report uses.", [pg("SELECT date_trunc('day', interval_start) AS day, sum(requests) AS requests, sum(bytes_out) AS bytes_out, sum(cache_hits) AS cache_hits, sum(dns_queries) AS dns_queries FROM grafana_usage_rollups WHERE interval_start > now() - interval '62 days' GROUP BY 1 ORDER BY 1 DESC LIMIT 62")], w=24,
                overrides=[{"matcher": {"id": "byName", "options": "bytes_out"}, "properties": [{"id": "unit", "value": "bytes"}]}])],
         row("Download and upload"),
-        [bargauge("Download by edge", "Bytes sent to clients, headers included, per edge host. SQL: SELECT edge_id, sum(bytes_sent) FROM cdnf.edge_volume_hourly WHERE $__timeFilter(interval_start) GROUP BY edge_id", [ch(volume("edge_id", "bytes_sent"), table=True)], "bytes", w=6),
-         bargauge("Download by cell", "Bytes sent to clients per serving cell. SQL: SELECT cell, sum(bytes_sent) FROM cdnf.edge_volume_hourly WHERE $__timeFilter(interval_start) GROUP BY cell", [ch(volume("cell", "bytes_sent"), table=True)], "bytes", w=6),
+        [bargauge("Download by edge", "Bytes sent to clients, headers included, per edge host. SQL: SELECT edge_id, sum(bytes_sent) FROM cdnf.edge_volume_hourly WHERE interval_start >= toStartOfHour($__fromTime) GROUP BY edge_id", [ch(volume("edge_id", "bytes_sent"), table=True)], "bytes", w=6),
+         bargauge("Download by cell", "Bytes sent to clients per serving cell. SQL: SELECT cell, sum(bytes_sent) FROM cdnf.edge_volume_hourly WHERE interval_start >= toStartOfHour($__fromTime) GROUP BY cell", [ch(volume("cell", "bytes_sent"), table=True)], "bytes", w=6),
          bargauge("Download by domain", "Bytes sent to clients per domain.", [ch(volume("domain_id", "bytes_sent"), table=True)], "bytes", w=6),
          bargauge("Download by country", "Bytes sent to clients per client country.", [ch(volume("country", "bytes_sent"), table=True)], "bytes", w=6)],
         [bargauge("Upload by edge", "Request bytes received from clients (the request length, headers included) per edge host.", [ch(volume("edge_id", "bytes_in"), table=True)], "bytes", w=6),
          bargauge("Upload by cell", "Request bytes received from clients per serving cell.", [ch(volume("cell", "bytes_in"), table=True)], "bytes", w=6),
          bargauge("Upload by domain", "Request bytes received from clients per domain.", [ch(volume("domain_id", "bytes_in"), table=True)], "bytes", w=6),
          bargauge("Upload by country", "Request bytes received from clients per client country.", [ch(volume("country", "bytes_in"), table=True)], "bytes", w=6)],
-        [timeseries("Bandwidth by edge: download and upload", "Bits per second per edge host, live from Prometheus. Origin-side traffic is not measured.", [prom("8 * sum by (edge) (rate(cdnf_edge_bytes_sent_total[5m]))", "download {{edge}}"), prom("8 * sum by (edge) (rate(cdnf_edge_bytes_received_total[5m]))", "upload {{edge}}")], "bps", w=24)],
+        [timeseries("Bandwidth by edge", "Bits per second each edge host sent (download) and received (upload), live from Prometheus. Origin-side traffic is not measured.", [prom("8 * sum by (edge) (rate(cdnf_edge_bytes_sent_total[5m]))", "download {{edge}}"), prom("8 * sum by (edge) (rate(cdnf_edge_bytes_received_total[5m]))", "upload {{edge}}")], "bps", w=24)],
     ]
     return dashboard("cdnf-usage-billing", "Usage and billing", "cdnf-business", "Monthly bandwidth, 95th-percentile bandwidth, requests, and DNS queries per domain, pool, and region, from rollups only.", rows, runbook="egress-anomaly")
 
@@ -340,9 +377,9 @@ def growth() -> dict:
          stat("New domains (30d)", "Domains created in the last 30 days.", [pg("SELECT count(*) AS domains FROM domains WHERE deleted_at IS NULL AND created_at > now() - interval '30 days'")], "short", w=6),
          stat("Traffic growth (30d)", "Requests in the last 30 days against the 30 days before.", [ch("SELECT 100 * (sumIf(requests, interval_start > now() - INTERVAL 30 DAY) / nullIf(sumIf(requests, interval_start <= now() - INTERVAL 30 DAY), 0) - 1) AS growth FROM cdnf.edge_traffic_daily WHERE interval_start > now() - INTERVAL 60 DAY AND " + SCOPE, table=True)], "percent", w=6, decimals=1),
          stat("Bandwidth growth (30d)", "Bytes sent in the last 30 days against the 30 days before.", [ch("SELECT 100 * (sumIf(bytes_sent, interval_start > now() - INTERVAL 30 DAY) / nullIf(sumIf(bytes_sent, interval_start <= now() - INTERVAL 30 DAY), 0) - 1) AS growth FROM cdnf.edge_traffic_daily WHERE interval_start > now() - INTERVAL 60 DAY AND " + SCOPE, table=True)], "percent", w=6, decimals=1)],
-        [timeseries("Domains by month", "Domains created per month.", [pg("SELECT date_trunc('month', created_at) AS time, count(*) AS domains FROM domains WHERE deleted_at IS NULL GROUP BY 1 ORDER BY 1", table=False)], "short"),
-         timeseries("Traffic by month", "Requests per month.", [ch("SELECT toStartOfMonth(interval_start) AS time, sum(requests) AS requests FROM cdnf.edge_traffic_daily WHERE " + SCOPE + " GROUP BY time ORDER BY time")], "short")],
-        [timeseries("Bandwidth by month", "Bytes sent per month.", [ch("SELECT toStartOfMonth(interval_start) AS time, sum(bytes_sent) AS bytes FROM cdnf.edge_traffic_daily WHERE " + SCOPE + " GROUP BY time ORDER BY time")], "bytes"),
+        [over(timeseries("Domains by month", "Domains created per month, over the last year.", [pg("SELECT date_trunc('month', created_at) AS time, count(*) AS domains FROM domains WHERE deleted_at IS NULL GROUP BY 1 ORDER BY 1", table=False)], "short"), "1y"),
+         over(timeseries("Traffic by month", "Requests per month, over the last year.", [ch("SELECT toStartOfMonth(interval_start) AS time, sum(requests) AS requests FROM cdnf.edge_traffic_daily WHERE " + SCOPE + " GROUP BY time ORDER BY time")], "short"), "1y")],
+        [over(timeseries("Bandwidth by month", "Bytes sent per month, over the last year.", [ch("SELECT toStartOfMonth(interval_start) AS time, sum(bytes_sent) AS bytes FROM cdnf.edge_traffic_daily WHERE " + SCOPE + " GROUP BY time ORDER BY time")], "bytes"), "1y"),
          table("Top growing domains", "Hostnames whose requests grew most against the previous 30 days.", [ch(
              "SELECT hostname, sumIf(requests, interval_start > now() - INTERVAL 30 DAY) AS last_30d, sumIf(requests, interval_start <= now() - INTERVAL 30 DAY) AS previous_30d, last_30d - previous_30d AS growth "
              "FROM cdnf.edge_traffic_daily WHERE interval_start > now() - INTERVAL 60 DAY AND hostname != '' AND " + SCOPE + " GROUP BY hostname ORDER BY growth DESC LIMIT 15", table=True)])],
@@ -356,9 +393,9 @@ def capacity() -> dict:
         [stat("Hottest cache", "Highest cache fill of any cell now.", [prom('max(cdnfoundry_cell_capacity_ratio{resource="cache"})', "cache", instant=True)], "percentunit", "ratio_utilization", w=6, decimals=0),
          stat("Hottest connections", "Highest connection use of any cell now.", [prom('max(cdnfoundry_cell_capacity_ratio{resource="connections"})', "connections", instant=True)], "percentunit", "ratio_utilization", w=6, decimals=0),
          stat("Hottest CPU", "Highest CPU use of any host now.", [prom('max(100 * (1 - avg by (node) (rate(node_cpu_seconds_total{mode="idle"}[5m]))))', "cpu", instant=True)], "percent", "utilization", w=6, decimals=0),
-         stat("First to run out", "Days until the first cache is forecast to fill, 30-day linear forecast.", [prom('clamp_min(min(((1 - cdnfoundry_cell_capacity_ratio{resource="cache"}) / clamp_min(deriv(cdnfoundry_cell_capacity_ratio{resource="cache"}[7d]), 1e-12)) / 86400), 0)', "days", instant=True)], "d", "neutral", w=6, decimals=0)],
+         first_to_run_out(stat("First to run out", "Days until the first cache is forecast to fill, by a linear forecast from the last 7 days. Shows \"Not within a year\" when no cache is on course to fill.", [prom('clamp_max(clamp_min(min(((1 - cdnfoundry_cell_capacity_ratio{resource="cache"}) / clamp_min(deriv(cdnfoundry_cell_capacity_ratio{resource="cache"}[7d]), 1e-12)) / 86400), 0), 365)', "days", instant=True)], "d", "neutral", w=6, decimals=0))],
         [table("Forecast: first PoP to run out", "Forecast cache fill in 30 days per PoP and cell. A value at or above 1 means the cache is full by then. The first row runs out first.", [prom(f'sort_desc({forecast % "cache"})', "forecast", instant=True, fmt="table")], "percentunit", w=12, sort="Value",
-               transformations=[{"id": "organize", "options": {"excludeByName": {"Time": True, "__name__": True, "job": True, "instance": True, "resource": True, "status": True}, "renameByName": {"pop": "PoP", "cell": "Cell", "Value": "Fill in 30 days"}}}],
+               transformations=[{"id": "filterFieldsByName", "options": {"include": {"names": ["pop", "cell", "Value"]}}}, {"id": "organize", "options": {"excludeByName": {"Time": True}, "indexByName": {"PoP": 0, "Cell": 1, "Fill in 30 days": 2}, "renameByName": {"pop": "PoP", "cell": "Cell", "Value": "Fill in 30 days"}}}],
                overrides=[{"matcher": {"id": "byName", "options": "Fill in 30 days"}, "properties": [{"id": "thresholds", "value": {"mode": "absolute", "steps": THRESHOLDS["ratio_utilization"]}}, {"id": "custom.cellOptions", "value": {"type": "color-background"}}]}]),
          timeseries("Cache headroom per PoP", "Free share of the cache volume, per PoP.", [prom('1 - max by (pop) (cdnfoundry_cell_capacity_ratio{resource="cache"})', "{{pop}}")], "percentunit", min_value=0, max_value=1)],
         [timeseries("Connection headroom per PoP", "Free share of the connection budget, per PoP.", [prom('1 - max by (pop) (cdnfoundry_cell_capacity_ratio{resource="connections"})', "{{pop}}")], "percentunit", min_value=0, max_value=1),
@@ -371,12 +408,12 @@ def capacity() -> dict:
 
 def query_samples() -> dict:
     rows = [
-        [text("How to use these", "The queries behind each sample run in the panels below.", "Each panel below answers a common question and shows its query in the panel description. Copy it into Explore to change it.", w=24, h=2)],
+        [text("How to use these", "The queries behind each sample run in the panels below.", "Each panel below answers a common question and shows its query in the panel description. Copy it into Explore to change it.", w=24, h=3)],
         [bargauge("Top domains by egress", "Which domains sent the most bytes? SQL: SELECT hostname, sum(bytes_sent) FROM cdnf.edge_traffic_hourly WHERE $__timeFilter(interval_start) GROUP BY hostname ORDER BY 2 DESC LIMIT 10", [ch(top("hostname", CH_BYTES, "bytes", hostname=True), table=True)], "bytes", w=8),
          bargauge("Which PoP is slowest", "Which PoP has the highest 95th percentile edge time? PromQL: topk(5, 1000 * histogram_quantile(0.95, sum by (le, pop) (cdnf:edge_latency_bucket:rate5m)))", [prom(f"topk(5, 1000 * histogram_quantile(0.95, sum by (le, pop) (cdnf:edge_latency_bucket:rate5m{{{S}}})))", "{{pop}}", instant=True)], "ms", "latency_ms", w=8),
          bargauge("Who triggered a WAF rule", "Which client networks triggered the most WAF matches? SQL: group edge_events by masked client network where waf_rule_id != 0.", [ch(f"SELECT {'if(position(client_ip, \':\') > 0, toString(IPv6CIDRToRange(toIPv6OrZero(client_ip), 48).1) || \'/48\', toString(IPv4CIDRToRange(toIPv4OrZero(client_ip), 24).1) || \'/24\')'} AS network, count() AS matches FROM cdnf.edge_events WHERE occurred_at > now() - INTERVAL 7 DAY AND waf_rule_id != 0 GROUP BY network ORDER BY matches DESC LIMIT 10", table=True)], "short", w=8)],
         [timeseries("Error rate by status", "What is the rate of each 5xx status? PromQL: sum by (status_class) (cdnf:edge_requests:rate5m{status_class=\"5xx\"})", [prom('sum by (status_class) (cdnf:edge_requests:rate5m{status_class=~"4xx|5xx"})', "{{status_class}}")], "reqps", w=8),
-         timeseries("Slowest origins over time", "Which hostnames have a slow origin? SQL: quantilesTDigestMerge over origin_latency_q by hostname.", [ch(split("hostname", CH_ORIGIN_P95, "origin_p95", hostname=True))], "ms", w=8),
+         over(timeseries("Slowest origins over time", "Which hostnames have a slow origin? SQL: quantilesTDigestMerge over origin_latency_q by hostname.", [ch(split("hostname", CH_ORIGIN_P95, "origin_p95", hostname=True))], "ms", w=8), "24h"),
          logs("Recent errors", "What errors did services log? LogQL: {level=~\"error|critical\"}", [loki('{level=~"error|critical"}')], w=8, h=8)],
     ]
     return dashboard("cdnf-query-samples", "Query samples", "cdnf-samples", "Documented PromQL, SQL, and LogQL for the common questions, each in a panel that runs.", rows, runbook="operational-error-logs")
