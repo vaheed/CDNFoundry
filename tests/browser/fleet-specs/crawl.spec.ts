@@ -39,7 +39,8 @@ for (const path of pages) {
                 const text = label.toLowerCase();
                 const wrapper = field.closest('label');
                 const helped = wrapper?.querySelector('.hint') || wrapper?.getAttribute('title') || field.getAttribute('title') || field.getAttribute('aria-describedby');
-                if (!helped && !obvious.includes(text) && text.length <= 60) out.push(`field "${label}" has no hint`);
+                // A label that tells the person what to type ("Type ROTATE to confirm") explains itself.
+                if (!helped && !obvious.includes(text) && !text.startsWith('type ') && text.length <= 60) out.push(`field "${label}" has no hint`);
             }
             return out;
         }, [...OBVIOUS_LABELS]);

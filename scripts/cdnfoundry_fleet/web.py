@@ -531,11 +531,11 @@ class FleetWeb:
             "/config/feature/logs", "Save central logs", fields=(
                 f'<label>Central logs<select name="mode" data-testid="logs-mode">{options(("disabled", "centralized"), logs["mode"], {"disabled": "Off", "centralized": "On"})}</select></label>'
                 f'<label>Log host<select name="host" data-testid="logs-host"><option value="">None</option>{options(hosts, logs.get("host"))}</select></label>'
-                f'<label>Endpoint<input name="endpoint" value="{esc(logs.get("endpoint") or "")}" autocomplete="off" placeholder="https://logs.example.com"></label>'))
+                f'<label>Endpoint<input name="endpoint" value="{esc(logs.get("endpoint") or "")}" autocomplete="off" placeholder="https://logs.example.com"><span class="hint">Where central logs are sent. Leave empty to keep them on the log host.</span></label>'))
         backup = self.action_form(
             "/config/feature/backups", "Save backups", fields=(
                 f'<label>Backups<select name="mode" data-testid="backups-mode">{options(("disabled", "control", "all-stateful"), backups["mode"], {"disabled": "Off", "control": "Control plane", "all-stateful": "Every stateful host"})}</select></label>'
-                f'<label>Repository<input name="repository" value="{esc(backups.get("repository") or "")}" autocomplete="off" placeholder="s3:https://storage.example/bucket/cdnfoundry"></label>'
+                f'<label>Repository<input name="repository" value="{esc(backups.get("repository") or "")}" autocomplete="off" placeholder="s3:https://storage.example/bucket/cdnfoundry"><span class="hint">The restic repository that holds the backups, for example an S3 bucket URL.</span></label>'
                 f'<label>Region<input name="region" value="{esc(backups.get("region") or "us-east-1")}" autocomplete="off" placeholder="us-east-1"></label>'))
         return ('<p class="hint">Saving changes the plan only. Use Deploy changes below to send it to the hosts.</p>' + monitoring + central + backup)
 
@@ -845,7 +845,7 @@ class FleetWeb:
         if path == "/backups":
             controls = "".join(f"<option>{esc(n)}</option>" for n, v in sorted(nodes.items()) if v["role"] == "control")
             fields = (f'<label>Control node<select name="node">{controls}</select></label>'
-                      '<label>Snapshot ID<input name="snapshot" required pattern="[0-9a-f]{8,64}" autocomplete="off" placeholder="1a2b3c4d"></label>'
+                      '<label>Snapshot ID<input name="snapshot" required pattern="[0-9a-f]{8,64}" autocomplete="off" placeholder="1a2b3c4d"><span class="hint">The backup to restore, from the Backups page. 8 to 64 hexadecimal characters.</span></label>'
                       '<label>Preflight operation UUID<input name="operation" autocomplete="off" placeholder="0b1c2d3e-4f50-4a6b-8c7d-9e0f1a2b3c4d"><span class="hint">Only for overwriting a live control node.</span></label>'
                       '<label><span><input type="checkbox" name="overwrite" value="1"> Allow overwriting a live control node</span></label>'
                       '<label>Type RESTORE followed by the snapshot ID<input name="confirm" required autocomplete="off" pattern="RESTORE [0-9a-f]{8,64}" placeholder="RESTORE 1a2b3c4d"></label>')
@@ -1135,8 +1135,8 @@ class FleetWeb:
         """For operators who sign releases themselves: pin their key, then paste the signed manifest. Hidden by default."""
         return ('<details class="help"><summary>I sign releases myself</summary>'
                 "<p>Paste your release public key (the whole block, with its BEGIN and END lines) to pin it, then paste the signed manifest. Fleet then accepts only releases signed with your key.</p>"
-                + self.action_form("/upgrade/trust", "Pin this key", fields=f'<label>Release public key (PEM)<textarea name="key" rows="4" required placeholder="-----BEGIN PUBLIC KEY-----"></textarea></label><input type="hidden" name="next" value="{back}">')
-                + self.action_form(action, "Use this manifest", fields='<label>Signed release manifest (JSON)<textarea name="manifest" rows="6" required spellcheck="false" placeholder="Paste the signed manifest JSON"></textarea></label>')
+                + self.action_form("/upgrade/trust", "Pin this key", fields=f'<label>Release public key (PEM)<textarea name="key" rows="4" required placeholder="-----BEGIN PUBLIC KEY-----"></textarea><span class="hint">The key whose signature Fleet requires on every release manifest from now on.</span></label><input type="hidden" name="next" value="{back}">')
+                + self.action_form(action, "Use this manifest", fields='<label>Signed release manifest (JSON)<textarea name="manifest" rows="6" required spellcheck="false" placeholder="Paste the signed manifest JSON"></textarea><span class="hint">A manifest signed with the pinned key. Fleet checks the signature and every image digest before it deploys.</span></label>')
                 + "</details>")
 
     def _release_document(self, form: dict[str, str]) -> dict[str, Any]:
