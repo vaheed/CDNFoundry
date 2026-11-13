@@ -107,6 +107,23 @@ def host(domain_id: int, rules: list[dict], waf: dict | None = None) -> dict:
     return config
 
 
+def waf_profile(name: str) -> dict:
+    settings = {
+        "off": (0, 0, 0, False), "monitor": (1, 5, 1048576, False), "balanced": (1, 5, 1048576, True),
+    }[name]
+    return {"name": name, "paranoia_level": settings[0], "inbound_threshold": settings[1], "outbound_threshold": 4,
+            "body_limit_bytes": settings[2], "blocking": settings[3], "ruleset": "owasp-crs/4.26.0-modsecurity/3.0.14", "exclusions": []}
+
+
+def access_entries(hostname: str) -> list[dict]:
+    logs = run("docker", "logs", NAME, check=False)
+    entries = []
+    for line in (logs.stdout + logs.stderr).splitlines():
+        if line.startswith("{") and f'"hostname":"{hostname}"' in line:
+            entries.append(json.loads(line))
+    return entries
+
+
 def get(hostname: str, path: str = "/", *headers: str, method: str = "GET", data: str | None = None) -> tuple[int, str, str]:
     return runtime.curl(hostname, path, headers, method, data, container=NAME)
 
@@ -164,6 +181,11 @@ def qualify(directory: pathlib.Path) -> None:
         "skip.example": host(24, [rule(1, [condition("path", "starts_with", "/legacy")], "skip_managed")],
                              {"name": "strict", "paranoia_level": 2, "inbound_threshold": 3, "outbound_threshold": 3, "body_limit_bytes": 262144, "blocking": True}),
         "challenge.example": host(25, [rule(1, [condition("path", "starts_with", "/members")], "challenge")]),
+        "scoreoff.example": host(28, [rule(1, [condition("attack_score", "less_than", 20)])], waf_profile("off")),
+        "scoremonitor.example": host(29, [rule(1, [condition("attack_score_sqli", "less_than", 30)], "log")], waf_profile("monitor")),
+        "scorebalanced.example": host(30, [], waf_profile("balanced")),
+        "scoreskip.example": host(31, [rule(1, [condition("header", "equals", "yes", "X-Trusted")], "skip_managed")], waf_profile("balanced")),
+        "scorerce.example": host(32, [rule(1, [condition("attack_score_rce", "less_than", 40)])], waf_profile("off")),
         "unsafe.example": host(26, [{"id": 1, "conditions": [], "action": "block", "priority": 1},
                                    {"id": 2, "conditions": [{"field": "path", "operator": "equals"}] * 6, "action": "block", "priority": 2},
                                    {"id": 3, "conditions": [{"field": "nonsense", "operator": "equals", "value": "x"}], "action": "block", "priority": 3}]),
@@ -275,6 +297,35 @@ def qualify(directory: pathlib.Path) -> None:
     cookie = re.search(r"cdnf_chal=([0-9a-f.]+)", head).group(1)
     expect(get("challenge.example", "/members", html, f"Cookie: cdnf_chal={cookie}"), 200)
     expect(get("plain.example", "/.cdnf/challenge", method="POST", data=f"seed={seed}&counter=1"), 200)
+
+    # attack score: 1 (attack) to 99 (clean), from the managed WAF's anomaly points, even when the profile is off
+    clean = "/?q=hello+world"
+    sqli = "/?q=1%27%20UNION%20SELECT%20username,password%20FROM%20users--%20"
+    xss = "/?q=%3Cscript%3Ealert(document.cookie)%3C%2Fscript%3E"
+    rce = "/?q=%3Bcat%20/etc/passwd%20%7C%20bash%20-c%20%27id%27"
+    expect(get("scoreoff.example", clean), 200)
+    expect(get("scoreoff.example", sqli), 403, blocked)
+    expect(get("scoreoff.example", xss), 403, blocked)
+    expect(get("scorerce.example", rce), 403, blocked)
+    expect(get("scorerce.example", sqli), 200)
+    cleans = [entry for entry in access_entries("scoreoff.example") if entry["path"] == clean]
+    attacks = [entry for entry in access_entries("scoreoff.example") if entry["path"] == sqli]
+    assert cleans and cleans[0]["attack_score"] == 99, cleans
+    assert attacks and 1 <= attacks[0]["attack_score"] < 20 and attacks[0]["attack_score_sqli"] < 20, attacks
+    # the observe profile scores and logs without blocking, and a log rule on the SQL injection score records its event
+    expect(get("scoremonitor.example", sqli), 200)
+    monitored = [entry for entry in access_entries("scoremonitor.example") if entry["path"] == sqli]
+    assert monitored and monitored[0]["attack_score"] < 40 and monitored[0]["waf_action"] == "monitor", monitored
+    expect(get("scoremonitor.example", clean), 200)
+    assert [entry for entry in access_entries("scoremonitor.example") if entry["path"] == clean][0]["attack_score"] == 99
+    # a blocking profile refuses the payload and keeps its established reason; the clean request passes with a score of 99
+    expect(get("scorebalanced.example", sqli), 403, "waf_block")
+    expect(get("scorebalanced.example", clean), 200)
+    blocked_entry = [entry for entry in access_entries("scorebalanced.example") if entry["path"] == sqli][0]
+    assert blocked_entry["waf_action"] == "block" and blocked_entry["attack_score"] < 20, blocked_entry
+    # a skip_managed rule lets the same payload through
+    expect(get("scoreskip.example", sqli), 403, "waf_block")
+    expect(get("scoreskip.example", sqli, "X-Trusted: yes"), 200)
 
     # a malformed or oversized rule never matches and never takes the cell down
     expect(get("unsafe.example"), 200)

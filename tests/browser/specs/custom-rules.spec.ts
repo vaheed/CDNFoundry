@@ -61,3 +61,16 @@ test('a header field asks for the header name, and the preview reads the rule ba
     await settle(page);
     await expect(sheet).toContainText('Header X-Api-Key equals secret');
 });
+
+test('the attack score field explains its scale and asks for an example number', async ({ page }) => {
+    await openRules(page);
+    await page.getByRole('button', { name: 'Add rule' }).click();
+    const sheet = page.locator('.fi-modal-window:visible');
+    await sheet.getByRole('combobox', { name: /^Field/ }).selectOption('attack_score');
+    await settle(page);
+    await sheet.getByRole('combobox', { name: /^Operator/ }).selectOption('less_than');
+    await settle(page);
+    await expect(sheet.getByText('From 1 (attack) to 99 (clean)', { exact: false })).toBeVisible();
+    await expect(sheet.getByRole('spinbutton', { name: 'Value*' })).toHaveAttribute('placeholder', '20');
+    await expectAccessible(page);
+});
