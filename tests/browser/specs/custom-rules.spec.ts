@@ -93,3 +93,28 @@ test('the rate limit fields appear with the toggle, with examples and a per-cell
     expect(await sheet.locator('[x-tooltip]').count()).toBeGreaterThanOrEqual(5);
     await expectAccessible(page);
 });
+
+test('the user agent preset dialog has an example and a tooltip, and the hotlink dialog lists its defaults', async ({ page }) => {
+    await openRules(page);
+    await page.getByRole('button', { name: 'Presets', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Block user agents' }).click();
+    let sheet = page.locator('.fi-modal-window:visible');
+    await expect(sheet.getByRole('heading', { name: 'Block or challenge user agents' })).toBeVisible();
+    await expect(sheet.locator('input[placeholder="sqlmap"]')).toBeVisible();
+    expect(await sheet.locator('[x-tooltip]').count()).toBeGreaterThanOrEqual(2);
+    await expectAccessible(page);
+    await sheet.getByRole('button', { name: 'Cancel' }).click();
+
+    await page.getByRole('button', { name: 'Presets', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Hotlink protection' }).click();
+    sheet = page.locator('.fi-modal-window:visible');
+    await expect(sheet.getByRole('heading', { name: 'Protect files from hotlinking' })).toBeVisible();
+    await expect(sheet.getByText('webp', { exact: true })).toBeVisible();
+    await expect(sheet.locator('input[placeholder="www.partner.example"]')).toBeVisible();
+    expect(await sheet.locator('[x-tooltip]').count()).toBeGreaterThanOrEqual(2);
+    await expectAccessible(page);
+    // Nothing was saved, so the seeded rules stay the only ones and neither remove action is offered.
+    await sheet.getByRole('button', { name: 'Cancel' }).click();
+    await page.getByRole('button', { name: 'Presets', exact: true }).click();
+    await expect(page.getByRole('menuitem', { name: 'Remove user agent rules' })).toHaveCount(0);
+});

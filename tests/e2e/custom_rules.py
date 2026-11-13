@@ -205,6 +205,12 @@ def qualify(directory: pathlib.Path) -> None:
         "tunerule.example": host(40, [], waf_profile("balanced", off_rules=[913100])),
         "tuneloganly.example": host(41, [], waf_profile("balanced", log_only_rules=[913100])),
         "tunethreshold.example": host(42, [], waf_profile("balanced", inbound_threshold=100)),
+        "hotlink.example": host(43, [rule(1, [
+            condition("file_extension", "in_list", ["jpg", "png"]), condition("referer_present", "equals", True),
+            condition("referer_host", "not_in_list", ["partner.example", "hotlink.example", "www.hotlink.example"]),
+        ])]),
+        "uapreset.example": host(44, [rule(1, [condition("user_agent", "contains", "sqlmap")]), rule(2, [condition("user_agent", "contains", "nikto")]),
+                                      rule(3, [condition("user_agent", "contains", "curl")], "challenge")]),
         "unsafe.example": host(26, [{"id": 1, "conditions": [], "action": "block", "priority": 1},
                                    {"id": 4, "conditions": [{"field": "path", "operator": "equals", "value": "/"}], "action": "block", "priority": 4, "rate_limit": {"key": "client_ip", "threshold": 0, "period_seconds": 7, "duration_seconds": 1}},
                                    {"id": 2, "conditions": [{"field": "path", "operator": "equals"}] * 6, "action": "block", "priority": 2},
@@ -409,6 +415,23 @@ def qualify(directory: pathlib.Path) -> None:
     assert version == f"ver:'OWASP_CRS/{catalog['ruleset'].split('/')[1]}'", (version, catalog["ruleset"])
     controls = int(run("docker", "exec", NAME, "sh", "-c", "grep -c ruleRemoveById /etc/cdnfoundry/waf-controls.conf").stdout)
     assert controls == len(catalog["categories"]) + len(catalog["rules"]), controls
+
+    # hotlink protection: only a request with a Referer from another host, for a listed extension, is blocked
+    expect(get("hotlink.example", "/a.jpg"), 200)                                                          # no Referer
+    expect(get("hotlink.example", "/a.jpg", "Referer: https://hotlink.example/page"), 200)                 # the domain itself
+    expect(get("hotlink.example", "/a.png", "Referer: https://PARTNER.example:8443/x"), 200)               # an allowed host, port and case ignored
+    expect(get("hotlink.example", "/a.jpg", "Referer: https://evil.example/p"), 403, blocked)
+    expect(get("hotlink.example", "/A.JPG", "Referer: http://user:secret@evil.example:81/p?q=1"), 403, blocked)
+    expect(get("hotlink.example", "/page.html", "Referer: https://evil.example/p"), 200)                  # another file type
+    expect(get("hotlink.example", "/a.jpg", "Referer: not-an-address"), 200)                               # a Referer that is no address is no Referer
+    expect(get("hotlink.example", "/photo.jpg.html", "Referer: https://evil.example/p"), 200)
+    # user agent presets: a word anywhere in the user agent, case does not matter, block or challenge
+    expect(get("uapreset.example", "/", "User-Agent: Mozilla SQLMap/1.7"), 403, blocked)
+    expect(get("uapreset.example", "/", "User-Agent: Nikto/2.5"), 403, blocked)
+    expect(get("uapreset.example", "/", "User-Agent: Mozilla/5.0 Firefox"), 200)
+    expect(get("uapreset.example", "/"), 403, "challenge_required")                                        # the test client is curl, so it is challenged
+    code, head, body = get("uapreset.example", "/", "Accept: text/html")
+    assert code == 403 and "Checking your browser" in body, (code, head)
 
     # a malformed or oversized rule never matches and never takes the cell down
     expect(get("unsafe.example"), 200)
