@@ -933,6 +933,158 @@ local function prompt_signals(check, method, uri)
     return prompt_injection_score(decoded), prompt_has_personal_data(decoded)
 end
 
+-- The API profile: compares a request under the base path with the typed table of paths, methods, and parameters from the
+-- domain's schema. Returns the first violation kind ("unknown_path", "wrong_method", "missing_parameter", "invalid_parameter",
+-- "body_too_large") or "none", and nil when the domain has no schema or the request is outside the base path.
+local SCHEMA_REASONS = {
+    unknown_path = "schema_unknown_path", wrong_method = "schema_wrong_method", missing_parameter = "schema_missing_parameter",
+    invalid_parameter = "schema_invalid_parameter", body_too_large = "schema_body_too_large",
+}
+local SCHEMA_OPERATIONS_MAX = 200
+local SCHEMA_PARAMETERS_MAX = 20
+
+local function schema_value_fits(kind, value)
+    if kind == "integer" then return value:find("^-?%d+$") ~= nil and #value <= 18 end
+    if kind == "number" then return value:find("^-?%d+%.?%d*$") ~= nil and #value <= 32 end
+    if kind == "boolean" then return value == "true" or value == "false" end
+    return true
+end
+
+-- The path variables of one template when the path fits it, or nil. A variable never matches an empty segment.
+local function schema_path_match(template, segments)
+    local variables = {}
+    local count = 0
+    for part in template:gmatch("[^/]+") do
+        count = count + 1
+        local actual = segments[count]
+        if actual == nil then return nil end
+        local variable = part:match("^{(.+)}$")
+        if variable then variables[variable] = actual
+        elseif part ~= actual then return nil end
+    end
+    if count ~= #segments then return nil end
+    return variables
+end
+
+local function schema_violation(schema, method, uri, size, content_type)
+    if type(schema) ~= "table" or type(schema.operations) ~= "table" or #schema.operations == 0 then return nil end
+    local base = type(schema.base_path) == "string" and schema.base_path or "/"
+    local relative = uri
+    if base ~= "/" then
+        if uri ~= base and uri:sub(1, #base + 1) ~= base .. "/" then return nil end
+        relative = uri:sub(#base + 1)
+        if relative == "" then relative = "/" end
+    end
+    local segments = {}
+    for part in relative:gmatch("[^/]+") do segments[#segments + 1] = part end
+    if #segments > 32 then return "unknown_path" end
+    local fitting_method
+    local matched = false
+    local lookup = method == "HEAD" and "GET" or method
+    for index, operation in ipairs(schema.operations) do
+        if index > SCHEMA_OPERATIONS_MAX then break end
+        local variables = type(operation.path) == "string" and schema_path_match(operation.path, segments)
+        if variables then
+            matched = true
+            if operation.method == method or operation.method == lookup then fitting_method = {operation = operation, variables = variables}; break end
+        end
+    end
+    if not matched then return "unknown_path" end
+    if not fitting_method then
+        if method == "OPTIONS" then return "none" end
+        return "wrong_method"
+    end
+    local arguments = ngx.req.get_uri_args(100)
+    local headers = ngx.req.get_headers(100)
+    local invalid = false
+    for index, parameter in ipairs(fitting_method.operation.parameters or {}) do
+        if index > SCHEMA_PARAMETERS_MAX then break end
+        local actual
+        if parameter["in"] == "path" then actual = fitting_method.variables[parameter.name]
+        elseif parameter["in"] == "query" then actual = arguments[parameter.name]
+        elseif parameter["in"] == "header" then actual = headers[parameter.name] end
+        if type(actual) == "table" then actual = actual[1] end
+        if actual == nil or actual == true then
+            if parameter.required then return "missing_parameter" end
+        elseif type(actual) == "string" and not schema_value_fits(parameter.type, actual) then
+            invalid = true
+        end
+    end
+    if invalid then return "invalid_parameter" end
+    local limit = tonumber(schema.maximum_body_bytes) or 65536
+    if size > limit and type(content_type) == "string" and content_type:lower():find("json", 1, true) then return "body_too_large" end
+    return "none"
+end
+
+-- Client-side security: the policy that makes browsers report scripts and connections, and the reserved path that receives the
+-- reports. A report is reduced to a kind, a page path, and the origin of the resource; nothing else is kept. A domain accepts a
+-- bounded number of reports per minute on each cell, and the rest are dropped without an error.
+local CLIENT_REPORT_PATH = "/.cdnf/csp-report"
+
+local function report_text(value, limit)
+    local text = tostring(value or ""):gsub("[%c|]", "")
+    return text:sub(1, limit)
+end
+
+local function report_url_parts(address)
+    if type(address) ~= "string" or #address > 2048 then return nil end
+    local scheme, authority, rest = address:match("^(%a[%w+.%-]*)://([^/?#]*)(.*)$")
+    if not scheme then return nil end
+    authority = authority:gsub("^.*@", ""):lower()
+    return scheme:lower(), authority, rest
+end
+
+local function client_report_fields(decoded)
+    if type(decoded) ~= "table" then return nil end
+    local body = decoded["csp-report"]
+    local document, blocked, directive
+    if type(body) == "table" then
+        document, blocked = body["document-uri"], body["blocked-uri"]
+        directive = body["effective-directive"] or body["violated-directive"]
+    else
+        local first = decoded[1]
+        body = type(first) == "table" and first.type == "csp-violation" and first.body or nil
+        if type(body) ~= "table" then return nil end
+        document, blocked, directive = body.documentURL, body.blockedURL, body.effectiveDirective
+    end
+    if type(directive) ~= "string" or type(blocked) ~= "string" then return nil end
+    local kind
+    if directive:find("^script%-src") then kind = "script" elseif directive:find("^connect%-src") then kind = "connection" else return nil end
+    local _, document_host, document_rest = report_url_parts(document)
+    local request_host = (ngx.var.host or ""):lower():gsub(":%d+$", "")
+    if not document_host or document_host:gsub(":%d+$", "") ~= request_host then return nil end
+    local page = document_rest:gsub("[?#].*$", "")
+    if page == "" then page = "/" end
+    local resource
+    if blocked == "inline" or blocked == "eval" then resource = blocked
+    elseif blocked == "data" or blocked:find("^data:") then resource = "data:"
+    elseif blocked == "blob" or blocked:find("^blob:") then resource = "blob:"
+    else
+        local scheme, authority = report_url_parts(blocked)
+        if not scheme or authority == "" then return nil end
+        resource = scheme .. "://" .. authority
+    end
+    return kind, report_text(page, 200), report_text(resource, 200)
+end
+
+local function receive_client_report(settings, config, method)
+    if method ~= "POST" then return security_reject(405, "invalid_method") end
+    ngx.req.read_body()
+    local raw = ngx.req.get_body_data() or ""
+    if #raw > (tonumber(settings.report_bytes) or 4096) then return security_reject(413, "body_too_large") end
+    ngx.header["Cache-Control"] = "no-store"
+    local counted = ngx.shared.domain_limits:incr("csp:" .. tostring(config.domain) .. ":" .. math.floor(ngx.time() / 60), 1, 0, 120)
+    if counted and counted <= (tonumber(settings.maximum_reports_per_minute) or 120) then
+        local ok, decoded = pcall(cjson.decode, raw)
+        if ok then
+            local kind, page, resource = client_report_fields(decoded)
+            if kind and page ~= "" and resource ~= "" then ngx.var.cdn_client_report = kind .. "|" .. page .. "|" .. resource end
+        end
+    end
+    ngx.status = 204
+    return ngx.exit(ngx.HTTP_NO_CONTENT)
+end
+
 -- The host of a Referer address in lower case, or nil when the header is absent or is not an address.
 local function referer_host(referer)
     if type(referer) ~= "string" or #referer > 2048 then return nil end
@@ -1076,6 +1228,21 @@ local function condition_matches(condition, request)
     if field == "leaked_password" then return request.leaked_password ~= nil and request.leaked_password == (expected == true) end
     if field == "prompt_injection_score" then return number_matches(operator, request.prompt_injection_score, expected) end
     if field == "prompt_pii" then return request.prompt_pii ~= nil and request.prompt_pii == (expected == true) end
+    if field == "schema_violation" then
+        local actual = request.schema_violation
+        if actual == nil then return false end
+        local function listed(value) return value == actual or (value == "any" and actual ~= "none") end
+        if operator == "equals" then return listed(expected) end
+        if operator == "not_equals" then return not listed(expected) end
+        if type(expected) ~= "table" then return false end
+        local found = false
+        for index, value in ipairs(expected) do
+            if index > RULE_MAX_LIST then break end
+            if listed(value) then found = true; break end
+        end
+        if operator == "not_in_list" then return not found end
+        return found
+    end
     return false
 end
 
@@ -1459,12 +1626,19 @@ function M.access()
         body_size = size, tls_version = ngx.var.https == "on" and (ngx.var.ssl_protocol or "none") or "none",
         cookie_header = ngx.var.http_cookie, headers = ngx.req.get_headers(100),
     }
+    local client_security = security.client_security
+    if type(client_security) == "table" and client_security.enabled == true then
+        if request.path == CLIENT_REPORT_PATH then return receive_client_report(client_security, config, method) end
+        if type(client_security.policy) == "string" then ngx.var.cdn_client_csp = client_security.policy end
+    end
     local skip_managed = false
     local rule_challenge = nil
     if has_field_rule(rules, {leaked_password = true}) then request.leaked_password = leaked_password_flag(security.credential_check, method, request.path) end
     if has_field_rule(rules, {prompt_injection_score = true, prompt_pii = true}) then
         request.prompt_injection_score, request.prompt_pii = prompt_signals(security.ai_protection, method, request.path)
     end
+    request.schema_violation = schema_violation(security.api_schema, method, request.path, size, request.content_type)
+    if SCHEMA_REASONS[request.schema_violation or ""] then record_security_event(SCHEMA_REASONS[request.schema_violation]) end
     local sensitive = security.sensitive_data
     if type(sensitive) == "table" and type(sensitive.kinds) == "table" and #sensitive.kinds > 0 then
         ngx.var.cdn_sensitive_kinds = table.concat(sensitive.kinds, ",")
@@ -1815,6 +1989,17 @@ function M.cache_status()
             ngx.header[name] = nil
         end
     end
+end
+
+-- Adds the report-only policy of an opted-in domain to HTML responses that do not carry one. The cache stores responses without
+-- it, so a cached page gets the policy of the domain's current snapshot.
+function M.client_security_response()
+    local policy = ngx.var.cdn_client_csp
+    if type(policy) ~= "string" or policy == "" then return end
+    local content_type = ngx.header["Content-Type"]
+    if type(content_type) ~= "string" or not content_type:lower():find("^text/html") then return end
+    if ngx.header["Content-Security-Policy-Report-Only"] then return end
+    ngx.header["Content-Security-Policy-Report-Only"] = policy
 end
 
 function M.compression_response()
