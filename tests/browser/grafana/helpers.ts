@@ -46,22 +46,30 @@ export function screenshotPath(project: string, range: string, uid: string): str
 /** Wait until every panel has finished loading, the way a person waits for the spinners to stop. */
 export async function waitForPanels(page: Page): Promise<void> {
     const loading = page.locator('[data-testid="data-testid Panel loading bar"], [aria-label="Panel loading bar"]');
+    const settled = async () => {
+        await expect(loading).toHaveCount(0, { timeout: 90_000 });
+        await expect(page.getByRole('button', { name: 'Cancel' })).toHaveCount(0, { timeout: 90_000 });
+    };
     await page.waitForLoadState('domcontentloaded');
-    await expect(loading).toHaveCount(0, { timeout: 90_000 });
-    await expect(page.getByRole('button', { name: 'Cancel' })).toHaveCount(0, { timeout: 90_000 });
-    // Grafana draws a panel only when it scrolls into view, so every screen of the dashboard is visited and allowed to load;
-    // otherwise panels below the first screen are never queried, checked, or shown in the screenshot.
-    const height = await page.evaluate(() => document.querySelector('[data-testid="data-testid dashboard controls"]')?.closest('main, .scrollbar-view, body')?.scrollHeight ?? document.body.scrollHeight);
-    const viewport = page.viewportSize() ?? { width: 1440, height: 900 };
-    // The pointer must be over the dashboard, not the navigation, for the wheel to scroll it.
-    await page.mouse.move(Math.round(viewport.width * 0.75), Math.round(viewport.height * 0.6));
-    for (let y = 0; y < Math.max(height, 8000); y += 600) {
-        await page.mouse.wheel(0, 600);
-        await page.waitForTimeout(250);
-        await expect(loading).toHaveCount(0, { timeout: 60_000 });
+    await settled();
+    // Grafana draws a panel only when it is in view, and scrolls the dashboard inside its own container. A viewport as tall
+    // as that container's content draws every panel at once, so each is queried, checked, and in the screenshot.
+    const width = page.viewportSize()?.width ?? 1440;
+    for (let attempt = 0; attempt < 4; attempt++) {
+        const overflow = await page.evaluate(() => Math.max(0, ...Array.from(document.querySelectorAll<HTMLElement>('body, body *'))
+            .filter((element) => /(auto|scroll)/.test(getComputedStyle(element).overflowY) && element.scrollHeight > element.clientHeight + 1)
+            .map((element) => element.scrollHeight - element.clientHeight)));
+        if (overflow === 0) break;
+        const height = page.viewportSize()?.height ?? 900;
+        await page.setViewportSize({ width, height: Math.min(height + overflow + 40, 16_000) });
+        await page.waitForTimeout(500);
+        await settled();
     }
-    await page.mouse.wheel(0, -100_000);
-    await expect(page.getByRole('button', { name: 'Cancel' })).toHaveCount(0, { timeout: 90_000 });
-    await page.waitForTimeout(1500);
-    await expect(loading).toHaveCount(0, { timeout: 30_000 });
+    await page.waitForTimeout(1000);
+    await settled();
+}
+
+/** Titles of the panels drawn on the page. */
+export async function drawnPanelTitles(page: Page): Promise<string[]> {
+    return page.locator('section h2').evaluateAll((titles) => titles.filter((title) => (title as HTMLElement).offsetParent !== null).map((title) => (title.textContent ?? '').trim()));
 }

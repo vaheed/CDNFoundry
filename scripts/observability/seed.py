@@ -148,11 +148,17 @@ def remote_write(series: list[tuple[dict[str, str], list[tuple[float, int]]]]) -
             raise SystemExit(f"Prometheus rejected the backfill: {error.code} {error.read().decode()[:300]}") from error
 
 
+def exporter_scenarios() -> model.Scenarios:
+    """The scenarios the running exporter holds, so backfilled counters match the ones Prometheus scrapes."""
+    with urllib.request.urlopen(f"{EXPORTER}/scenarios", timeout=10) as response:
+        return model.Scenarios({name: (float(start), float(end)) for name, (start, end) in json.load(response).items()})
+
+
 def backfill_prometheus(hours: int = 48) -> None:
     """Raw counters and the recorded 5-minute rates for the last `hours`, from the same functions the exporter uses."""
     now = int(time.time() // 60) * 60
     steps = [now - minute * 60 for minute in range(hours * 60, 0, -1)]
-    scenarios = model.Scenarios()
+    scenarios = exporter_scenarios()
     series: dict[tuple, list[tuple[float, int]]] = {}
 
     def add(name: str, labels: dict[str, str], t: int, value: float) -> None:
@@ -208,7 +214,7 @@ def backfill_loki(hours: int = 6) -> None:
     skipped = 0
     for minute in range(now - hours * 60, now):
         try:
-            exporter.loki_lines(minute, model.Scenarios())
+            exporter.loki_lines(minute, exporter_scenarios())
         except urllib.error.HTTPError as error:
             # Loki refuses lines far behind the newest one of a stream; the live feeder has already written those streams.
             if error.code != 400 or b"too far behind" not in error.read():

@@ -1,5 +1,5 @@
 import { test, expect, type ConsoleMessage, type Page } from '@playwright/test';
-import { dashboards, adminUser, adminPassword, signIn, waitForPanels, screenshotPath } from './helpers';
+import { dashboards, adminUser, adminPassword, signIn, waitForPanels, screenshotPath, drawnPanelTitles } from './helpers';
 
 // Every dashboard, on each screen, over each time range: no error, no empty panel, no truncated title, no query text,
 // loadable variables, resolving links, and a quiet console.
@@ -38,17 +38,24 @@ for (const dashboard of dashboards()) {
             await page.goto(`/d/${dashboard.uid}?orgId=1&from=${ranges[range]}&to=now&refresh=${kiosk}${sampleInput[dashboard.uid] ?? ''}`);
             await waitForPanels(page);
 
+            // Every panel the dashboard defines is drawn: a blank dashboard is a failure, not a pass.
+            const drawn = await drawnPanelTitles(page);
+            const defined = dashboard.panels.filter((panel) => panel.type !== 'row').map((panel) => panel.title);
+            expect(defined.filter((title) => !drawn.includes(title)), 'panels that were not drawn').toEqual([]);
+
             // No panel reports an error or a failed query.
             const failed = responses.filter((response) => /"error"\s*:/.test(response.body)).map((response) => response.body.slice(0, 240));
             expect(failed, 'query errors').toEqual([]);
-            await expect(page.locator('[data-testid="data-testid Panel status error"], [aria-label="Panel status error"]')).toHaveCount(0);
+            const erroring = await page.locator('[data-testid="data-testid Panel status error"], [aria-label="Panel status error"]').evaluateAll((badges) =>
+                badges.map((badge) => badge.closest('section')?.querySelector('h2')?.textContent?.trim() ?? 'panel'));
+            expect(erroring, 'panels that report an error').toEqual([]);
 
             // No empty panel against the seeded normal scenario.
             if (expectData) {
                 const empty = await page.locator('[data-testid="data-testid panel content"], section[data-testid^="data-testid Panel header"]').evaluateAll(() => {
                     return Array.from(document.querySelectorAll('[class*="panel-content"], [data-testid="data-testid panel content"]'))
                         .filter((element) => /^No data/i.test((element as HTMLElement).innerText.trim()))
-                        .map((element) => (element.closest('section') as HTMLElement | null)?.getAttribute('aria-label') ?? 'panel');
+                        .map((element) => element.closest('section')?.querySelector('h2')?.textContent?.trim() ?? 'panel');
                 });
                 expect(empty, 'panels that show No data').toEqual([]);
             }
@@ -63,7 +70,8 @@ for (const dashboard of dashboards()) {
             expect(printed, 'panels that show query text').toEqual([]);
 
             expect(messages, 'browser console errors').toEqual([]);
-            await page.screenshot({ path: screenshotPath(info.project.name, range, dashboard.uid), fullPage: kiosk === '' });
+            // The viewport already holds the whole dashboard; a full-page capture would stitch Grafana's inner scroller.
+            await page.screenshot({ path: screenshotPath(info.project.name, range, dashboard.uid) });
         });
     }
 }

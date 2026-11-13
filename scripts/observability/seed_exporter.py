@@ -25,6 +25,17 @@ LOCK = threading.Lock()
 ACTIVE: dict[str, tuple[float, float]] = {}
 
 
+def switch_scenario(active: dict[str, tuple[float, float]], name: str, body: dict, now: float) -> None:
+    if name == "normal":
+        # End running scenarios rather than forget them: the counters keep what they counted, so they never step
+        # down and rate() never reads the change as a counter reset.
+        for key, (start, end) in list(active.items()):
+            active[key] = (start, min(end, max(start, now)))
+    else:
+        start = float(body.get("start", now))
+        active[name] = (start, start + float(body.get("minutes", 40)) * 60)
+
+
 def render(now: float) -> str:
     scenarios = model.Scenarios(dict(ACTIVE))
     lines: list[str] = []
@@ -185,6 +196,8 @@ def loki_lines(minute: int, scenarios: model.Scenarios) -> None:
             values = []
             for index in range(count):
                 request = f"{digest(minute, service, level, index):016x}{digest(minute, service, level, index, 1):016x}"
+                if service == "core" and level == "info" and index == 0 and minute % 30 == 0:
+                    request = "cdnf-seed-request-0001"  # the request the trace dashboard opens on, so its log panel has lines
                 host = model.POPS[digest(minute, service, index) % 3]["pop"]
                 values.append([str(int((minute * 60 + index + 1) * 1e9)), json.dumps({"message": f"{service} {level} sample", "request_id": request, "domain_id": 9001 + index}), {"request_id": request, "domain_id": str(9001 + index)}])
             if values:
@@ -246,11 +259,7 @@ class Handler(BaseHTTPRequestHandler):
         if name not in model.SCENARIOS:
             return self._send(400, json.dumps({"error": "unknown scenario"}), "application/json")
         with LOCK:
-            if name == "normal":
-                ACTIVE.clear()
-            else:
-                start = float(body.get("start", time.time()))
-                ACTIVE[name] = (start, start + float(body.get("minutes", 40)) * 60)
+            switch_scenario(ACTIVE, name, body, time.time())
         self._send(200, json.dumps(ACTIVE), "application/json")
 
 
