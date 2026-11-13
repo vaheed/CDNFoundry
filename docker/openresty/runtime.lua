@@ -677,31 +677,43 @@ local function score_request(body_limit, off_list)
     }
 end
 
+-- The host of a Referer address in lower case, or nil when the header is absent or is not an address.
+local function referer_host(referer)
+    if type(referer) ~= "string" or #referer > 2048 then return nil end
+    local authority = referer:match("^[%a][%w+.%-]*://([^/?#]*)")
+    if not authority or authority == "" then return nil end
+    authority = authority:gsub("^.*@", ""):gsub(":%d*$", "")
+    if authority == "" then return nil end
+    return authority:lower()
+end
+
 -- Typed custom rules. A rule holds up to five conditions that must all match; each condition is a field from a fixed
 -- list, an operator from a fixed list, and a value. There is no expression language and no regular expression.
 local RULE_MAX_CONDITIONS = 5
 local RULE_MAX_LIST = 100
 
 local function text_matches(operator, actual, expected, fold)
-    if actual == nil then return operator == "not_equals" end
+    if actual == nil then return operator == "not_equals" or operator == "not_in_list" end
     actual = tostring(actual)
     if fold then actual = actual:lower() end
     local function compare(value)
         value = tostring(value)
         if fold then value = value:lower() end
-        if operator == "equals" or operator == "not_equals" or operator == "in_list" then return actual == value end
+        if operator == "equals" or operator == "not_equals" or operator == "in_list" or operator == "not_in_list" then return actual == value end
         if operator == "starts_with" then return actual:sub(1, #value) == value end
         if operator == "ends_with" then return #actual >= #value and actual:sub(-#value) == value end
         if operator == "contains" then return actual:find(value, 1, true) ~= nil end
         return false
     end
-    if operator == "in_list" then
+    if operator == "in_list" or operator == "not_in_list" then
         if type(expected) ~= "table" then return false end
+        local listed = false
         for index, value in ipairs(expected) do
             if index > RULE_MAX_LIST then break end
-            if compare(value) then return true end
+            if compare(value) then listed = true; break end
         end
-        return false
+        if operator == "not_in_list" then return not listed end
+        return listed
     end
     local matched = compare(expected)
     if operator == "not_equals" then return not matched end
@@ -709,16 +721,18 @@ local function text_matches(operator, actual, expected, fold)
 end
 
 local function number_matches(operator, actual, expected)
-    if actual == nil then return operator == "not_equals" end
+    if actual == nil then return operator == "not_equals" or operator == "not_in_list" end
     if operator == "greater_than" then return actual > (tonumber(expected) or math.huge) end
     if operator == "less_than" then return actual < (tonumber(expected) or -math.huge) end
-    if operator == "in_list" then
+    if operator == "in_list" or operator == "not_in_list" then
         if type(expected) ~= "table" then return false end
+        local listed = false
         for index, value in ipairs(expected) do
             if index > RULE_MAX_LIST then break end
-            if actual == tonumber(value) then return true end
+            if actual == tonumber(value) then listed = true; break end
         end
-        return false
+        if operator == "not_in_list" then return not listed end
+        return listed
     end
     local matched = actual == tonumber(expected)
     if operator == "not_equals" then return not matched end
@@ -733,13 +747,14 @@ end
 
 local function address_matches(operator, ip, expected)
     local matched = false
-    if operator == "in_list" then
+    if operator == "in_list" or operator == "not_in_list" then
         if type(expected) == "table" then
             for index, value in ipairs(expected) do
                 if index > RULE_MAX_LIST then break end
                 if address_equals(ip, value) then matched = true; break end
             end
         end
+        if operator == "not_in_list" then return not matched end
         return matched
     end
     matched = address_equals(ip, expected)
@@ -784,6 +799,9 @@ local function condition_matches(condition, request)
     if field == "client_ip" then return address_matches(operator, request.client, expected) end
     if field == "user_agent" then return text_matches(operator, request.user_agent, expected, true) end
     if field == "referer" then return text_matches(operator, request.referer, expected, true) end
+    if field == "referer_host" then return text_matches(operator, request.referer_host, expected, true) end
+    if field == "referer_present" then return (request.referer_host ~= nil) == (expected == true) end
+    if field == "file_extension" then return text_matches(operator, request.file_extension, expected, true) end
     if field == "header" then return text_matches(operator, header_value(request, tostring(condition.name or ""):lower()), expected, true) end
     if field == "cookie_present" then
         request.cookies = request.cookies or cookie_names(request.cookie_header)
@@ -1149,6 +1167,7 @@ function M.access()
         host = host, path = ngx.var.uri or "/", query_present = (ngx.var.args or "") ~= "", method = method,
         country = country, continent = continent, asn = tonumber(ngx.var.cdn_asn) or 0, client = client,
         user_agent = ngx.var.http_user_agent, referer = ngx.var.http_referer, content_type = ngx.var.http_content_type,
+        referer_host = referer_host(ngx.var.http_referer), file_extension = (ngx.var.uri or "/"):match("%.([%w]+)$"),
         body_size = size, tls_version = ngx.var.https == "on" and (ngx.var.ssl_protocol or "none") or "none",
         cookie_header = ngx.var.http_cookie, headers = ngx.req.get_headers(100),
     }

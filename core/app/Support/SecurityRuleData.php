@@ -15,7 +15,7 @@ final class SecurityRuleData
 {
     public const ACTIONS = ['block', 'challenge', 'log', 'allow', 'skip_managed'];
 
-    public const OPERATORS = ['equals', 'not_equals', 'starts_with', 'ends_with', 'contains', 'in_list', 'greater_than', 'less_than'];
+    public const OPERATORS = ['equals', 'not_equals', 'starts_with', 'ends_with', 'contains', 'in_list', 'not_in_list', 'greater_than', 'less_than'];
 
     public const MAXIMUM_CONDITIONS = 5;
 
@@ -34,11 +34,11 @@ final class SecurityRuleData
 
     public const TLS_VERSIONS = ['TLSv1', 'TLSv1.1', 'TLSv1.2', 'TLSv1.3', 'none'];
 
-    private const TEXT = ['equals', 'not_equals', 'starts_with', 'ends_with', 'contains', 'in_list'];
+    private const TEXT = ['equals', 'not_equals', 'starts_with', 'ends_with', 'contains', 'in_list', 'not_in_list'];
 
-    private const CHOICE = ['equals', 'not_equals', 'in_list'];
+    private const CHOICE = ['equals', 'not_equals', 'in_list', 'not_in_list'];
 
-    private const NUMBER = ['equals', 'not_equals', 'in_list', 'greater_than', 'less_than'];
+    private const NUMBER = ['equals', 'not_equals', 'in_list', 'not_in_list', 'greater_than', 'less_than'];
 
     private const FLAG = ['equals'];
 
@@ -54,6 +54,9 @@ final class SecurityRuleData
         'client_ip' => ['kind' => 'address', 'operators' => self::CHOICE],
         'user_agent' => ['kind' => 'text', 'operators' => self::TEXT],
         'referer' => ['kind' => 'text', 'operators' => self::TEXT],
+        'referer_host' => ['kind' => 'host', 'operators' => self::CHOICE],
+        'referer_present' => ['kind' => 'flag', 'operators' => self::FLAG],
+        'file_extension' => ['kind' => 'extension', 'operators' => self::CHOICE],
         'header' => ['kind' => 'text', 'operators' => self::TEXT, 'named' => true],
         'cookie_present' => ['kind' => 'flag', 'operators' => self::FLAG, 'named' => true],
         'content_type' => ['kind' => 'text', 'operators' => self::TEXT],
@@ -67,7 +70,7 @@ final class SecurityRuleData
 
     public const FIELD_LABELS = [
         'hostname' => 'Hostname', 'path' => 'Path', 'query_present' => 'Query string', 'method' => 'Method', 'country' => 'Country',
-        'continent' => 'Continent', 'asn' => 'ASN', 'client_ip' => 'Client IP', 'user_agent' => 'User agent', 'referer' => 'Referer',
+        'continent' => 'Continent', 'asn' => 'ASN', 'client_ip' => 'Client IP', 'user_agent' => 'User agent', 'referer' => 'Referer', 'referer_host' => 'Referer host', 'referer_present' => 'Referer', 'file_extension' => 'File extension',
         'header' => 'Header', 'cookie_present' => 'Cookie', 'content_type' => 'Content type', 'body_size' => 'Body size (bytes)',
         'tls_version' => 'TLS version', 'attack_score' => 'Attack score', 'attack_score_sqli' => 'Attack score (SQL injection)',
         'attack_score_xss' => 'Attack score (XSS)', 'attack_score_rce' => 'Attack score (command injection)',
@@ -75,7 +78,7 @@ final class SecurityRuleData
 
     public const OPERATOR_LABELS = [
         'equals' => 'equals', 'not_equals' => 'does not equal', 'starts_with' => 'starts with', 'ends_with' => 'ends with',
-        'contains' => 'contains', 'in_list' => 'is one of', 'greater_than' => 'is greater than', 'less_than' => 'is less than',
+        'contains' => 'contains', 'in_list' => 'is one of', 'not_in_list' => 'is not one of', 'greater_than' => 'is greater than', 'less_than' => 'is less than',
     ];
 
     public const ACTION_LABELS = [
@@ -95,7 +98,7 @@ final class SecurityRuleData
             if (isset($condition['name'])) {
                 $label .= " {$condition['name']}";
             }
-            if (in_array($field, ['query_present', 'cookie_present'], true)) {
+            if (in_array($field, ['query_present', 'cookie_present', 'referer_present'], true)) {
                 $present = ($condition['value'] ?? null) === true;
 
                 return $field === 'query_present' ? ($present ? 'Query string is present' : 'Query string is absent') : $label.($present ? ' is present' : ' is absent');
@@ -238,7 +241,7 @@ final class SecurityRuleData
             }
             $condition['name'] = $field === 'header' ? strtolower($name) : $name;
         }
-        $condition['value'] = $operator === 'in_list'
+        $condition['value'] = in_array($operator, ['in_list', 'not_in_list'], true)
             ? self::listValue($input['value'] ?? null, $definition['kind'], $path)
             : self::scalarValue($input['value'] ?? null, $definition['kind'], "$path.value");
 
@@ -269,10 +272,32 @@ final class SecurityRuleData
             'continent' => self::choice($value, GeoVocabulary::CONTINENTS, $path, strtoupper(...)),
             'tls' => self::choice($value, self::TLS_VERSIONS, $path, fn (string $item): string => $item),
             'asn' => self::integer($value, 0, 4294967295, $path),
+            'host' => self::host($value, $path),
+            'extension' => self::extension($value, $path),
             'bytes' => self::integer($value, 0, 1073741824, $path),
             'score' => self::integer($value, 1, 99, $path),
             'address' => self::address($value, $path),
         };
+    }
+
+    private static function host(mixed $value, string $path): string
+    {
+        $host = is_string($value) ? strtolower(trim($value)) : '';
+        if (! preg_match('/^(?=.{1,253}$)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/', $host)) {
+            throw ValidationException::withMessages([$path => 'The value must be a host name such as www.example.com.']);
+        }
+
+        return $host;
+    }
+
+    private static function extension(mixed $value, string $path): string
+    {
+        $extension = is_string($value) ? strtolower(ltrim(trim($value), '.')) : '';
+        if (! preg_match('/^[a-z0-9]{1,10}$/', $extension)) {
+            throw ValidationException::withMessages([$path => 'The value must be a file extension such as jpg, without a dot.']);
+        }
+
+        return $extension;
     }
 
     private static function text(mixed $value, string $path): string
