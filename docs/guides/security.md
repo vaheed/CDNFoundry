@@ -101,11 +101,37 @@ receive a new signed revision.
 | `file_extension` | equals, not equals, in list, not in list | The extension of the path in lower case, without the dot |
 | `tls_version` | equals, not equals, in list | `TLSv1`, `TLSv1.1`, `TLSv1.2`, `TLSv1.3`, or `none` for plain HTTP |
 | `attack_score`, `attack_score_sqli`, `attack_score_xss`, `attack_score_rce` | equals, not equals, in list, greater than, less than | 1 to 99 |
+| `leaked_password` | equals | `true` when the password sent to a login path is in the leaked-password set (see below) |
 
 Hostname, user agent, referer, header, and content type compare without regard to
 case. Path compares exactly and uses the decoded request path without the query
 string. A visitor whose country, continent, or ASN is unknown never matches
 "equals" or a comparison, and does match "not equals".
+
+### Leaked passwords
+
+A detection never blocks by itself: it sets a field, and a custom rule decides what
+to do with it. `leaked_password` is set for login requests only.
+
+1. Name the login paths of the domain (up to 5 exact paths such as `/api/login`),
+   the body format (form fields or a JSON object), and the field that holds the
+   password. A JSON field may be nested with dots, such as `user.password`. The
+   username field is recorded for reference and is not read.
+   `PUT /api/domains/{domain}/security/credential-check` saves the paths and
+   `DELETE` removes them. Saving is one signed revision and returns `202`.
+2. On a `POST`, `PUT`, or `PATCH` to one of those paths, the cell reads at most the
+   first 8 KiB of the body, hashes the password, and looks the first 8 bytes of the
+   hash up in a leaked-password set held in fixed shared memory. The set is built
+   from a list that ships inside the cell image of the release. It is never
+   downloaded at runtime and is never changed by a domain.
+3. Add a custom rule on `leaked_password` equals `true` with the action `log`,
+   `challenge`, or `block`.
+
+The password and its hash are never logged, stored, or sent anywhere. A request is
+read only while a rule of the domain or a platform ruleset uses `leaked_password`.
+A request that is not a login request, or whose password could not be read, leaves
+the flag unset, so neither a `true` nor a `false` condition matches it. The set is
+a short list of the most common leaked passwords; it is not a full breach corpus.
 
 ### Attack score
 
