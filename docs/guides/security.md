@@ -101,6 +101,8 @@ receive a new signed revision.
 | `file_extension` | equals, not equals, in list, not in list | The extension of the path in lower case, without the dot |
 | `tls_version` | equals, not equals, in list | `TLSv1`, `TLSv1.1`, `TLSv1.2`, `TLSv1.3`, or `none` for plain HTTP |
 | `attack_score`, `attack_score_sqli`, `attack_score_xss`, `attack_score_rce` | equals, not equals, in list, greater than, less than | 1 to 99 |
+| `prompt_injection_score` | equals, not equals, in list, greater than, less than | 1 to 99 (see AI prompts) |
+| `prompt_pii` | equals | `true` when the prompt holds personal data (see AI prompts) |
 | `leaked_password` | equals | `true` when the password sent to a login path is in the leaked-password set (see below) |
 
 Hostname, user agent, referer, header, and content type compare without regard to
@@ -132,6 +134,59 @@ read only while a rule of the domain or a platform ruleset uses `leaked_password
 A request that is not a login request, or whose password could not be read, leaves
 the flag unset, so neither a `true` nor a `false` condition matches it. The set is
 a short list of the most common leaked passwords; it is not a full breach corpus.
+
+### Sensitive data in responses
+
+`PUT /api/domains/{domain}/security/sensitive-data` with `kinds` (any of `card`,
+`iban`, `private_key`, `api_key`) makes the cell read the first 16 KB of text
+responses (`text/*`, JSON, XML, JavaScript) and record one security event per kind
+found: `sensitive_data_card`, `sensitive_data_iban`, `sensitive_data_private_key`,
+or `sensitive_data_api_key`. `DELETE` turns it off.
+
+- It only logs. The response is not changed or delayed, and nothing blocks.
+- Card numbers need a valid Luhn check and a leading digit from 3 to 6. IBANs need
+  a known country, its length, and the mod 97 checksum. API keys are AWS access
+  keys, GitHub personal tokens, Stripe live keys, Slack tokens, and Google API keys.
+- The matched value is never stored, logged, or reported. The security event holds
+  the kind and a count only, so Security events show that a kind was found, not the
+  value.
+- Compressed origin responses and other content types are not read.
+- The events do not count toward automatic state changes or the security alert.
+
+### AI prompts
+
+`PUT /api/domains/{domain}/security/ai-protection` names up to five `endpoints`
+(exact paths) and the JSON `prompt_field` (dots for a nested field, such as
+`input.prompt`). On a `POST` or `PUT` to one of them the cell reads at most the
+first 16 KB of the body and sets two fields for custom rules:
+
+- `prompt_injection_score`: 99 when no known injection phrase is present, 29 for
+  one phrase, and 1 for two or more. It matches a fixed list of phrases such as
+  "ignore previous instructions" and "reveal your system prompt", without regard to
+  case or spacing. Use a rule `prompt_injection_score less than 30` to log or block.
+- `prompt_pii`: `true` when the prompt holds an email address, a payment card
+  number, an IBAN, or a US social security number.
+
+This is pattern based. It does not understand a prompt, it misses rephrased or
+translated attacks, and it can match a prompt that quotes an attack phrase. A
+prompt field that is a list of messages is read from each message's `content`.
+Prompts are never stored or logged. A request that is not to one of the endpoints,
+or whose prompt cannot be read, leaves both fields unset.
+
+### Measured results
+
+From `tests/e2e/detections.py` on one cell with a real origin, 150 requests per
+case on a development host (not a capacity figure):
+
+| Detection | Result |
+| --- | --- |
+| Leaked password, JSON and form | A known password sets the flag, a fresh one does not, and no log holds either |
+| Sensitive data | Each of the four kinds recorded once; a clean page, a timestamp, an order number, and a binary type recorded nothing |
+| Injection score | 6 of 6 known injection prompts below 30; 0 of 20 clean prompts below 30 |
+| Median request time | Login 10.6 ms without and 10.7 ms with the check; prompt 9.7 ms and 10.1 ms; response 7.9 ms and 8.7 ms |
+
+The clean sample is 20 prompts written for the test, so it shows that ordinary
+requests pass and not a false positive rate on real traffic.
 
 ### Attack score
 

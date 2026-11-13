@@ -237,6 +237,17 @@ from an outside service at runtime.
 **Gate:** each detection has a measured false positive rate on a recorded
 clean sample and a measured latency cost.
 
+### Phase 7 completion gate (recorded 2026-11-13, branch `dev`)
+
+| Field | Status |
+| --- | --- |
+| Implementation | Done for 7.1 to 7.3 in a smaller form than the table says: a leaked-password check on named login paths, a log-only sensitive data check on response starts, and prompt injection and personal data fields for named AI endpoints. All three set rule fields or log events and never block by themselves. One shared base controller serves the three settings. |
+| Tests | The full Laravel suite passes (719 tests, 15,345 assertions) including `CredentialCheckTest` and `DetectionSettingsTest`: validation of every bound, permissions, revisioning, audit entries, the compiled snapshot, and the rule fields. The Lua detectors were also run against known cards, IBANs, keys, and prompts outside nginx. |
+| Runtime qualification | `tests/e2e/detections.py` passes on a real cell and origin: JSON and form logins, every case that must not set the flag, each sensitive data kind once and never for clean or binary content, 6 of 6 injections stopped and 0 of 20 clean prompts, and no secret, hash, or match in any log or status. `tests/e2e/custom_rules.py` still passes. |
+| Browser suite | Changed screens only: `credential-check.spec.ts` and `detections.spec.ts` (8 of 8 each, light and dark, desktop and phone) with placeholder, tooltip, and accessibility checks. The rule form gained three fields; `custom-rules.spec.ts` was not re-run after that and is covered by the full re-run in Phase 11. |
+| Documentation | `docs/guides/security.md` and the generated API reference. |
+| Open | 7.1: the leaked-password set is a list of about 100 very common passwords, not a breach corpus, and is built into the image from the repository, not delivered as a signed release artifact. 7.2: security events show the kind and count, not a masked value, and compressed responses are not read. 7.3: the false positive rate is 0 of 20 hand-written prompts, not a recorded real sample, and the check is phrase matching only. The gate asks for a false positive rate on a recorded clean sample for each detection and a latency cost; latency is measured on a development host only. `tests/contract/test_security_event_reasons.py` fails on `domain_restricted`, which is not new. |
+
 ## Phase 8: API and client-side protection
 
 | # | Item | Direction | Proof of completion |
