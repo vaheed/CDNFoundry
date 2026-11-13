@@ -52,12 +52,13 @@ for (const dashboard of dashboards()) {
                 expect(empty, 'panels that show No data').toEqual([]);
             }
 
-            // No panel title is cut off, and no panel prints its query.
+            // No panel title is cut off, and no panel prints its query. A function call is a name and an opening parenthesis
+            // with no space and no number after it, so a label such as "Burn rate (1h)" is not query text.
             const truncated = await page.locator('section h2, section h2 *').evaluateAll((titles) =>
                 titles.filter((title) => (title as HTMLElement).offsetParent !== null && title.textContent && title.scrollWidth > title.clientWidth + 1).map((title) => title.textContent));
             expect(truncated, 'truncated panel titles').toEqual([]);
             const printed = await page.locator('section').evaluateAll((sections) =>
-                sections.filter((section) => /\b(sum|rate|histogram_quantile|increase|count_over_time)\s*\(/.test((section as HTMLElement).innerText)).map((section) => section.getAttribute('aria-label')));
+                sections.filter((section) => /\b(sum|rate|histogram_quantile|increase|count_over_time)\((?!\d)/.test((section as HTMLElement).innerText)).map((section) => section.getAttribute('aria-label')));
             expect(printed, 'panels that show query text').toEqual([]);
 
             expect(messages, 'browser console errors').toEqual([]);
@@ -73,8 +74,9 @@ test.describe('variables and links', () => {
             await signIn(page, adminUser, adminPassword);
             await page.goto(`/d/${dashboard.uid}?orgId=1&from=now-6h&to=now`);
             await waitForPanels(page);
-            for (const name of ['region', 'pop', 'edge']) {
-                const picker = page.getByTestId(`data-testid Dashboard template variables Variable Value DropDown value link text ${name}`).or(page.locator(`[data-testid*="Variable"][data-testid*="${name}"]`)).first();
+            // Grafana names a variable's picker by its label and its value link by the value, so each is found by its label.
+            for (const label of ['Region', 'PoP', 'Edge']) {
+                const picker = page.getByTestId('data-testid template variable').filter({ has: page.getByTestId(`data-testid Dashboard template variables submenu Label ${label}`) }).first();
                 await expect(picker).toBeVisible();
                 await expect(picker).toContainText(/All/);
             }
