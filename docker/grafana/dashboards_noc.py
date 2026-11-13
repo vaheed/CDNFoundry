@@ -12,6 +12,8 @@ def pop_table_query(expr: str, ref_name: str) -> dict:
 def with_span(panel: dict, span: str) -> dict:
     """A panel that always shows `span`: hourly series have no point inside a short range."""
     panel["timeFrom"] = span
+    # The title already says so in the description; the override label would cut a narrow panel's title short.
+    panel["hideTimeOverride"] = True
     return panel
 
 

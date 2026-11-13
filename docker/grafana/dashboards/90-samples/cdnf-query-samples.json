@@ -556,6 +556,7 @@
         "x": 8,
         "y": 11
       },
+      "hideTimeOverride": true,
       "id": 6,
       "options": {
         "legend": {

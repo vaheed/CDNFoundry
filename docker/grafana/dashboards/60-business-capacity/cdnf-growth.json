@@ -506,6 +506,7 @@
         "x": 0,
         "y": 4
       },
+      "hideTimeOverride": true,
       "id": 5,
       "options": {
         "legend": {
@@ -593,6 +594,7 @@
         "x": 12,
         "y": 4
       },
+      "hideTimeOverride": true,
       "id": 6,
       "options": {
         "legend": {
@@ -680,6 +682,7 @@
         "x": 0,
         "y": 12
       },
+      "hideTimeOverride": true,
       "id": 7,
       "options": {
         "legend": {

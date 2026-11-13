@@ -29,6 +29,8 @@ def first_to_run_out(panel: dict) -> dict:
 def over(panel: dict, span: str) -> dict:
     """A panel that always shows `span`, whatever range the dashboard shows: monthly and daily series have no point inside six hours."""
     panel["timeFrom"] = span
+    # The title already says so in the description; the override label would cut a narrow panel's title short.
+    panel["hideTimeOverride"] = True
     return panel
 
 
@@ -322,7 +324,7 @@ def domain_comparison() -> dict:
             transformations=[{"id": "organize", "options": {"renameByName": {"hostname": "Domain", "request_count": "Requests", "error_percent": "5xx %", "hit_percent": "Cache hit %", "bytes": "Bytes sent", "p95_ms": "p95"}}}],
             overrides=[{"matcher": {"id": "byName", "options": "Bytes sent"}, "properties": [{"id": "unit", "value": "bytes"}]},
                        {"matcher": {"id": "byRegexp", "options": ".* %"}, "properties": [{"id": "unit", "value": "percent"}, {"id": "decimals", "value": 2}]},
-                       {"matcher": {"id": "byName", "options": "p95"}, "properties": [{"id": "unit", "value": "ms"}, {"id": "decimals", "value": 0}]}])],
+                       {"matcher": {"id": "byName", "options": "p95"}, "properties": [{"id": "unit", "value": "ms"}, {"id": "decimals", "value": 1}]}])],
         [over(timeseries("Requests by domain", "Requests per second for the selected hostnames.", [ch(split("hostname", "sum(requests)", "requests", hostname=True, per_second=True))], "reqps"), "24h"),
          over(timeseries("5xx by domain", "Server errors per second for the selected hostnames.", [ch(split("hostname", "sumIf(requests, status >= 500)", "errors", hostname=True, per_second=True))], "reqps", threshold="zero_warn"), "24h")],
         [over(timeseries("Cache hit by domain", "Share of requests served from cache.", [ch(split("hostname", CH_HIT_PCT, "hit", hostname=True))], "percent", threshold="hit_percent"), "24h"),

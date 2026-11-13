@@ -239,7 +239,7 @@
               },
               {
                 "id": "decimals",
-                "value": 0
+                "value": 1
               }
             ]
           }
@@ -348,6 +348,7 @@
         "x": 0,
         "y": 9
       },
+      "hideTimeOverride": true,
       "id": 2,
       "options": {
         "legend": {
@@ -440,6 +441,7 @@
         "x": 12,
         "y": 9
       },
+      "hideTimeOverride": true,
       "id": 3,
       "options": {
         "legend": {
@@ -532,6 +534,7 @@
         "x": 0,
         "y": 17
       },
+      "hideTimeOverride": true,
       "id": 4,
       "options": {
         "legend": {
@@ -628,6 +631,7 @@
         "x": 12,
         "y": 17
       },
+      "hideTimeOverride": true,
       "id": 5,
       "options": {
         "legend": {

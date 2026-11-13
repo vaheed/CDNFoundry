@@ -937,6 +937,7 @@
         "x": 0,
         "y": 20
       },
+      "hideTimeOverride": true,
       "id": 10,
       "options": {
         "legend": {
