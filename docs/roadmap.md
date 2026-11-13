@@ -72,6 +72,17 @@ providers.
 receive a real test message on every channel type, and a domain user never
 sees another customer's event.
 
+### Phase 1 completion gate (recorded 2026-11-13, branch `dev`)
+
+| Field | Status |
+| --- | --- |
+| Implementation | Done for 1.1 to 1.4 (commits `914034f` to `11f28ed`). A bug found on 2026-11-13 is fixed: the administrator channel list was cached as Eloquent models in a store that refuses to unserialize objects, so the second event within a minute failed (`f6db1f8`). |
+| Tests | `NotificationChannelTest`, `NotificationChannelPanelTest`, and `AlertmanagerReceiverTest` pass in the full Laravel suite (729 tests), including a new regression test that reproduces the failure through a serializing cache store. |
+| Runtime qualification | `tests/e2e/notifications.py` passes on the development stack: an Alertmanager payload reaches an administrator channel of each of the four types at a fake provider, a provider that never answers does not delay the others, a domain user receives only events for an assigned domain, and the switch stops delivery. |
+| Browser suite | `notifications.spec.ts` passes in all four projects (light and dark, desktop and phone) with the accessibility check. Its two snapshots were updated on 2026-11-13 because the shared theme changed (flat value tags, no empty widget gap); the screen itself did not change. |
+| Documentation | `docs/guides/notifications.md`. |
+| Open | The gate asks for real messages from real Telegram, Discord, and Slack on a staging stack. Only fake providers were used; no staging stack or provider tokens are available to this work. |
+
 ---
 
 ## Phase 2: Log push for domain users
@@ -94,6 +105,17 @@ receives the logs of their own domains.
 **Gate:** two domains on one cell each push to their own receiver; each
 receiver gets only its own rows, with delay under a stated bound; turning
 the switch off stops both.
+
+### Phase 2 completion gate (recorded 2026-11-13, branch `dev`)
+
+| Field | Status |
+| --- | --- |
+| Implementation | Done for 2.1 to 2.5 (commits `b5eb500` to `3a74c20`, with fixes `478ad98` and `6e4b29a`). |
+| Tests | `LogPushTest` and `LogPushPanelTest` pass in the full Laravel suite (729 tests). |
+| Runtime qualification | `tests/e2e/log_push.py` passes on the development stack with real ClickHouse rows, the real scheduler, and the `log-pusher` worker: two receivers each get only their own domain's rows in order with no platform field, a receiver that is down catches up without a gap or a duplicate, falling behind retention records the gap, and the switch stops delivery and keeps the destination. |
+| Browser suite | `log-push.spec.ts` passes in all four projects with the accessibility check. Its snapshot was updated on 2026-11-13: the domain header changed, and Sent became an optional column so the table fits its card. |
+| Documentation | `docs/guides/log-push.md` (its list numbering error is fixed). |
+| Open | The delay bound is not stated as a number in the documentation, and the gate's two domains share a development cell, not a staging cell. |
 
 ---
 
@@ -118,6 +140,17 @@ WAF is what stopped it.
 the scripted test attack (rate-limit trips, a WAF block, a blocked rule),
 admits a real browser after the challenge, expires on time, and leaves two
 revisions and a readable trail.
+
+### Phase 3 completion gate (recorded 2026-11-13, branch `dev`)
+
+| Field | Status |
+| --- | --- |
+| Implementation | Done for 3.1 to 3.5 (commits `e5a120a` to `8fbb9b1`). On 2026-11-13 the older administrator-only Under Attack mode, which only tightened limits, was removed and the incident profile became the one **Under attack mode** control (`d5e7a75`), with an **End now** button on its banner. |
+| Tests | `IncidentProfileTest` and `IncidentProfilePanelTest` pass in the full Laravel suite (729 tests). |
+| Runtime qualification | `tests/e2e/openresty_runtime.py` passes on a real cell, including the incident overlay, the challenge (no token, solved token, replayed and foreign tokens), and expiry. |
+| Browser suite | `incident-profile.spec.ts` passes in all four projects (light and dark, desktop and phone) with the accessibility check. The test that ends the profile and expects the banner to clear stays marked `fixme`; ending is proved on the server. |
+| Documentation | `docs/guides/incident-response.md`, `security.md`, `managed-waf.md`, and `operations/runbooks.md` describe the single control. The WAF upkeep check (3.5) is `docs/audit/2026-11-12-waf-upkeep-check.md`. |
+| Open | The gate's staging run (a real browser admitted after the challenge on a staging domain) has not been done: no staging stack is available to this work. |
 
 ---
 
@@ -269,6 +302,19 @@ shows a newly added script, both in the panel.
 | Documentation | `docs/guides/security.md` (API schema, client-side security), `notifications.md`, `operations/cli-commands.md`, `reference/configuration.md`, and the generated API reference. |
 | Open | The gate's two panel scenes are covered in pieces: schema violations are proved on a real cell and the panel sheet saves and refuses a document, but no single run goes from the panel through the agent to a cell; the script list is proved from real ClickHouse rows written the way Vector writes them, not from a real browser loading a page and reporting. Bodies are checked for size only, not for fields; YAML documents and cookie parameters are not supported. Reports can be forged by anyone, so the list is a hint. Report requests count as ordinary traffic in usage. No false positive or latency measurement was taken for the schema check. `make docs-check` also reports existing list numbering errors in `guides/log-push.md` and `operations/fleet-web.md` (not touched here), and `tests/contract/test_security_event_reasons.py` still fails on `domain_restricted`, which is not new. |
 
+### Phases 1 to 8 review (recorded 2026-11-13, branch `dev`)
+
+An owner-requested pass over Phases 1 to 8 before Phase 10. It changed no phase's scope.
+
+| Field | Status |
+| --- | --- |
+| Implementation | The domain page shows each action once, beside the facts it changes, with a Protection section listing every detection; the rule sheet is one column; rules on a detection field are refused until the detection is set up, and a detection in use cannot be turned off; the older administrator Under Attack mode is merged into the incident profile as one **Under attack mode**; the notifier no longer fails on a second event within a minute; the WAF moves to OWASP CRS 4.30.0 and ModSecurity 3.0.17 with `make waf-version-check`; the documentation site publishes Markdown copies, `llms.txt` by section, and `llms-full.txt`. |
+| Tests | The full Laravel suite passes (729 tests, 15,499 assertions). Pint, `make contract-check`, `make openapi-check`, and `make docs-check` pass. `tests/contract/test_security_event_reasons.py` now passes. PHPStan finds no error from this work, but 536 older errors from Phases 1 to 8 remain outside the baseline, so static analysis is not green. |
+| Runtime qualification | On the rebuilt cell image: `managed_waf.py`, `custom_rules.py` (which checks the catalog against the CRS version on the cell), `detections.py`, `application_protection.py`, `openresty_runtime.py`, and `edge_purge_protocol.py` pass. On the development stack: `notifications.py` and `log_push.py` pass. |
+| Browser suite | Every changed screen: `spike`, `custom-rules`, `platform-rulesets`, `security-events`, `detections`, `credential-check`, `application-protection`, `security-alert`, `waf-tuning`, `cache-rules`, `incident-profile`, `edge-health`, `notifications`, and `log-push` pass in all four projects with the accessibility check; snapshots changed only for the overview, domain, notifications, and log push screens. `every-screen`, `first-run-setup`, and `screens-rich` pass in all four projects. `crawl.spec.ts` opens every link, action, section button, menu item, row action, and tab of both panels with no server error, script error, or policy violation. |
+| Documentation | New `reference/security-rules.md` and `reference/waf.md`; updated `guides/domain-panel.md`, `incident-response.md`, `security.md`, `managed-waf.md`, `analytics.md`, `domains.md`, `notifications.md`, `operations/runbooks.md`, and `development/testing.md`. |
+| Open | The 536 older static analysis errors. The open items of each phase gate above are unchanged by this review. |
+
 ---
 
 ## Phase 9: Measured performance envelope
@@ -313,6 +359,16 @@ Previously Phase 10.
 **Gate:** the external review is published and the records exist for the
 current release.
 
+### Phase 10 status (recorded 2026-11-13)
+
+| Item | Status |
+| --- | --- |
+| 10.1 | Not started. The scope package for the reviewer is `docs/audit/2026-11-13-security-review-scope.md`; no reviewer is engaged, and the review must be external. |
+| 10.2 | Not started. It needs a third party installing a fleet from the documentation. |
+| 10.3 | Not started. It depends on Phase 9 (skipped by the owner on 2026-11-13), 10.1, and staging gate records per release. |
+
+Phase 10 is not complete and cannot be completed from inside the project.
+
 ---
 
 ## Phase 11: Missing gate records and full qualification
@@ -332,6 +388,20 @@ above left open and proves the finished system end to end.
 
 **Gate:** one record per audit phase (11.1 to 11.4) and one full
 qualification record (11.5), all on the same release.
+
+### Phase 11 progress (recorded 2026-11-13, branch `dev`)
+
+| Item | Status |
+| --- | --- |
+| 11.1 | Not done: it needs a host outside the management allowlist and a staging fleet. |
+| 11.2 | Runtime part done: `openresty_runtime.py` and `edge_purge_protocol.py` pass (the second with digest-pinned images from a temporary local registry). The full browser suite is not yet re-run. |
+| 11.3 | Not done: it needs staging and both PoPs. |
+| 11.4 | Not done: it needs staging. |
+| 11.5 | Partly done: the Laravel suite, contract checks, and the end-to-end files listed in the Phases 1 to 8 review pass on the development host. Not yet run together on one fresh stack: Go tests, observability tests, every other end-to-end file, and the full browser suite. |
+| 11.6 | Done for the pages touched on 2026-11-13; `make docs-check` passes. |
+| 11.7 | Done for both Filament panels: `crawl.spec.ts` now opens every dialog and form on every screen and fails on any text, number, URL, or text-area input without an example placeholder, and on any field whose meaning is not obvious that has neither a help tooltip nor a description line. The first run listed 173 findings; all are fixed and the crawl passes with zero. Not done for the Fleet web page, which has its own browser suite and was not audited. |
+
+Phase 11 is not complete.
 
 ---
 
