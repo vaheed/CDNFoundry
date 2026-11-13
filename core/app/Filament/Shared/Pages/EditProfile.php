@@ -3,6 +3,7 @@
 namespace App\Filament\Shared\Pages;
 
 use App\Models\AuditLog;
+use App\Support\Impersonation;
 use Filament\Auth\Pages\EditProfile as BaseEditProfile;
 
 class EditProfile extends BaseEditProfile
@@ -11,6 +12,7 @@ class EditProfile extends BaseEditProfile
 
     protected function beforeSave(): void
     {
+        Impersonation::refuse('change the profile or password');
         $this->passwordChanging = filled($this->data['password'] ?? null);
     }
 

@@ -5,6 +5,7 @@ namespace App\Filament\Shared\Pages;
 use App\Models\ApiToken;
 use App\Models\AuditLog;
 use App\Models\Domain;
+use App\Support\Impersonation;
 use Filament\Facades\Filament;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -58,6 +59,7 @@ class ApiTokens extends Page
 
     public function createToken(): void
     {
+        Impersonation::refuse('create an API token');
         $this->validate([
             'name' => ['required', 'string', 'max:100'],
             'ability' => ['required', Rule::in(ApiToken::ABILITIES)],

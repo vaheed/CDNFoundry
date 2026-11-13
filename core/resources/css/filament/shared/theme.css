@@ -1797,6 +1797,30 @@ a.cdn-stat-card:hover {
     display: none;
 }
 
+/* ---------------------------------------------------------------- acting as another user */
+
+/* A full-width bar above the panel that cannot be missed or mistaken for content: the warning tint, one line on wide screens. */
+.cdn-impersonation {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--cdn-space-2) var(--cdn-space-3);
+    border-bottom: 1px solid var(--cdn-line);
+    background: var(--cdn-warning-tint);
+    color: var(--cdn-text-strong);
+    padding: 0.5rem var(--cdn-space-4);
+    font-size: 0.875rem;
+}
+
+.cdn-impersonation p {
+    flex: 1 1 18rem;
+    margin: 0;
+}
+
+.cdn-impersonation-email {
+    color: var(--cdn-text-default);
+}
+
 /* ---------------------------------------------------------------- domain detail */
 
 .cdn-overview {

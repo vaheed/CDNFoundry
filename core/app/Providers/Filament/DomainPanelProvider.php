@@ -6,12 +6,14 @@ use App\Filament\Domain\Pages\DomainDashboard;
 use App\Filament\Shared\Pages\ApiTokens;
 use App\Filament\Shared\Pages\EditProfile;
 use App\Filament\Shared\Pages\NotificationChannels;
+use App\Support\Impersonation;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
 use Filament\Panel;
 use Filament\PanelProvider;
+use Filament\View\PanelsRenderHook;
 use Filament\Widgets\AccountWidget;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
@@ -49,6 +51,7 @@ class DomainPanelProvider extends PanelProvider
                 DisableBladeIconComponents::class,
                 DispatchServingFilamentEvent::class,
             ])
-            ->authMiddleware([Authenticate::class]);
+            ->authMiddleware([Authenticate::class])
+            ->renderHook(PanelsRenderHook::BODY_START, fn (): string => Impersonation::active() ? view('filament.domain.impersonation-banner', ['administrator' => Impersonation::administrator(), 'user' => auth()->user()])->render() : '');
     }
 }

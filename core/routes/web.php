@@ -6,9 +6,11 @@ use App\Http\Controllers\EdgeAgentController;
 use App\Http\Controllers\HealthController;
 use App\Http\Controllers\MetricsController;
 use App\Http\Controllers\UsageController;
+use App\Support\Impersonation;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
+use Illuminate\Http\Request;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
@@ -57,3 +59,10 @@ Route::middleware(['auth', 'account.active'])->group(function (): void {
         ->middleware('admin')
         ->name('admin.telemetry.usage.csv');
 });
+
+// Back from acting as a domain user to the administrator who started it.
+Route::post('/impersonation/leave', function (Request $request) {
+    abort_unless(Impersonation::leave($request), 403, 'This session is not acting as another user.');
+
+    return redirect('/admin/users');
+})->middleware('auth')->name('impersonation.leave');
