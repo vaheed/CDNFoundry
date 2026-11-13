@@ -36,6 +36,8 @@ Limits that the software enforces are listed in the [limits reference](limits.md
 | `MANAGEMENT_NETWORKS` | control | Space-separated CIDRs allowed to reach the administrator panel, the administrator API, Horizon, the metrics endpoint, and Grafana. Everyone else gets a bare `403`; `/app`, the customer API, and the status page stay open. Empty restricts nothing. Fleet writes it from `management_networks` plus the fleet's node addresses |
 | `CORS_ALLOWED_ORIGINS` | control | Space-separated browser origins allowed to call the API. Empty allows none; there is no wildcard |
 | `CONTENT_SECURITY_POLICY` | control | `enforce` (default), `report-only`, or `off` for the panels' and API's `Content-Security-Policy` |
+| `SECURITY_RATE_LIMIT_RULES` | control | Most rate-limit rules one domain may hold (default 20, hard ceiling 50) |
+| `SECURITY_RULE_LIST_VALUES` | control | Most values in one rule list (default 100, hard ceiling 100) |
 | `TELEMETRY_HOSTNAME` | control/telemetry | Public telemetry-ingest hostname in independent management DNS |
 | `CONTROL_PUBLIC_IPV4_ALLOWLIST` | gateways | Exact control/worker sources allowed through the control and telemetry gateways |
 | `CONTROL_PUBLIC_IPV6_ALLOWLIST` | gateways | Optional IPv6 control/worker sources for the same gateways |
