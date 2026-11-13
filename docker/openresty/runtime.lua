@@ -840,6 +840,10 @@ local function find_private_key(text)
 end
 
 local SENSITIVE_DETECTORS = {card = find_card, iban = find_iban, private_key = find_private_key, api_key = find_api_key}
+-- Spelled out so the reason contract can find every code this check raises.
+local SENSITIVE_REASONS = {
+    card = "sensitive_data_card", iban = "sensitive_data_iban", private_key = "sensitive_data_private_key", api_key = "sensitive_data_api_key",
+}
 local SENSITIVE_TYPES = {"text/", "json", "xml", "javascript", "x-www-form-urlencoded"}
 
 -- Reads the start of a text response, once per kind it finds records a log-only security event with no value. The response is
@@ -874,7 +878,7 @@ function M.inspect_response()
     context.sensitive_buffer = nil
     for kind in kinds:gmatch("[a-z_]+") do
         local detector = SENSITIVE_DETECTORS[kind]
-        if detector and detector(text) then record_security_event("sensitive_data_" .. kind) end
+        if detector and detector(text) then record_security_event(SENSITIVE_REASONS[kind]) end
     end
 end
 
