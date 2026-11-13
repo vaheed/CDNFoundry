@@ -25,7 +25,7 @@ use Illuminate\Validation\ValidationException;
 /**
  * Detection settings added after the schema snapshot that static analysis reads; each is a validated typed array or null.
  *
- * @property \Carbon\CarbonImmutable|null $incident_expires_at
+ * @property CarbonImmutable|null $incident_expires_at
  * @property-read int|null $failing_destinations_count
  * @property-read int|null $new_scripts_count
  * @property array{threshold: int, period_minutes: int}|null $security_alert
