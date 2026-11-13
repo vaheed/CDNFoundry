@@ -204,7 +204,6 @@ for authentication, pagination, response, and retry behaviour.
 | `GET` | `/admin/domains/{domain}/isolation` | Required | No | `get.admin.domains.domain.isolation` |
 | `PATCH` | `/admin/domains/{domain}/isolation` | Required | Supported | `patch.admin.domains.domain.isolation` |
 | `POST` | `/admin/domains/{domain}/move` | Required | Supported | `post.admin.domains.domain.move` |
-| `POST` | `/admin/domains/{domain}/protect` | Required | Supported | `post.admin.domains.domain.protect` |
 | `POST` | `/admin/domains/{domain}/quarantine` | Required | Supported | `post.admin.domains.domain.quarantine` |
 | `POST` | `/admin/domains/{domain}/return-to-normal` | Required | Supported | `post.admin.domains.domain.return-to-normal` |
 | `DELETE` | `/admin/domains/{domain}/users/{user}` | Required | Supported | `delete.admin.domains.domain.users.user` |

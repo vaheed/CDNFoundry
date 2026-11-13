@@ -22,7 +22,6 @@
     "cache_abuse_detected",
     "cache_mode_origin_disabled",
     "too_many_query_arguments",
-    "domain_restricted",
     "domain_quarantined",
     "edge_emergency_mode",
     "incident_method",

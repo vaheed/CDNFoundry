@@ -103,7 +103,7 @@ class AutomaticSecurityStateTest extends TestCase
         Queue::fake();
         [$edge, $domain] = $this->servedDomain('automatic');
         foreach (range(1, 20) as $step) {
-            $this->report($edge, $domain, 'domain_restricted', $step * 100);
+            $this->report($edge, $domain, 'domain_quarantined', $step * 100);
         }
         $this->assertSame('normal', $domain->refresh()->automatic_security_state);
         $this->assertSame(0, EdgeTask::query()->where('type', 'security_overlay')->count());

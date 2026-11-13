@@ -257,7 +257,7 @@ class SimpleAnycastPoolTest extends TestCase
             'noisy_domains' => [['domain_id' => $domain->id, 'hostname' => 'own-rule.test', 'reason_code' => $reason, 'count' => $count, 'occurred_at' => now()->timestamp]],
         ]);
 
-        foreach (['domain_restricted', 'invalid_method', 'edge_emergency_mode'] as $reason) {
+        foreach (['domain_quarantined', 'invalid_method', 'edge_emergency_mode'] as $reason) {
             $request = $report($reason, 1000);
             $request->attributes->set('edge', $edge);
             app(EdgeAgentController::class)->heartbeat($request);

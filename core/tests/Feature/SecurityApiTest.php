@@ -256,7 +256,7 @@ class SecurityApiTest extends TestCase
         $this->assertSame(100, $domain->securityRules()->count());
     }
 
-    public function test_admin_protection_quarantine_recovery_and_failed_target_preserve_active_placement(): void
+    public function test_admin_quarantine_recovery_and_failed_target_preserve_active_placement(): void
     {
         Queue::fake();
         [, $domain] = $this->ownedDomain(true);
@@ -265,8 +265,7 @@ class SecurityApiTest extends TestCase
         $quarantine = EdgePool::query()->where('kind', 'quarantine')->firstOrFail();
         DomainEdgePlacement::query()->create(['domain_id' => $domain->id, 'active_pool_id' => $shared->id, 'desired_revision' => $domain->revision, 'state' => 'active']);
 
-        $this->actingAs($admin)->postJson("/api/admin/domains/{$domain->id}/protect", ['reason' => 'request spike'])
-            ->assertAccepted()->assertJsonPath('data.state', 'restricted');
+        $this->actingAs($admin)->postJson("/api/admin/domains/{$domain->id}/protect", ['reason' => 'request spike'])->assertNotFound();
         $this->actingAs($admin)->postJson("/api/admin/domains/{$domain->id}/quarantine", ['reason' => 'continued spike'])
             ->assertAccepted()->assertJsonPath('data.target_pool_id', $quarantine->id);
         $placement = $domain->edgePlacement()->firstOrFail();
