@@ -280,6 +280,7 @@ Expected result: every command exits with status 0 and `git diff --check` prints
 - `make openapi-check` prepares the vendor volume and compares the routes with the committed OpenAPI contract in the same disposable test configuration. It needs neither PostgreSQL nor Redis.
 - `make fleet-test` runs `pytest` on `tests/fleet`.
 - `make qualification-tools-check` runs the supply-chain and qualification unit tests, including the image-transfer rejection cases.
+- `make waf-version-check` compares the CRS, ModSecurity, and ModSecurity-nginx commits pinned in the OpenResty image with the newest upstream release tags and says how to update. It reads tags with `git ls-remote` and changes nothing. `python3 scripts/waf/check_upstream.py --strict` exits 3 when an update exists, for a scheduled job.
 
 `make contract-check` runs `config-check`, `openapi-check`, and the edge-rejection, cache-key, and observability contract tests.
 

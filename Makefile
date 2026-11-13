@@ -3,7 +3,7 @@ COMPOSE_TEST := $(COMPOSE_DEV) -f compose.test.yml
 COMPOSE_PROD := docker compose --env-file .env.prod -f compose.prod.yml
 COMPOSE_PROD_EXAMPLE := docker compose --env-file .env.prod.example -f compose.prod.yml
 
-.PHONY: backend-test contract-check dev-assets dev-control-up dev-up dev-edge-up dev-edge-status dev-scale-up dev-down dev-migrate dev-clickhouse-migrate dev-pdns-migrate dev-test dev-e2e dev-waf-image dev-waf-e2e dev-gateway-e2e dev-cache-e2e dev-compression-e2e dev-origin-failover-e2e dev-analytics-e2e dev-backup-e2e dev-recovery-e2e dev-upgrade-e2e dev-throughput-e2e dev-mmdb-e2e dev-scale-e2e dev-grafana-smoke dev-observability-seed dev-grafana-browser dev-operational-logs-smoke dev-production-qualification dev-logs prod-pull prod-migrate prod-clickhouse-migrate prod-pdns-migrate prod-control prod-dns prod-telemetry prod-edge prod-logs config-check openapi-check version-check check-no-screenshots docs-dev docs-build docs-check fleet-test qualification-tools-check supply-chain-check
+.PHONY: backend-test contract-check dev-assets dev-control-up dev-up dev-edge-up dev-edge-status dev-scale-up dev-down dev-migrate dev-clickhouse-migrate dev-pdns-migrate dev-test dev-e2e dev-waf-image dev-waf-e2e dev-gateway-e2e dev-cache-e2e dev-compression-e2e dev-origin-failover-e2e dev-analytics-e2e dev-backup-e2e dev-recovery-e2e dev-upgrade-e2e dev-throughput-e2e dev-mmdb-e2e dev-scale-e2e dev-grafana-smoke dev-observability-seed dev-grafana-browser dev-operational-logs-smoke dev-production-qualification dev-logs prod-pull prod-migrate prod-clickhouse-migrate prod-pdns-migrate prod-control prod-dns prod-telemetry prod-edge prod-logs config-check openapi-check version-check waf-version-check check-no-screenshots docs-dev docs-build docs-check fleet-test qualification-tools-check supply-chain-check
 
 backend-test: dev-test
 
@@ -172,6 +172,9 @@ version-check:
 
 check-no-screenshots:
 	python3 scripts/ci/check_no_screenshots.py
+
+waf-version-check:
+	python3 scripts/waf/check_upstream.py
 
 openapi-check:
 	$(COMPOSE_DEV) run --rm --no-deps vendor-init
