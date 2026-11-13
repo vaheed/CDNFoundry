@@ -65,6 +65,12 @@ final class AnalyticsStore
             'volume-cells' => ['cell, edge_id, sum(requests) AS requests, sum(bytes_in) AS upload_bytes, sum(bytes_sent) AS download_bytes', 'cell, edge_id', 'download_bytes DESC, cell, edge_id', 'edge_volume_hourly'],
             'volume-domains' => ['domain_id, sum(requests) AS requests, sum(bytes_in) AS upload_bytes, sum(bytes_sent) AS download_bytes', 'domain_id', 'download_bytes DESC, domain_id', 'edge_volume_hourly'],
             'volume-countries' => ['country, sum(requests) AS requests, sum(bytes_in) AS upload_bytes, sum(bytes_sent) AS download_bytes', 'country', 'download_bytes DESC, country', 'edge_volume_hourly'],
+            'security-bands' => ['attack_band, sum(requests) AS requests, sumIf(requests, action != \'allowed\') AS mitigated', 'attack_band', 'attack_band', 'security_hourly'],
+            'security-actions' => ['action, sum(requests) AS requests, sumIf(requests, action != \'allowed\') AS mitigated', 'action', 'sum(requests) DESC, action', 'security_hourly'],
+            'security-countries' => ['country, sum(requests) AS requests, sumIf(requests, action != \'allowed\') AS mitigated', 'country', 'mitigated DESC, sum(requests) DESC, country', 'security_hourly'],
+            'security-asns' => ['asn, sum(requests) AS requests, sumIf(requests, action != \'allowed\') AS mitigated', 'asn', 'mitigated DESC, sum(requests) DESC, asn', 'security_hourly'],
+            'security-paths' => ["path, count() AS requests, countIf(security_action = 'block' OR security_rule != '') AS mitigated", 'path', 'mitigated DESC, requests DESC, path', 'edge_events'],
+            'security-agents' => ["user_agent, count() AS requests, countIf(security_action = 'block' OR security_rule != '') AS mitigated", 'user_agent', 'mitigated DESC, requests DESC, user_agent', 'edge_events'],
             'dns' => ['qtype, rcode, sum(queries) AS queries', 'qtype, rcode', 'sum(queries) DESC, qtype, rcode', 'dns_hourly'],
             default => throw ValidationException::withMessages(['view' => 'The analytics view is invalid.']),
         };
@@ -74,6 +80,9 @@ final class AnalyticsStore
         $groupSql = $group === '' ? '' : " GROUP BY {$group}";
 
         $timeColumn = $table === 'edge_events' ? 'occurred_at' : 'interval_start';
+        if ($table === 'edge_events' && str_starts_with($view, 'security-')) {
+            $scope .= " AND event_type = 'request'";
+        }
 
         return $this->query("SELECT {$select} FROM cdnf.{$table} WHERE {$scope} AND {$timeColumn} >= {from:DateTime64} AND {$timeColumn} < {to:DateTime64}{$groupSql} ORDER BY {$order} LIMIT 1000", $parameters);
     }

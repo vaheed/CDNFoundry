@@ -298,4 +298,25 @@ class AnalyticsApiTest extends TestCase
         $this->actingAs($user)->getJson("/api/domains/{$domain->id}/security/mitigations?action=everything")->assertUnprocessable();
         $this->actingAs(User::factory()->create())->getJson("/api/domains/{$domain->id}/security/mitigations")->assertNotFound();
     }
+
+    public function test_security_views_count_all_requests_by_band_action_country_network_path_and_agent(): void
+    {
+        $user = User::factory()->create();
+        $domain = Domain::query()->create(['name' => 'sec-views.example', 'display_name' => 'S', 'revision' => 1, 'lifecycle_state' => 'active']);
+        $domain->users()->attach($user->id);
+        Http::fake([config('services.clickhouse.url').'*' => Http::response(json_encode(['attack_band' => 1, 'requests' => 10, 'mitigated' => 4]))]);
+
+        foreach (['bands', 'actions', 'countries', 'asns'] as $view) {
+            $this->actingAs($user)->getJson("/api/domains/{$domain->id}/analytics/security/$view")->assertOk()->assertJsonPath('data.0.mitigated', 4);
+        }
+        // Paths and user agents come from stored request events, so they are limited to 24 hours like the other raw views.
+        foreach (['paths', 'agents'] as $view) {
+            $this->actingAs($user)->getJson("/api/domains/{$domain->id}/analytics/security/$view")->assertOk();
+            $this->actingAs($user)->getJson("/api/domains/{$domain->id}/analytics/security/$view?from=".urlencode(now()->subDays(3)->toIso8601String()))->assertUnprocessable();
+        }
+        $this->actingAs($user)->getJson("/api/domains/{$domain->id}/analytics/security/bands?from=".urlencode(now()->subDays(3)->toIso8601String()))->assertOk();
+        Http::assertSent(fn ($request) => str_contains($request->body(), 'FROM cdnf.security_hourly') && str_contains($request->body(), "sumIf(requests, action != 'allowed')"));
+        Http::assertSent(fn ($request) => str_contains($request->body(), 'FROM cdnf.edge_events') && str_contains($request->body(), "event_type = 'request'"));
+        $this->actingAs(User::factory()->create())->getJson("/api/domains/{$domain->id}/analytics/security/bands")->assertNotFound();
+    }
 }

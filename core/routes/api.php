@@ -155,6 +155,9 @@ Route::middleware(['auth:sanctum', 'account.active', 'token.scope', 'throttle:ac
     Route::get('/domains/{domain}/analytics/cache', [AnalyticsController::class, 'view'])->defaults('view', 'cache');
     Route::get('/domains/{domain}/analytics/countries', [AnalyticsController::class, 'view'])->defaults('view', 'countries');
     Route::get('/domains/{domain}/analytics/hostnames', [AnalyticsController::class, 'view'])->defaults('view', 'hostnames');
+    foreach (['bands', 'actions', 'countries', 'asns', 'paths', 'agents'] as $securityView) {
+        Route::get("/domains/{domain}/analytics/security/{$securityView}", [AnalyticsController::class, 'view'])->defaults('view', "security-{$securityView}");
+    }
     Route::get('/domains/{domain}/analytics/top-urls', [AnalyticsController::class, 'view'])->defaults('view', 'top-urls');
     Route::get('/domains/{domain}/analytics/origin', [AnalyticsController::class, 'view'])->defaults('view', 'origin');
     Route::get('/domains/{domain}/analytics/edges', [AnalyticsController::class, 'view'])->defaults('view', 'edges');

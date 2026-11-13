@@ -21,9 +21,9 @@ class AnalyticsController extends Controller
     public function view(Request $request, Domain $domain, string $view, AnalyticsStore $store): JsonResponse
     {
         Gate::authorize('view', $domain);
-        $rawAggregate = in_array($view, ['top-urls', 'compression'], true);
+        $rawAggregate = in_array($view, ['top-urls', 'compression', 'security-paths', 'security-agents'], true);
         $range = $store->range($request, $rawAggregate);
-        $data = $rawAggregate ? $store->topUrls($domain, $range) : $store->aggregate($domain, $range, $view);
+        $data = $view === 'top-urls' ? $store->topUrls($domain, $range) : $store->aggregate($domain, $range, $view);
 
         return response()->json(['data' => $data, 'meta' => $store->metadata($range)]);
     }

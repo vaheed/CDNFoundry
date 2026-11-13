@@ -6,6 +6,7 @@ use App\Filament\Domain\Widgets\AnalyticsBreakdowns;
 use App\Filament\Domain\Widgets\AnalyticsDomainTable;
 use App\Filament\Domain\Widgets\AnalyticsRecentLogs;
 use App\Filament\Domain\Widgets\AnalyticsResponsesChart;
+use App\Filament\Domain\Widgets\AnalyticsSecurityBreakdowns;
 use App\Filament\Domain\Widgets\AnalyticsSummary;
 use App\Filament\Domain\Widgets\AnalyticsTrafficChart;
 use App\Filament\Domain\Widgets\AnalyticsUsage;
@@ -89,6 +90,7 @@ class Analytics extends Dashboard
             AnalyticsResponsesChart::class,
             AnalyticsDomainTable::class,
             AnalyticsBreakdowns::class,
+            AnalyticsSecurityBreakdowns::class,
             AnalyticsRecentLogs::class,
             AnalyticsUsage::class,
         ];
