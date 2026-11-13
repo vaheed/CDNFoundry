@@ -323,7 +323,7 @@ class FleetWeb:
             text = self.logs_text(name, container)
         except (FleetError, KeyError) as exc:
             return 200, self.layout(path, f"Logs of {container}", f'<p class="empty" role="alert">{esc(exc)}</p>' + back)
-        tools = ('<div class="log-tools"><label class="inline-field">Filter the log<input type="search" data-log-filter autocomplete="off"></label>'
+        tools = ('<div class="log-tools"><label class="inline-field">Filter the log<input type="search" data-log-filter autocomplete="off" placeholder="error"></label>'
                  '<label class="check"><input type="checkbox" data-log-poll>Follow (every 5 seconds)</label></div>')
         return 200, self.layout(path, f"Logs of {container}", f'<div class="job" data-state="logs" data-logs-url="/api/logs?node={esc(name)}&amp;c={esc(container)}">{tools}'
                                 f'<pre class="log" id="job-log" tabindex="0" aria-label="Container log">{esc(text) or "The container has written nothing yet."}</pre></div>'
@@ -389,7 +389,7 @@ class FleetWeb:
             f'<span class="job-time" data-since="{round(job.started)}" data-end="{round(job.finished) if job.finished else ""}">{snap["elapsed"]}s</span>{cancel}{retry}</div>'
             f'{meter}{result}'
             + (f'<div class="tasks-wrap" data-testid="job-tasks">{self._task_list(steps)}</div>' if total or running else "")
-            + '<div class="log-tools"><label class="inline-field">Filter the log<input type="search" data-log-filter autocomplete="off"></label>'
+            + '<div class="log-tools"><label class="inline-field">Filter the log<input type="search" data-log-filter autocomplete="off" placeholder="error"></label>'
               '<label class="check"><input type="checkbox" data-log-follow checked>Follow the end</label>'
               f'<a class="btn" href="/jobs/{esc(job.id)}/log.txt" download="fleet-{esc(job.id)}.log">Download log</a></div>'
             f'<pre class="log" id="job-log" tabindex="0" aria-label="Action log" data-testid="job-log">{esc(chr(10).join(lines) or "Waiting for the first step...")}</pre>'
@@ -472,12 +472,12 @@ class FleetWeb:
         active = nodes[controls[0]]
         plan = self.ha_plan
         name = plan.get("name") or self.read(lambda e: StandbySetup(e).next_name(state))
-        form = (f'<label>Standby name<input name="name" value="{esc(name)}" required pattern="[a-z0-9][a-z0-9-]*" autocomplete="off"></label>'
+        form = (f'<label>Standby name<input name="name" value="{esc(name)}" required pattern="[a-z0-9][a-z0-9-]*" autocomplete="off" placeholder="control-b"></label>'
                 f'<label>Standby public IPv4<input name="host" value="{esc(plan.get("host", ""))}" required autocomplete="off" placeholder="203.0.113.11"></label>'
-                f'<label>SSH user<input name="ssh_user" value="{esc(plan.get("ssh_user", "root"))}" required pattern="[a-z_][a-z0-9_-]*" autocomplete="off"><span class="hint">Any user with passwordless sudo works.</span></label>'
-                f'<label>SSH port<input name="ssh_port" type="number" min="1" max="65535" value="{esc(plan.get("ssh_port", "22"))}" required></label>'
-                f'<label>Standby private address<input name="replication_address" value="{esc(plan.get("replication_address", ""))}" autocomplete="off"><span class="hint">Optional. Fleet reads it from the host when there is exactly one private address.</span></label>'
-                f'<label>Active private address<input name="active_replication_address" value="{esc(plan.get("active_replication_address", ""))}" autocomplete="off"><span class="hint">Optional, same rule.</span></label>')
+                f'<label>SSH user<input name="ssh_user" value="{esc(plan.get("ssh_user", "root"))}" required pattern="[a-z_][a-z0-9_-]*" autocomplete="off" placeholder="root"><span class="hint">Any user with passwordless sudo works.</span></label>'
+                f'<label>SSH port<input name="ssh_port" type="number" min="1" max="65535" value="{esc(plan.get("ssh_port", "22"))}" required placeholder="22"></label>'
+                f'<label>Standby private address<input name="replication_address" value="{esc(plan.get("replication_address", ""))}" autocomplete="off" placeholder="10.0.0.12"><span class="hint">Optional. Fleet reads it from the host when there is exactly one private address.</span></label>'
+                f'<label>Active private address<input name="active_replication_address" value="{esc(plan.get("active_replication_address", ""))}" autocomplete="off" placeholder="10.0.0.11"><span class="hint">Optional, same rule.</span></label>')
         out = ["<p>A standby is a second control node that copies the first and takes over when you promote it. DNS and HTTP keep serving while control is down; the standby restores the panel and API.</p>",
                "<h2>Step 1: point the addresses</h2>",
                f"<p>Create or change these records <b>before</b> you add the standby. The two client names point at the <b>active</b> node ({esc(controls[0])}), not the standby. "
@@ -536,7 +536,7 @@ class FleetWeb:
             "/config/feature/backups", "Save backups", fields=(
                 f'<label>Backups<select name="mode" data-testid="backups-mode">{options(("disabled", "control", "all-stateful"), backups["mode"], {"disabled": "Off", "control": "Control plane", "all-stateful": "Every stateful host"})}</select></label>'
                 f'<label>Repository<input name="repository" value="{esc(backups.get("repository") or "")}" autocomplete="off" placeholder="s3:https://storage.example/bucket/cdnfoundry"></label>'
-                f'<label>Region<input name="region" value="{esc(backups.get("region") or "us-east-1")}" autocomplete="off"></label>'))
+                f'<label>Region<input name="region" value="{esc(backups.get("region") or "us-east-1")}" autocomplete="off" placeholder="us-east-1"></label>'))
         return ('<p class="hint">Saving changes the plan only. Use Deploy changes below to send it to the hosts.</p>' + monitoring + central + backup)
 
     def _tls_section(self, state: dict[str, Any]) -> str:
@@ -674,8 +674,8 @@ class FleetWeb:
         out.append(table(["Host", "Role", "Login", "Install", "Connection"], rows, label="Hosts"))
         if any(n not in have for n in order):
             out.append(self.action_form("/deploy/ssh-defaults", "Save this login for hosts without one", primary=True, fields=(
-                '<label>SSH user<input name="ssh_user" value="root" required autocomplete="off"></label>'
-                '<label>SSH port<input name="ssh_port" type="number" min="1" max="65535" value="22" required><span class="hint">Change it if your servers do not use 22. You can set a different port per host on its page.</span></label>')))
+                '<label>SSH user<input name="ssh_user" value="root" required autocomplete="off" placeholder="root"></label>'
+                '<label>SSH port<input name="ssh_port" type="number" min="1" max="65535" value="22" required placeholder="22"><span class="hint">Change it if your servers do not use 22. You can set a different port per host on its page.</span></label>')))
         out.append(self.action_form("/deploy/test", "Test connections", primary=all(n in have for n in order)))
         out.append('<h3 id="dns">b. DNS names and certificates</h3><p>Caddy gets Let\'s Encrypt certificates for <b>control</b>, <b>grafana</b>, and <b>telemetry</b> when the control node starts. '
                    'That works only if 1.1.1.1 sees those names pointing at the host. See <a href="/dns">DNS names</a> for the exact records and a check, or '
@@ -707,7 +707,7 @@ class FleetWeb:
         return f'<input type="hidden" name="csrf" value="{esc(self.csrf)}">'
 
     def action_form(self, action: str, label: str, *, primary: bool = False, fields: str = "", confirm: str | None = None, inline: bool = False) -> str:
-        typed = (f'<label>Type <b>{esc(confirm)}</b> to confirm<input name="confirm" required autocomplete="off" pattern="{esc(confirm)}"></label>' if confirm else "")
+        typed = (f'<label>Type <b>{esc(confirm)}</b> to confirm<input name="confirm" required autocomplete="off" pattern="{esc(confirm)}" placeholder="{esc(confirm)}"></label>' if confirm else "")
         return (f'<form class="{"inline" if inline else "stack"}" method="post" action="{action}">{self.csrf_field()}{fields}{typed}'
                 f'<button{" class=primary" if primary else ""}>{esc(label)}</button></form>')
 
@@ -770,11 +770,11 @@ class FleetWeb:
                              f'<a href="/nodes/{esc(n["name"])}">Open</a>'])
             listing = (table(["Name", "Role", "Host", "IPv4", "Release", "State", "Cores", "Memory", "Disk", ""], rows, numeric={6}, label="Nodes") if rows else '<p class="empty">No nodes yet.</p>')
             fields = (
-                '<label>Name<input name="name" required pattern="[a-z0-9-]+" autocomplete="off"></label>'
+                '<label>Name<input name="name" required pattern="[a-z0-9-]+" autocomplete="off" placeholder="edge-fra-1"></label>'
                 '<label>Role<select name="role"><option>control</option><option>dns</option><option>edge</option><option>dns-edge</option><option>monitoring</option></select></label>'
-                '<label>Public IPv4<input name="public_ipv4" required autocomplete="off"></label>'
-                '<label>SSH port<input name="ssh_port" type="number" min="1" max="65535" value="22" required></label>'
-                '<label>SSH user<input name="ssh_user" value="root" required autocomplete="off"></label>'
+                '<label>Public IPv4<input name="public_ipv4" required autocomplete="off" placeholder="203.0.113.21"></label>'
+                '<label>SSH port<input name="ssh_port" type="number" min="1" max="65535" value="22" required placeholder="22"></label>'
+                '<label>SSH user<input name="ssh_user" value="root" required autocomplete="off" placeholder="root"></label>'
             )
             key_block = ("<h2>Fleet SSH public key</h2><p>One key reaches every node. Add this line to <b>/root/.ssh/authorized_keys</b> on each host "
                          "<b>before</b> you add it here. Fleet logs in with key authentication only.</p>"
@@ -790,16 +790,16 @@ class FleetWeb:
             have = self.read(lambda e: e.targets(state))
             login = have.get(name)
             ssh_form = self.action_form(f"/nodes/{esc(name)}/ssh", "Save SSH login", fields=(
-                f'<label>SSH user<input name="ssh_user" value="{esc(login.user if login else "root")}" required autocomplete="off"><span class="hint">root, or a user with passwordless sudo.</span></label>'
-                f'<label>Address<input name="ssh_host" value="{esc(login.host if login else node["public_ipv4"])}" required autocomplete="off"></label>'
-                f'<label>SSH port<input name="ssh_port" type="number" min="1" max="65535" value="{login.port if login else 22}" required></label>'))
+                f'<label>SSH user<input name="ssh_user" value="{esc(login.user if login else "root")}" required autocomplete="off" placeholder="root"><span class="hint">root, or a user with passwordless sudo.</span></label>'
+                f'<label>Address<input name="ssh_host" value="{esc(login.host if login else node["public_ipv4"])}" required autocomplete="off" placeholder="203.0.113.21"></label>'
+                f'<label>SSH port<input name="ssh_port" type="number" min="1" max="65535" value="{login.port if login else 22}" required placeholder="22"></label>'))
             facts = table(["Role", "Host", "IPv4", "Release"], label="Node facts", rows=[[esc(node["role"]), esc(node["hostname"]), esc(node["public_ipv4"]), esc(node["release"])]])
             if login is None:
                 return 200, self.layout(path, name, facts + "<h2>SSH login</h2><p>Fleet has no login saved for this host. Save one, then add the Fleet key on the <a href=\"/deploy#connect\">Deploy page</a>.</p>" + ssh_form, flash)
             plan = self.read(lambda e: e.bootstrap_plan(name))
             enroll = any(s.kind == "enroll" for s in plan.steps)
-            geo = ('<label>Country code<input name="country" value="US" maxlength="2" required><span class="hint">Places this PoP in Geo-DNS.</span></label>'
-                   '<label>Continent code<input name="continent" value="NA" maxlength="2" required></label>') if enroll else ""
+            geo = ('<label>Country code<input name="country" value="US" maxlength="2" required placeholder="US"><span class="hint">Places this PoP in Geo-DNS.</span></label>'
+                   '<label>Continent code<input name="continent" value="NA" maxlength="2" required placeholder="NA"></label>') if enroll else ""
             body = (facts + self._node_hardware(name, node) + "<h2>SSH login</h2>" + f"<p>Fleet logs in as <b>{esc(login.user)}@{esc(login.host)}:{login.port}</b>. The Fleet key must be on this host (see the <a href=\"/deploy#connect\">Deploy page</a>).</p>" + ssh_form
                     + "<h2>Install only this host</h2><p>Most people use the <a href=\"/deploy\">Deploy page</a> to install everything in order.</p><ol>" + "".join(f"<li>{esc(s.label())}</li>" for s in plan.steps) + "</ol>"
                     + self.action_form(f"/nodes/{esc(name)}/bootstrap", "Install and start this node", primary=True, fields=geo))
@@ -845,10 +845,10 @@ class FleetWeb:
         if path == "/backups":
             controls = "".join(f"<option>{esc(n)}</option>" for n, v in sorted(nodes.items()) if v["role"] == "control")
             fields = (f'<label>Control node<select name="node">{controls}</select></label>'
-                      '<label>Snapshot ID<input name="snapshot" required pattern="[0-9a-f]{8,64}" autocomplete="off"></label>'
-                      '<label>Preflight operation UUID<input name="operation" autocomplete="off"><span class="hint">Only for overwriting a live control node.</span></label>'
+                      '<label>Snapshot ID<input name="snapshot" required pattern="[0-9a-f]{8,64}" autocomplete="off" placeholder="1a2b3c4d"></label>'
+                      '<label>Preflight operation UUID<input name="operation" autocomplete="off" placeholder="0b1c2d3e-4f50-4a6b-8c7d-9e0f1a2b3c4d"><span class="hint">Only for overwriting a live control node.</span></label>'
                       '<label><span><input type="checkbox" name="overwrite" value="1"> Allow overwriting a live control node</span></label>'
-                      '<label>Type RESTORE followed by the snapshot ID<input name="confirm" required autocomplete="off" pattern="RESTORE [0-9a-f]{8,64}"></label>')
+                      '<label>Type RESTORE followed by the snapshot ID<input name="confirm" required autocomplete="off" pattern="RESTORE [0-9a-f]{8,64}" placeholder="RESTORE 1a2b3c4d"></label>')
             body = (self.action_form("/backups/now", "Back up now", primary=True)
                     + self.action_form("/backups/vault", "Back up the Fleet vault to the restic repository")
                     + "<h2>Restore</h2><p>Restores into an empty control node by default. The exact confirmation is <b>RESTORE</b> followed by the snapshot ID.</p>"
@@ -1136,7 +1136,7 @@ class FleetWeb:
         return ('<details class="help"><summary>I sign releases myself</summary>'
                 "<p>Paste your release public key (the whole block, with its BEGIN and END lines) to pin it, then paste the signed manifest. Fleet then accepts only releases signed with your key.</p>"
                 + self.action_form("/upgrade/trust", "Pin this key", fields=f'<label>Release public key (PEM)<textarea name="key" rows="4" required placeholder="-----BEGIN PUBLIC KEY-----"></textarea></label><input type="hidden" name="next" value="{back}">')
-                + self.action_form(action, "Use this manifest", fields='<label>Signed release manifest (JSON)<textarea name="manifest" rows="6" required></textarea></label>')
+                + self.action_form(action, "Use this manifest", fields='<label>Signed release manifest (JSON)<textarea name="manifest" rows="6" required spellcheck="false" placeholder="Paste the signed manifest JSON"></textarea></label>')
                 + "</details>")
 
     def _release_document(self, form: dict[str, str]) -> dict[str, Any]:

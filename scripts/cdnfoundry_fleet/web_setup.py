@@ -122,7 +122,7 @@ class WebGate:
 
     def _unlock_form(self) -> str:
         return (f'<p>Enter the Fleet vault passphrase to continue.</p><form class="stack" method="post" action="/unlock"><input type="hidden" name="csrf" value="{esc(self.csrf)}">'
-                + self._field("Passphrase", "passphrase", type="password", required="", autocomplete="current-password", autofocus="")
+                + self._field("Passphrase", "passphrase", type="password", required="", autocomplete="current-password", autofocus="", placeholder="Vault passphrase")
                 + '<button class="primary">Unlock</button></form>')
 
     def _setup_form(self) -> str:
@@ -132,19 +132,19 @@ class WebGate:
             "host until you choose to on the Nodes page.</p>"
             f'<form class="stack" method="post" action="/setup"><input type="hidden" name="csrf" value="{esc(self.csrf)}">'
             "<h2>Vault</h2>"
-            + self._field("Passphrase", "passphrase", type="password", required="", minlength=str(MIN_PASSPHRASE), autocomplete="new-password",
+            + self._field("Passphrase", "passphrase", type="password", required="", minlength=str(MIN_PASSPHRASE), autocomplete="new-password", placeholder="A long passphrase",
                           hint=f"At least {MIN_PASSPHRASE} characters. It cannot be recovered; store it safely.")
-            + self._field("Repeat passphrase", "passphrase2", type="password", required="", autocomplete="new-password")
+            + self._field("Repeat passphrase", "passphrase2", type="password", required="", autocomplete="new-password", placeholder="Type it again")
             + "<h2>Your platform</h2>"
             + self._field("Operator domain", "operator_domain", required="", placeholder="cdn.example.com", hint="Where the control panel and API live.")
             + self._field("Platform domain", "platform_domain", required="", placeholder="example.net", hint="Holds the platform nameserver names.")
-            + self._field("Release", "release", required="", value=f"v{__version__}", hint="Exact release tag or commit to deploy.")
+            + self._field("Release", "release", required="", value=f"v{__version__}", placeholder=f"v{__version__}", hint="Exact release tag or commit to deploy.")
             + self._field("Admin email for Let's Encrypt", "acme_email", type="email", required="", autocomplete="email", hint="Let's Encrypt sends expiry and problem notices here. Used for the free certificates of the control panel and Grafana.")
             + f'<label>Layout<select name="preset">{presets}</select></label>'
             + "<h2>Control host</h2>"
-            + self._field("Name", "control_name", required="", value="control-1", pattern="[a-z0-9][a-z0-9-]*")
+            + self._field("Name", "control_name", required="", value="control-1", placeholder="control-1", pattern="[a-z0-9][a-z0-9-]*")
             + self._field("Public IPv4", "control_ipv4", required="", placeholder="203.0.113.5")
-            + self._field("Host name", "control_hostname", hint="Leave empty to use name.operator-domain.")
+            + self._field("Host name", "control_hostname", placeholder="control-1.cdn.example.com", hint="Leave empty to use name.operator-domain.")
             + "<h2>Other hosts</h2>"
             + '<label>One host per line: name role ipv4 [region]<textarea name="nodes" rows="5" spellcheck="false" '
               'placeholder="pop-1 dns-edge 203.0.113.10 EU&#10;pop-2 dns-edge 203.0.113.11 AS"></textarea>'
