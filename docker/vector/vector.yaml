@@ -135,6 +135,7 @@ transforms:
       .waf_processing_us = to_int(.waf_processing_us) ?? 0
       .waf_body_limit = slice!(to_string(.waf_body_limit) ?? "none", 0, 16)
       .waf_exclusion_id = to_int(.waf_exclusion_id) ?? 0
+      .security_rule = slice!(to_string(.security_rule) ?? "", 0, 24)
       # Attack scores run from 1 (attack) to 99 (clean); 0 means the request was not scored.
       .attack_score = to_int(.attack_score) ?? 0
       if .attack_score < 0 || .attack_score > 99 {

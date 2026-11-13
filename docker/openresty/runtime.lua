@@ -687,6 +687,12 @@ local function referer_host(referer)
     return authority:lower()
 end
 
+-- The reference a request's log line carries for the rule that acted: "r12" for a domain rule, "p5" for a platform rule.
+local function rule_ref(rule)
+    if rule.platform then return tostring(rule.id) end
+    return "r" .. tostring(rule.id)
+end
+
 -- Typed custom rules. A rule holds up to five conditions that must all match; each condition is a field from a fixed
 -- list, an operator from a fixed list, and a value. There is no expression language and no regular expression.
 local RULE_MAX_CONDITIONS = 5
@@ -1228,10 +1234,10 @@ function M.access()
     for index, rule in ipairs(rules) do
         if index > 1000 then break end
         if type(rule.rate_limit) ~= "table" and rule_matches(rule, request) then
-            if rule.action == "block" then return security_reject(403, rule.platform and "platform_rule_block" or "custom_rule_block") end
+            if rule.action == "block" then ngx.var.cdn_security_rule = rule_ref(rule); return security_reject(403, rule.platform and "platform_rule_block" or "custom_rule_block") end
             -- A client the domain's own rules allow is trusted: later rules and the challenge do not apply.
             if rule.action == "allow" then trusted = true; break end
-            if rule.action == "log" then record_security_event(rule.platform and "platform_rule_log" or "custom_rule_log") end
+            if rule.action == "log" then ngx.var.cdn_security_rule = rule_ref(rule); record_security_event(rule.platform and "platform_rule_log" or "custom_rule_log") end
             if rule.action == "skip_managed" then skip_managed = true end
             if rule.action == "challenge" and not rule_challenge then rule_challenge = rule end
         end
@@ -1242,9 +1248,9 @@ function M.access()
         for index, rule in ipairs(rules) do
             if index > 1000 then break end
             if type(rule.rate_limit) == "table" and rule_matches(rule, request) and rate_limit_exceeded(config, rule, rule.rate_limit) then
-                if rule.action == "block" then return security_reject(429, rule.platform and "platform_rule_rate_limited" or "custom_rule_rate_limited") end
+                if rule.action == "block" then ngx.var.cdn_security_rule = rule_ref(rule); return security_reject(429, rule.platform and "platform_rule_rate_limited" or "custom_rule_rate_limited") end
                 if rule.action == "challenge" and not rule_challenge then rule_challenge = rule end
-                if rule.action == "log" then record_security_event(rule.platform and "platform_rule_rate_limited" or "custom_rule_rate_limited") end
+                if rule.action == "log" then ngx.var.cdn_security_rule = rule_ref(rule); record_security_event(rule.platform and "platform_rule_rate_limited" or "custom_rule_rate_limited") end
             end
         end
     end
@@ -1259,6 +1265,7 @@ function M.access()
             ngx.var.cdn_waf_action = "block"
             ngx.var.cdn_waf_rule_id = "949110"
             ngx.var.cdn_waf_score = tostring(math.min(100, request.scores.total))
+            ngx.var.cdn_security_rule = "waf"
             return security_reject(403, "waf_block")
         end
     end
@@ -1267,7 +1274,7 @@ function M.access()
         local rule_incident = {expires_at = ngx.time() + CHALLENGE_TOKEN_SECONDS, challenge_bypass_prefixes = {}}
         local challenged = enforce_challenge(config, rule_challenge and rule_incident or (incident or rule_incident), client, trusted)
         if challenged then
-            if rule_challenge then record_security_event(rule_challenge.platform and "platform_rule_challenge" or "custom_rule_challenge") end
+            if rule_challenge then ngx.var.cdn_security_rule = rule_ref(rule_challenge); record_security_event(rule_challenge.platform and "platform_rule_challenge" or "custom_rule_challenge") end
             return challenged
         end
     end

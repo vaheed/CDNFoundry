@@ -473,11 +473,13 @@ def qualify(directory: pathlib.Path) -> None:
     # the phase gate: the same scripted attack is stopped by a rule on the attack score, a rate-limit rule, and a platform ruleset,
     # and each stop is in the request telemetry the cell ships to Vector, with its reason, action, and score
     stopped_by_score = [entry for entry in access_entries("scoreoff.example") if entry["path"] == sqli and entry["status"] == 403]
-    assert stopped_by_score and stopped_by_score[0]["security_reason"] == "custom_rule_block" and stopped_by_score[0]["security_action"] == "block" and 1 <= stopped_by_score[0]["attack_score"] < 20, stopped_by_score
+    assert stopped_by_score and stopped_by_score[0]["security_reason"] == "custom_rule_block" and stopped_by_score[0]["security_rule"] == "r1" and stopped_by_score[0]["security_action"] == "block" and 1 <= stopped_by_score[0]["attack_score"] < 20, stopped_by_score
     stopped_by_rate = [entry for entry in access_entries("ratepath.example") if entry["status"] == 429]
-    assert stopped_by_rate and stopped_by_rate[0]["security_reason"] == "custom_rule_rate_limited" and stopped_by_rate[0]["security_action"] == "block", stopped_by_rate
+    assert stopped_by_rate and stopped_by_rate[0]["security_reason"] == "custom_rule_rate_limited" and stopped_by_rate[0]["security_rule"] == "r1" and stopped_by_rate[0]["security_action"] == "block", stopped_by_rate
     stopped_by_platform = [entry for entry in access_entries("platformone.example") if entry["path"] == "/wp-login.php" and entry["status"] == 403]
-    assert stopped_by_platform and stopped_by_platform[0]["security_reason"] == "platform_rule_block", stopped_by_platform
+    assert stopped_by_platform and stopped_by_platform[0]["security_reason"] == "platform_rule_block" and stopped_by_platform[0]["security_rule"] == "p1", stopped_by_platform
+    waf_stop = [entry for entry in access_entries("scorebalanced.example") if entry["path"] == sqli and entry["status"] == 403]
+    assert waf_stop and waf_stop[0]["security_rule"] == "waf", waf_stop
 
     # a malformed or oversized rule never matches and never takes the cell down
     expect(get("unsafe.example"), 200)

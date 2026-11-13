@@ -160,7 +160,7 @@ def main() -> None:
                 assert row.get('origin_latency_ms') == expected_latency, (key, 'origin_latency_ms', row.get('origin_latency_ms'))
                 assert 'origin_response_time' not in row
             # Attack scores run from 1 to 99; a value outside the range, or one that is not a number, becomes 0 (not scored).
-            score_cases = {'score-low': {'attack_score': 4, 'attack_score_sqli': '7', 'attack_score_xss': 99, 'attack_score_rce': 1},
+            score_cases = {'score-rule': {'security_rule': 'x' * 40}, 'score-low': {'attack_score': 4, 'attack_score_sqli': '7', 'attack_score_xss': 99, 'attack_score_rce': 1},
                            'score-bad': {'attack_score': 150, 'attack_score_sqli': -3, 'attack_score_xss': 'abc', 'attack_score_rce': 100},
                            'score-none': {}}
             for key, scores in score_cases.items():
@@ -176,6 +176,7 @@ def main() -> None:
                     break
                 time.sleep(0.25)
             fields = ('attack_score', 'attack_score_sqli', 'attack_score_xss', 'attack_score_rce')
+            assert by_path['/score-rule']['security_rule'] == 'x' * 24, by_path['/score-rule']
             assert [by_path['/score-low'][name] for name in fields] == [4, 7, 99, 1], by_path['/score-low']
             assert [by_path['/score-bad'][name] for name in fields] == [0, 0, 0, 0], by_path['/score-bad']
             assert [by_path['/score-none'][name] for name in fields] == [0, 0, 0, 0], by_path['/score-none']
