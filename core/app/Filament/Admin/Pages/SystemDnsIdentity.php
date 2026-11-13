@@ -65,7 +65,7 @@ class SystemDnsIdentity extends Page
                 ->schema([
                     TextInput::make('platform_domain')
                         ->label(FilamentHelp::label('Platform domain', 'Enter the public platform domain; standard DNS identity fields will be filled automatically.'))
-                        ->required()->maxLength(253)->live(onBlur: true)
+                        ->placeholder('cdn.example.net')->required()->maxLength(253)->live(onBlur: true)
                         ->afterStateUpdated(function (?string $state, Get $get, Set $set): void {
                             $domain = mb_strtolower(rtrim(trim((string) $state), '.'));
                             if ($domain === '') {
@@ -88,25 +88,25 @@ class SystemDnsIdentity extends Page
                                 $set('soa_mailbox', "hostmaster.{$domain}");
                             }
                         }),
-                    TextInput::make('proxy_hostname')->label('Proxy hostname')->required()->maxLength(220),
+                    TextInput::make('proxy_hostname')->label(FilamentHelp::label('Proxy hostname', 'The name proxied customer records point to with a CNAME. It resolves to the serving pools.'))->placeholder('proxy.cdn.example.net')->required()->maxLength(220),
                 ]),
             Section::make('Authoritative nameservers')
                 ->description('At least two public authoritative endpoints. IPv6 is optional but validated when supplied.')
                 ->schema([
-                    Repeater::make('nameservers')->label('Nameservers')->minItems(2)->maxItems(8)->schema([
-                        TextInput::make('hostname')->label('Hostname')->required()->maxLength(253),
-                        TextInput::make('ipv4')->label('IPv4')->required()->ipv4(),
-                        TextInput::make('ipv6')->label(FilamentHelp::label('IPv6', 'Optional. Leave empty for IPv4-only authoritative DNS.'))->ipv6(),
+                    Repeater::make('nameservers')->label(FilamentHelp::label('Nameservers', 'The NS set of the platform domain itself, with the glue addresses DNS nodes answer on. Two at least, for redundancy.'))->minItems(2)->maxItems(8)->schema([
+                        TextInput::make('hostname')->label('Hostname')->placeholder('ns1.cdn.example.net')->required()->maxLength(253),
+                        TextInput::make('ipv4')->label(FilamentHelp::label('IPv4', 'The public address this nameserver answers on, published as glue.'))->placeholder('192.0.2.53')->required()->ipv4(),
+                        TextInput::make('ipv6')->label(FilamentHelp::label('IPv6', 'Optional. Leave empty for IPv4-only authoritative DNS.'))->placeholder('2001:db8::53')->ipv6(),
                     ])->columns(['default' => 1, 'md' => 3]),
-                    Repeater::make('customer_pairs')->label('Customer nameserver pairs')
+                    Repeater::make('customer_pairs')->label(FilamentHelp::label('Customer nameserver pairs', 'The pairs customers set at their registrar. A domain is assigned one pair.'))
                         ->helperText('Readable pairs offered to customers for delegation, separate from the apex NS set above. Each pair needs two hostnames inside the platform domain with public addresses. A competing claim on a name always gets a different pair, so offer at least two.')
                         ->minItems(1)->maxItems(8)->schema([
-                            TextInput::make('first_hostname')->label('First hostname')->required()->maxLength(253),
-                            TextInput::make('first_ipv4')->label('First IPv4')->required()->ipv4(),
-                            TextInput::make('first_ipv6')->label('First IPv6')->ipv6(),
-                            TextInput::make('second_hostname')->label('Second hostname')->required()->maxLength(253),
-                            TextInput::make('second_ipv4')->label('Second IPv4')->required()->ipv4(),
-                            TextInput::make('second_ipv6')->label('Second IPv6')->ipv6(),
+                            TextInput::make('first_hostname')->label('First hostname')->placeholder('ada.ns.cdn.example.net')->required()->maxLength(253),
+                            TextInput::make('first_ipv4')->label('First IPv4')->placeholder('192.0.2.53')->required()->ipv4(),
+                            TextInput::make('first_ipv6')->label('First IPv6')->placeholder('2001:db8::53')->ipv6(),
+                            TextInput::make('second_hostname')->label('Second hostname')->placeholder('bob.ns.cdn.example.net')->required()->maxLength(253),
+                            TextInput::make('second_ipv4')->label('Second IPv4')->placeholder('198.51.100.53')->required()->ipv4(),
+                            TextInput::make('second_ipv6')->label('Second IPv6')->placeholder('2001:db8:1::53')->ipv6(),
                         ])->columns(['default' => 1, 'md' => 3]),
                     TextEntry::make('hidden_primary')
                         ->label('Hidden primary')
@@ -119,13 +119,13 @@ class SystemDnsIdentity extends Page
                 ->description('Zone authority identity and bounded default timers, in seconds.')
                 ->columns(['default' => 1, 'md' => 2, 'xl' => 3])
                 ->schema([
-                    TextInput::make('soa_primary')->label('SOA primary')->required()->maxLength(253),
-                    TextInput::make('soa_mailbox')->label('SOA mailbox')->required()->maxLength(253),
-                    TextInput::make('soa_refresh')->label('SOA refresh')->required()->integer()->minValue(300)->maxValue(86400),
-                    TextInput::make('soa_retry')->label('SOA retry')->required()->integer()->minValue(60)->maxValue(86400),
-                    TextInput::make('soa_expire')->label('SOA expire')->required()->integer()->minValue(86400)->maxValue(2419200),
-                    TextInput::make('soa_minimum_ttl')->label('SOA minimum TTL')->required()->integer()->minValue(30)->maxValue(86400),
-                    TextInput::make('default_ttl')->label('Default TTL')->required()->integer()->minValue(30)->maxValue(86400),
+                    TextInput::make('soa_primary')->label(FilamentHelp::label('SOA primary', 'The primary nameserver named in the zone\'s SOA record.'))->placeholder('ns1.cdn.example.net')->required()->maxLength(253),
+                    TextInput::make('soa_mailbox')->label(FilamentHelp::label('SOA mailbox', 'The zone contact address, written with a dot instead of @.'))->placeholder('hostmaster.cdn.example.net')->required()->maxLength(253),
+                    TextInput::make('soa_refresh')->label(FilamentHelp::label('SOA refresh', 'How often secondary servers check the zone for changes.'))->placeholder('3600')->required()->integer()->minValue(300)->maxValue(86400),
+                    TextInput::make('soa_retry')->label(FilamentHelp::label('SOA retry', 'How long a secondary waits before retrying a failed check.'))->placeholder('600')->required()->integer()->minValue(60)->maxValue(86400),
+                    TextInput::make('soa_expire')->label(FilamentHelp::label('SOA expire', 'How long a secondary keeps answering without reaching the primary.'))->placeholder('1209600')->required()->integer()->minValue(86400)->maxValue(2419200),
+                    TextInput::make('soa_minimum_ttl')->label(FilamentHelp::label('SOA minimum TTL', 'How long resolvers cache a negative answer (a name that does not exist).'))->placeholder('300')->required()->integer()->minValue(30)->maxValue(86400),
+                    TextInput::make('default_ttl')->label(FilamentHelp::label('Default TTL', 'The TTL of platform records that do not set their own.'))->placeholder('300')->required()->integer()->minValue(30)->maxValue(86400),
                 ]),
         ]);
     }

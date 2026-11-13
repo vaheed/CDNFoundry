@@ -541,7 +541,7 @@ class ViewDomain extends ViewRecord
                 ->modalDescription('Name the login paths and where the password is sent. Rules can then act on Leaked password. The password is checked on the cell and is never stored or logged.')
                 ->extraModalFooterActions(fn (): array => $this->turnOffAction('credential_check', CredentialCheckController::class, 'Credential check turned off', 'Turn off'))
                 ->schema([
-                    Repeater::make('login_paths')->label('Login paths')->minItems(1)->maxItems(CredentialCheckData::MAXIMUM_LOGIN_PATHS)->addActionLabel('Add login path')->table([
+                    Repeater::make('login_paths')->label(FilamentHelp::label('Login paths', 'Each path that receives a username and password, how the body is sent, and the names of its fields. Up to '.CredentialCheckData::MAXIMUM_LOGIN_PATHS.'.'))->minItems(1)->maxItems(CredentialCheckData::MAXIMUM_LOGIN_PATHS)->addActionLabel('Add login path')->table([
                         TableColumn::make('Path'), TableColumn::make('Format'), TableColumn::make('Password field'), TableColumn::make('Username field'),
                     ])->schema([
                         TextInput::make('path')->label('Path')->required()->maxLength(200)->placeholder('/api/login')->extraInputAttributes(['data-testid' => 'credential-path']),

@@ -25,6 +25,7 @@ use App\Models\Domain;
 use App\Models\Edge;
 use App\Models\Operation;
 use App\Models\User;
+use App\Support\FilamentHelp;
 use App\Support\SystemHealth;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Toggle;
@@ -80,7 +81,7 @@ class AdminDashboard extends Dashboard
                     Select::make('edge_id')->label('Edge')->placeholder('All edges')->searchable()->native(false)
                         ->getSearchResultsUsing(fn (string $search): array => Edge::query()->where('name', 'like', '%'.$search.'%')->orderBy('name')->limit(50)->pluck('name', 'id')->all())
                         ->getOptionLabelUsing(fn (mixed $value): ?string => Edge::query()->find($value)?->name),
-                    Toggle::make('compare')->label('Compare previous period')->default(true)->inline(false),
+                    Toggle::make('compare')->label(FilamentHelp::label('Compare previous period', 'Shows each number beside the same length of time just before the chosen range, and a dashed line on the charts.'))->default(true)->inline(false),
                 ]),
         ]);
     }

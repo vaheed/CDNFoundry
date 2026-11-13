@@ -26,7 +26,7 @@ class ListDomains extends ListRecords
                 ->modalHeading('Add domain')->modalDescription('Enter the domain to serve. No origin is required for DNS-only use.')
                 ->modalSubmitActionLabel('Add domain')
                 ->extraAttributes(['data-testid' => 'domain-create-button'])
-                ->schema([TextInput::make('name')->label('Domain')->required()->maxLength(253)])
+                ->schema([TextInput::make('name')->label('Domain')->placeholder('example.com')->required()->maxLength(253)])
                 ->action(function (array $data) {
                     try {
                         $domain = Domain::createPendingFor(auth()->user(), (string) $data['name'], request()->ip());

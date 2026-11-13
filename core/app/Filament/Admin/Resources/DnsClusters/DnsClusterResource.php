@@ -42,13 +42,13 @@ class DnsClusterResource extends Resource
                 ->description('Private PowerDNS API boundary and desired cluster state.')
                 ->columns(['default' => 1, 'lg' => 2])
                 ->schema([
-                    TextInput::make('name')->label('Name')->required()->maxLength(100)->unique(ignoreRecord: true),
-                    TextInput::make('location')->label('Location')->required()->maxLength(100),
-                    TextInput::make('transfer_endpoint')->label('Transfer endpoint')->required()->maxLength(100)->helperText('Where DNS nodes pull zones from: this primary’s public IP address and transfer port, such as 192.0.2.10:5300.')->regex('/^(?:\d{1,3}(?:\.\d{1,3}){3}|\[[0-9a-fA-F:]+\]):\d{1,5}$/'),
-                    TextInput::make('api_url')->label('API URL')->url()->required()->maxLength(500),
-                    TextInput::make('server_id')->label('Server ID')->required()->default('localhost')->maxLength(100),
-                    TextInput::make('api_key')->label('API key')->password()->revealable()->required(fn (string $operation): bool => $operation === 'create')->dehydrated(fn (?string $state): bool => filled($state))->minLength(8),
-                    TextInput::make('capacity_zones')->label('Zone capacity')->numeric()->required()->default(100000)->minValue(1)->maxValue(10000000),
+                    TextInput::make('name')->label('Name')->placeholder('dns-primary')->required()->maxLength(100)->unique(ignoreRecord: true),
+                    TextInput::make('location')->label('Location')->placeholder('Frankfurt')->required()->maxLength(100),
+                    TextInput::make('transfer_endpoint')->label('Transfer endpoint')->placeholder('192.0.2.10:5300')->required()->maxLength(100)->helperText('Where DNS nodes pull zones from: this primary’s public IP address and transfer port, such as 192.0.2.10:5300.')->regex('/^(?:\d{1,3}(?:\.\d{1,3}){3}|\[[0-9a-fA-F:]+\]):\d{1,5}$/'),
+                    TextInput::make('api_url')->label(FilamentHelp::label('API URL', 'The private PowerDNS HTTP API of this cluster\'s primary. Only workers call it, never a browser or the public.'))->placeholder('http://pdns-primary:8081')->url()->required()->maxLength(500),
+                    TextInput::make('server_id')->label(FilamentHelp::label('Server ID', 'The server name in the PowerDNS API path. It is localhost unless the PowerDNS server was given another name.'))->placeholder('localhost')->required()->default('localhost')->maxLength(100),
+                    TextInput::make('api_key')->label(FilamentHelp::label('API key', 'The PowerDNS API key, stored encrypted and never shown again. Leave it empty when editing to keep the current key.'))->placeholder('At least 8 characters')->password()->revealable()->required(fn (string $operation): bool => $operation === 'create')->dehydrated(fn (?string $state): bool => filled($state))->minLength(8),
+                    TextInput::make('capacity_zones')->label(FilamentHelp::label('Zone capacity', 'How many zones this cluster is sized for, as a planning figure. It is recorded and shown; it does not stop zones from being placed.'))->placeholder('100000')->numeric()->required()->default(100000)->minValue(1)->maxValue(10000000),
                     Toggle::make('enabled')
                         ->label(FilamentHelp::label('Enabled', 'A new cluster stays disabled until its asynchronous connection test succeeds.'))
                         ->default(false)->disabled(fn (?DnsCluster $record): bool => $record === null || $record->last_health_status !== 'healthy'),
@@ -60,7 +60,7 @@ class DnsClusterResource extends Resource
                         ->label(FilamentHelp::label('Nameservers', 'At least two authoritative nameservers are required for redundancy. These default to the System DNS identity nameservers.'))
                         ->addActionLabel('Add nameserver')
                         ->schema([
-                            TextInput::make('hostname')->label('Hostname')->required()->maxLength(253),
+                            TextInput::make('hostname')->label('Hostname')->placeholder('ns1.example.net')->required()->maxLength(253),
                         ])->default(fn (): array => collect(PlatformDnsSetting::query()->find(1)?->nameservers ?? [])
                         ->map(fn (array $nameserver): array => ['hostname' => $nameserver['hostname']])->all())
                         ->minItems(2)->maxItems(8)->required(),
@@ -68,7 +68,7 @@ class DnsClusterResource extends Resource
             Section::make('Operator context')
                 ->collapsed(fn (?DnsCluster $record): bool => blank($record?->operational_notes))
                 ->schema([
-                    Textarea::make('operational_notes')->label('Operational notes')->rows(4)->maxLength(4000),
+                    Textarea::make('operational_notes')->label('Operational notes')->placeholder('Primary in rack B4; contact the network team before maintenance.')->rows(4)->maxLength(4000),
                 ]),
         ]);
     }

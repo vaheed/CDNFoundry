@@ -32,8 +32,8 @@ class UserResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
-            TextInput::make('name')->required()->maxLength(255),
-            TextInput::make('email')->email()->required()->maxLength(255)->unique(ignoreRecord: true),
+            TextInput::make('name')->placeholder('Your Name')->required()->maxLength(255),
+            TextInput::make('email')->placeholder('email@example.com')->email()->required()->maxLength(255)->unique(ignoreRecord: true),
             Select::make('type')->options([
                 UserType::Admin->value => 'Administrator',
                 UserType::User->value => 'Domain user',

@@ -33,7 +33,7 @@
             <div class="cdn-token-field">
                 <label class="cdn-field-label" for="token-lifetime">Expires after</label>
                 <x-filament::input.wrapper :valid="! $errors->has('lifetimeDays')" suffix="days">
-                    <x-filament::input id="token-lifetime" type="number" min="1" max="365" wire:model="lifetimeDays" data-testid="token-lifetime" />
+                    <x-filament::input id="token-lifetime" type="number" min="1" max="365" placeholder="90" wire:model="lifetimeDays" data-testid="token-lifetime" />
                 </x-filament::input.wrapper>
                 @error('lifetimeDays') <p class="cdn-field-error" role="alert">{{ $message }}</p> @enderror
             </div>

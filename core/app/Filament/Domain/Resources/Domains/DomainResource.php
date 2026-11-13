@@ -43,7 +43,7 @@ class DomainResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
-            TextInput::make('name')->label('Domain')->required()->maxLength(253)->visibleOn('create'),
+            TextInput::make('name')->label('Domain')->placeholder('example.com')->required()->maxLength(253)->visibleOn('create'),
             TextInput::make('display_name')->label('Display label')->maxLength(253)->visibleOn('edit'),
         ]);
     }
