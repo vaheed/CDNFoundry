@@ -66,10 +66,9 @@ local function effective_limits(config, security)
     return merged
 end
 
-local function security_reject(status, reason)
-    local dictionary = ngx.shared.runtime_limits
-    dictionary:incr("capacity:rejected_requests", 1, 0)
-    dictionary:incr("security:reason:" .. reason, 1, 0)
+-- Counts a security event for the reason and, when the request belongs to a domain, queues it for the next heartbeat.
+local function record_security_event(reason)
+    ngx.shared.runtime_limits:incr("security:reason:" .. reason, 1, 0)
     if ngx.ctx.security_domain then
         local events = ngx.shared.security_limits
         local key = "event:" .. tostring(ngx.ctx.security_domain) .. ":" .. reason
@@ -79,6 +78,11 @@ local function security_reject(status, reason)
         events:set("host:" .. tostring(ngx.ctx.security_domain), ngx.ctx.security_hostname or "", 3600)
         events:set("time:" .. tostring(ngx.ctx.security_domain) .. ":" .. reason, ngx.time(), 3600)
     end
+end
+
+local function security_reject(status, reason)
+    ngx.shared.runtime_limits:incr("capacity:rejected_requests", 1, 0)
+    record_security_event(reason)
     if diagnostic_headers_enabled() then ngx.header["X-CDNF-Security-Reason"] = reason else ngx.header["Server"] = nil end
     ngx.var.cdn_security_reason = reason
     ngx.var.cdn_security_action = "block"
@@ -592,12 +596,140 @@ local function autonomous_system(ip)
     return math.floor(number)
 end
 
-local function rule_matches(rule, ip, country, continent)
-    if rule.match_type == "ip" then return ip:lower() == tostring(rule.value):lower() end
-    if rule.match_type == "cidr" then return allowed(ip, {rule.value}) end
-    if rule.match_type == "country" then return country ~= "unknown" and country == rule.value end
-    if rule.match_type == "continent" then return continent ~= "unknown" and continent == rule.value end
+-- Typed custom rules. A rule holds up to five conditions that must all match; each condition is a field from a fixed
+-- list, an operator from a fixed list, and a value. There is no expression language and no regular expression.
+local RULE_MAX_CONDITIONS = 5
+local RULE_MAX_LIST = 100
+
+local function text_matches(operator, actual, expected, fold)
+    if actual == nil then return operator == "not_equals" end
+    actual = tostring(actual)
+    if fold then actual = actual:lower() end
+    local function compare(value)
+        value = tostring(value)
+        if fold then value = value:lower() end
+        if operator == "equals" or operator == "not_equals" or operator == "in_list" then return actual == value end
+        if operator == "starts_with" then return actual:sub(1, #value) == value end
+        if operator == "ends_with" then return #actual >= #value and actual:sub(-#value) == value end
+        if operator == "contains" then return actual:find(value, 1, true) ~= nil end
+        return false
+    end
+    if operator == "in_list" then
+        if type(expected) ~= "table" then return false end
+        for index, value in ipairs(expected) do
+            if index > RULE_MAX_LIST then break end
+            if compare(value) then return true end
+        end
+        return false
+    end
+    local matched = compare(expected)
+    if operator == "not_equals" then return not matched end
+    return matched
+end
+
+local function number_matches(operator, actual, expected)
+    if actual == nil then return operator == "not_equals" end
+    if operator == "greater_than" then return actual > (tonumber(expected) or math.huge) end
+    if operator == "less_than" then return actual < (tonumber(expected) or -math.huge) end
+    if operator == "in_list" then
+        if type(expected) ~= "table" then return false end
+        for index, value in ipairs(expected) do
+            if index > RULE_MAX_LIST then break end
+            if actual == tonumber(value) then return true end
+        end
+        return false
+    end
+    local matched = actual == tonumber(expected)
+    if operator == "not_equals" then return not matched end
+    return matched
+end
+
+local function address_equals(ip, value)
+    value = tostring(value)
+    if value:find("/", 1, true) then return allowed(ip, {value}) end
+    return ip:lower() == value:lower()
+end
+
+local function address_matches(operator, ip, expected)
+    local matched = false
+    if operator == "in_list" then
+        if type(expected) == "table" then
+            for index, value in ipairs(expected) do
+                if index > RULE_MAX_LIST then break end
+                if address_equals(ip, value) then matched = true; break end
+            end
+        end
+        return matched
+    end
+    matched = address_equals(ip, expected)
+    if operator == "not_equals" then return not matched end
+    return matched
+end
+
+local function cookie_names(header)
+    local names = {}
+    if type(header) ~= "string" then return names end
+    local count = 0
+    for pair in header:sub(1, 8192):gmatch("[^;]+") do
+        count = count + 1
+        if count > 100 then break end
+        local name = pair:match("^%s*([^=%s]+)")
+        if name then names[name] = true end
+    end
+    return names
+end
+
+local function header_value(request, name)
+    local value = request.headers[name]
+    if type(value) == "table" then value = value[1] end
+    return value
+end
+
+local function condition_matches(condition, request)
+    local field, operator, expected = condition.field, condition.operator, condition.value
+    if field == "hostname" then return text_matches(operator, request.host, expected, true) end
+    if field == "path" then return text_matches(operator, request.path, expected, false) end
+    if field == "query_present" then return request.query_present == (expected == true) end
+    if field == "method" then return text_matches(operator, request.method, expected, false) end
+    if field == "country" or field == "continent" then
+        local actual = request[field]
+        if actual == nil or actual == "unknown" then return operator == "not_equals" end
+        return text_matches(operator, actual, expected, false)
+    end
+    if field == "asn" then
+        if request.asn == 0 then return operator == "not_equals" end
+        return number_matches(operator, request.asn, expected)
+    end
+    if field == "client_ip" then return address_matches(operator, request.client, expected) end
+    if field == "user_agent" then return text_matches(operator, request.user_agent, expected, true) end
+    if field == "referer" then return text_matches(operator, request.referer, expected, true) end
+    if field == "header" then return text_matches(operator, header_value(request, tostring(condition.name or ""):lower()), expected, true) end
+    if field == "cookie_present" then
+        request.cookies = request.cookies or cookie_names(request.cookie_header)
+        return (request.cookies[tostring(condition.name or "")] == true) == (expected == true)
+    end
+    if field == "content_type" then return text_matches(operator, request.content_type, expected, true) end
+    if field == "body_size" then return number_matches(operator, request.body_size, expected) end
+    if field == "tls_version" then return text_matches(operator, request.tls_version, expected, false) end
     return false
+end
+
+local function security_has_challenge_rule(rules)
+    for index, rule in ipairs(rules) do
+        if index > 1000 then break end
+        if rule.action == "challenge" then return true end
+    end
+    return false
+end
+
+-- A rule matches only when every one of its conditions matches. A malformed rule never matches.
+local function rule_matches(rule, request)
+    local conditions = rule.conditions
+    if type(conditions) ~= "table" or #conditions == 0 or #conditions > RULE_MAX_CONDITIONS then return false end
+    for _, condition in ipairs(conditions) do
+        if type(condition) ~= "table" or not condition_matches(condition, request) then return false end
+    end
+    return true
 end
 
 local function emergency_actions(dictionary)
@@ -896,12 +1028,38 @@ function M.access()
     ngx.var.cdn_continent = continent or "ZZ"
     ngx.var.cdn_asn = tostring(autonomous_system(client))
     local trusted = false
-    for _, rule in ipairs(security.rules or {}) do
-        if rule_matches(rule, client, country, continent) then
-            if rule.action == "block" then return security_reject(403, "domain_restricted") end
-            -- A client the domain's own rules allow is trusted and is not challenged.
-            if rule.action == "allow" then trusted = true end
-            break
+    local rules = security.rules or {}
+    local request = {
+        host = host, path = ngx.var.uri or "/", query_present = (ngx.var.args or "") ~= "", method = method,
+        country = country, continent = continent, asn = tonumber(ngx.var.cdn_asn) or 0, client = client,
+        user_agent = ngx.var.http_user_agent, referer = ngx.var.http_referer, content_type = ngx.var.http_content_type,
+        body_size = size, tls_version = ngx.var.https == "on" and (ngx.var.ssl_protocol or "none") or "none",
+        cookie_header = ngx.var.http_cookie, headers = ngx.req.get_headers(100),
+    }
+    local skip_managed = false
+    local rule_challenge = nil
+    for index, rule in ipairs(rules) do
+        if index > 1000 then break end
+        if rule_matches(rule, request) then
+            if rule.action == "block" then return security_reject(403, "custom_rule_block") end
+            -- A client the domain's own rules allow is trusted: later rules and the challenge do not apply.
+            if rule.action == "allow" then trusted = true; break end
+            if rule.action == "log" then record_security_event("custom_rule_log") end
+            if rule.action == "skip_managed" then skip_managed = true end
+            if rule.action == "challenge" and not rule_challenge then rule_challenge = rule end
+        end
+    end
+    if skip_managed then
+        ngx.req.set_header("X-CDNF-Internal-WAF-Mode", "off")
+        ngx.var.cdn_waf_action = "off"
+    end
+    if rule_challenge or ((ngx.var.uri or "/") == CHALLENGE_PATH and security_has_challenge_rule(rules)) then
+        -- A matching challenge rule asks for the same proof of work as the incident profile, valid for a short while.
+        local rule_incident = {expires_at = ngx.time() + CHALLENGE_TOKEN_SECONDS, challenge_bypass_prefixes = {}}
+        local challenged = enforce_challenge(config, rule_challenge and rule_incident or (incident or rule_incident), client, trusted)
+        if challenged then
+            if rule_challenge then record_security_event("custom_rule_challenge") end
+            return challenged
         end
     end
     if incident and incident.challenge == true then

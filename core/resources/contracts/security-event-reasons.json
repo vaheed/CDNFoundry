@@ -28,6 +28,9 @@
     "incident_method",
     "incident_body_size",
     "challenge_required",
-    "challenge_invalid"
+    "challenge_invalid",
+    "custom_rule_block",
+    "custom_rule_challenge",
+    "custom_rule_log"
   ]
 }
