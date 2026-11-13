@@ -271,7 +271,7 @@ The two panels have different login pages:
 
 Use your own `control.<operator_domain>` name. **Check:** after you sign in at `/admin`, you see the CDNFoundry operations overview. If the browser shows a certificate warning, do not bypass it. Return to the DNS, firewall, and ACME checks above.
 
-An administrator cannot sign in at `/app/login`, and a domain user cannot sign in at `/admin/login`. The form shows the same generic credentials error for a wrong password and for a valid account on the wrong panel. Before you reset a password, confirm the URL, the user type, and that the account is active. A domain user without assigned domains can sign in and sees an empty state.
+An administrator cannot sign in at `/app/login`, and a domain user cannot sign in at `/admin/login`. An administrator who is already signed in and opens `/app` is sent to `/admin` instead of seeing a `403` page, and `/app` itself is never restricted by `management_networks`. The form shows the same generic credentials error for a wrong password and for a valid account on the wrong panel. Before you reset a password, confirm the URL, the user type, and that the account is active. A domain user without assigned domains can sign in and sees an empty state.
 
 ## 6. Start authoritative DNS on both PoPs
 

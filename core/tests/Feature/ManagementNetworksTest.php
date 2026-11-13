@@ -2,11 +2,15 @@
 
 namespace Tests\Feature;
 
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Tests\TestCase;
 
 class ManagementNetworksTest extends TestCase
 {
+    use RefreshDatabase;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -42,6 +46,21 @@ class ManagementNetworksTest extends TestCase
         foreach (['/', '/app', '/app/login', '/health', '/api/domains', '/up', '/api/health', '/api/ready', '/edge/v1/config/manifest'] as $path) {
             $this->assertNotSame(403, $this->call('GET', $path, [], [], [], $this->viaCaddy('203.0.113.9'))->getStatusCode(), $path);
         }
+    }
+
+    public function test_a_signed_in_domain_user_outside_the_management_networks_uses_the_whole_customer_panel(): void
+    {
+        config(['security.management_networks' => '198.51.100.0/24 2001:db8::/32']);
+        $user = User::factory()->create();
+
+        foreach (['203.0.113.9', '2001:db9::7'] as $client) {
+            foreach (['/app', '/app/api-tokens', '/app/analytics', '/app/profile'] as $path) {
+                $response = $this->actingAs($user)->call('GET', $path, [], [], [], $this->viaCaddy($client));
+                $this->assertNotSame(403, $response->getStatusCode(), "{$path} from {$client}");
+            }
+        }
+        // The administrator panel stays closed to the same client, whoever is signed in.
+        $this->actingAs($user)->call('GET', '/admin', [], [], [], $this->viaCaddy('203.0.113.9'))->assertForbidden();
     }
 
     public function test_inside_clients_and_direct_internal_callers_pass(): void
