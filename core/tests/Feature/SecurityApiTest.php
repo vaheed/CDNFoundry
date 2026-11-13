@@ -136,6 +136,21 @@ class SecurityApiTest extends TestCase
         $this->assertSame('IR', collect($snapshot['security']['rules'])->firstWhere('priority', 30)['conditions'][0]['value']);
     }
 
+    public function test_attack_score_fields_accept_one_to_ninety_nine_only(): void
+    {
+        [$user, $domain] = $this->ownedDomain();
+        foreach (['attack_score', 'attack_score_sqli', 'attack_score_xss', 'attack_score_rce'] as $index => $field) {
+            $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", $this->ruleBody($field, '19', 'block', $index + 1, 'less_than'))->assertCreated();
+        }
+        foreach ([0, 100, -3] as $bad) {
+            $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", $this->ruleBody('attack_score', (string) $bad, 'block', 9, 'less_than'))
+                ->assertUnprocessable()->assertJsonValidationErrors('conditions.0.value');
+        }
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", $this->ruleBody('attack_score', '20', 'log', 9, 'starts_with'))
+            ->assertUnprocessable()->assertJsonValidationErrors('conditions.0.operator');
+        $this->assertSame(19, $domain->securityRules()->where('priority', 1)->firstOrFail()->conditions[0]['value']);
+    }
+
     public function test_rule_bounds_duplicates_and_permissions(): void
     {
         [$user, $domain] = $this->ownedDomain();

@@ -50,13 +50,18 @@ final class SecurityRuleData
         'content_type' => ['kind' => 'text', 'operators' => self::TEXT],
         'body_size' => ['kind' => 'bytes', 'operators' => ['equals', 'not_equals', 'greater_than', 'less_than']],
         'tls_version' => ['kind' => 'tls', 'operators' => self::CHOICE],
+        'attack_score' => ['kind' => 'score', 'operators' => self::NUMBER],
+        'attack_score_sqli' => ['kind' => 'score', 'operators' => self::NUMBER],
+        'attack_score_xss' => ['kind' => 'score', 'operators' => self::NUMBER],
+        'attack_score_rce' => ['kind' => 'score', 'operators' => self::NUMBER],
     ];
 
     public const FIELD_LABELS = [
         'hostname' => 'Hostname', 'path' => 'Path', 'query_present' => 'Query string', 'method' => 'Method', 'country' => 'Country',
         'continent' => 'Continent', 'asn' => 'ASN', 'client_ip' => 'Client IP', 'user_agent' => 'User agent', 'referer' => 'Referer',
         'header' => 'Header', 'cookie_present' => 'Cookie', 'content_type' => 'Content type', 'body_size' => 'Body size (bytes)',
-        'tls_version' => 'TLS version',
+        'tls_version' => 'TLS version', 'attack_score' => 'Attack score', 'attack_score_sqli' => 'Attack score (SQL injection)',
+        'attack_score_xss' => 'Attack score (XSS)', 'attack_score_rce' => 'Attack score (command injection)',
     ];
 
     public const OPERATOR_LABELS = [
@@ -178,6 +183,7 @@ final class SecurityRuleData
             'tls' => self::choice($value, self::TLS_VERSIONS, $path, fn (string $item): string => $item),
             'asn' => self::integer($value, 0, 4294967295, $path),
             'bytes' => self::integer($value, 0, 1073741824, $path),
+            'score' => self::integer($value, 1, 99, $path),
             'address' => self::address($value, $path),
         };
     }

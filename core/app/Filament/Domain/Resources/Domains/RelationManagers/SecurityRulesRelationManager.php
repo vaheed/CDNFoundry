@@ -61,6 +61,10 @@ class SecurityRulesRelationManager extends RelationManager
         'cookie_present' => 'Whether the request carries a cookie with this name. The value is never read.',
         'content_type' => 'The Content-Type header of the request.', 'body_size' => 'The request body size in bytes.',
         'tls_version' => 'The TLS version of the connection. Plain HTTP reports "none".',
+        'attack_score' => 'From 1 (attack) to 99 (clean), from the managed WAF\'s anomaly points. Below 20 is a very likely attack. Requests that could not be scored never match.',
+        'attack_score_sqli' => 'The same 1 to 99 score counting only SQL injection signs.',
+        'attack_score_xss' => 'The same 1 to 99 score counting only cross-site scripting signs.',
+        'attack_score_rce' => 'The same 1 to 99 score counting only command injection signs.',
     ];
 
     public function form(Schema $schema): Schema
@@ -145,10 +149,14 @@ class SecurityRulesRelationManager extends RelationManager
                 ->visible(fn (Get $get): bool => (SecurityRuleData::FIELDS[$get('field')]['named'] ?? false) === true)->columnSpanFull(),
             TextInput::make('value')->label('Value')->required()->maxLength(512)->visible($text)->columnSpanFull()
                 ->placeholder(fn (Get $get): string => self::EXAMPLES[$get('field')] ?? 'Value'),
-            TextInput::make('value')->label('Value')->numeric()->required()->visible(fn (Get $get): bool => in_array($kind($get), ['asn', 'bytes'], true) && ! $list($get))
-                ->placeholder(fn (Get $get): string => $kind($get) === 'asn' ? '64500' : '1048576')->columnSpanFull(),
-            TagsInput::make('value')->label('Values')->required()->visible(fn (Get $get): bool => $list($get) && in_array($kind($get), ['text', 'address', 'asn'], true))
-                ->placeholder(fn (Get $get): string => $get('field') === 'asn' ? '64500' : (self::EXAMPLES[$get('field')] ?? 'Value'))
+            TextInput::make('value')->label('Value')->numeric()->required()->visible(fn (Get $get): bool => in_array($kind($get), ['asn', 'bytes', 'score'], true) && ! $list($get))
+                ->placeholder(fn (Get $get): string => match ($kind($get)) {
+                    'asn' => '64500', 'score' => '20', default => '1048576'
+                })->columnSpanFull(),
+            TagsInput::make('value')->label('Values')->required()->visible(fn (Get $get): bool => $list($get) && in_array($kind($get), ['text', 'address', 'asn', 'score'], true))
+                ->placeholder(fn (Get $get): string => match ($kind($get)) {
+                    'asn' => '64500', 'score' => '10', default => self::EXAMPLES[$get('field')] ?? 'Value'
+                })
                 ->helperText('Type a value and press Enter. Up to '.SecurityRuleData::listValuesLimit().' values.')->columnSpanFull(),
             Select::make('value')->label('Country')->options(GeoVocabulary::countryOptions())->searchable()->multiple(fn (Get $get): bool => $list($get))->required()
                 ->visible($choice('country'))->placeholder('Search by name or code')->columnSpanFull(),
