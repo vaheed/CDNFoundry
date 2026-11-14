@@ -519,6 +519,20 @@ def test_config_page_sets_monitoring_logs_and_backups_like_the_cli(served) -> No
     assert "selected" in get(port, "/config")[1]
 
 
+def test_config_page_saves_backup_credentials_into_the_vault_and_never_shows_them(served) -> None:
+    web, port = served
+    add_node(web, port)
+    page = get(port, "/config")[1]
+    assert 'name="access_key"' in page and 'name="secret_key"' in page
+    form = {"csrf": web.csrf, "mode": "control", "repository": "s3:https://storage.example/b", "region": "eu-1", "access_key": "AKIATESTKEY", "secret_key": "test-secret-value"}
+    assert post(port, "/config/feature/backups", form)[0] == 303
+    assert web.read(lambda e: e.store.read_secret("backup-access-key")) == "AKIATESTKEY"
+    assert web.read(lambda e: e.store.read_secret("backup-secret-key")) == "test-secret-value"
+    assert "test-secret-value" not in get(port, "/config")[1]
+    assert post(port, "/config/feature/backups", {**form, "access_key": "", "secret_key": ""})[0] == 303
+    assert web.read(lambda e: e.store.read_secret("backup-access-key")) == "AKIATESTKEY"
+
+
 def test_config_page_refuses_a_log_host_that_does_not_exist_and_an_unknown_setting(served) -> None:
     web, port = served
     code, body, _ = post(port, "/config/feature/logs", {"csrf": web.csrf, "mode": "centralized", "host": "ghost"})
