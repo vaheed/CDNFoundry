@@ -1,5 +1,20 @@
 #!/bin/sh
 set -eu
+# A new repository (an empty bucket, a new path) has to be initialised once before the first snapshot. Only a repository that
+# does not exist is initialised: a wrong password, a bad credential, or an unreachable endpoint stops here with restic's own
+# message, because `restic init` on an existing repository fails and never overwrites it.
+if ! check=$(restic cat config 2>&1 >/dev/null); then
+    case "$check" in
+        *"repository does not exist"*)
+            echo '{"message_type":"status","message":"the backup repository does not exist yet; initialising it"}' >&2
+            restic init >&2
+            ;;
+        *)
+            printf '%s\n' "$check" >&2
+            exit 1
+            ;;
+    esac
+fi
 # Hourly and daily usage rollups survive the loss of the telemetry host. Raw events are not backed up:
 # they expire after seven days and the platform serves without them. A rollup failure never stops the
 # control backup, which is the one that matters for recovery. The export ends with a completion line, so a
