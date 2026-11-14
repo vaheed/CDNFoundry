@@ -39,8 +39,8 @@ def main() -> None:
                        '--query', sql, check=check)
 
         # The previous release's own schema, so the migrations run against a database that genuinely lacks the new columns.
-        previous_init = Path(directory) / 'previous-init.sql'
-        previous_init.write_text(run('git', '-C', str(ROOT), 'show', 'v2.0.8:docker/clickhouse/init.sql').stdout)
+        # Kept as a file because CI checks out without tags.
+        previous_init = ROOT / 'tests/e2e/fixtures/clickhouse-init-2.0.8.sql'
 
         def start(image: str) -> None:
             run('docker', 'run', '-d', '--name', name, '--network', 'none', '--memory', '2g',
