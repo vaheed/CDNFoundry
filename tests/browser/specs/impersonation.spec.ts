@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { adminPassword, expectAccessible, settle, signIn } from './helpers';
+import { adminPassword, expectAccessible, rememberSession, settle, signIn } from './helpers';
 
 // An administrator opens the domain panel as a domain user from the Users screen, sees who they act as, and returns.
 test('an administrator logs in as a domain user and returns to the admin panel', async ({ page }) => {
@@ -22,4 +22,6 @@ test('an administrator logs in as a domain user and returns to the admin panel',
     await page.getByTestId('impersonation-leave').click();
     await page.waitForURL(/\/admin\/users/);
     await expect(page.getByTestId('impersonation-banner')).toHaveCount(0);
+    // Returning regenerates the session id, so the specs that follow need the new cookies, not the ones saved before.
+    await rememberSession(page, 'admin');
 });

@@ -1454,6 +1454,13 @@ a.cdn-condition-row:hover {
     white-space: nowrap;
 }
 
+.cdn-attention .cdn-row-title {
+    overflow: visible;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+    white-space: normal;
+}
+
 .cdn-row-meta {
     margin-top: 0.125rem;
     color: var(--cdn-text-subtle);

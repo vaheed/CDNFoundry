@@ -5,7 +5,10 @@ import { adminPassword, expectAccessible, settle, signIn } from './helpers';
 
 async function startProfile(page: import('@playwright/test').Page): Promise<void> {
     await signIn(page, 'admin', 'admin@browser.test', adminPassword);
-    await page.goto('/admin/domains/1');
+    // Other specs add domains and events, so the domain is found by search rather than by its place on the first page.
+    await page.goto('/admin/domains?tableSearch=alpha-browser');
+    await settle(page);
+    await page.getByText('alpha-browser.example').first().click();
     await settle(page);
     await expect(page.getByTestId('incident-banner')).toHaveCount(0);
     await page.getByTestId('incident-start-action').click();
