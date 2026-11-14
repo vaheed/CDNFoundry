@@ -43,7 +43,10 @@ class BuildUsageRollups implements ShouldQueue
                             'requests' => $rows->sum('requests'), 'bytes_in' => $rows->sum('bytes_in'), 'bytes_out' => $rows->sum('bytes_out'),
                             'cache_hits' => $rows->sum('cache_hits'), 'dns_queries' => $rows->sum('dns_queries'),
                         ]);
-                        foreach (array_keys($scope) as $domainId) {
+                        // Usage summed into a day or a month is final: the hourly detail is gone, so it is never rebuilt.
+                        $compacted = UsageRollup::query()->whereIn('domain_id', array_keys($scope))->whereIn('granularity', ['day', 'month'])
+                            ->where('interval_start', '<=', $interval)->where('interval_end', '>=', $end)->pluck('domain_id')->all();
+                        foreach (array_diff(array_keys($scope), $compacted) as $domainId) {
                             $values = $totals->get((string) $domainId, $totals->get($domainId, ['requests' => 0, 'bytes_in' => 0, 'bytes_out' => 0, 'cache_hits' => 0, 'dns_queries' => 0]));
                             UsageRollup::query()->updateOrCreate(
                                 ['domain_id' => $domainId, 'interval_start' => $interval, 'granularity' => 'hour'],

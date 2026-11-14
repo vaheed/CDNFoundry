@@ -24,7 +24,7 @@ final class UsageReport
         $domains = Domain::query()->withTrashed()->orderBy('id')->pluck('name', 'id');
         $pools = DomainEdgePlacement::query()->join('edge_pools', 'edge_pools.id', '=', 'domain_edge_placements.active_pool_id')
             ->pluck('edge_pools.name', 'domain_edge_placements.domain_id');
-        $rollups = UsageRollup::query()->where('granularity', 'hour')->where('interval_start', '>=', $from)->where('interval_start', '<', $to)
+        $rollups = UsageRollup::query()->where('interval_start', '>=', $from)->where('interval_start', '<', $to)
             ->selectRaw('domain_id, sum(dns_queries) as dns_queries, sum(requests) as requests')->groupBy('domain_id')->get()->keyBy('domain_id');
 
         $rows = [];
