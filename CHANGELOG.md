@@ -7,6 +7,16 @@ single source of truth; `make version-check` enforces it.
 
 ## [Unreleased]
 
+## [2.1.1] - 2026-11-14
+
+Fixes an upgrade from 2.0.8 that stopped in `clickhouse-migrate`. See the [release notes](docs/operations/releases/v2.1.1.md).
+
+### Fixed
+
+- The ClickHouse migration that adds `edge_events.security_rule` now runs before the `security_hourly` view that reads it,
+  so upgrading a 2.0.8 database no longer fails with `UNKNOWN_IDENTIFIER`.
+- The ClickHouse upgrade qualification starts from the previous release's own schema.
+
 ## [2.1.0] - 2026-11-14
 
 Adds notifications, log push, an incident profile, and a typed rule engine with rate limits, managed-WAF tuning,

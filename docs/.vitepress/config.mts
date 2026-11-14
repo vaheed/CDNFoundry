@@ -179,6 +179,7 @@ const operate = [
       { text: 'Signing-key rotation', link: '/operations/signing-key-rotation' },
       { text: 'Software supply chain', link: '/operations/software-supply-chain' },
       { text: 'Production qualification', link: '/operations/production-qualification' },
+      { text: 'Release notes v2.1.1', link: '/operations/releases/v2.1.1' },
       { text: 'Release notes v2.1.0', link: '/operations/releases/v2.1.0' },
       { text: 'Release notes v2.0.8', link: '/operations/releases/v2.0.8' },
       { text: 'Release notes v2.0.7', link: '/operations/releases/v2.0.7' },
