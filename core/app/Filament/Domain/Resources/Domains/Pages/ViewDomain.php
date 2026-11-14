@@ -150,7 +150,7 @@ class ViewDomain extends ViewRecord
     public function getRelationManagers(): array
     {
         $managers = parent::getRelationManagers();
-        if ($this->getRecord()->isVerified()) {
+        if ($this->domain()->isVerified()) {
             return $managers;
         }
 
@@ -190,7 +190,7 @@ class ViewDomain extends ViewRecord
     protected function getHeaderWidgets(): array
     {
         // An unverified domain has no traffic and no incident to show; only what still needs doing.
-        return $this->record->isVerified() ? [DomainKpiStrip::class, DomainIncidentBanner::class, DomainNeedsAttention::class] : [DomainNeedsAttention::class];
+        return $this->domain()->isVerified() ? [DomainKpiStrip::class, DomainIncidentBanner::class, DomainNeedsAttention::class] : [DomainNeedsAttention::class];
     }
 
     public function getHeaderWidgetsColumns(): int|array
@@ -835,7 +835,7 @@ class ViewDomain extends ViewRecord
 
         return collect($actions)
             ->keyBy(fn (Action $action): string => $action->getName())
-            ->each(fn (Action $action, string $name) => in_array($name, $beforeVerification, true) ? null : $action->hidden(fn (): bool => ! $this->record->isVerified()))
+            ->each(fn (Action $action, string $name) => in_array($name, $beforeVerification, true) ? null : $action->hidden(fn (): bool => ! $this->domain()->isVerified()))
             ->each(fn (Action $action, string $name) => isset($submit[$name]) ? $action->modalSubmitActionLabel($submit[$name]) : null)
             ->map(fn (Action $action): Action => match (true) {
                 in_array($action->getName(), $sheets, true) => $action->slideOver()->modalWidth(Width::TwoExtraLarge),

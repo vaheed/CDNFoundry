@@ -112,7 +112,7 @@ class DnsRecordsRelationManager extends RelationManager
                     ->label(FilamentHelp::label('Mode', 'Geo-DNS answers directly. Proxied records send traffic through the domain\'s assigned service pool: the apex publishes managed A/AAAA answers, while subdomains publish a pool-specific CNAME.'))
                     ->options(function (Get $get): array {
                         $options = ['dns_only' => 'DNS only'];
-                        if (! $this->getOwnerRecord()->isVerified()) {
+                        if (! ($this->getOwnerRecord() instanceof Domain && $this->getOwnerRecord()->isVerified())) {
                             return $options;
                         }
                         if (in_array($get('type'), GeoDnsConfig::SUPPORTED_TYPES, true)) {
