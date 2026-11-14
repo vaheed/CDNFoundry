@@ -104,6 +104,13 @@ def node_gate(transport: Any, target: Target, node: dict[str, Any], state: dict[
         r = transport.run(target, f"curl -fsk -m 8 --resolve {host}:443:127.0.0.1 https://{host}/api/health")
         if not r.ok:
             return False, "control /api/health did not answer"
+        # The administrator panel must answer from the host's own fleet address, which is always a management network.
+        # A bare 403 here means the management-network check rejects everyone (a wrong or missing proxy hop, a changed allowlist).
+        address = node.get("public_ipv4") or "127.0.0.1"
+        r = transport.run(target, f"curl -sk -m 8 -o /dev/null -w '%{{http_code}}' --resolve {host}:443:{address} https://{host}/admin/login")
+        code = r.stdout.strip()
+        if not (code.isdigit() and 200 <= int(code) < 400):
+            return False, f"the administrator panel answered {code or 'nothing'} instead of the login page"
     return True, ""
 
 

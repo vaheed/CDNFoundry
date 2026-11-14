@@ -154,8 +154,10 @@ class Engine:
         provision: Callable[[str], tuple[bool, str]] | None = None,
         roots: dict[str, str] | None = None,
         progress: Tracker | None = None,
+        verify: Callable[[str], tuple[bool, str]] | None = None,
     ) -> None:
         self.progress = progress
+        self.verify = verify
         self.services = services or {}
         self.enroll = enroll
         self.provision = provision
@@ -411,6 +413,11 @@ class Engine:
                 return False, (r.stderr or r.stdout).strip()[-300:]
             return dns_port_conflicts(self.t, target, {**self.nodes[step.node], "name": step.node})
         if step.kind == "validate":
+            leftovers = self.t.run(target, f"cd {remote} 2>/dev/null && (ls -d compose.*.yml hotfix hotfix.* 2>/dev/null || true)")
+            if leftovers.ok and leftovers.stdout.strip():
+                names = ", ".join(leftovers.stdout.split())
+                return False, (f"{remote} holds files that are not part of any release ({names}). A swap or rollback would start the "
+                               "services without them. Ship the change in a release, then remove them.")
             return validate_node_config(self.t, target, role, remote + ".next", self.services.get(step.node, set()))
         if step.kind == "switchover":
             if self.switchover:
@@ -449,8 +456,13 @@ class Engine:
                 log(f"{node}: rollback interrupted: {exc}")
                 continue
             detail = "" if r.ok else " " + ((r.stderr or r.stdout).strip()[-300:] or f"exit {r.code}")
-            log(f"{node}: rollback {'ok' if r.ok else 'FAILED'}{detail}")
-            if r.ok:
+            if r.ok and self.verify:
+                # start.sh exiting 0 only proves the containers were created: the restored release must also pass the health gate.
+                verified, why = self.verify(node)
+                if not verified:
+                    r, detail = None, f" restored, but it does not pass its health gate: {why}"
+            log(f"{node}: rollback {'ok' if r is not None and r.ok else 'FAILED'}{detail}")
+            if r is not None and r.ok:
                 rolled.append(node)
         return rolled
 

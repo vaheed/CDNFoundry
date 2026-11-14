@@ -144,6 +144,23 @@ def test_rollback_returns_the_previous_bundle(fleet) -> None:
         assert (Path(root) / "RELEASE").read_text().strip() == "2.0.0"
 
 
+def test_a_rollback_that_restarts_but_fails_the_health_gate_is_not_reported_as_done(fleet) -> None:
+    make, _, roots, _ = fleet
+    engine = make(verify=lambda node: (node != "pop-2", "administrator panel answered 403"))
+    assert engine.apply(plan(), manifest("2.0.1", D2)).ok
+    messages: list[str] = []
+    assert engine._rollback(["pop-1", "pop-2"], [], messages.append) == ["pop-1"]
+    assert any("pop-2: rollback FAILED" in m and "403" in m for m in messages)
+
+
+def test_files_outside_the_release_stop_an_upgrade_before_any_host_changes(fleet) -> None:
+    make, _, roots, _ = fleet
+    (Path(roots["pop-1"]) / "compose.hotfix.yml").write_text("services: {}\n")
+    out = make().apply(plan(), manifest("2.0.1", D2))
+    assert out.failed == "pop-1:validate" and "compose.hotfix.yml" in out.detail
+    assert (Path(roots["pop-1"]) / "RELEASE").read_text().strip() == "2.0.0"
+
+
 def test_validation_runs_the_start_script_up_to_validate_and_no_further(fleet) -> None:
     from cdnfoundry_fleet.validators import validate_node_config
 

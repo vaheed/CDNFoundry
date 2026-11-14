@@ -23,12 +23,14 @@ class R:
 
 class T:
     def __init__(self, bad: str | None = None) -> None:
-        self.bad, self.ran = bad, []
+        self.bad, self.ran, self.admin_status = bad, [], "200"
 
     def run(self, target, command, **_):
         self.ran.append(command)
         if self.bad and self.bad in command:
             return R(1, "syntax error")
+        if "/admin/login" in command:
+            return R(0, "", self.admin_status)
         if command.startswith("dig "):
             return R(0, "", ";; ->>HEADER<<- opcode: QUERY, status: REFUSED, id: 1\n")
         return R(0)
@@ -86,6 +88,18 @@ def test_the_control_gate_asks_the_control_hostname_not_the_operator_domain() ->
     assert ok
     health = next(c for c in t.ran if "/api/health" in c)
     assert "--resolve control.ops.example.test:443:127.0.0.1 https://control.ops.example.test/api/health" in health
+
+
+def test_the_control_gate_fails_when_the_administrator_panel_refuses_the_host_itself() -> None:
+    from cdnfoundry_fleet.checks import node_gate
+
+    t = T()
+    t.admin_status = "403"
+    state = {"global": {"operator_domain": "ops.example.test", "platform_domain": "cdn.example.test"}}
+    ok, detail = node_gate(t, TARGET, {"role": "control", "name": "c", "public_ipv4": "203.0.113.5"}, state)
+    assert not ok and "403" in detail
+    probe = next(c for c in t.ran if "/admin/login" in c)
+    assert "--resolve control.ops.example.test:443:203.0.113.5 https://control.ops.example.test/admin/login" in probe
 
 
 def _ss(*listeners: str):

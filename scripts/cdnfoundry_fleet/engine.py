@@ -295,6 +295,7 @@ class FleetEngine:
             gate=lambda n: self._gate_and_record(n, lambda: gate_with_retry(lambda: node_gate(self.transport, targets[n], state["nodes"][n], state), report=self._report_gate)),
             switchover=self._switchover,
             mixed_versions_ok=mixed_versions_ok, services=services, provision=self._provision, progress=self.progress,
+            verify=lambda n: gate_with_retry(lambda: node_gate(self.transport, targets[n], state["nodes"][n], state), report=self._report_gate),
         )
         built.prepared = self._prepared
         return built
