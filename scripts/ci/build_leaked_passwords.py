@@ -12,11 +12,11 @@ MAXIMUM_ENTRIES = 200_000
 
 def main(source: str, target: str) -> int:
     with open(source, encoding="utf-8") as handle:
-        passwords = {line.rstrip("\n") for line in handle if line.rstrip("\n")}
-    if len(passwords) > MAXIMUM_ENTRIES:
-        print(f"{len(passwords)} passwords exceed the limit of {MAXIMUM_ENTRIES}", file=sys.stderr)
+        entries = {line.rstrip("\n") for line in handle if line.rstrip("\n")}
+    if len(entries) > MAXIMUM_ENTRIES:
+        print(f"{len(entries)} entries exceed the limit of {MAXIMUM_ENTRIES}", file=sys.stderr)
         return 1
-    hashes = sorted({hashlib.sha256(password.encode()).hexdigest()[:16] for password in passwords})
+    hashes = sorted({hashlib.sha256(entry.encode()).hexdigest()[:16] for entry in entries})
     with open(target, "w", encoding="ascii") as handle:
         handle.write("\n".join(hashes) + "\n")
     return 0

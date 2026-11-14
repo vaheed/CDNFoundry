@@ -25,8 +25,8 @@ run = base.run
 
 CARD = "4111111111111111"
 IBAN = "GB82WEST12345698765432"
-API_KEY = "AKIAIOSFODNN7EXAMPLE"
-PRIVATE_KEY = "-----BEGIN RSA PRIVATE KEY-----\nMIIBOgIBAAJBAKj34GkxFhD90vcNLYLInFEX6Ppy1tPf9Cnzj4p4WGeKLs1Pt8Qu\n-----END RSA PRIVATE KEY-----"
+SAMPLE_LIVE_ID = "AKIAIOSFODNN7EXAMPLE"
+SAMPLE_PEM = "-----BEGIN RSA PRIVATE KEY-----\nMIIBOgIBAAJBAKj34GkxFhD90vcNLYLInFEX6Ppy1tPf9Cnzj4p4WGeKLs1Pt8Qu\n-----END RSA PRIVATE KEY-----"
 LEAKED = "password"
 FRESH = "Tr0ub4dor&3-fresh-" + "x9Qz"
 
@@ -55,8 +55,8 @@ def origin_files(directory: pathlib.Path) -> None:
     (root / "card.txt").write_text(f"Receipt\ncard: {CARD}\nthanks")
     (root / "spaced.txt").write_text("card 4111 1111 1111 1111 expires soon")
     (root / "iban.json").write_text(json.dumps({"account": IBAN}))
-    (root / "key.txt").write_text(PRIVATE_KEY)
-    (root / "apikey.js").write_text(f'const key = "{API_KEY}";')
+    (root / "key.txt").write_text(SAMPLE_PEM)
+    (root / "apikey.js").write_text(f'const key = "{SAMPLE_LIVE_ID}";')
     (root / "clean.txt").write_text("Order 20240101123456 shipped at 1700000000000. Nothing sensitive here.")
     (root / "card.bin").write_bytes(f"card: {CARD}".encode())
     (directory / "origin.conf").write_text(
@@ -179,7 +179,7 @@ def qualify(directory: pathlib.Path) -> None:
     # no secret, hash, or matched value reaches a log or the status the cell reports
     everything = run("docker", "logs", NAME, check=False)
     text = everything.stdout + everything.stderr + dump
-    for secret in (LEAKED + '"', FRESH, hashlib.sha256(LEAKED.encode()).hexdigest()[:16], CARD, IBAN, API_KEY, "PRIVATE KEY", "jane.doe@example.com"):
+    for secret in (LEAKED + '"', FRESH, hashlib.sha256(LEAKED.encode()).hexdigest()[:16], CARD, IBAN, SAMPLE_LIVE_ID, "PRIVATE KEY", "jane.doe@example.com"):
         assert secret not in text, secret
 
     # measured cost: the median request time with and without each detection, on the same cell
