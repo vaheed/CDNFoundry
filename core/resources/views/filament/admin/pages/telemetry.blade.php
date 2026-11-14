@@ -57,14 +57,14 @@
                             <div @class(['min-w-0', 'lg:col-span-2' => array_key_exists('path', $table['columns']) || array_key_exists('qname', $table['columns']) || array_key_exists('origin_error', $table['columns'])])>
                                 <div class="cdn-row-title">{{ $table['title'] }}</div>
                                 <p class="cdn-row-meta mb-2">{{ $table['description'] }}</p>
-                                <x-ui.data-table :caption="$table['title']" fixed>
+                                <x-ui.data-table :caption="$table['title']" auto class="[&_.cdn-data-table]:min-w-[28rem]" role="region" tabindex="0" :aria-label="$table['title'] . ', scrolls sideways on a narrow screen'">
                                     <x-slot:header><tr>@foreach ($table['columns'] as $key => $label)<th class="{{ in_array($key, ['requests', 'queries', 'bytes_out', 'failures', 'samples', 'average_ms'], true) ? 'text-right' : 'text-left' }}">{{ $label }}</th>@endforeach</tr></x-slot:header>
                                     @forelse (array_slice($table['rows'], 0, 10) as $row)
                                         <tr>@foreach ($table['columns'] as $key => $label)
                                             @php $value = $row[$key] ?? ''; @endphp
                                             @if (in_array($key, ['requests', 'queries', 'failures', 'samples', 'average_ms'], true))<td class="px-3 py-2 text-right tabular-nums">{{ number_format((float) $value) }}</td>
                                             @elseif ($key === 'bytes_out')<td class="px-3 py-2 text-right tabular-nums">{{ $formatBytes($value) }}</td>
-                                            @else<td class="px-3 py-2" @if (strlen((string) $value) > 24) title="{{ $value }}" @endif>{{ $value === '' ? 'None' : $value }}</td>@endif
+                                            @else<td class="px-3 py-2" @if (! $loop->first) style="max-width: 18rem; overflow: hidden; text-overflow: ellipsis" @endif @if (strlen((string) $value) > 24) title="{{ $value }}" @endif>{{ $value === '' ? 'None' : $value }}</td>@endif
                                         @endforeach</tr>
                                     @empty
                                         <tr><td colspan="{{ count($table['columns']) }}" class="px-3 py-6 text-center text-gray-500">Nothing was recorded for this table in the selected range.</td></tr>
@@ -96,7 +96,7 @@
 
             <div class="cdn-dashboard-columns">
                 <x-filament::section heading="Global traffic" icon="phosphor-chart-bar">
-                    <x-ui.data-table caption="Global hourly traffic" fixed>
+                    <x-ui.data-table caption="Global hourly traffic" auto class="[&_.cdn-data-table]:min-w-[24rem]" role="region" tabindex="0" aria-label="Global hourly traffic, scrolls sideways on a narrow screen">
                         <x-slot:header><tr><th>Hour</th><th class="text-right">Requests</th><th class="text-right">Transfer</th></tr></x-slot:header>
                                 @forelse ($state['traffic']['items'] as $row)
                                     <tr><td class="px-3 py-2" title="{{ $display->formatTimestamp($row['bucket'] ?? null) }}">{{ $display->formatTimestamp($row['bucket'] ?? null, 'M j, H:i') }}</td><td class="px-3 py-2 text-right tabular-nums">{{ number_format((int) ($row['requests'] ?? 0)) }}</td><td class="px-3 py-2 text-right tabular-nums">{{ $formatBytes(((int) ($row['bytes_in'] ?? 0)) + ((int) ($row['bytes_out'] ?? 0))) }}</td></tr>
@@ -117,7 +117,7 @@
                 </x-filament::section>
 
                 <x-filament::section heading="Global DNS" icon="phosphor-globe">
-                    <x-ui.data-table caption="Global DNS responses" fixed>
+                    <x-ui.data-table caption="Global DNS responses" auto class="[&_.cdn-data-table]:min-w-[24rem]" role="region" tabindex="0" aria-label="Global DNS responses, scrolls sideways on a narrow screen">
                         <x-slot:header><tr><th>Type</th><th>Response</th><th class="text-right">Queries</th></tr></x-slot:header>
                                 @forelse ($state['dns']['items'] as $row)
                                     <tr><td class="px-3 py-2 font-medium">{{ $row['qtype'] ?? 'Unknown' }}</td><td class="px-3 py-2">{{ $row['rcode'] ?? 'Unknown' }}</td><td class="px-3 py-2 text-right tabular-nums">{{ number_format((int) ($row['queries'] ?? 0)) }}</td></tr>
