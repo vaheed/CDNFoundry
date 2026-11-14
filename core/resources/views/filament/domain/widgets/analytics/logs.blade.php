@@ -13,7 +13,7 @@
             @elseif ($state === 'no_data')
                 <x-ui.widget-state state="no_data" description="No {{ strtolower($streams[$active]) }} events were recorded in this window." />
             @elseif ($active === 'dns')
-                <x-ui.data-table caption="Recent DNS queries" fixed>
+                <x-ui.data-table caption="Recent DNS queries" auto>
                     <x-slot:header><tr><th class="text-left">Name</th><th class="text-left">Type</th><th class="hidden text-left md:table-cell">Client</th><th class="text-right">Time</th></tr></x-slot:header>
                     @foreach ($rows as $row)
                         <tr>
@@ -25,7 +25,7 @@
                     @endforeach
                 </x-ui.data-table>
             @else
-                <x-ui.data-table caption="Recent {{ strtolower($streams[$active]) }} events" fixed>
+                <x-ui.data-table caption="Recent {{ strtolower($streams[$active]) }} events" auto>
                     <x-slot:header><tr><th class="text-left">Request</th><th class="text-right">Status</th><th class="hidden text-left md:table-cell">Client</th><th class="text-right">Time</th></tr></x-slot:header>
                     @foreach ($rows as $row)
                         @php($request = ($row['hostname'] ?? '') . ($row['path'] ?? ''))
