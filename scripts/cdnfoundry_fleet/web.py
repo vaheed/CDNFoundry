@@ -531,11 +531,11 @@ class FleetWeb:
             "/config/feature/logs", "Save central logs", fields=(
                 f'<label>Central logs<select name="mode" data-testid="logs-mode">{options(("disabled", "centralized"), logs["mode"], {"disabled": "Off", "centralized": "On"})}</select></label>'
                 f'<label>Log host<select name="host" data-testid="logs-host"><option value="">None</option>{options(hosts, logs.get("host"))}</select></label>'
-                f'<label>Endpoint<input name="endpoint" value="{esc(logs.get("endpoint") or "")}" autocomplete="off" placeholder="https://logs.example.com"><span class="hint">Where central logs are sent. Leave empty to keep them on the log host.</span></label>'))
+                f'<label>Endpoint<input name="endpoint" value="{esc(logs.get("endpoint") or "")}" autocomplete="off" placeholder="https://logs.example.com"><span class="hint">Where logs are sent. Leave empty to keep them on the log host.</span></label>'))
         backup = self.action_form(
             "/config/feature/backups", "Save backups", fields=(
                 f'<label>Backups<select name="mode" data-testid="backups-mode">{options(("disabled", "control", "all-stateful"), backups["mode"], {"disabled": "Off", "control": "Control plane", "all-stateful": "Every stateful host"})}</select></label>'
-                f'<label>Repository<input name="repository" value="{esc(backups.get("repository") or "")}" autocomplete="off" placeholder="s3:https://storage.example/bucket/cdnfoundry"><span class="hint">The restic repository that holds the backups, for example an S3 bucket URL.</span></label>'
+                f'<label>Repository<input name="repository" value="{esc(backups.get("repository") or "")}" autocomplete="off" placeholder="s3:https://storage.example/bucket/cdnfoundry"><span class="hint">The restic repository location, for example an S3 bucket URL.</span></label>'
                 f'<label>Region<input name="region" value="{esc(backups.get("region") or "us-east-1")}" autocomplete="off" placeholder="us-east-1"></label>'))
         return ('<p class="hint">Saving changes the plan only. Use Deploy changes below to send it to the hosts.</p>' + monitoring + central + backup)
 
