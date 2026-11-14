@@ -3,6 +3,12 @@ import { adminPassword, expectAccessible, settle, signIn } from './helpers';
 
 /** The seeded rows are the oldest, so after other specs add events they may sit on a later page: page forward until the row shows. */
 async function expectOnSomePage(page: import('@playwright/test').Page, row: import('@playwright/test').Locator): Promise<void> {
+    // Start from the first page, so a check that follows another never begins where the last one stopped.
+    const previous = page.getByRole('button', { name: 'Previous' });
+    for (let back = 0; back < 8 && (await previous.isVisible()) && !(await previous.isDisabled()); back++) {
+        await previous.click();
+        await settle(page);
+    }
     for (let attempt = 0; attempt < 8; attempt++) {
         if (await row.isVisible()) return;
         const next = page.getByRole('button', { name: 'Next' });
@@ -28,10 +34,10 @@ test('the domain history shows operator actions and automatic changes, and filte
     await settle(page);
 
     const automatic = page.getByRole('row').filter({ hasText: 'Security state changed' });
-    await expect(automatic.first()).toBeVisible();
-    await expect(page.getByText('Normal to suspected, 64 events in 5 minutes')).toBeVisible();
-    await expect(page.getByText('Suspected to normal, quiet for 10 minutes')).toBeVisible();
-    await expect(automatic.first().getByText('Platform')).toBeVisible();
+    await expectOnSomePage(page, automatic.first());
+    await expectOnSomePage(page, page.getByText('Normal to suspected, 64 events in 5 minutes'));
+    await expectOnSomePage(page, page.getByText('Suspected to normal, quiet for 10 minutes'));
+    await expectOnSomePage(page, automatic.first().getByText('Platform'));
     await expectOnSomePage(page, page.getByRole('row').filter({ hasText: 'Cache purged' }).first());
 
     await page.getByRole('button', { name: 'Filter', exact: true }).click();
