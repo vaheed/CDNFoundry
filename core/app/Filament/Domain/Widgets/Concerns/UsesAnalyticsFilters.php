@@ -21,7 +21,9 @@ trait UsesAnalyticsFilters
     protected function analyticsScope(): array
     {
         $selected = array_values(array_filter(array_map('intval', (array) ($this->pageFilters['domains'] ?? [])), fn (int $id): bool => $id > 0));
-        $query = AnalyticsFilterOptions::assignedDomains()->when($selected !== [], fn (Builder $query) => $query->whereKey($selected));
+        // The administrator's Telemetry page passes `platform` to see every verified domain; no one else can widen the scope.
+        $platform = ($this->pageFilters['platform'] ?? false) === true && auth()->user()?->isAdmin() === true;
+        $query = ($platform ? AnalyticsFilterOptions::platformDomains() : AnalyticsFilterOptions::assignedDomains())->when($selected !== [], fn (Builder $query) => $query->whereKey($selected));
         $total = (clone $query)->count();
 
         return [
@@ -41,7 +43,7 @@ trait UsesAnalyticsFilters
             'bucket' => $from->diffInHours($to) > 7 * 24 ? 'day' : 'hour',
         ];
         if ($range !== 'custom') {
-            return $result($now->subSeconds(['7d' => 604800, '30d' => 2592000][$range] ?? 86400), $now);
+            return $result($now->subSeconds(['1h' => 3600, '6h' => 21600, '7d' => 604800, '30d' => 2592000][$range] ?? 86400), $now);
         }
         $timezone = app(PlatformSettings::class)->displayTimezone();
         try {

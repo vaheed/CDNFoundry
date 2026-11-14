@@ -8,6 +8,13 @@ use App\Filament\Shared\Pages\ApiTokens;
 use App\Filament\Shared\Pages\EditProfile;
 use App\Filament\Shared\Pages\NotificationChannels;
 use App\Support\GrafanaExploreUrl;
+use App\Filament\Domain\Widgets\AnalyticsBreakdowns;
+use App\Filament\Domain\Widgets\AnalyticsDomainTable;
+use App\Filament\Domain\Widgets\AnalyticsRecentLogs;
+use App\Filament\Domain\Widgets\AnalyticsResponsesChart;
+use App\Filament\Domain\Widgets\AnalyticsSecurityBreakdowns;
+use App\Filament\Domain\Widgets\AnalyticsSummary;
+use App\Filament\Domain\Widgets\AnalyticsTrafficChart;
 use Filament\Auth\MultiFactor\App\AppAuthentication;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
@@ -51,7 +58,12 @@ class AdminPanelProvider extends PanelProvider
             ->resources([DomainResource::class])
             ->discoverPages(in: app_path('Filament/Admin/Pages'), for: 'App\\Filament\\Admin\\Pages')
             ->pages([AdminDashboard::class, ApiTokens::class, NotificationChannels::class])
-            ->widgets([AccountWidget::class])
+            ->widgets([
+                AccountWidget::class,
+                // The administrator's Telemetry page shows the same analytics a domain user sees, over every verified domain.
+                AnalyticsSummary::class, AnalyticsTrafficChart::class, AnalyticsResponsesChart::class, AnalyticsDomainTable::class,
+                AnalyticsBreakdowns::class, AnalyticsSecurityBreakdowns::class, AnalyticsRecentLogs::class,
+            ])
             ->middleware([
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,

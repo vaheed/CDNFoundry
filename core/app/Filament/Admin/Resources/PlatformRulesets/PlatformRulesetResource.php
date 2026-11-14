@@ -47,7 +47,7 @@ class PlatformRulesetResource extends Resource
             Toggle::make('applies_to_all')->label(FilamentHelp::label('Apply to all domains', 'Every domain gets this ruleset ahead of its own rules. Turn it off to choose domains.'))->live()->default(false),
             Select::make('domain_ids')->label(FilamentHelp::label('Domains', 'Only these domains get the ruleset. Up to '.config('security.maximum_platform_ruleset_domains').'.'))
                 ->multiple()->searchable()->maxItems((int) config('security.maximum_platform_ruleset_domains'))->placeholder('Search by domain name, for example example.com')
-                ->getSearchResultsUsing(fn (string $search): array => Domain::query()->where('name', 'like', '%'.addcslashes($search, '%_\\').'%')->orderBy('name')->limit(50)->pluck('name', 'id')->all())
+                ->getSearchResultsUsing(fn (string $search): array => Domain::query()->verified()->where('name', 'like', '%'.addcslashes($search, '%_\\').'%')->orderBy('name')->limit(50)->pluck('name', 'id')->all())
                 ->getOptionLabelsUsing(fn (array $values): array => Domain::query()->whereIn('id', $values)->pluck('name', 'id')->all())
                 ->visible(fn (Get $get): bool => ! $get('applies_to_all')),
         ])->columns(1);

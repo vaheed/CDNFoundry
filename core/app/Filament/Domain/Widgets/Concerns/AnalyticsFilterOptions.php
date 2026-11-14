@@ -22,4 +22,15 @@ final class AnalyticsFilterOptions
     {
         return Domain::query()->whereHas('users', fn (Builder $users): Builder => $users->whereKey(auth()->id()));
     }
+
+    /**
+     * What an administrator's Telemetry page analyzes: every verified domain. A pending claim has no traffic and shares its name
+     * with other claims, so it is never listed.
+     *
+     * @return Builder<Domain>
+     */
+    public static function platformDomains(): Builder
+    {
+        return Domain::query()->verified();
+    }
 }
