@@ -54,6 +54,11 @@ queues no edge operation. It does not change the timezone of an external Grafana
 | `audit_retention_days` | 365 | 30–3,650 |
 | `security_event_retention_days` | 30 | 7–365 |
 | `operation_retention_days` | 90 | 7–3,650 |
+| `usage_hourly_retention_days` | 35 | 8–380 |
+| `usage_daily_retention_days` | 365 | 90–3,650 |
+| `edge_task_retention_days` | 30 | 7–365 |
+| `cache_purge_retention_days` | 90 | 7–730 |
+| `tls_order_retention_days` | 180 | 30–1,095 |
 | `scheduler_stale_seconds` | 180 | 60–3,600 |
 | `clock_drift_warning_seconds` | 5 | 1–300 |
 | `backup_stale_hours` | 26 | 1–168 |
@@ -62,6 +67,9 @@ queues no edge operation. It does not change the timezone of an external Grafana
 - `audit_retention_days`: a daily job deletes audit events older than this, in small batches.
 - `security_event_retention_days`: a daily job deletes edge-reported security events older than this. The control plane keeps one row per domain, edge, reason, and hour, so a flood of reports cannot grow the table faster than that.
 - `operation_retention_days`: a daily job deletes finished operations older than this. Pending and running operations, and failed operations nobody has acknowledged, are kept.
+- `usage_hourly_retention_days`, `usage_daily_retention_days`: a daily job sums hourly usage into days, and days into months, after these periods. Totals are unchanged.
+- `edge_task_retention_days`, `cache_purge_retention_days`: a daily job deletes succeeded and failed edge tasks, and finished cache purges with their URL lists, older than these. Pending and running ones are kept.
+- `tls_order_retention_days`: a daily job deletes finished certificate orders and their challenges older than this. The newest order of every domain is kept, and certificates are never deleted.
 - `scheduler_stale_seconds`: health turns degraded when the scheduler heartbeat is older than this.
 - `clock_drift_warning_seconds`: the largest host clock offset that monitoring and qualification accept.
 - `backup_stale_hours`: the largest accepted age of the newest verified off-host control database backup.

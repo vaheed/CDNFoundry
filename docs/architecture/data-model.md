@@ -42,6 +42,24 @@ erDiagram
 | Analytics and operations | `usage_rollups`, `generated_reports`, `backups`, `fleet_releases`, `fleet_rollouts`, `fleet_rollout_edges`, `control_nodes`, `control_plane_state`, Laravel jobs and failed jobs |
 | Product policy | `system_settings`: JSONB groups checked against `core/config/platform.php` |
 
+## Growth and retention
+
+Request logs, DNS query logs, and traffic aggregates live only in ClickHouse; PostgreSQL holds desired state and a small
+amount of bounded history. Every table that grows with activity has a retention rule and a scheduled job.
+
+| Table | What grows it | Bound |
+| --- | --- | --- |
+| `usage_rollups` | one row per domain and hour | hours sum into days after 35 days, days into months after a year; about 12 rows per domain and year afterwards |
+| `security_events` | edge reports | one row per domain, edge, reason, and hour; deleted after 30 days |
+| `audit_logs`, `operations` | actions and jobs | deleted after 365 and 90 days |
+| `edge_tasks`, `cache_purges` | purges, tests, rollouts | finished rows deleted after 30 and 90 days |
+| `tls_orders`, `acme_challenges` | issuance and renewal | finished orders deleted after 180 days, newest per domain kept |
+| `failed_jobs`, `personal_access_tokens`, `idempotency_keys` | failures, tokens, retries | deleted after 90 days, expiry, and one day |
+| `edge_revisions` | proxy deploys | bounded history per domain |
+
+Queues, sessions, and the cache are in Redis. Only desired state, certificates, domains, and these bounded tables remain,
+so PostgreSQL grows with the number of domains, not with traffic. All IDs of growing tables are `bigint` or UUID.
+
 Domains and DNS records use integer IDs. Edges, operations, tasks, backups,
 purges, certificates, orders, and challenges use UUIDs where they cross process
 or host boundaries.

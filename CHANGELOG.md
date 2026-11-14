@@ -7,6 +7,11 @@ single source of truth; `make version-check` enforces it.
 
 ## [Unreleased]
 
+### Added
+
+- `cdnf:usage:compact` sums hourly usage into daily rows after 35 days and daily rows into monthly rows after a year, with the same totals, so `usage_rollups` stops growing by a row per domain per hour.
+- `cdnf:history:prune`, `queue:prune-failed`, and `sanctum:prune-expired` run daily: finished edge tasks, cache purges, certificate orders, expired name holds, old failed jobs, and expired tokens no longer accumulate in PostgreSQL. New retention settings control the windows. A migration adds the settings, the `month` granularity, and the supporting indexes.
+
 ### Fixed
 
 - The Fleet web Backups form now takes the S3 access key ID and secret access key, which it saves into the vault without showing them again.

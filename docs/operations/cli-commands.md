@@ -55,6 +55,8 @@ docker compose -f compose.dev.yml run --rm core php artisan cdnf:api:openapi --c
 | Command and syntax | Purpose and effects | Scheduled |
 | --- | --- | --- |
 | `cdnf:operations:prune {--batch=5000}` | Permanently deletes one bounded batch of finished operations older than `operation_retention_days`. Pending, running, and unacknowledged failed operations are kept. | Daily at 03:30 |
+| `cdnf:history:prune {--batch=5000}` | Permanently deletes one bounded batch each of finished edge tasks, finished cache purges, finished certificate orders (never the newest of a domain), and domain-name holds 30 days past their reclaim date. | Daily at 03:35 |
+| `cdnf:usage:compact {--periods=40}` | Sums hourly usage older than `usage_hourly_retention_days` into daily rows, and daily usage older than `usage_daily_retention_days` into monthly rows. Totals are unchanged and each period is one transaction. | Daily at 03:45 |
 | `cdnf:security-events:prune {--batch=5000}` | Permanently deletes one bounded batch of security events older than `security_event_retention_days`. | Daily at 03:20 |
 | `cdnf:audit:prune {--batch=1000}` | Permanently deletes one bounded batch of audit events beyond configured retention. Increase the batch cautiously because deletion load grows with it. | Daily at 03:10 |
 
