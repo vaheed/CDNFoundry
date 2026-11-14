@@ -118,7 +118,7 @@ class EdgeProxyTest extends TestCase
         $this->assertNull($reports['unassigned'][1]->refresh()->origin_health);
         $this->assertDatabaseHas('security_events', ['domain_id' => $reports['assigned'][0]->id]);
         $this->assertDatabaseMissing('security_events', ['domain_id' => $reports['unassigned'][0]->id]);
-        $payload['noisy_domains'] = [[...$payload['noisy_domains'][0], 'count' => 51]];
+        $payload['noisy_domains'] = [[...$payload['noisy_domains'][0], 'count' => 51, 'clients' => 12]];
         $this->postJson('/edge/v1/heartbeat', $payload)->assertOk();
         $assigned = $reports['assigned'][0]->refresh();
         $this->assertSame('suspected', $assigned->automatic_security_state);

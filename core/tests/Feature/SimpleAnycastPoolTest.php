@@ -254,7 +254,7 @@ class SimpleAnycastPoolTest extends TestCase
         $report = fn (string $reason, int $count) => Request::create('/edge/v1/heartbeat', 'POST', [
             'agent_version' => '1.2.0', 'listener_ready' => true, 'active_sequence' => 0,
             'cells' => [['name' => 'cell-01', 'status' => 'ready', 'capacity' => ['active_connections' => 0]]],
-            'noisy_domains' => [['domain_id' => $domain->id, 'hostname' => 'own-rule.test', 'reason_code' => $reason, 'count' => $count, 'occurred_at' => now()->timestamp]],
+            'noisy_domains' => [['domain_id' => $domain->id, 'hostname' => 'own-rule.test', 'reason_code' => $reason, 'count' => $count, 'occurred_at' => now()->timestamp, 'clients' => 12]],
         ]);
 
         foreach (['domain_quarantined', 'invalid_method', 'edge_emergency_mode'] as $reason) {

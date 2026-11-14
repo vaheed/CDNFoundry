@@ -271,6 +271,7 @@ class EdgeAgentController extends Controller
             'reason_code' => ['required', 'string', Rule::in(SecurityConfig::reasonCodes())],
             'count' => ['required', 'integer', 'between:1,2147483647'],
             'occurred_at' => ['required', 'integer', 'min:0'],
+            'clients' => ['sometimes', 'integer', 'between:0,1000'],
         ], $advisoryDropped);
         $data['passive_origins'] = $this->advisoryEntries($request->input('passive_origins', []), [
             'domain' => ['required', 'string', 'max:253'],

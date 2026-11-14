@@ -118,6 +118,84 @@ class AutomaticSecurityStateTest extends TestCase
         $this->assertSame('normal', $domain->refresh()->automatic_security_state);
     }
 
+    public function test_a_flood_from_one_client_never_tightens_the_domain_for_everyone_else(): void
+    {
+        Queue::fake();
+        [$edge, $domain] = $this->servedDomain('automatic');
+
+        // Five hundred escalating events, every one from the same client.
+        foreach ([100, 250, 500] as $cumulative) {
+            $this->report($edge, $domain, 'waf_block', $cumulative, 1);
+            $this->report($edge, $domain, 'client_rate_exceeded', $cumulative, 1);
+        }
+
+        $this->assertGreaterThanOrEqual(1000, RecordSecurityReport::recentRate($domain));
+        $this->assertSame(1, RecordSecurityReport::distinctClients($domain));
+        $this->assertSame('normal', $domain->refresh()->automatic_security_state);
+        $this->assertSame(0, EdgeTask::query()->where('type', 'security_overlay')->count());
+        $this->assertSame(0, AuditLog::query()->where('action', 'security.automatic_state_changed')->count());
+    }
+
+    public function test_the_domain_tightens_only_when_enough_distinct_clients_take_part(): void
+    {
+        Queue::fake();
+        [$edge, $domain] = $this->servedDomain('automatic');
+
+        $this->report($edge, $domain, 'client_rate_exceeded', 60, SecurityConfig::DISTRIBUTED_CLIENTS_MINIMUM - 1);
+        $this->assertSame('normal', $domain->refresh()->automatic_security_state, 'sixty events from nine clients is not distributed');
+
+        $this->report($edge, $domain, 'client_rate_exceeded', 61, SecurityConfig::DISTRIBUTED_CLIENTS_MINIMUM);
+        $this->assertSame('suspected', $domain->refresh()->automatic_security_state);
+        $change = AuditLog::query()->where('action', 'security.automatic_state_changed')->sole();
+        $this->assertSame(SecurityConfig::DISTRIBUTED_CLIENTS_MINIMUM, $change->metadata['distinct_clients']);
+    }
+
+    public function test_a_cell_that_reports_no_client_evidence_never_escalates_a_domain(): void
+    {
+        Queue::fake();
+        [$edge, $domain] = $this->servedDomain('automatic');
+
+        $this->report($edge, $domain, 'client_rate_exceeded', 500, null);
+
+        $this->assertSame(0, RecordSecurityReport::distinctClients($domain));
+        $this->assertSame('normal', $domain->refresh()->automatic_security_state);
+    }
+
+    public function test_client_evidence_older_than_the_rate_window_does_not_count(): void
+    {
+        Queue::fake();
+        [$edge, $domain] = $this->servedDomain('automatic');
+        $this->report($edge, $domain, 'client_rate_exceeded', 10, 30);
+        $this->assertSame(30, RecordSecurityReport::distinctClients($domain));
+
+        $this->travel(SecurityConfig::RATE_WINDOW_MINUTES + 1)->minutes();
+
+        $this->assertSame(0, RecordSecurityReport::distinctClients($domain));
+    }
+
+    public function test_the_most_distinct_clients_of_any_edge_is_the_evidence_not_their_sum(): void
+    {
+        Queue::fake();
+        [$edge, $domain] = $this->servedDomain('automatic');
+        $second = Edge::query()->create(['name' => 'second-pop', 'country_code' => 'DE', 'continent_code' => 'EU']);
+        $cell = $second->cells()->create(['slot' => 1, 'status' => 'ready']);
+        DomainEdgeCell::query()->create(['domain_id' => $domain->id, 'edge_id' => $second->id, 'replica' => 1, 'active_cell_id' => $cell->id, 'desired_revision' => 3, 'state' => 'active']);
+
+        $this->report($edge, $domain, 'waf_block', 10, 6);
+        $this->report($second, $domain, 'waf_block', 10, 7);
+
+        $this->assertSame(7, RecordSecurityReport::distinctClients($domain), 'one client may reach both edges, so the evidence is not added up');
+        $this->assertSame('normal', $domain->refresh()->automatic_security_state);
+    }
+
+    public function test_containing_a_client_is_not_an_escalating_event(): void
+    {
+        $this->assertContains('client_temporarily_blocked', SecurityConfig::nonEscalatingReasons());
+        $this->assertContains('client_temporarily_blocked', SecurityConfig::reasonCodes());
+        $this->assertNotContains('client_rate_exceeded', SecurityConfig::nonEscalatingReasons(), 'a crowd of clients over their limits is distributed evidence');
+        $this->assertNotContains('waf_block', SecurityConfig::nonEscalatingReasons());
+    }
+
     public function test_an_edge_that_receives_the_domain_later_gets_the_current_overlay(): void
     {
         Queue::fake();
@@ -149,10 +227,12 @@ class AutomaticSecurityStateTest extends TestCase
         return [$edge, $domain];
     }
 
-    private function report(Edge $edge, Domain $domain, string $reason, int $cumulative): void
+    /** A report from a cell. By default the events came from a crowd of clients; pass `null` for a cell that reports no client evidence. */
+    private function report(Edge $edge, Domain $domain, string $reason, int $cumulative, ?int $clients = 12): void
     {
         RecordSecurityReport::execute($edge, [
             'domain_id' => $domain->id, 'hostname' => $domain->name, 'reason_code' => $reason, 'count' => $cumulative, 'occurred_at' => now()->timestamp,
+            ...($clients === null ? [] : ['clients' => $clients]),
         ]);
     }
 }

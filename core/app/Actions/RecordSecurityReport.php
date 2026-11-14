@@ -19,7 +19,7 @@ class RecordSecurityReport
 {
     private const SLOT_RETENTION_MINUTES = 15;
 
-    /** @param array{domain_id: int, hostname?: ?string, reason_code: string, count: int, occurred_at: int} $event */
+    /** @param array{domain_id: int, hostname?: ?string, reason_code: string, count: int, occurred_at: int, clients?: int} $event */
     public static function execute(Edge $edge, array $event): void
     {
         DB::transaction(function () use ($edge, $event): void {
@@ -46,11 +46,14 @@ class RecordSecurityReport
             $slots = array_filter($slots, fn (int $value, string $minute): bool => (int) $minute >= $oldest, ARRAY_FILTER_USE_BOTH);
             $stored->fill([
                 'hostname' => $event['hostname'] ?? $stored->hostname, 'state' => $domain->effectiveSecurityState(),
-                'details' => ['count' => max((int) ($stored->details['count'] ?? 0), $event['count']), 'reported' => $event['count'], 'minutes' => $slots],
+                // `clients` is how many distinct clients the cell saw cause escalating events of the domain recently. A cell that
+                // does not report it gives no distributed evidence, and the domain is never escalated on its events alone.
+                'details' => ['count' => max((int) ($stored->details['count'] ?? 0), $event['count']), 'reported' => $event['count'], 'minutes' => $slots,
+                    'clients' => (int) ($event['clients'] ?? 0), 'clients_at' => now()->timestamp],
                 'occurred_at' => $stored->occurred_at === null ? $occurredAt : $occurredAt->max($stored->occurred_at),
             ])->save();
 
-            if ($increase > 0 && ! in_array($event['reason_code'], SecurityConfig::NON_ESCALATING_REASONS, true)) {
+            if ($increase > 0 && ! in_array($event['reason_code'], SecurityConfig::nonEscalatingReasons(), true)) {
                 self::escalateOnRate($domain);
             }
         });
@@ -63,7 +66,7 @@ class RecordSecurityReport
         $total = 0;
         SecurityEvent::query()->where('domain_id', $domain->id)->whereNotNull('bucket_at')
             ->where('occurred_at', '>=', now()->subMinutes(self::SLOT_RETENTION_MINUTES))
-            ->whereNotIn('reason_code', SecurityConfig::NON_ESCALATING_REASONS)
+            ->whereNotIn('reason_code', SecurityConfig::nonEscalatingReasons())
             ->limit(1000)->get(['details'])
             ->each(function (SecurityEvent $row) use (&$total, $since): void {
                 foreach ((array) ($row->details['minutes'] ?? []) as $minute => $events) {
@@ -74,6 +77,28 @@ class RecordSecurityReport
             });
 
         return $total;
+    }
+
+    /**
+     * The most distinct clients any edge reported for the domain's escalating events within the rate window. Each cell counts
+     * the clients of all escalating reasons together, so the largest report is the best evidence, and adding reports from
+     * several edges would count a client twice.
+     */
+    public static function distinctClients(Domain $domain): int
+    {
+        $since = now()->subMinutes(SecurityConfig::RATE_WINDOW_MINUTES)->timestamp;
+        $most = 0;
+        SecurityEvent::query()->where('domain_id', $domain->id)->whereNotNull('bucket_at')
+            ->where('occurred_at', '>=', now()->subMinutes(self::SLOT_RETENTION_MINUTES))
+            ->whereNotIn('reason_code', SecurityConfig::nonEscalatingReasons())
+            ->limit(1000)->get(['details'])
+            ->each(function (SecurityEvent $row) use (&$most, $since): void {
+                if ((int) ($row->details['clients_at'] ?? 0) >= $since) {
+                    $most = max($most, (int) ($row->details['clients'] ?? 0));
+                }
+            });
+
+        return $most;
     }
 
     /**
@@ -106,13 +131,19 @@ class RecordSecurityReport
             return;
         }
         $rate = self::recentRate($domain);
+        // Many events from a few clients are contained on the cell, per client. The whole domain tightens only for an attack that
+        // many clients take part in, so one noisy client cannot make the domain stricter for everyone else.
+        $clients = self::distinctClients($domain);
+        if ($clients < SecurityConfig::DISTRIBUTED_CLIENTS_MINIMUM) {
+            return;
+        }
         $automatic = (string) $domain->automatic_security_state;
         $settings = $domain->security_settings ?? SecurityConfig::defaults();
         if ($rate >= SecurityConfig::RESTRICT_EVENTS_PER_WINDOW && str_starts_with((string) $settings['quarantine_policy'], 'automatic')
             && $automatic !== 'restricted') {
-            ChangeAutomaticSecurityState::execute($domain, 'restricted', 'event_rate', ['events_in_window' => $rate, 'window_minutes' => SecurityConfig::RATE_WINDOW_MINUTES]);
+            ChangeAutomaticSecurityState::execute($domain, 'restricted', 'event_rate', ['events_in_window' => $rate, 'distinct_clients' => $clients, 'window_minutes' => SecurityConfig::RATE_WINDOW_MINUTES]);
         } elseif ($rate >= SecurityConfig::SUSPECT_EVENTS_PER_WINDOW && in_array($automatic, ['normal', 'recovering'], true)) {
-            ChangeAutomaticSecurityState::execute($domain, 'suspected', 'event_rate', ['events_in_window' => $rate, 'window_minutes' => SecurityConfig::RATE_WINDOW_MINUTES]);
+            ChangeAutomaticSecurityState::execute($domain, 'suspected', 'event_rate', ['events_in_window' => $rate, 'distinct_clients' => $clients, 'window_minutes' => SecurityConfig::RATE_WINDOW_MINUTES]);
         }
     }
 }

@@ -32,7 +32,7 @@ class ReconcileSecurityReadiness extends Command
         // A domain held by an incident profile keeps its state until the profile ends.
         Domain::query()->where('automatic_security_state', '!=', 'normal')->whereNull('incident_expires_at')->orderBy('id')->limit($limit)->get()
             ->each(function (Domain $domain): void {
-                $latest = $domain->securityEvents()->whereNotIn('reason_code', SecurityConfig::NON_ESCALATING_REASONS)->max('occurred_at');
+                $latest = $domain->securityEvents()->whereNotIn('reason_code', SecurityConfig::nonEscalatingReasons())->max('occurred_at');
                 if ($latest !== null && now()->diffInMinutes($latest, absolute: true) < SecurityConfig::QUIET_MINUTES) {
                     return;
                 }
