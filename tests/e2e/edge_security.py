@@ -157,7 +157,7 @@ def qualify_profile_control_plane() -> None:
         "$stranger=App\\Models\\User::query()->create(["
         f"'name'=>'stranger','email'=>{php_string(STRANGER_EMAIL)},"
         f"'password'=>Illuminate\\Support\\Facades\\Hash::make({php_string(PASSWORD)}),'type'=>'user']);"
-        f"$domain=App\\Models\\Domain::query()->create(['name'=>{php_string(DOMAIN)},'display_name'=>'profiles','revision'=>1]);"
+        f"$domain=App\\Models\\Domain::query()->create(['name'=>{php_string(DOMAIN)},'display_name'=>'profiles','revision'=>1,'nameservers_verified_at'=>now()]);"
         "$domain->users()->attach($user);echo $domain->id;"
     )
     assert domain_id.isdigit(), domain_id

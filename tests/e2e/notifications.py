@@ -155,7 +155,7 @@ def main() -> None:
             artisan("$u=App\\Models\\User::query()->create(['name'=>'Notify " + suffix + "','email'=>" + php_string(email)
                     + ",'password'=>Illuminate\\Support\\Facades\\Hash::make(" + php_string(e2e.USER_PASSWORD) + "),'type'=>'user']);"
                     "$d=App\\Models\\Domain::query()->create(['name'=>" + php_string(domain) + ",'display_name'=>" + php_string(domain)
-                    + ",'revision'=>1,'lifecycle_state'=>'active']);$d->users()->attach($u->id);")
+                    + ",'revision'=>1,'lifecycle_state'=>'active','nameservers_verified_at'=>now()]);$d->users()->attach($u->id);")
             created_users.append(email)
         tokens = {s: login(f"e2e-notify-{s}-{e2e.RUN_ID}@example.test", e2e.USER_PASSWORD) for s in ("a", "b")}
         for suffix, token_path in (("a", "/bot111111111:USERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/sendMessage"), ("b", "/bot222222222:USERBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/sendMessage")):

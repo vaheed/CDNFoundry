@@ -190,7 +190,7 @@ def create_scope() -> tuple[int, str, str, str]:
         f"'name'=>'stranger','email'=>{php_string(STRANGER_EMAIL)},'password'=>Illuminate\\Support\\Facades\\Hash::make({php_string(PASSWORD)}),'type'=>'user']);"
         "$admin=App\\Models\\User::query()->create(["
         f"'name'=>'admin','email'=>{php_string(ADMIN_EMAIL)},'password'=>Illuminate\\Support\\Facades\\Hash::make({php_string(PASSWORD)}),'type'=>'admin']);"
-        f"$domain=App\\Models\\Domain::query()->create(['name'=>{php_string(DOMAIN)},'display_name'=>'analytics','lifecycle_state'=>'active','revision'=>1]);"
+        f"$domain=App\\Models\\Domain::query()->create(['name'=>{php_string(DOMAIN)},'display_name'=>'analytics','lifecycle_state'=>'active','nameservers_verified_at'=>now(),'revision'=>1]);"
         "$domain->users()->attach($user,['created_at'=>now()]);echo $domain->id;"
     )
     assert output.isdigit(), output
