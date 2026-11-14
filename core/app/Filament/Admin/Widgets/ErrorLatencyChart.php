@@ -30,11 +30,6 @@ class ErrorLatencyChart extends ChartWidget
         return app(OpsDashboardService::class)->traffic($this->opsContext());
     }
 
-    public function getDrilldownUrl(): string
-    {
-        return $this->telemetryUrl(['view' => 'origin', 'status_family' => '5xx']);
-    }
-
     protected function getData(): array
     {
         $rows = $this->getDisplayState()['current'] ?? [];

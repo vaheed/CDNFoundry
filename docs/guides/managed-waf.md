@@ -28,13 +28,14 @@ Two settings decide whether the WAF runs for a domain.
 | **Offer managed WAF protection** on a service pool | Administrator | Where can the WAF run? |
 | **Web application firewall (WAF)** on a domain | Domain owner | What should the WAF do for this site? |
 
-CDNFoundry pins the WAF release (ModSecurity 3.0.14, its Nginx connector, and
-CRS 4.26.0) inside the immutable OpenResty image. Cells never download rules at
+CDNFoundry pins the WAF release (ModSecurity 3.0.17, its Nginx connector, and
+CRS 4.30.0) inside the immutable OpenResty image. Cells never download rules at
 run time. Customers cannot upload rules or write `SecRule` lines.
 
-**Under Attack mode** is a separate control. It tightens request and connection
-limits during an incident. It does not turn the WAF on or change the WAF level.
-See [Security](security.md).
+**Under attack mode** is a separate, temporary control. While it is on, the WAF
+runs in blocking mode at high sensitivity whatever level you chose here, together
+with tighter limits and a browser challenge. When it ends, your own level applies
+again. See [Incident response](incident-response.md).
 
 ## 1. Offer the WAF on a pool
 
@@ -91,6 +92,69 @@ the WAF yet. Nothing changed. Ask an administrator to do step 1. CDNFoundry neve
 accepts a level it cannot run, and never places the domain on a runtime without
 the WAF.
 
+## Adjust the managed rules
+
+The [managed WAF reference](../reference/waf.md) explains every adjustment with examples.
+
+A protection level is a good start. When a level blocks something it should not,
+or you want to watch a rule before it counts, adjust the managed rules for the
+domain. Adjustments sit on top of the level and never turn an Off domain on.
+
+<DocTabs :labels="['Domain panel', 'API']">
+<template #tab-1>
+
+Open the domain, choose **Web application firewall (WAF)**, and open **Adjust
+managed rules**. It shows the pinned ruleset and offers a paranoia level, an
+anomaly threshold, categories to turn off, single rules to turn off, and rules to
+log only. Rule pickers search by number or by name.
+
+</template>
+<template #tab-2>
+
+```sh
+curl -X PATCH "$CDNF_URL/api/domains/$DOMAIN_ID/waf" \
+  -H "Authorization: Bearer $CDNF_TOKEN" \
+  -H "Idempotency-Key: $(uuidgen)" \
+  -H "Content-Type: application/json" \
+  -d '{"tuning": {"paranoia_level": 2, "inbound_threshold": 8,
+       "disabled_categories": ["xss"], "disabled_rules": [942100], "log_only_rules": [913100]}}'
+```
+
+`GET /api/domains/$DOMAIN_ID/waf/rules` lists the adjustable rules with their
+state for the domain (`enabled`, `disabled`, or `log_only`). It takes `category`,
+`search`, and a `cursor`. Send `"tuning": null` to clear every adjustment. The
+`tuning` object replaces the earlier one as a whole, and a request without it
+keeps what is saved.
+
+</template>
+</DocTabs>
+
+| Adjustment | Effect |
+| --- | --- |
+| Paranoia level (1 to 4) | Replaces the level's own paranoia. Higher levels add stricter rules and more false positives. |
+| Anomaly threshold (1 to 100) | The score at which a request is blocked. Each matched rule adds 2 to 5 points. |
+| Turn off a category | Every rule of the category stops running: method, scanner, protocol, protocol attacks, multipart, file inclusion, remote inclusion, command injection, PHP, generic injection, cross-site scripting, SQL injection, session fixation, Java. |
+| Turn off a rule | The rule never runs for this domain. Up to 100 rules. |
+| Log only | The rule still runs but never counts toward blocking or the attack score. When one matches, the domain records a `waf_rule_logged` security event. |
+
+Rule numbers come from the catalog of the pinned ruleset, and anything else is
+refused. A rule cannot be both disabled and log only. Rules that only gate
+paranoia levels or evaluate the final score are not adjustable. The ruleset
+version in the panel and in `GET .../waf` is the version the cells run: it ships
+inside the image, and cells never download rules.
+
+Log only is exact about whether a rule matched, not about which one. The event
+says that a log-only rule matched on a request; the domain knows which rules it
+listed. A domain with log-only rules is scored twice per request.
+
+::: warning What changed for inspection
+A request that the cell scores is inspected once, in the scoring step, with the
+domain's adjustments applied. The cache location then skips its own second
+inspection of that request. Responses are not inspected: the managed WAF covers
+requests. If scoring is unavailable, the cell falls back to inspecting the request
+with the level's unadjusted defaults.
+:::
+
 ## 3. Review detections, then tighten
 
 Check the domain's security events for expected detections and false positives.
@@ -104,7 +168,9 @@ body admission can show only `waf_body_limit`.
 
 ## Handle a false positive
 
-Per-rule exclusions are unavailable. Creating one returns `409` with
+Turn off the rule that fired, or set it to log only, in
+[Adjust the managed rules](#adjust-the-managed-rules). Per-target exclusions are
+unavailable. Creating one returns `409` with
 `waf_exclusions_unavailable`, and the domain screen has no create action.
 Libmodsecurity cannot safely remove one chosen rule for one target. An earlier
 design switched the whole request to monitor mode, and an attacker could add a

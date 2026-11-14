@@ -409,7 +409,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Failed handshakes by reason.",
+      "description": "Failed handshakes per hour by reason over the last 24 hours, whatever range the dashboard shows.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -461,6 +461,7 @@
         "x": 0,
         "y": 4
       },
+      "hideTimeOverride": true,
       "id": 5,
       "options": {
         "legend": {
@@ -487,6 +488,7 @@
           "refId": "A"
         }
       ],
+      "timeFrom": "24h",
       "title": "Handshake failures by reason",
       "type": "timeseries"
     },
@@ -495,7 +497,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Failed handshakes by TLS version.",
+      "description": "Failed handshakes per hour by TLS version over the last 24 hours, whatever range the dashboard shows.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -547,6 +549,7 @@
         "x": 12,
         "y": 4
       },
+      "hideTimeOverride": true,
       "id": 6,
       "options": {
         "legend": {
@@ -573,6 +576,7 @@
           "refId": "A"
         }
       ],
+      "timeFrom": "24h",
       "title": "Handshake failures by protocol",
       "type": "timeseries"
     },
@@ -756,18 +760,7 @@
             },
             "inspect": false
           },
-          "mappings": [
-            {
-              "options": {
-                "match": "null+nan",
-                "result": {
-                  "color": "text",
-                  "text": "No data yet"
-                }
-              },
-              "type": "special"
-            }
-          ],
+          "mappings": [],
           "noValue": "\u2013",
           "thresholds": {
             "mode": "absolute",
@@ -780,7 +773,24 @@
           },
           "unit": "short"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(.*_id|rule|domain|asn|id)$"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
@@ -830,18 +840,7 @@
             },
             "inspect": false
           },
-          "mappings": [
-            {
-              "options": {
-                "match": "null+nan",
-                "result": {
-                  "color": "text",
-                  "text": "No data yet"
-                }
-              },
-              "type": "special"
-            }
-          ],
+          "mappings": [],
           "noValue": "\u2013",
           "thresholds": {
             "mode": "absolute",
@@ -854,7 +853,24 @@
           },
           "unit": "short"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(.*_id|rule|domain|asn|id)$"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,

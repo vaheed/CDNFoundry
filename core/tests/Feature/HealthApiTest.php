@@ -26,6 +26,23 @@ class HealthApiTest extends TestCase
         $this->assertIsArray($payload['queues']);
     }
 
+    public function test_a_stopped_prometheus_shows_as_unavailable_on_the_health_page(): void
+    {
+        Http::fake([config('services.prometheus.url').'/*' => Http::response('', 503), '*' => Http::response('Ok.', 200)]);
+        $components = app(SystemHealth::class)->components();
+        $this->assertSame('unavailable', $components['prometheus']['status']);
+        $this->assertSame('healthy', $components['loki']['status']);
+        $this->assertStringContainsString('Metrics and alert rules', json_encode(app(SystemHealth::class)->publicSnapshot($components, []), JSON_THROW_ON_ERROR));
+    }
+
+    public function test_a_stopped_loki_shows_as_unavailable_on_the_health_page(): void
+    {
+        Http::fake([config('services.loki.url').'/*' => Http::failedConnection(), '*' => Http::response('Ok.', 200)]);
+        $components = app(SystemHealth::class)->components();
+        $this->assertSame('healthy', $components['prometheus']['status']);
+        $this->assertSame('unavailable', $components['loki']['status']);
+    }
+
     public function test_liveness_does_not_require_authentication(): void
     {
         $this->getJson('/api/health')->assertOk()->assertExactJson(['status' => 'ok']);

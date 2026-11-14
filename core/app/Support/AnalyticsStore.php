@@ -65,6 +65,12 @@ final class AnalyticsStore
             'volume-cells' => ['cell, edge_id, sum(requests) AS requests, sum(bytes_in) AS upload_bytes, sum(bytes_sent) AS download_bytes', 'cell, edge_id', 'download_bytes DESC, cell, edge_id', 'edge_volume_hourly'],
             'volume-domains' => ['domain_id, sum(requests) AS requests, sum(bytes_in) AS upload_bytes, sum(bytes_sent) AS download_bytes', 'domain_id', 'download_bytes DESC, domain_id', 'edge_volume_hourly'],
             'volume-countries' => ['country, sum(requests) AS requests, sum(bytes_in) AS upload_bytes, sum(bytes_sent) AS download_bytes', 'country', 'download_bytes DESC, country', 'edge_volume_hourly'],
+            'security-bands' => ['attack_band, sum(requests) AS requests, sumIf(requests, action != \'allowed\') AS mitigated', 'attack_band', 'attack_band', 'security_hourly'],
+            'security-actions' => ['action, sum(requests) AS requests, sumIf(requests, action != \'allowed\') AS mitigated', 'action', 'sum(requests) DESC, action', 'security_hourly'],
+            'security-countries' => ['country, sum(requests) AS requests, sumIf(requests, action != \'allowed\') AS mitigated', 'country', 'mitigated DESC, sum(requests) DESC, country', 'security_hourly'],
+            'security-asns' => ['asn, sum(requests) AS requests, sumIf(requests, action != \'allowed\') AS mitigated', 'asn', 'mitigated DESC, sum(requests) DESC, asn', 'security_hourly'],
+            'security-paths' => ["path, count() AS requests, countIf(security_action = 'block' OR security_rule != '') AS mitigated", 'path', 'mitigated DESC, requests DESC, path', 'edge_events'],
+            'security-agents' => ["user_agent, count() AS requests, countIf(security_action = 'block' OR security_rule != '') AS mitigated", 'user_agent', 'mitigated DESC, requests DESC, user_agent', 'edge_events'],
             'dns' => ['qtype, rcode, sum(queries) AS queries', 'qtype, rcode', 'sum(queries) DESC, qtype, rcode', 'dns_hourly'],
             default => throw ValidationException::withMessages(['view' => 'The analytics view is invalid.']),
         };
@@ -74,6 +80,9 @@ final class AnalyticsStore
         $groupSql = $group === '' ? '' : " GROUP BY {$group}";
 
         $timeColumn = $table === 'edge_events' ? 'occurred_at' : 'interval_start';
+        if ($table === 'edge_events' && str_starts_with($view, 'security-')) {
+            $scope .= " AND event_type = 'request'";
+        }
 
         return $this->query("SELECT {$select} FROM cdnf.{$table} WHERE {$scope} AND {$timeColumn} >= {from:DateTime64} AND {$timeColumn} < {to:DateTime64}{$groupSql} ORDER BY {$order} LIMIT 1000", $parameters);
     }
@@ -251,6 +260,53 @@ final class AnalyticsStore
         return ['items' => $rows, 'next_cursor' => $hasMore && is_array($last) ? $this->encodeCursor($last) : null];
     }
 
+    /** The most mitigated requests one list returns. The list is the newest of the window, not every mitigated request. */
+    public const MITIGATIONS_LIMIT = 500;
+
+    /**
+     * Mitigated requests of one domain, newest first: blocked, challenged, or logged by a rule. Only stored request events can be
+     * listed, so the list is bounded by the event retention and by MITIGATIONS_LIMIT.
+     *
+     * @param  array{action?: ?string, rule?: ?string, reason?: ?string, score_max?: ?int, path?: ?string, country?: ?string, asn?: ?int, user_agent?: ?string, request_id?: ?string}  $filters
+     */
+    public function mitigations(Domain $domain, array $range, array $filters): array
+    {
+        $parameters = [...$this->parameters($range, $domain), 'limit' => self::MITIGATIONS_LIMIT];
+        $where = ["event_type = 'request'", "(security_action = 'block' OR security_rule != '')"];
+        $equals = ['rule' => ['security_rule', 'String'], 'reason' => ['security_reason', 'String'], 'country' => ['country', 'String'], 'request_id' => ['request_id', 'String']];
+        foreach ($equals as $name => [$column, $type]) {
+            if (filled($filters[$name] ?? null)) {
+                $where[] = "{$column} = {{$name}:{$type}}";
+                $parameters[$name] = (string) $filters[$name];
+            }
+        }
+        foreach (['path' => 'path', 'user_agent' => 'user_agent'] as $name => $column) {
+            if (filled($filters[$name] ?? null)) {
+                $where[] = "positionCaseInsensitiveUTF8({$column}, {{$name}:String}) > 0";
+                $parameters[$name] = (string) $filters[$name];
+            }
+        }
+        if (filled($filters['asn'] ?? null)) {
+            $where[] = 'asn = {asn:UInt32}';
+            $parameters['asn'] = (int) $filters['asn'];
+        }
+        if (filled($filters['score_max'] ?? null)) {
+            $where[] = 'attack_score BETWEEN 1 AND {score_max:UInt8}';
+            $parameters['score_max'] = (int) $filters['score_max'];
+        }
+        $where[] = match ($filters['action'] ?? null) {
+            'blocked' => "security_action = 'block'",
+            'logged' => "security_action != 'block'",
+            default => '1',
+        };
+        $rows = $this->query('SELECT occurred_at, event_id, hostname, method, path, status, security_action, security_reason, security_rule, attack_score, country, asn, user_agent, request_id, client_ip FROM cdnf.edge_events WHERE '.$this->edgeScope($domain).' AND occurred_at >= {from:DateTime64} AND occurred_at < {to:DateTime64} AND '.implode(' AND ', $where).' ORDER BY occurred_at DESC, event_id DESC LIMIT {limit:UInt32}', $parameters);
+        foreach ($rows as &$row) {
+            $row['client_ip'] = $this->maskAddress((string) ($row['client_ip'] ?? ''));
+        }
+
+        return $rows;
+    }
+
     /** @param array<int, string> $domains */
     public function usageInterval(CarbonImmutable $from, CarbonImmutable $to, array $domains): array
     {
@@ -298,6 +354,46 @@ final class AnalyticsStore
     {
         return $this->query("SELECT hostname, sumIf(requests, status >= 500) AS errors FROM cdnf.edge_traffic_hourly WHERE interval_start >= {from:DateTime64} AND interval_start < {to:DateTime64} AND hostname != '' GROUP BY hostname HAVING errors > 0 ORDER BY errors DESC LIMIT 10",
             ['from' => $from->format('Y-m-d H:i:s.u'), 'to' => $to->format('Y-m-d H:i:s.u')]);
+    }
+
+    /** @return list<array{domain_id: int|string, requests: int|string, origin_errors: int|string}> */
+    public function originErrorsByDomain(CarbonImmutable $from, CarbonImmutable $to, int $minimumRequests): array
+    {
+        return $this->query('SELECT domain_id, sum(requests) AS requests, sum(origin_errors) AS origin_errors FROM cdnf.edge_traffic_1m WHERE interval_start >= {from:DateTime} AND interval_start < {to:DateTime} AND domain_id != 0 GROUP BY domain_id HAVING requests >= {minimum:UInt64} AND origin_errors > 0 ORDER BY origin_errors DESC LIMIT 1000',
+            ['from' => $from->format('Y-m-d H:i:s'), 'to' => $to->format('Y-m-d H:i:s'), 'minimum' => $minimumRequests]);
+    }
+
+    /**
+     * The next rows of one domain's dataset after a cursor, oldest first. The caller supplies only allowlisted fields and an
+     * integer domain id; events newer than `$until` are left for the next run so late-arriving inserts are not skipped.
+     *
+     * @param  list<string>  $fields
+     * @return list<array<string, mixed>>
+     */
+    public function rowsAfter(string $table, string $condition, array $fields, int $domainId, string $afterAt, string $afterId, CarbonImmutable $until, int $limit): array
+    {
+        $columns = implode(', ', array_map(fn (string $field): string => $field, $fields));
+
+        return $this->query("SELECT toString(occurred_at) AS occurred_at, toString(event_id) AS event_id, {$columns} FROM {$table} WHERE domain_id = {domain:UInt64} AND {$condition} "
+            .'AND (occurred_at, event_id) > ({afterAt:DateTime64(3)}, {afterId:UUID}) AND occurred_at <= {until:DateTime64(3)} ORDER BY occurred_at, event_id LIMIT {limit:UInt32}',
+            ['domain' => $domainId, 'afterAt' => $afterAt, 'afterId' => $afterId, 'until' => $until->format('Y-m-d H:i:s.v'), 'limit' => $limit]);
+    }
+
+    /**
+     * The scripts and connections browsers reported for these domains since a time, one row per page and resource.
+     *
+     * @param  list<int>  $domainIds
+     * @return list<array{domain_id: int|string, kind: string, page: string, resource: string, first_seen: string, last_seen: string}>
+     */
+    public function clientReports(array $domainIds, CarbonImmutable $from): array
+    {
+        $ids = implode(',', array_map('intval', $domainIds));
+        if ($ids === '') {
+            return [];
+        }
+
+        return $this->query("SELECT domain_id, splitByChar('|', client_report)[1] AS kind, splitByChar('|', client_report)[2] AS page, splitByChar('|', client_report)[3] AS resource, toString(min(occurred_at)) AS first_seen, toString(max(occurred_at)) AS last_seen FROM cdnf.edge_events WHERE domain_id IN ({$ids}) AND client_report != '' AND occurred_at >= {from:DateTime64} GROUP BY domain_id, kind, page, resource HAVING kind != '' AND page != '' AND resource != '' ORDER BY domain_id, first_seen LIMIT 5000",
+            ['from' => $from->format('Y-m-d H:i:s.u')]);
     }
 
     /** @return list<array{hostname: string, blocked: int|string}> */

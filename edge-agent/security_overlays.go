@@ -16,11 +16,25 @@ const maximumSecurityOverlays = 256
 
 var errOverlayCapacity = errors.New("security overlay capacity exceeded")
 
+// securityIncident is the incident profile a domain's overlay may carry: the cell enforces it and ends it by its own clock at ExpiresAt.
+type securityIncident struct {
+	ExpiresAt int64 `json:"expires_at"`
+	WAF       struct {
+		Mode        string `json:"mode"`
+		Sensitivity string `json:"sensitivity"`
+	} `json:"waf"`
+	Methods        []string `json:"methods"`
+	MaxBodyBytes   int64    `json:"max_body_bytes"`
+	Challenge      bool     `json:"challenge"`
+	BypassPrefixes []string `json:"challenge_bypass_prefixes,omitempty"`
+}
+
 type securityOverlay struct {
-	DomainID uint64           `json:"domain_id"`
-	Sequence uint64           `json:"sequence"`
-	State    string           `json:"state"`
-	Limits   map[string]int64 `json:"limits"`
+	DomainID uint64            `json:"domain_id"`
+	Sequence uint64            `json:"sequence"`
+	State    string            `json:"state"`
+	Limits   map[string]int64  `json:"limits"`
+	Incident *securityIncident `json:"incident,omitempty"`
 }
 
 func (c *client) overlayStatePath() string { return filepath.Join(c.dir, "security-overlays.json") }
@@ -82,6 +96,9 @@ func overlayCommand(taskID string, overlay securityOverlay) map[string]any {
 	if overlay.Limits != nil {
 		command["limits"] = overlay.Limits
 	}
+	if overlay.Incident != nil {
+		command["incident"] = overlay.Incident
+	}
 	return command
 }
 
@@ -99,6 +116,28 @@ func validOverlay(overlay securityOverlay) bool {
 			return false
 		}
 	}
+	return validIncident(overlay.Incident)
+}
+
+// validIncident accepts only what the cell enforces: blocking WAF, known methods, bounded lists, and an absolute expiry.
+func validIncident(incident *securityIncident) bool {
+	if incident == nil {
+		return true
+	}
+	if incident.ExpiresAt <= 0 || incident.WAF.Mode != "block" || incident.MaxBodyBytes < 0 || len(incident.Methods) > 8 || len(incident.BypassPrefixes) > 8 {
+		return false
+	}
+	known := map[string]bool{"GET": true, "HEAD": true, "OPTIONS": true, "POST": true, "PUT": true, "PATCH": true, "DELETE": true}
+	for _, method := range incident.Methods {
+		if !known[method] {
+			return false
+		}
+	}
+	for _, prefix := range incident.BypassPrefixes {
+		if len(prefix) == 0 || len(prefix) > 128 || prefix[0] != '/' {
+			return false
+		}
+	}
 	return true
 }
 
@@ -107,7 +146,7 @@ func validOverlay(overlay securityOverlay) bool {
 func (c *client) runSecurityOverlay(task edgeTask) (map[string]any, string) {
 	overlay := securityOverlay{
 		DomainID: uint64(task.Payload.DomainID), Sequence: task.Payload.OverlaySequence,
-		State: task.Payload.OverlayState, Limits: task.Payload.OverlayLimits,
+		State: task.Payload.OverlayState, Limits: task.Payload.OverlayLimits, Incident: task.Payload.OverlayIncident,
 	}
 	if !validOverlay(overlay) {
 		return map[string]any{"status": "failed", "failure_reason": "invalid_security_overlay"}, "failed"

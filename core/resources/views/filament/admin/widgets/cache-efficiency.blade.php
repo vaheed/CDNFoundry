@@ -14,9 +14,7 @@
                     <div><dt>Bypass</dt><dd>{{ number_format((int) ($summary['cache_bypass'] ?? 0)) }}</dd></div>
                     <div><dt>Stale</dt><dd>{{ number_format((int) ($summary['cache_stale'] ?? 0)) }}</dd></div>
                     <div><dt>Cache-served egress</dt><dd>{{ $cacheBytes }}</dd></div>
-                    <div><dt>Estimated financial savings</dt><dd>Unavailable</dd></div>
                 </dl>
-                <a class="cdn-widget-link" href="{{ $telemetryUrl }}">Open cache analytics <span aria-hidden="true">→</span></a>
             @endif
         </div>
     </x-filament::section>

@@ -14,13 +14,15 @@ instead. See the [admin panel tour](admin-panel.md).
 
 <Screenshot name="app-domains" alt="The Domains list in the domain panel." />
 
-The menu has three screens.
+The menu has three screens, and a fourth when an administrator turns on notification channels.
 
 | Screen | Use it to |
 | --- | --- |
 | [Domains](#domains) | List your domains and open one to manage it |
 | [Analytics and logs](#analytics-and-logs) | See traffic, cache, and errors for a domain |
 | [API tokens](#api-tokens) | Create tokens to use the API from scripts |
+| [Log push](log-push.md) | On a domain page: send that domain's logs to your own endpoint |
+| [Notifications](notifications.md) | Send events for your domains to Telegram, Discord, or Slack |
 
 ## Domains
 
@@ -36,17 +38,25 @@ Open a domain to see its page. It has an **Overview** and tabs for the work:
 | --- | --- | --- |
 | **Overview** | Cards for Delegation, DNS, Delivery, TLS, Cache, and Security | This page |
 | **DNS records** | Your records, with proxy, origin, health-check, backup-origin, and Geo-DNS settings | [DNS](dns.md), [Proxy and origins](proxy-and-origins.md), [Geo-DNS](geo-dns.md) |
-| **Security rules** | Allow and block rules by network, country, or continent | [Security](security.md) |
+| **Custom rules** | Typed rules: up to five conditions and one action, with rate limits and presets | [Security](security.md#custom-rules) |
 | **WAF exclusions** | Shown only when the domain still has exclusions saved before they were disabled. They have no effect; delete them | [Managed WAF](managed-waf.md) |
 
-The **Overview** cards answer the common questions at a glance:
+The **Overview** tab is a set of sections. Each shows its facts and, on its title row, the buttons that change them, so an
+action sits next to what it changes and appears only once. Values are plain text and flat grey tags; actions are raised
+buttons with an icon.
 
-- **Delegation:** the nameservers to set, and whether they are verified.
-- **DNS:** how many records you have and the zone state.
-- **Delivery:** which pool serves the domain and the last revisions.
-- **TLS:** the certificate mode and expiry.
-- **Cache:** whether caching is on and its limits.
-- **Security:** the current security state.
+| Section | Shows | Actions |
+| --- | --- | --- |
+| **Delegation** | The nameservers to set, verification, and registration expiry | **Verify nameservers** (at the top while unverified) |
+| **DNS deployment** | Each DNS cluster's desired and active zone revision | **Reconcile**, **Import zone**, **Export zone** |
+| **Delivery** | Placement, pool, cells, revisions, and proxy settings | **Proxy settings**, **Maintenance**, **Roll back**, **Move service pool** (administrators) |
+| **Protection** | Under attack mode, security state, profile, limits, WAF, and each detection, on or off | **Edit** or **Set up** on each row; **Quarantine** and **Return to normal** (administrators) |
+| **TLS** | Certificate mode, names, expiry, and fingerprint | **Mode**, **Upload certificate**, **Renew**, **Reissue**, **Remove custom certificate** |
+| **Cache** | The cache policy and purge epoch | **Settings**, **Purge**, **Development mode** |
+
+A detection (security alert, credential check, sensitive data, AI protection, API schema, client-side security) is turned off
+from its own sheet with **Turn off**. It cannot be turned off while a custom rule uses one of its fields; change or delete
+those rules first. **Custom** in **TLS mode** can be chosen only once a valid custom certificate is uploaded.
 
 The page updates itself after every change you make. While a change is still
 deploying, it checks again every 5 seconds until the deployment finishes, so you
@@ -54,17 +64,9 @@ never need to reload it.
 
 ### What you can do from a domain page
 
-The **Domain actions** menu holds the one-time and rare actions:
-
-| Action | What it does | Read |
-| --- | --- | --- |
-| **Verify nameservers**, **Activate**, **Disable** | Take the domain through its life | [Domains](domains.md) |
-| **Import zone**, **Export zone** | Move DNS records in or out as a zone file | [DNS](dns.md) |
-| **Reconcile authoritative DNS** | Re-send the zone to DNS | [DNS](dns.md) |
-| **TLS mode**, **Renew managed certificate**, **Reissue managed certificate**, **Upload custom certificate**, **Remove custom certificate** | Manage the certificate | [TLS](tls.md) |
-| **Cache settings**, **Purge cache**, **Enable development mode** | Control caching and purge | [Cache and purge](cache.md) |
-| **Proxy defaults**, **Rollback proxy revision**, **Move service pool** | Change delivery | [Proxy and origins](proxy-and-origins.md) |
-| **Security profile and limits**, **Web application firewall (WAF)**, **Start maintenance**, **Enable Under Attack mode**, **Quarantine domain**, **Return to normal** | Protect the domain | [Security](security.md), [Managed WAF](managed-waf.md) |
+At the top right, **Under attack mode** turns on the temporary protections described in
+[Incident response](incident-response.md). **More actions** holds the rare actions that concern the whole domain:
+**Activate**, **Disable**, and **Delete domain** ([Domains](domains.md)).
 
 Actions that change a live service show a confirmation first, and long ones
 start a background operation you can follow.

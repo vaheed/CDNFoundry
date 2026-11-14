@@ -17,18 +17,7 @@
           },
           "inspect": false
         },
-        "mappings": [
-          {
-            "options": {
-              "match": "null+nan",
-              "result": {
-                "color": "text",
-                "text": "No data yet"
-              }
-            },
-            "type": "special"
-          }
-        ],
+        "mappings": [],
         "noValue": "\u2013",
         "thresholds": {
           "mode": "absolute",
@@ -44,10 +33,58 @@
       "overrides": [
         {
           "matcher": {
+            "id": "byRegexp",
+            "options": "^(.*_id|rule|domain|asn|id)$"
+          },
+          "properties": [
+            {
+              "id": "unit",
+              "value": "none"
+            },
+            {
+              "id": "decimals",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "matcher": {
+            "id": "byName",
+            "options": "IP"
+          },
+          "properties": [
+            {
+              "id": "custom.width",
+              "value": 60
+            },
+            {
+              "id": "mappings",
+              "value": [
+                {
+                  "options": {
+                    "4": {
+                      "text": "IPv4"
+                    },
+                    "6": {
+                      "text": "IPv6"
+                    }
+                  },
+                  "type": "value"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "matcher": {
             "id": "byName",
             "options": "Up"
           },
           "properties": [
+            {
+              "id": "custom.width",
+              "value": 60
+            },
             {
               "id": "thresholds",
               "value": {
@@ -127,7 +164,15 @@
             "Time": true,
             "__name__": true,
             "instance": true,
+            "node": true,
             "probe": true
+          },
+          "indexByName": {
+            "IP": 3,
+            "PoP": 1,
+            "Probe": 2,
+            "Region": 4,
+            "Up": 0
           },
           "renameByName": {
             "Value": "Up",

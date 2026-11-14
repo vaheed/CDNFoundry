@@ -89,44 +89,164 @@ class SecurityApiTest extends TestCase
         $this->assertSame(64, $compiled['limits']['origin_max_connections']);
     }
 
-    public function test_ipv4_ipv6_cidr_and_geo_rules_validate_and_order_deterministically(): void
+    private function ruleBody(string $field, string $value, string $action = 'block', int $priority = 10, string $operator = 'equals'): array
+    {
+        return ['conditions' => [['field' => $field, 'operator' => $operator, 'value' => $value]], 'action' => $action, 'priority' => $priority];
+    }
+
+    public function test_typed_rules_validate_normalize_and_order_deterministically(): void
     {
         [$user, $domain] = $this->ownedDomain();
         $valid = [
-            ['match_type' => 'ip', 'value' => '192.0.2.1', 'action' => 'block', 'priority' => 20],
-            ['match_type' => 'ip', 'value' => '2001:db8::1', 'action' => 'allow', 'priority' => 10],
-            ['match_type' => 'cidr', 'value' => '2001:db8::/32', 'action' => 'block', 'priority' => 10],
-            ['match_type' => 'country', 'value' => 'ir', 'action' => 'block', 'priority' => 30],
-            ['match_type' => 'continent', 'value' => 'AS', 'action' => 'allow', 'priority' => 40],
+            $this->ruleBody('client_ip', '192.0.2.1', 'block', 20),
+            $this->ruleBody('client_ip', '2001:DB8::1', 'allow', 10),
+            $this->ruleBody('client_ip', '2001:db8::/32', 'block', 10),
+            $this->ruleBody('country', 'ir', 'block', 30),
+            $this->ruleBody('continent', 'AS', 'allow', 40),
+            ['name' => 'Log scrapers', 'action' => 'log', 'priority' => 50, 'conditions' => [
+                ['field' => 'path', 'operator' => 'starts_with', 'value' => '/api/'],
+                ['field' => 'header', 'name' => 'X-Token', 'operator' => 'contains', 'value' => 'abc'],
+                ['field' => 'body_size', 'operator' => 'greater_than', 'value' => 1000],
+                ['field' => 'asn', 'operator' => 'in_list', 'value' => [64500, 64501]],
+                ['field' => 'cookie_present', 'name' => 'session', 'operator' => 'equals', 'value' => true],
+            ]],
         ];
         foreach ($valid as $rule) {
             $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", $rule)->assertCreated();
         }
-        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", [
-            'match_type' => 'cidr', 'value' => '2001:db8::/129', 'action' => 'block', 'priority' => 1,
-        ])->assertUnprocessable()->assertJsonValidationErrors('value');
-        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", [
-            'match_type' => 'country', 'value' => 'XX', 'action' => 'block', 'priority' => 1,
-        ])->assertUnprocessable()->assertJsonValidationErrors('value');
+        $this->assertSame('2001:db8::1', $domain->securityRules()->where('action', 'allow')->orderBy('priority')->first()->conditions[0]['value']);
+        $this->assertSame('x-token', $domain->securityRules()->where('action', 'log')->first()->conditions[1]['name']);
+
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", $this->ruleBody('client_ip', '2001:db8::/129'))
+            ->assertUnprocessable()->assertJsonValidationErrors('conditions.0.value');
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", $this->ruleBody('country', 'XX'))
+            ->assertUnprocessable()->assertJsonValidationErrors('conditions.0.value');
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", $this->ruleBody('path', '/a', 'block', 1, 'greater_than'))
+            ->assertUnprocessable()->assertJsonValidationErrors('conditions.0.operator');
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", $this->ruleBody('nonsense', 'x'))
+            ->assertUnprocessable()->assertJsonValidationErrors('conditions.0.field');
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", $this->ruleBody('path', '/a', 'redirect'))
+            ->assertUnprocessable()->assertJsonValidationErrors('action');
 
         (new ReconcileEdgeDomain($domain->id))->handle();
         $snapshot = EdgeRevision::query()->where('domain_id', $domain->id)->latest('revision')->firstOrFail()->snapshot;
-        $this->assertSame([10, 10, 20, 30, 40], collect($snapshot['security']['rules'])->pluck('priority')->all());
+        $this->assertSame([10, 10, 20, 30, 40, 50], collect($snapshot['security']['rules'])->pluck('priority')->all());
         $samePriority = collect($snapshot['security']['rules'])->where('priority', 10)->pluck('id')->all();
         $this->assertSame($samePriority, collect($samePriority)->sort()->values()->all());
-        $this->assertSame('IR', collect($snapshot['security']['rules'])->firstWhere('match_type', 'country')['value']);
+        $this->assertSame('IR', collect($snapshot['security']['rules'])->firstWhere('priority', 30)['conditions'][0]['value']);
+    }
+
+    public function test_attack_score_fields_accept_one_to_ninety_nine_only(): void
+    {
+        [$user, $domain] = $this->ownedDomain();
+        foreach (['attack_score', 'attack_score_sqli', 'attack_score_xss', 'attack_score_rce'] as $index => $field) {
+            $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", $this->ruleBody($field, '19', 'block', $index + 1, 'less_than'))->assertCreated();
+        }
+        foreach ([0, 100, -3] as $bad) {
+            $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", $this->ruleBody('attack_score', (string) $bad, 'block', 9, 'less_than'))
+                ->assertUnprocessable()->assertJsonValidationErrors('conditions.0.value');
+        }
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", $this->ruleBody('attack_score', '20', 'log', 9, 'starts_with'))
+            ->assertUnprocessable()->assertJsonValidationErrors('conditions.0.operator');
+        $this->assertSame(19, $domain->securityRules()->where('priority', 1)->firstOrFail()->conditions[0]['value']);
+    }
+
+    public function test_rate_limit_rules_validate_their_typed_limit_and_are_bounded(): void
+    {
+        [$user, $domain] = $this->ownedDomain();
+        $rate = ['key' => 'client_ip_path', 'threshold' => 100, 'period_seconds' => 60, 'duration_seconds' => 300];
+        $body = ['name' => 'Login brute force', 'conditions' => [['field' => 'path', 'operator' => 'equals', 'value' => '/login']], 'action' => 'block', 'priority' => 10, 'rate_limit' => $rate];
+        $id = $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", $body)->assertCreated()->json('data.id');
+        $this->assertSame($rate, $domain->securityRules()->findOrFail($id)->rate_limit);
+
+        // Counting every request of the domain is a rate-limit rule with no conditions; any other rule needs a condition.
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", ['conditions' => [], 'action' => 'log', 'priority' => 20, 'rate_limit' => ['key' => 'header', 'header_name' => 'X-Api-Key', 'threshold' => 5, 'period_seconds' => 10, 'duration_seconds' => 10]])
+            ->assertCreated();
+        $this->assertSame('x-api-key', $domain->securityRules()->where('priority', 20)->firstOrFail()->rate_limit['header_name']);
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", ['conditions' => [], 'action' => 'block', 'priority' => 21])->assertUnprocessable()->assertJsonValidationErrors('conditions');
+
+        $bad = [
+            ['rate_limit' => [...$rate, 'period_seconds' => 30], 'field' => 'rate_limit.period_seconds'],
+            ['rate_limit' => [...$rate, 'threshold' => 0], 'field' => 'rate_limit.threshold'],
+            ['rate_limit' => [...$rate, 'duration_seconds' => 5], 'field' => 'rate_limit.duration_seconds'],
+            ['rate_limit' => [...$rate, 'key' => 'country'], 'field' => 'rate_limit.key'],
+            ['rate_limit' => [...$rate, 'key' => 'header'], 'field' => 'rate_limit.header_name'],
+            ['rate_limit' => $rate, 'action' => 'allow', 'field' => 'action'],
+            ['rate_limit' => $rate, 'action' => 'skip_managed', 'field' => 'action'],
+        ];
+        foreach ($bad as $index => $case) {
+            $payload = [...$body, 'priority' => 100 + $index, 'conditions' => [['field' => 'path', 'operator' => 'equals', 'value' => "/p$index"]], 'rate_limit' => $case['rate_limit'], 'action' => $case['action'] ?? 'block'];
+            $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", $payload)->assertUnprocessable()->assertJsonValidationErrors($case['field']);
+        }
+
+        // The same conditions and action with a different limit is a different rule; the cap on rate-limit rules is enforced.
+        config(['security.maximum_rate_limit_rules' => 3]);
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", [...$body, 'priority' => 30, 'rate_limit' => [...$rate, 'threshold' => 200]])->assertCreated();
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", [...$body, 'priority' => 31, 'rate_limit' => [...$rate, 'threshold' => 300]])->assertStatus(409);
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", $this->ruleBody('country', 'DE', 'block', 32))->assertCreated();
+        $this->actingAs($user)->patchJson("/api/domains/{$domain->id}/security/rules/$id", [...$body, 'rate_limit' => [...$rate, 'threshold' => 150]])->assertAccepted();
+        $this->assertSame(150, $domain->securityRules()->findOrFail($id)->rate_limit['threshold']);
+        $this->actingAs($user)->patchJson("/api/domains/{$domain->id}/security/rules/$id", [...$body, 'rate_limit' => null])->assertAccepted();
+        $this->assertNull($domain->securityRules()->findOrFail($id)->rate_limit);
+
+        (new ReconcileEdgeDomain($domain->id))->handle();
+        $snapshot = EdgeRevision::query()->where('domain_id', $domain->id)->latest('revision')->firstOrFail()->snapshot;
+        $this->assertContains(200, collect($snapshot['security']['rules'])->pluck('rate_limit.threshold')->all());
+    }
+
+    public function test_rule_bounds_duplicates_and_permissions(): void
+    {
+        [$user, $domain] = $this->ownedDomain();
+        $tooMany = ['action' => 'block', 'priority' => 1, 'conditions' => array_fill(0, 6, ['field' => 'method', 'operator' => 'equals', 'value' => 'GET'])];
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", $tooMany)->assertUnprocessable()->assertJsonValidationErrors('conditions');
+        $longList = $this->ruleBody('asn', '1');
+        $longList['conditions'][0] = ['field' => 'asn', 'operator' => 'in_list', 'value' => range(1, 101)];
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", $longList)->assertUnprocessable()->assertJsonValidationErrors('conditions.0.value');
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", ['action' => 'block', 'priority' => 1, 'conditions' => []])->assertUnprocessable();
+
+        $first = $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", $this->ruleBody('country', 'ir'))->assertCreated()->json('data.id');
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", $this->ruleBody('country', 'IR', 'block', 99))
+            ->assertUnprocessable()->assertJsonValidationErrors('conditions');
+        $other = $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", $this->ruleBody('country', 'DE'))->assertCreated()->json('data.id');
+        $this->actingAs($user)->patchJson("/api/domains/{$domain->id}/security/rules/$other", $this->ruleBody('country', 'ir'))
+            ->assertUnprocessable()->assertJsonValidationErrors('conditions');
+        $this->actingAs($user)->patchJson("/api/domains/{$domain->id}/security/rules/$first", [...$this->ruleBody('country', 'IR'), 'enabled' => false])->assertAccepted();
+
+        $outsider = User::factory()->create();
+        $this->actingAs($outsider)->postJson("/api/domains/{$domain->id}/security/rules", $this->ruleBody('country', 'FR'))->assertNotFound();
+        $this->actingAs($outsider)->putJson("/api/domains/{$domain->id}/security/rules/order", ['order' => [$first, $other]])->assertNotFound();
+    }
+
+    public function test_reorder_and_preview(): void
+    {
+        [$user, $domain] = $this->ownedDomain();
+        $ids = [];
+        foreach (['IR', 'DE', 'FR'] as $index => $country) {
+            $ids[] = $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", $this->ruleBody('country', $country, 'block', ($index + 1) * 100))->json('data.id');
+        }
+        $before = $domain->refresh()->revision;
+        $this->actingAs($user)->putJson("/api/domains/{$domain->id}/security/rules/order", ['order' => [$ids[2], $ids[0], $ids[1]]])->assertAccepted();
+        $this->assertSame($before + 1, $domain->refresh()->revision);
+        $this->assertSame([$ids[2], $ids[0], $ids[1]], $domain->securityRules()->orderBy('priority')->pluck('id')->all());
+        $this->actingAs($user)->putJson("/api/domains/{$domain->id}/security/rules/order", ['order' => [$ids[2], $ids[0]]])->assertUnprocessable()->assertJsonValidationErrors('order');
+        $this->actingAs($user)->putJson("/api/domains/{$domain->id}/security/rules/order", ['order' => [$ids[2], $ids[0], $ids[1], 999999]])->assertUnprocessable();
+        $this->assertSame($before + 1, $domain->refresh()->revision);
+
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules/preview", $this->ruleBody('country', 'DE', 'block', 25))
+            ->assertOk()->assertJsonPath('data.position', 3)->assertJsonPath('data.duplicate_of', $ids[1])->assertJsonPath('data.rule.conditions.0.value', 'DE');
+        $this->assertSame(3, $domain->securityRules()->count());
+        $this->assertSame($before + 1, $domain->refresh()->revision);
     }
 
     public function test_bounded_import_creates_one_revision_and_rolls_back_through_edge_history(): void
     {
         [$user, $domain] = $this->ownedDomain();
         $before = $domain->revision;
-        $rules = collect(range(1, 100))->map(fn (int $index): array => [
-            'match_type' => 'ip', 'value' => "192.0.2.$index", 'action' => 'block', 'priority' => $index,
-        ])->all();
+        $rules = collect(range(1, 100))->map(fn (int $index): array => $this->ruleBody('client_ip', "192.0.2.$index", 'block', $index))->all();
         $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules/import", ['replace_existing' => true, 'rules' => $rules])->assertAccepted();
         $this->assertSame($before + 1, $domain->refresh()->revision);
         $this->assertSame(100, $domain->securityRules()->count());
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules/import", ['rules' => [$rules[0], $rules[0]]])->assertUnprocessable();
         (new ReconcileEdgeDomain($domain->id))->handle();
         $revision = $domain->refresh()->revision;
 
@@ -136,7 +256,7 @@ class SecurityApiTest extends TestCase
         $this->assertSame(100, $domain->securityRules()->count());
     }
 
-    public function test_admin_protection_quarantine_recovery_and_failed_target_preserve_active_placement(): void
+    public function test_admin_quarantine_recovery_and_failed_target_preserve_active_placement(): void
     {
         Queue::fake();
         [, $domain] = $this->ownedDomain(true);
@@ -145,8 +265,7 @@ class SecurityApiTest extends TestCase
         $quarantine = EdgePool::query()->where('kind', 'quarantine')->firstOrFail();
         DomainEdgePlacement::query()->create(['domain_id' => $domain->id, 'active_pool_id' => $shared->id, 'desired_revision' => $domain->revision, 'state' => 'active']);
 
-        $this->actingAs($admin)->postJson("/api/admin/domains/{$domain->id}/protect", ['reason' => 'request spike'])
-            ->assertAccepted()->assertJsonPath('data.state', 'restricted');
+        $this->actingAs($admin)->postJson("/api/admin/domains/{$domain->id}/protect", ['reason' => 'request spike'])->assertNotFound();
         $this->actingAs($admin)->postJson("/api/admin/domains/{$domain->id}/quarantine", ['reason' => 'continued spike'])
             ->assertAccepted()->assertJsonPath('data.target_pool_id', $quarantine->id);
         $placement = $domain->edgePlacement()->firstOrFail();

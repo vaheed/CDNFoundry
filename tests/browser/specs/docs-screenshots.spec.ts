@@ -37,6 +37,15 @@ for (const scene of scenes) {
     });
 }
 
+// The social card search engines and link previews show: the SVG card rendered at 1200 by 630, since they do not read SVG.
+test('documentation social card', async ({ page }, info) => {
+    test.skip(info.project.name !== 'light-desktop', 'the card is rendered once');
+    await page.setViewportSize({ width: 1200, height: 630 });
+    await page.setContent(readFileSync(resolve(output, '../social-card.svg'), 'utf8'));
+    mkdirSync(output, { recursive: true });
+    await page.screenshot({ path: `${output}/social-card.png`, clip: { x: 0, y: 0, width: 1200, height: 630 } });
+});
+
 // The release these screenshots were taken for. scripts/ci/check_no_screenshots.py fails when it differs from VERSION.
 test('documentation screenshots record their release', async () => {
     const version = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../../../VERSION'), 'utf8').trim();

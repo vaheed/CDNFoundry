@@ -21,11 +21,13 @@ trait BuildsSettingFields
                 ->options(array_combine(\DateTimeZone::listIdentifiers(), \DateTimeZone::listIdentifiers()))
                 ->searchable()->native(false)->required()->rules($field['rules']),
             'boolean' => Toggle::make($name),
-            'cidr_list', 'ip_list' => TagsInput::make($name),
+            'cidr_list' => TagsInput::make($name)->placeholder('203.0.113.0/24'),
+            'ip_list' => TagsInput::make($name)->placeholder('198.51.100.7'),
             'choice_list' => CheckboxList::make($name)->options($field['options'])->columns(2)
                 ->dehydrateStateUsing(fn (array $state): array => array_map(fn (mixed $value): mixed => is_int($value) ? (string) $value : $value, $state)),
             'url' => TextInput::make($name)->url()->maxLength(2048)->placeholder('https://grafana.example.com/explore'),
-            default => TextInput::make($name)->integer()->required()->extraInputAttributes(['class' => 'cdn-mono']),
+            // The default is the example: it shows what a normal value looks like when the field is cleared.
+            default => TextInput::make($name)->integer()->required()->placeholder(is_scalar($field['default']) ? (string) $field['default'] : null)->extraInputAttributes(['class' => 'cdn-mono']),
         };
 
         return $control->label($field['label'])->inlineLabel()

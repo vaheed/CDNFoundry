@@ -21,7 +21,7 @@ from .progress import Tracker, plan_steps
 from .render import Renderer
 from . import management as mg
 from .ssh import SshError, SshTransport, Target, load_targets, save_target
-from .state import FleetState, validate_alert_webhook, validate_management_networks
+from .state import FleetState, validate_management_networks
 
 RELEASES = "releases"
 INVENTORY = "inventory"
@@ -178,15 +178,6 @@ class FleetEngine:
 
     def local_ca(self) -> str | None:
         return mg.local_ca_certificate(self.work)
-
-    def alert_webhook(self) -> str:
-        return self.state()["global"].get("alert_webhook_url", "")
-
-    def set_alert_webhook(self, url: str) -> None:
-        """Where Alertmanager sends alerts. Optional; empty turns notifications off. The next config run carries a change to the hosts."""
-        state = self.state()
-        state["global"]["alert_webhook_url"] = validate_alert_webhook(url.strip())
-        self.store._write(state)
 
     def management_networks(self) -> list[str]:
         return list(self.state()["global"].get("management_networks", []))
@@ -699,8 +690,6 @@ class FleetEngine:
                 verified = -1
             if verified == 0:
                 extra.append(Check("fleet", "A verified backup exists", False, "the recovery point is nothing; run `backup-now`"))
-        if not state["global"].get("alert_webhook_url", ""):
-            extra.append(Check("fleet", "Alerts have a receiver", False, "alerts fire and reach nobody; run `alert-webhook --url https://...` and apply the config"))
         return checks + extra
 
     def security_status(self) -> list[dict[str, Any]]:

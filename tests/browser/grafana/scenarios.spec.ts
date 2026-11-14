@@ -8,7 +8,9 @@ const alertmanager = process.env.ALERTMANAGER_URL ?? 'http://127.0.0.1:9093';
 
 const scenarios = [
     { name: 'origin-down', alert: 'EdgeGlobal5xxRatioHigh', team: 'noc', dashboard: '/d/cdnf-global-traffic', wait: 12 },
-    { name: 'l7-flood', alert: 'DomainRequestFlood', team: 'soc', dashboard: '/d/cdnf-l7-flood', wait: 10 },
+    // A Grafana-managed rule (it reads ClickHouse), so it reaches Alertmanager and the alert list but not the Prometheus ALERTS series
+    // that the Firing alerts table reads.
+    { name: 'l7-flood', alert: 'DomainRequestFlood', team: 'soc', dashboard: '/d/cdnf-l7-flood', wait: 10, inTable: false },
     { name: 'dns-flood', alert: 'DnsNxdomainFlood', team: 'soc', dashboard: '/d/cdnf-dns-abuse', wait: 12 },
     { name: 'pop-loss', alert: 'EdgeHeartbeatStale', team: 'noc', dashboard: '/d/cdnf-pop-fleet', wait: 14 },
     { name: 'cert-expiry', alert: 'CDNFoundryCertificateExpiry', team: 'noc', dashboard: '/d/cdnf-tls-posture', wait: 12 },
@@ -46,13 +48,17 @@ for (const scenario of scenarios) {
 
         await signIn(page, adminUser, adminPassword);
         await page.goto(`/alerting/list?view=list&search=${scenario.alert}`);
+        // Data source rules are listed in collapsed groups.
+        await page.getByRole('button', { name: 'Expand all' }).click({ timeout: 30_000 }).catch(() => undefined);
         await expect(page.getByText(scenario.alert).first()).toBeVisible({ timeout: 60_000 });
 
         await page.goto(`${scenario.dashboard}?orgId=1&from=now-30m&to=now`);
         await waitForPanels(page);
         await page.goto('/d/cdnf-now?orgId=1&from=now-30m&to=now');
         await waitForPanels(page);
-        await expect(page.locator('section').filter({ hasText: 'Firing alerts' }).first()).toContainText(scenario.alert, { timeout: 60_000 });
+        if (scenario.inTable !== false) {
+            await expect(page.locator('section').filter({ hasText: 'Firing alerts' }).first()).toContainText(scenario.alert, { timeout: 60_000 });
+        }
         await start(request, 'normal');
     });
 }

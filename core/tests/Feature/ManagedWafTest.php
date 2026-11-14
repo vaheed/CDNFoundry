@@ -8,6 +8,7 @@ use App\Models\Domain;
 use App\Models\EdgePool;
 use App\Models\User;
 use App\Support\ManagedWaf;
+use App\Support\ManagedWafTuning;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
@@ -74,6 +75,77 @@ class ManagedWafTest extends TestCase
         $this->assertSame(2, $domain->refresh()->revision);
         $this->assertDatabaseHas('audit_logs', ['action' => 'waf.profile_updated', 'subject_id' => (string) $domain->id]);
         Queue::assertPushed(ReconcileEdgeDomain::class);
+    }
+
+    public function test_tuning_adjusts_categories_rules_paranoia_and_threshold_within_the_catalog(): void
+    {
+        Queue::fake();
+        EdgePool::query()->where('kind', 'shared')->update(['waf_capable' => true, 'waf_runtime_version' => 'sha256:test']);
+        [$owner, $domain] = $this->ownedDomain();
+        $tuning = ['paranoia_level' => 3, 'inbound_threshold' => 8, 'disabled_categories' => ['xss'], 'disabled_rules' => [942100, 941100], 'log_only_rules' => [942120]];
+        $this->actingAs($owner)->patchJson("/api/domains/{$domain->id}/waf", ['profile' => 'balanced', 'tuning' => $tuning])->assertAccepted();
+
+        $compiled = ManagedWaf::compile($domain->refresh());
+        $this->assertSame(3, $compiled['paranoia_level']);
+        $this->assertSame(8, $compiled['inbound_threshold']);
+        // A rule inside a switched-off category is covered by the category and is not listed again.
+        $this->assertSame(['941'], $compiled['off_categories']);
+        $this->assertSame([942100], $compiled['off_rules']);
+        $this->assertSame([942120], $compiled['log_only_rules']);
+        $this->assertSame('owasp-crs/4.30.0', ManagedWafTuning::catalog()['ruleset']);
+        $this->assertStringStartsWith(ManagedWafTuning::catalog()['ruleset'], config('security.waf.ruleset'));
+
+        // The tuning is replaced as a whole, kept when only the profile changes, and cleared with null.
+        $this->actingAs($owner)->patchJson("/api/domains/{$domain->id}/waf", ['profile' => 'strict'])->assertAccepted();
+        $this->assertSame(['xss'], $domain->refresh()->waf_tuning['disabled_categories']);
+        $this->actingAs($owner)->patchJson("/api/domains/{$domain->id}/waf", ['tuning' => null])->assertAccepted();
+        $this->assertNull($domain->refresh()->waf_tuning);
+        $this->assertSame('strict', $domain->waf_profile);
+        $this->assertSame(2, ManagedWaf::compile($domain)['paranoia_level']);
+
+        // An Off domain stays off whatever its tuning says.
+        $this->actingAs($owner)->patchJson("/api/domains/{$domain->id}/waf", ['profile' => 'off', 'tuning' => ['paranoia_level' => 4]])->assertAccepted();
+        $this->assertSame(0, ManagedWaf::compile($domain->refresh())['paranoia_level']);
+    }
+
+    public function test_tuning_refuses_unknown_rules_bad_bounds_and_conflicts(): void
+    {
+        Queue::fake();
+        EdgePool::query()->where('kind', 'shared')->update(['waf_capable' => true, 'waf_runtime_version' => 'sha256:test']);
+        [$owner, $domain] = $this->ownedDomain();
+        $cases = [
+            ['paranoia_level' => 5], ['paranoia_level' => 0], ['inbound_threshold' => 101], ['inbound_threshold' => 0],
+            ['disabled_categories' => ['nonsense']], ['disabled_rules' => [123456]], ['log_only_rules' => ['x']],
+            ['disabled_rules' => [942100], 'log_only_rules' => [942100]], ['disabled_rules' => range(900000, 900100)],
+            ['disabled_rules' => array_fill(0, 101, 942100)],
+        ];
+        foreach ($cases as $tuning) {
+            $this->actingAs($owner)->patchJson("/api/domains/{$domain->id}/waf", ['profile' => 'balanced', 'tuning' => $tuning])->assertUnprocessable();
+        }
+        $this->assertNull($domain->refresh()->waf_tuning);
+        $this->assertSame('off', $domain->waf_profile);
+
+        $stranger = User::factory()->create();
+        $this->actingAs($stranger)->patchJson("/api/domains/{$domain->id}/waf", ['tuning' => ['paranoia_level' => 2]])->assertNotFound();
+    }
+
+    public function test_the_rule_catalog_is_paginated_filtered_and_shows_each_rules_state(): void
+    {
+        [$owner, $domain] = $this->ownedDomain();
+        $domain->update(['waf_tuning' => ['disabled_categories' => ['sqli'], 'disabled_rules' => [941100], 'log_only_rules' => [941110]]]);
+        $first = $this->actingAs($owner)->getJson("/api/domains/{$domain->id}/waf/rules")->assertOk();
+        $this->assertCount(100, $first->json('data'));
+        $this->assertNotNull($first->json('next_cursor'));
+        $second = $this->actingAs($owner)->getJson("/api/domains/{$domain->id}/waf/rules?cursor=".$first->json('next_cursor'))->assertOk();
+        $this->assertSame($first->json('next_cursor') < $second->json('data.0.id'), true);
+
+        $xss = collect($this->actingAs($owner)->getJson("/api/domains/{$domain->id}/waf/rules?category=xss")->json('data'))->keyBy('id');
+        $this->assertSame('disabled', $xss[941100]['state']);
+        $this->assertSame('log_only', $xss[941110]['state']);
+        $this->assertSame('enabled', $xss->except([941100, 941110])->first()['state']);
+        $sqli = $this->actingAs($owner)->getJson("/api/domains/{$domain->id}/waf/rules?category=sqli&search=libinjection")->json('data');
+        $this->assertSame('disabled', $sqli[0]['state']);
+        $this->actingAs(User::factory()->create())->getJson("/api/domains/{$domain->id}/waf/rules")->assertNotFound();
     }
 
     public function test_new_exclusions_are_refused_and_stored_exclusions_never_reach_the_edge(): void

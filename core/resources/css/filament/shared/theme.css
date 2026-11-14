@@ -420,8 +420,7 @@ body,
     background-color: var(--cdn-brand-hover);
 }
 
-.fi-btn.fi-color-gray,
-.cdn-quick .fi-btn {
+.fi-btn.fi-color-gray {
     border: 0;
     background-color: var(--cdn-base);
     color: var(--cdn-text-default);
@@ -429,8 +428,7 @@ body,
     white-space: nowrap;
 }
 
-.fi-btn.fi-color-gray:hover,
-.cdn-quick .fi-btn:hover {
+.fi-btn.fi-color-gray:hover {
     background-color: var(--cdn-tint);
 }
 
@@ -765,14 +763,16 @@ body,
     gap: 0.25rem;
 }
 
+/* A value, never an action: flat and sunken with small corners, where an action is raised, ringed, and carries an icon. */
 .cdn-chip {
-    border-radius: 9999px;
-    background: var(--cdn-fill);
-    padding: 0.0625rem 0.5rem;
-    color: var(--cdn-neutral-text);
+    border-radius: 0.25rem;
+    background: var(--cdn-recessed);
+    padding: 0.0625rem 0.375rem;
+    color: var(--cdn-text-default);
     font-size: 0.75rem;
-    font-weight: 500;
+    font-weight: 400;
     white-space: nowrap;
+    cursor: default;
 }
 
 /* ---------------------------------------------------------------- tables: compact header, hover tint, no zebra */
@@ -813,6 +813,11 @@ body,
 .fi-ta-text,
 .fi-ta-icon {
     padding-inline: 0.5rem;
+}
+
+/* A second line under a cell value keeps AA contrast on the hovered row tint. */
+.fi-ta-text-description {
+    color: var(--cdn-text-subtle);
 }
 
 .fi-ta-row:hover,
@@ -1026,11 +1031,86 @@ body,
     padding: 0.625rem var(--cdn-space-4);
 }
 
+/* A section title with the actions that change it on the right, on one line. */
+.cdn-panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--cdn-space-2);
+    border-bottom: 1px solid var(--cdn-hairline);
+    background: var(--cdn-elevated);
+    padding-inline-end: var(--cdn-space-3);
+}
+
+.cdn-panel-head {
+    flex-wrap: wrap;
+}
+
+/* The title keeps one line; on a narrow screen the buttons move under it instead of squeezing it. */
+.cdn-panel-head .cdn-panel-title {
+    flex: 0 0 auto;
+    border-bottom: 0;
+    background: transparent;
+    white-space: nowrap;
+}
+
+.cdn-panel-actions {
+    display: flex;
+    flex: 1 1 auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: center;
+    gap: var(--cdn-space-1);
+    padding-block: 0.375rem;
+}
+
+.cdn-panel-actions .fi-btn,
+.cdn-dl-action {
+    white-space: nowrap;
+}
+
+.cdn-dl-action {
+    margin-inline-start: auto;
+    flex-shrink: 0;
+    /* The button sits inside the row's padding, so a row with an action is as tall as one without. */
+    margin-block: -0.1875rem;
+}
+
 .cdn-attention-title {
     display: flex;
     align-items: center;
     gap: var(--cdn-space-2);
     padding: var(--cdn-space-3) var(--cdn-space-4) 0;
+}
+
+/* Under attack mode: what is on and when it ends in one header row, the protections as hairline rows, the limit note last. */
+.cdn-incident-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--cdn-space-3);
+    padding: var(--cdn-space-3) var(--cdn-space-4);
+}
+
+.cdn-incident-title {
+    color: var(--cdn-text-strong);
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.cdn-incident-list > li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--cdn-space-3);
+    border-top: 1px solid var(--cdn-hairline);
+    padding: 0.5rem var(--cdn-space-4);
+    font-size: 0.875rem;
+}
+
+.cdn-incident-note {
+    border-top: 1px solid var(--cdn-hairline);
+    padding: 0.5rem var(--cdn-space-4) var(--cdn-space-3);
 }
 
 /* ---------------------------------------------------------------- tabs: underline in ink, on the page */
@@ -1284,6 +1364,22 @@ a.cdn-kpi-body:hover {
     gap: var(--cdn-space-6);
 }
 
+/* A quiet label above a strip of figures, saying what they cover. */
+.cdn-section-label {
+    margin-bottom: var(--cdn-space-2);
+    color: var(--cdn-text-subtle);
+    font-size: 0.8125rem;
+    font-weight: 500;
+}
+
+/* A long name in a table cell ends with an ellipsis instead of widening the table; its title holds the full name. */
+.cdn-cell-truncate {
+    max-width: 18rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .cdn-dashboard-columns {
     display: grid;
     align-items: start;
@@ -1356,6 +1452,13 @@ a.cdn-condition-row:hover {
     line-height: 1.25rem;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.cdn-attention .cdn-row-title {
+    overflow: visible;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+    white-space: normal;
 }
 
 .cdn-row-meta {
@@ -1700,6 +1803,47 @@ a.cdn-stat-card:hover {
     user-select: all;
 }
 
+/* ---------------------------------------------------------------- widget grid: cards side by side share one height */
+
+.fi-wi-widget {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+}
+
+.fi-wi-widget > * {
+    flex: 1 1 auto;
+}
+
+/* A widget with nothing to say (no incident, nothing needs attention) leaves no gap in the page. */
+.fi-wi-widget:not(:has(*)) {
+    display: none;
+}
+
+/* ---------------------------------------------------------------- acting as another user */
+
+/* A full-width bar above the panel that cannot be missed or mistaken for content: the warning tint, one line on wide screens. */
+.cdn-impersonation {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--cdn-space-2) var(--cdn-space-3);
+    border-bottom: 1px solid var(--cdn-line);
+    background: var(--cdn-warning-tint);
+    color: var(--cdn-text-strong);
+    padding: 0.5rem var(--cdn-space-4);
+    font-size: 0.875rem;
+}
+
+.cdn-impersonation p {
+    flex: 1 1 18rem;
+    margin: 0;
+}
+
+.cdn-impersonation-email {
+    color: var(--cdn-text-default);
+}
+
 /* ---------------------------------------------------------------- domain detail */
 
 .cdn-overview {
@@ -1719,12 +1863,6 @@ a.cdn-stat-card:hover {
     .cdn-overview {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
-}
-
-.cdn-quick {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--cdn-space-2);
 }
 
 .cdn-quick-state {
@@ -2101,6 +2239,12 @@ a.cdn-stat-card:hover {
     display: grid;
     max-height: 12rem;
     overflow-y: auto;
+}
+
+/* A short fixed list of choices, such as notification events, shows every option instead of scrolling inside a box. */
+.cdn-token-domain-list--all {
+    max-height: none;
+    overflow-y: visible;
 }
 
 .cdn-token-domain {

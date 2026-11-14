@@ -5,6 +5,7 @@ namespace App\Actions;
 use App\Models\Domain;
 use App\Models\Edge;
 use App\Models\SecurityEvent;
+use App\Support\SecurityAlertData;
 use App\Support\SecurityConfig;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -63,6 +64,29 @@ class RecordSecurityReport
         SecurityEvent::query()->where('domain_id', $domain->id)->whereNotNull('bucket_at')
             ->where('occurred_at', '>=', now()->subMinutes(self::SLOT_RETENTION_MINUTES))
             ->whereNotIn('reason_code', SecurityConfig::NON_ESCALATING_REASONS)
+            ->limit(1000)->get(['details'])
+            ->each(function (SecurityEvent $row) use (&$total, $since): void {
+                foreach ((array) ($row->details['minutes'] ?? []) as $minute => $events) {
+                    if ((int) $minute > $since) {
+                        $total += (int) $events;
+                    }
+                }
+            });
+
+        return $total;
+    }
+
+    /**
+     * Mitigated requests the edges reported for the domain over the last $minutes minutes, from the same per-minute slots.
+     * Unlike the escalation rate it counts every enforcing reason, including a domain's own rules.
+     */
+    public static function mitigationsInWindow(Domain $domain, int $minutes): int
+    {
+        $since = intdiv(now()->timestamp, 60) - $minutes;
+        $total = 0;
+        SecurityEvent::query()->where('domain_id', $domain->id)->whereNotNull('bucket_at')
+            ->where('occurred_at', '>=', now()->subMinutes(self::SLOT_RETENTION_MINUTES))
+            ->whereNotIn('reason_code', SecurityAlertData::NOT_MITIGATIONS)
             ->limit(1000)->get(['details'])
             ->each(function (SecurityEvent $row) use (&$total, $since): void {
                 foreach ((array) ($row->details['minutes'] ?? []) as $minute => $events) {

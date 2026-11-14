@@ -486,7 +486,7 @@
       "id": 5,
       "options": {
         "displayMode": "gradient",
-        "namePlacement": "left",
+        "namePlacement": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
           "calcs": [

@@ -20,7 +20,7 @@ start maintenance for their own domain.
 
 | Situation | Control | Scope | Who |
 | --- | --- | --- | --- |
-| One domain is flooded with requests | **Enable Under Attack mode** | Domain | Administrator |
+| One domain is flooded with requests | **Under attack mode** | Domain | Domain owner |
 | One domain misbehaves and hurts others | **Quarantine domain** | Domain | Administrator |
 | A site must show "temporarily unavailable" | **Start maintenance** | Domain | Domain owner |
 | A pool must show "temporarily unavailable" | **Maintenance** | Pool | Administrator |
@@ -31,35 +31,67 @@ start maintenance for their own domain.
 
 ## Apply a control
 
-### Under Attack mode, quarantine, and maintenance on a domain
+### Under attack mode on a domain
+
+Under attack mode (called the incident profile in the API) is one temporary bundle of protections for one domain, and a domain
+user can turn it on for their own domains. Open the domain, choose **Under attack mode** at the top right, and pick how long it
+stays on (15 minutes to 24 hours). It replaces the older administrator-only Under Attack mode, which only tightened the limits.
+
+For that time the domain gets:
+
+- protected request and connection limits for each client;
+- the web application firewall in blocking mode at high sensitivity;
+- only `GET`, `HEAD`, `OPTIONS`, and `POST`, with request bodies up to 1 MiB;
+- a browser challenge before a visitor reaches the origin.
+
+It ends by itself when its time is up, or sooner with **End now** on the banner the domain page shows while it is on. The
+banner says who started it, when it ends, and whether each protection is active on the cells. Starting and ending it each send one overlay to the cells and no
+configuration revision, and each is recorded in the audit log. Users who chose the **Incident profile started** and **ended**
+events in [notifications](notifications.md) get a message for each.
+
+The cell enforces every protection from the overlay and ends the profile by its own clock, so it stops on time even if the control
+plane is unreachable.
+
+**The browser challenge.** A visitor's page load without a token gets a short page that asks the browser to solve a small
+computation (about a second on a current device) and then continues on its own. The answer is single use and is bound to the
+visitor's address and browser; the token it earns works until the profile ends or for an hour, whichever is sooner, and is
+the only cookie the profile sets. Requests that are not page loads (scripts, bots, API clients) and have no token are refused.
+Paths under `/api/` and `/.well-known/`, and visitors that one of your own allow rules matches, are not challenged. The page
+explains itself to screen readers and tells a visitor without JavaScript what to do. The check needs HTTPS, because browsers
+only offer the cryptography it uses on secure pages. Each address can be issued only a limited number of challenges a minute, so
+the challenge cannot be turned into a flood of its own.
+
+Refusals are recorded as security events with the reasons `incident_method`, `incident_body_size`, `challenge_required`, and
+`challenge_invalid`. They show the profile working and never raise the domain's automatic security state.
+
+This protects your origin and the cells from request floods. It cannot absorb traffic that saturates a host, a link, or an
+upstream. The same actions are in the API under `/api/domains/{domain}/incident`.
+
+### Quarantine and maintenance on a domain
 
 <DocTabs :labels="['Panel', 'API']">
 <template #tab-1>
 
-1. Open the domain and its **Domain actions** menu.
-2. Choose **Enable Under Attack mode**, **Quarantine domain**, or **Start maintenance**.
-3. For maintenance, set the **503 response message** visitors will see.
-4. Confirm.
+1. Open the domain. On the **Overview** tab, quarantine is in the **Protection** section's menu (administrators only), and
+   **Maintenance** is on the **Delivery** section.
+2. For maintenance, set the **503 response message** visitors will see.
+3. Confirm.
 
 </template>
 <template #tab-2>
 
 ```sh
-curl -X POST "$CDNF_URL/api/admin/domains/$DOMAIN_ID/protect" \
+curl -X POST "$CDNF_URL/api/admin/domains/$DOMAIN_ID/quarantine" \
   -H "Authorization: Bearer $CDNF_TOKEN" -H "Idempotency-Key: $(uuidgen)"
 ```
 
-Use `/quarantine` instead of `/protect` to quarantine. Both return `202 Accepted`
-with an operation ID.
+`/return-to-normal` reverses it. Both return `202 Accepted` with an operation ID.
 
 </template>
 </DocTabs>
 
-**Expected result:** an operation starts, and the domain's security state changes.
-Under Attack mode tightens request and connection limits for a time. It does not
-move the domain or change the WAF. Quarantine deploys the domain to the
-quarantine pool first, then drains the shared source, so there is no gap.
-Maintenance returns HTTP 503 for that domain only. Only a proxied domain can be quarantined.
+**Expected result:** an operation starts. Quarantine deploys the domain to the quarantine pool first, then drains the shared
+source, so there is no gap. Maintenance returns HTTP 503 for that domain only. Only a proxied domain can be quarantined.
 
 ### Maintenance on a pool
 
@@ -98,7 +130,7 @@ with a conflict until you end the first one.
 
 | You applied | Undo with |
 | --- | --- |
-| Under Attack mode, quarantine | **Return to normal** on the domain |
+| Quarantine | **Return to normal** on the domain |
 | Domain maintenance | **End maintenance** on the domain |
 | Pool maintenance | **End maintenance** on the pool, or wait for its expiry |
 | Edge or cell drain | **Undrain** |

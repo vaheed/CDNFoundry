@@ -169,7 +169,7 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 2,
+        "h": 3,
         "w": 24,
         "x": 0,
         "y": 0
@@ -224,12 +224,12 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 2
+        "y": 3
       },
       "id": 2,
       "options": {
         "displayMode": "gradient",
-        "namePlacement": "left",
+        "namePlacement": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
           "calcs": [
@@ -306,12 +306,12 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 2
+        "y": 3
       },
       "id": 3,
       "options": {
         "displayMode": "gradient",
-        "namePlacement": "left",
+        "namePlacement": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
           "calcs": [
@@ -380,12 +380,12 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 2
+        "y": 3
       },
       "id": 4,
       "options": {
         "displayMode": "gradient",
-        "namePlacement": "left",
+        "namePlacement": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
           "calcs": [
@@ -467,7 +467,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 10
+        "y": 11
       },
       "id": 5,
       "options": {
@@ -523,6 +523,7 @@
               "mode": "off"
             }
           },
+          "displayName": "${__field.labels.hostname}",
           "mappings": [
             {
               "options": {
@@ -553,8 +554,9 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 10
+        "y": 11
       },
+      "hideTimeOverride": true,
       "id": 6,
       "options": {
         "legend": {
@@ -577,10 +579,11 @@
           "editorType": "sql",
           "format": 0,
           "queryType": "timeSeries",
-          "rawSql": "SELECT * FROM (SELECT $__timeInterval(interval_start) AS time, hostname, quantilesTDigestMerge(0.5, 0.95, 0.99)(origin_latency_q)[2] AS origin_p95 FROM cdnf.edge_traffic_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 0 AND 34560000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) AND $__conditionalAll(hostname IN (${hostname:singlequote}), $hostname) GROUP BY time, hostname UNION ALL SELECT $__timeInterval(interval_start) AS time, hostname, quantilesTDigestMerge(0.5, 0.95, 0.99)(origin_latency_q)[2] AS origin_p95 FROM cdnf.edge_traffic_daily WHERE interval_start >= toStartOfDay($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 34560001 AND 10000000000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) AND $__conditionalAll(hostname IN (${hostname:singlequote}), $hostname) GROUP BY time, hostname) ORDER BY time",
+          "rawSql": "SELECT * FROM (SELECT $__timeInterval(interval_start) AS time, if(hostname = '', 'not recorded', hostname) AS hostname, quantilesTDigestMerge(0.5, 0.95, 0.99)(origin_latency_q)[2] AS origin_p95 FROM cdnf.edge_traffic_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 0 AND 34560000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) AND $__conditionalAll(hostname IN (${hostname:singlequote}), $hostname) GROUP BY time, hostname UNION ALL SELECT $__timeInterval(interval_start) AS time, if(hostname = '', 'not recorded', hostname) AS hostname, quantilesTDigestMerge(0.5, 0.95, 0.99)(origin_latency_q)[2] AS origin_p95 FROM cdnf.edge_traffic_daily WHERE interval_start >= toStartOfDay($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 34560001 AND 10000000000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) AND $__conditionalAll(hostname IN (${hostname:singlequote}), $hostname) GROUP BY time, hostname) ORDER BY time",
           "refId": "A"
         }
       ],
+      "timeFrom": "24h",
       "title": "Slowest origins over time",
       "type": "timeseries"
     },
@@ -609,7 +612,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 10
+        "y": 11
       },
       "id": 7,
       "options": {

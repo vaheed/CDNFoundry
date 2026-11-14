@@ -19,6 +19,8 @@ trap cleanup EXIT
 make dev-assets
 "${compose[@]}" run --rm --no-deps vendor-init >/dev/null
 "${compose[@]}" up -d --no-deps --build browser-app
+# A ClickHouse stand-in for the mitigated-requests screen, inside the disposable container only.
+"${compose[@]}" exec -d browser-app php -S 127.0.0.1:8123 /tests/browser/clickhouse-stub.php
 for _ in $(seq 1 60); do
   curl -fsS -o /dev/null "$CDNF_BROWSER_BASE_URL/admin/login" && break
   sleep 2

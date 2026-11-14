@@ -5,12 +5,15 @@ namespace App\Providers\Filament;
 use App\Filament\Domain\Pages\DomainDashboard;
 use App\Filament\Shared\Pages\ApiTokens;
 use App\Filament\Shared\Pages\EditProfile;
-use Filament\Http\Middleware\Authenticate;
+use App\Filament\Shared\Pages\NotificationChannels;
+use App\Http\Middleware\SendAdministratorsToTheirPanel;
+use App\Support\Impersonation;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
 use Filament\Panel;
 use Filament\PanelProvider;
+use Filament\View\PanelsRenderHook;
 use Filament\Widgets\AccountWidget;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
@@ -35,7 +38,7 @@ class DomainPanelProvider extends PanelProvider
             ->navigationGroups(['Domains', 'Observe', 'Account'])
             ->discoverResources(in: app_path('Filament/Domain/Resources'), for: 'App\\Filament\\Domain\\Resources')
             ->discoverPages(in: app_path('Filament/Domain/Pages'), for: 'App\\Filament\\Domain\\Pages')
-            ->pages([DomainDashboard::class, ApiTokens::class])
+            ->pages([DomainDashboard::class, ApiTokens::class, NotificationChannels::class])
             ->widgets([AccountWidget::class])
             ->middleware([
                 EncryptCookies::class,
@@ -48,6 +51,7 @@ class DomainPanelProvider extends PanelProvider
                 DisableBladeIconComponents::class,
                 DispatchServingFilamentEvent::class,
             ])
-            ->authMiddleware([Authenticate::class]);
+            ->authMiddleware([SendAdministratorsToTheirPanel::class])
+            ->renderHook(PanelsRenderHook::BODY_START, fn (): string => Impersonation::active() ? view('filament.domain.impersonation-banner', ['administrator' => Impersonation::administrator(), 'user' => auth()->user()])->render() : '');
     }
 }

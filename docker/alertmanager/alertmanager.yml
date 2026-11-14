@@ -1,7 +1,8 @@
-# Every alert carries a `team` label (noc, soc, platform) and is routed by it. start.sh writes the
-# webhook URL to /tmp/alert-webhook-url from ALERT_WEBHOOK_URL. Without one it removes the webhook_configs lines
-# below, so the receivers send nothing and Alertmanager still starts. A
-# deployment points all three teams at one webhook, or overrides a receiver with its own notifier.
+# Every alert carries a `team` label (noc, soc, platform) and is routed by it. All three teams post to one private
+# receiver in the control plane (ALERT_RECEIVER_URL, written to /tmp/alert-receiver-url by start.sh), authenticated with
+# the monitoring token. The receiver queues the alert for the notifier, which delivers it to the channels
+# administrators configure in Platform settings. Alertmanager groups alerts, so the receiver sees a few small
+# requests a minute however many domains are firing.
 route:
   receiver: platform
   group_by: [alertname, team]
@@ -34,13 +35,25 @@ inhibit_rules:
 receivers:
   - name: noc
     webhook_configs:
-      - url_file: /tmp/alert-webhook-url
+      - url_file: /tmp/alert-receiver-url
         send_resolved: true
+        max_alerts: 200
+        http_config:
+          authorization:
+            credentials_file: /run/secrets/metrics-token
   - name: soc
     webhook_configs:
-      - url_file: /tmp/alert-webhook-url
+      - url_file: /tmp/alert-receiver-url
         send_resolved: true
+        max_alerts: 200
+        http_config:
+          authorization:
+            credentials_file: /run/secrets/metrics-token
   - name: platform
     webhook_configs:
-      - url_file: /tmp/alert-webhook-url
+      - url_file: /tmp/alert-receiver-url
         send_resolved: true
+        max_alerts: 200
+        http_config:
+          authorization:
+            credentials_file: /run/secrets/metrics-token

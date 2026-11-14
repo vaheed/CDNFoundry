@@ -64,7 +64,7 @@ def test_enrollment_survives_a_bootstrap_that_fails_later(tmp_path: Path, monkey
     common = ["--vault", str(vault), "--output-dir", str(tmp_path / "bundles"), "--repo-root", str(ROOT), "--non-interactive", "--yes"]
     topology = tmp_path / "topology.json"
     topology.write_text(json.dumps({"preset": "control-only", "global": {"operator_domain": "ops.example.test", "platform_domain": "cdn.example.test", "release": "v0",
-                                    "acme_email": "acme@example.test", "alert_webhook_url": "https://alerts.example.test/h"},
+                                    "acme_email": "acme@example.test"},
                                     "nodes": [{"name": "control-1", "role": "control", "public_ipv4": "93.184.216.10"},
                                               {"name": "pop-1", "role": "edge", "public_ipv4": "93.184.216.11"}]}))
     assert main(["setup", "--config", str(topology), "--no-render", *common]) == 0

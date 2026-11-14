@@ -6,10 +6,18 @@ return [
     // enforce, report-only, or off. The panels and the API send one Content-Security-Policy.
     'content_security_policy' => env('CONTENT_SECURITY_POLICY', 'enforce'),
     'waf' => [
-        'ruleset' => env('WAF_RULESET_VERSION', 'owasp-crs/4.26.0-modsecurity/3.0.14'),
+        'ruleset' => env('WAF_RULESET_VERSION', 'owasp-crs/4.30.0-modsecurity/3.0.17'),
     ],
     'maximum_rules_per_domain' => 1000,
     'maximum_import_rules' => 500,
+    // Platform rulesets: how many exist, how many rules each holds, and how many domains a ruleset may list.
+    'maximum_platform_rulesets' => 10,
+    'maximum_platform_rules_per_ruleset' => 100,
+    'maximum_platform_ruleset_domains' => 500,
+    // Rate-limit rules per domain. The hard ceiling is 50; a lower value here tightens it.
+    'maximum_rate_limit_rules' => env('SECURITY_RATE_LIMIT_RULES', 20),
+    // Values in one in_list condition. The hard ceiling is 100; a lower value here tightens it.
+    'maximum_rule_list_values' => env('SECURITY_RULE_LIST_VALUES', 100),
     'trusted_proxy_cidrs_maximum' => 32,
     'emergency_duration_minutes_maximum' => 1440,
     'allowed_methods' => ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],

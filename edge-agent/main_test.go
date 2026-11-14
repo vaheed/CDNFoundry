@@ -59,7 +59,7 @@ func TestVerifyAndCompatibility(t *testing.T) {
 	if err := verifyDelivery(scope, checksum, 2, time.Now().Add(-time.Second).Unix(), delivery, hex.EncodeToString(public)); err == nil {
 		t.Fatal("expired delivery accepted")
 	}
-	if !compatible("2.0.0", "2.99.99") || compatible("2.1.0", "2.99.99") {
+	if !compatible("2.0.0", "2.99.99") || compatible("2.2.0", "2.99.99") {
 		t.Fatal("compatibility bounds are incorrect")
 	}
 }
@@ -112,7 +112,7 @@ func TestControlRequestsRejectPlaintextAndRedirects(t *testing.T) {
 }
 
 func TestVersionCommand(t *testing.T) {
-	if version != "2.0.8" {
+	if version != "2.1.0" {
 		t.Fatalf("unexpected release version %q", version)
 	}
 }

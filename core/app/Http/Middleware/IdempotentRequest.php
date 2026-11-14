@@ -94,7 +94,7 @@ class IdempotentRequest
         $omitted = false;
         $strip = function (array $value) use (&$strip, &$omitted): array {
             foreach ($value as $field => $item) {
-                if (in_array($field, ['token', 'bootstrap_token'], true)) {
+                if (in_array($field, ['token', 'bootstrap_token', 'signing_secret'], true)) {
                     unset($value[$field]);
                     $omitted = true;
                 } elseif (is_array($item)) {

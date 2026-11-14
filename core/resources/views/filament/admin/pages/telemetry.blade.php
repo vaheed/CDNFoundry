@@ -90,8 +90,8 @@
             </div>
 
             <div class="cdn-dashboard-columns">
-                @livewire(\App\Filament\Admin\Widgets\TrafficOverviewChart::class, ['showDrilldown' => false, 'pageFilters' => ['range' => $state['filters']['range'], 'compare' => true, 'domain_id' => $state['filters']['domain']?->id, 'edge_id' => $state['filters']['edge']]], key('telemetry-traffic-'.$state['filters']['range'].'-'.($state['filters']['domain']?->id ?? 'all').'-'.($state['filters']['edge'] ?? 'all')))
-                @livewire(\App\Filament\Admin\Widgets\ErrorLatencyChart::class, ['showDrilldown' => false, 'pageFilters' => ['range' => $state['filters']['range'], 'compare' => true, 'domain_id' => $state['filters']['domain']?->id, 'edge_id' => $state['filters']['edge']]], key('telemetry-errors-'.$state['filters']['range'].'-'.($state['filters']['domain']?->id ?? 'all').'-'.($state['filters']['edge'] ?? 'all')))
+                @livewire(\App\Filament\Admin\Widgets\TrafficOverviewChart::class, ['pageFilters' => ['range' => $state['filters']['range'], 'compare' => true, 'domain_id' => $state['filters']['domain']?->id, 'edge_id' => $state['filters']['edge']]], key('telemetry-traffic-'.$state['filters']['range'].'-'.($state['filters']['domain']?->id ?? 'all').'-'.($state['filters']['edge'] ?? 'all')))
+                @livewire(\App\Filament\Admin\Widgets\ErrorLatencyChart::class, ['pageFilters' => ['range' => $state['filters']['range'], 'compare' => true, 'domain_id' => $state['filters']['domain']?->id, 'edge_id' => $state['filters']['edge']]], key('telemetry-errors-'.$state['filters']['range'].'-'.($state['filters']['domain']?->id ?? 'all').'-'.($state['filters']['edge'] ?? 'all')))
             </div>
 
             <div class="cdn-dashboard-columns">

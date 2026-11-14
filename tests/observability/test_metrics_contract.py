@@ -260,6 +260,10 @@ class SecurityClassContractTest(unittest.TestCase):
             "body_too_large", "client_connections_exceeded", "client_rate_exceeded", "domain_connections_exceeded", "domain_quarantined", "domain_rate_exceeded",
             "domain_restricted", "edge_emergency_mode", "header_too_large", "invalid_method", "malformed_request_body", "origin_capacity_exceeded",
             "origin_circuit_open", "sni_host_mismatch", "unknown_host", "waf_body_limit", "waf_block", "cache_abuse_detected",
+            # The incident profile's refusals are plain blocks.
+            "incident_method", "incident_body_size", "challenge_required", "challenge_invalid",
+            # A domain's own custom rule blocking a request is a plain block.
+            "custom_rule_block", "custom_rule_rate_limited", "platform_rule_block",
         }
         self.assertEqual(set(), reasons - known, "a new security reason must be classified here and in Vector before it ships")
 

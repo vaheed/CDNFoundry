@@ -55,7 +55,8 @@ Open the domain and choose **Cache settings**, or use `GET` and `PATCH` on `/api
 | respect origin headers (**Respect origin cache headers**) | boolean |
 | query policy | include all, ignore all, include selected, or ignore selected |
 | selected query names | up to 32 distinct safe names |
-| ignored cookie names | up to 32 distinct names, each 1–64 safe characters; a request whose cookies are all on this list can still be cached |
+| ignored cookie names | up to 32 distinct names, each 1–64 safe characters; a name ending in `*` matches every cookie that starts with it (`_ga_*`); a request whose cookies are all on this list can still be cached |
+| path rules | up to 16 rules; each has a match (starts with or ends with), a path of up to 128 safe characters (a prefix starts with `/`), and an action: bypass the cache, or set the edge TTL (1–31,536,000 seconds) |
 | status TTLs | approved 200, 203, 204, 206, 301, 302, and 404 map; 0 disables admission |
 | admission requests | 1–10 requests before a new object is admitted |
 | stale if error | 0–86,400 seconds |
@@ -67,6 +68,30 @@ Defaults are enabled, 3,600-second edge TTL, 300-second browser TTL, 100 MiB
 maximum object, origin-header respect, query inclusion, no ignored cookies (every request with a cookie bypasses the cache),
 approved status TTLs, two-request admission, 60 seconds of stale-if-error,
 30 seconds of stale-while-revalidate, normal serving, and 32 variants.
+
+### Analytics cookies
+
+A request that carries any cookie is personal, so most analytics cookies would
+turn every visit into a cache bypass. In **Cache settings**, **Add analytics
+cookies** appends the usual cookie names of one tool to the ignored list (Google
+Analytics, Meta Pixel, Hotjar, Matomo, or consent banners). Review the list before
+saving: only name cookies that do not change the response. A cookie the preset
+does not cover still bypasses the cache.
+
+### Path rules
+
+A path rule changes cache behavior for one part of the site. The first rule, in
+list order, whose path matches the raw request path (query string excluded,
+case-sensitive) applies:
+
+- **Bypass cache** never stores or serves the path from the cache.
+- **Set edge TTL** keeps responses for the given seconds. It replaces the origin's
+  own lifetime for that path, but only for statuses the status TTL map already
+  allows. A status set to 0 is still never stored.
+
+Rules are part of the domain's cache policy, so changing one starts a new policy
+generation and earlier copies are not reused. There are no wildcards and no regular
+expressions.
 
 The edge serves an expired object inside the stale-while-revalidate window while
 one background refresh runs. Nginx also uses a per-key lock so that many cold

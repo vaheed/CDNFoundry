@@ -51,7 +51,6 @@ Fleet rejects any field that is not listed on this page.
     "platform_domain": "example.net",
     "release": "RELEASE_TAG_OR_COMMIT",
     "acme_email": "operations@example.com",
-    "alert_webhook_url": "https://alerts.example.com/cdnfoundry",
     "ipv6": false
   },
   "nodes": [],
@@ -71,7 +70,6 @@ Fleet rejects any field that is not listed on this page.
 | `platform_domain` | Domain that holds the platform nameserver names |
 | `release` | Exact tag or commit label. Moving names such as `latest`, `main`, and `master` are rejected |
 | `acme_email` | Contact address for certificate issuance |
-| `alert_webhook_url` | An `https://` URL that receives every alert. Optional: when empty, Alertmanager still starts but sends nothing. Set it any time and deploy the configuration |
 | `ipv6` | `true` plans IPv6 on every node. Use a JSON boolean |
 
 The global fields may also sit at the top level of the file.

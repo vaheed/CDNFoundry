@@ -109,7 +109,7 @@
       }
     ]
   },
-  "description": "Every daily check the platform makes visible, each with its pass or fail state.",
+  "description": "Every daily check the platform makes visible: which fail, which are not reported, and what to do.",
   "editable": false,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -156,256 +156,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Every daily check as pass or fail. A red tile is a failed check; open its runbook from the Now dashboard.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [
-            {
-              "options": {
-                "0": {
-                  "color": "red",
-                  "text": "fail"
-                },
-                "1": {
-                  "color": "green",
-                  "text": "pass"
-                }
-              },
-              "type": "value"
-            },
-            {
-              "options": {
-                "match": "null+nan",
-                "result": {
-                  "color": "text",
-                  "text": "No data yet"
-                }
-              },
-              "type": "special"
-            }
-          ],
-          "noValue": "No traffic",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 12,
-        "w": 24,
-        "x": 0,
-        "y": 0
-      },
-      "id": 1,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "text": {
-          "titleSize": 14,
-          "valueSize": 22
-        },
-        "textMode": "value",
-        "wideLayout": true
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "((max(cdnfoundry_edge_gateway_active_revision) - min(cdnfoundry_edge_gateway_active_revision) <= bool 5) or vector(0)) or vector(0)",
-          "instant": true,
-          "legendFormat": "PoPs hold the latest artifact",
-          "range": false,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "((cdnfoundry_dns_deployments_drifted == bool 0)) or vector(0)",
-          "instant": true,
-          "legendFormat": "DNS serials match desired",
-          "range": false,
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "((sum(cdnfoundry_pool_dns_fail_static) == bool 0)) or vector(0)",
-          "instant": true,
-          "legendFormat": "No pool address set shrank",
-          "range": false,
-          "refId": "C"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "((min(cdnfoundry_edge_identity_expires_seconds) > bool 30 * 86400) or vector(1)) or vector(0)",
-          "instant": true,
-          "legendFormat": "No edge identity near expiry",
-          "range": false,
-          "refId": "D"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(cdnfoundry_component_health{component=\"edge_placements\"}) or vector(0)",
-          "instant": true,
-          "legendFormat": "No placement stuck deploying",
-          "range": false,
-          "refId": "E"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "((max(cdnfoundry_queue_oldest_job_age_seconds) < bool 900) or vector(1)) or vector(0)",
-          "instant": true,
-          "legendFormat": "Queue latency under bound",
-          "range": false,
-          "refId": "F"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "((sum(increase(alertmanager_notifications_total{integration=\"webhook\"}[1h])) > bool 0)) or vector(0)",
-          "instant": true,
-          "legendFormat": "Watchdog delivered within the hour",
-          "range": false,
-          "refId": "G"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "((cdnfoundry_tls_certificates_expiring == bool 0)) or vector(0)",
-          "instant": true,
-          "legendFormat": "No certificate near expiry unrenewed",
-          "range": false,
-          "refId": "H"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(cdnfoundry_component_health{component=\"backups\"}) or vector(0)",
-          "instant": true,
-          "legendFormat": "Backup fresh and checks pass",
-          "range": false,
-          "refId": "I"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "((sum(increase(vector_component_discarded_events_total{intentional!=\"true\"}[1h])) == bool 0) * (sum(increase(vector_component_errors_total{component_id=~\"clickhouse_.*\"}[1h])) == bool 0)) or vector(0)",
-          "instant": true,
-          "legendFormat": "Vector drops nothing, ClickHouse accepts",
-          "range": false,
-          "refId": "J"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "((cdnfoundry_control_ha_state{state=\"degraded\"} == bool 0) or vector(1)) or vector(0)",
-          "instant": true,
-          "legendFormat": "Control HA state not degraded",
-          "range": false,
-          "refId": "K"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(((cdnfoundry_control_valkey_replica_linked == bool 1) or vector(1)) * ((cdnfoundry_control_fingerprint_mismatch == bool 0) or vector(1))) or vector(0)",
-          "instant": true,
-          "legendFormat": "Valkey linked, secrets match",
-          "range": false,
-          "refId": "L"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "((cdnfoundry_control_edges_missing_addresses == bool 0)) or vector(0)",
-          "instant": true,
-          "legendFormat": "PoPs hold the control addresses",
-          "range": false,
-          "refId": "M"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(cdnfoundry_component_health{component=\"control_ha\"}) or vector(0)",
-          "instant": true,
-          "legendFormat": "Services run on the primary node",
-          "range": false,
-          "refId": "N"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "((min(up{job=\"node\",role=\"control\"}) == bool 1) or vector(1)) or vector(0)",
-          "instant": true,
-          "legendFormat": "Standby watched, dead-man alarm delivered",
-          "range": false,
-          "refId": "O"
-        }
-      ],
-      "title": "Daily checks",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "description": "Daily checks that fail now.",
+      "description": "Checks that fail now. Each one is listed first in the table below with what to do.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -443,9 +194,83 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 24,
+        "w": 8,
         "x": 0,
-        "y": 12
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count(((label_replace(label_replace(label_replace(min((max(cdnfoundry_edge_gateway_active_revision) - min(cdnfoundry_edge_gateway_active_revision) <= bool 5)) * 2, \"check\", \"PoPs hold the latest artifact\", \"\", \"\"), \"about\", \"Every edge gateway runs a configuration revision within 5 of the newest one.\", \"\", \"\"), \"todo\", \"Open Fleet and rollouts and find the edge that is behind; check its agent log.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"PoPs hold the latest artifact\", \"\", \"\"), \"about\", \"Every edge gateway runs a configuration revision within 5 of the newest one.\", \"\", \"\"), \"todo\", \"Open Fleet and rollouts and find the edge that is behind; check its agent log.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((cdnfoundry_dns_deployments_drifted == bool 0)) * 2, \"check\", \"DNS serials match desired\", \"\", \"\"), \"about\", \"No DNS cluster serves an older zone than the control plane wants.\", \"\", \"\"), \"todo\", \"Open DNS authoritative; reconcile the drifted zones from their domains.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"DNS serials match desired\", \"\", \"\"), \"about\", \"No DNS cluster serves an older zone than the control plane wants.\", \"\", \"\"), \"todo\", \"Open DNS authoritative; reconcile the drifted zones from their domains.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((sum(cdnfoundry_pool_dns_fail_static) == bool 0)) * 2, \"check\", \"No pool held on its last answers\", \"\", \"\"), \"about\", \"No pool is in fail-static, where DNS keeps the last answers because no edge looks healthy.\", \"\", \"\"), \"todo\", \"Open PoP fleet; bring an edge of that pool back to ready.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"No pool held on its last answers\", \"\", \"\"), \"about\", \"No pool is in fail-static, where DNS keeps the last answers because no edge looks healthy.\", \"\", \"\"), \"todo\", \"Open PoP fleet; bring an edge of that pool back to ready.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((min(cdnfoundry_edge_identity_expires_seconds) > bool 30 * 86400)) * 2, \"check\", \"No edge identity near expiry\", \"\", \"\"), \"about\", \"Every edge client certificate is valid for more than 30 days.\", \"\", \"\"), \"todo\", \"Rotate the identity of the edge named in Fleet and rollouts.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"No edge identity near expiry\", \"\", \"\"), \"about\", \"Every edge client certificate is valid for more than 30 days.\", \"\", \"\"), \"todo\", \"Rotate the identity of the edge named in Fleet and rollouts.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min(cdnfoundry_component_health{component=\"edge_placements\"}) * 2, \"check\", \"No placement stuck deploying\", \"\", \"\"), \"about\", \"No domain has waited too long for a new pool or cell to become ready.\", \"\", \"\"), \"todo\", \"Open the Operations screen in the admin panel and read the failing placement.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"No placement stuck deploying\", \"\", \"\"), \"about\", \"No domain has waited too long for a new pool or cell to become ready.\", \"\", \"\"), \"todo\", \"Open the Operations screen in the admin panel and read the failing placement.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((max(cdnfoundry_queue_oldest_job_age_seconds) < bool 900)) * 2, \"check\", \"Queue latency under bound\", \"\", \"\"), \"about\", \"The oldest waiting job in every queue is younger than 15 minutes.\", \"\", \"\"), \"todo\", \"Open Control plane; scale the busy lane or restart its worker.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"Queue latency under bound\", \"\", \"\"), \"about\", \"The oldest waiting job in every queue is younger than 15 minutes.\", \"\", \"\"), \"todo\", \"Open Control plane; scale the busy lane or restart its worker.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((sum(increase(alertmanager_notifications_total{integration=\"webhook\"}[1h])) > bool 0)) * 2, \"check\", \"Watchdog delivered within the hour\", \"\", \"\"), \"about\", \"Alertmanager delivered its always-firing watchdog in the last hour, so alerts can reach people.\", \"\", \"\"), \"todo\", \"Check the notifier container and the alert receiver in Platform settings.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"Watchdog delivered within the hour\", \"\", \"\"), \"about\", \"Alertmanager delivered its always-firing watchdog in the last hour, so alerts can reach people.\", \"\", \"\"), \"todo\", \"Check the notifier container and the alert receiver in Platform settings.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((cdnfoundry_tls_certificates_expiring == bool 0)) * 2, \"check\", \"No certificate near expiry unrenewed\", \"\", \"\"), \"about\", \"No active certificate is close to expiry without a renewal in progress.\", \"\", \"\"), \"todo\", \"Open TLS posture; renew or reissue the certificate named there.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"No certificate near expiry unrenewed\", \"\", \"\"), \"about\", \"No active certificate is close to expiry without a renewal in progress.\", \"\", \"\"), \"todo\", \"Open TLS posture; renew or reissue the certificate named there.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min(cdnfoundry_component_health{component=\"backups\"}) * 2, \"check\", \"Backup fresh and checks pass\", \"\", \"\"), \"about\", \"The last backup is recent enough and its restore check passed.\", \"\", \"\"), \"todo\", \"Open Backups; run a backup with Fleet and read why the last one failed.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"Backup fresh and checks pass\", \"\", \"\"), \"about\", \"The last backup is recent enough and its restore check passed.\", \"\", \"\"), \"todo\", \"Open Backups; run a backup with Fleet and read why the last one failed.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((sum(increase(vector_component_discarded_events_total{intentional!=\"true\"}[1h])) == bool 0) * (sum(increase(vector_component_errors_total{component_id=~\"clickhouse_.*\"}[1h])) == bool 0)) * 2, \"check\", \"Vector drops nothing, ClickHouse accepts\", \"\", \"\"), \"about\", \"In the last hour Vector dropped no event by accident and ClickHouse refused no write.\", \"\", \"\"), \"todo\", \"Open Telemetry pipeline; check ClickHouse disk and Vector buffers.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"Vector drops nothing, ClickHouse accepts\", \"\", \"\"), \"about\", \"In the last hour Vector dropped no event by accident and ClickHouse refused no write.\", \"\", \"\"), \"todo\", \"Open Telemetry pipeline; check ClickHouse disk and Vector buffers.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((cdnfoundry_control_ha_state{state=\"degraded\"} == bool 0)) * 2, \"check\", \"Control HA state not degraded\", \"\", \"\"), \"about\", \"The two-node control plane is not in its degraded state.\", \"\", \"\"), \"todo\", \"Run the Fleet control status command and follow the control HA runbook.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"Control HA state not degraded\", \"\", \"\"), \"about\", \"The two-node control plane is not in its degraded state.\", \"\", \"\"), \"todo\", \"Run the Fleet control status command and follow the control HA runbook.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((cdnfoundry_control_valkey_replica_linked == bool 1) * (cdnfoundry_control_fingerprint_mismatch == bool 0)) * 2, \"check\", \"Valkey linked, secrets match\", \"\", \"\"), \"about\", \"The standby Valkey follows the primary and both control nodes hold the same secrets.\", \"\", \"\"), \"todo\", \"Re-run the control HA setup step for the standby node.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"Valkey linked, secrets match\", \"\", \"\"), \"about\", \"The standby Valkey follows the primary and both control nodes hold the same secrets.\", \"\", \"\"), \"todo\", \"Re-run the control HA setup step for the standby node.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((cdnfoundry_control_edges_missing_addresses == bool 0)) * 2, \"check\", \"PoPs hold the control addresses\", \"\", \"\"), \"about\", \"Every edge knows the addresses of both control nodes.\", \"\", \"\"), \"todo\", \"Push the control addresses again from Fleet.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"PoPs hold the control addresses\", \"\", \"\"), \"about\", \"Every edge knows the addresses of both control nodes.\", \"\", \"\"), \"todo\", \"Push the control addresses again from Fleet.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min(cdnfoundry_component_health{component=\"control_ha\"}) * 2, \"check\", \"Services run on the primary node\", \"\", \"\"), \"about\", \"The control services run on the node that holds the primary role.\", \"\", \"\"), \"todo\", \"Follow the control HA runbook to fence and fail over.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"Services run on the primary node\", \"\", \"\"), \"about\", \"The control services run on the node that holds the primary role.\", \"\", \"\"), \"todo\", \"Follow the control HA runbook to fence and fail over.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((min(up{job=\"node\",role=\"control\"}) == bool 1)) * 2, \"check\", \"Standby watched\", \"\", \"\"), \"about\", \"Prometheus reaches the node exporter of every control node.\", \"\", \"\"), \"todo\", \"Check the standby host and its node exporter.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"Standby watched\", \"\", \"\"), \"about\", \"Prometheus reaches the node exporter of every control node.\", \"\", \"\"), \"todo\", \"Check the standby host and its node exporter.\", \"\", \"\"))) == 0) or vector(0)",
+          "instant": true,
+          "legendFormat": "failing",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Failing",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Checks whose metric is not reported, usually because the part is not installed (a second control node) or has not reported yet.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "match": "null+nan",
+                "result": {
+                  "color": "text",
+                  "text": "No data yet"
+                }
+              },
+              "type": "special"
+            }
+          ],
+          "noValue": "No traffic",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 8,
+        "y": 0
       },
       "id": 2,
       "options": {
@@ -468,15 +293,277 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "count((((max(cdnfoundry_edge_gateway_active_revision) - min(cdnfoundry_edge_gateway_active_revision) <= bool 5) or vector(0)) or ((cdnfoundry_dns_deployments_drifted == bool 0)) or ((sum(cdnfoundry_pool_dns_fail_static) == bool 0)) or ((min(cdnfoundry_edge_identity_expires_seconds) > bool 30 * 86400) or vector(1)) or (cdnfoundry_component_health{component=\"edge_placements\"}) or ((max(cdnfoundry_queue_oldest_job_age_seconds) < bool 900) or vector(1)) or ((sum(increase(alertmanager_notifications_total{integration=\"webhook\"}[1h])) > bool 0)) or ((cdnfoundry_tls_certificates_expiring == bool 0)) or (cdnfoundry_component_health{component=\"backups\"}) or ((sum(increase(vector_component_discarded_events_total{intentional!=\"true\"}[1h])) == bool 0) * (sum(increase(vector_component_errors_total{component_id=~\"clickhouse_.*\"}[1h])) == bool 0)) or ((cdnfoundry_control_ha_state{state=\"degraded\"} == bool 0) or vector(1)) or (((cdnfoundry_control_valkey_replica_linked == bool 1) or vector(1)) * ((cdnfoundry_control_fingerprint_mismatch == bool 0) or vector(1))) or ((cdnfoundry_control_edges_missing_addresses == bool 0)) or (cdnfoundry_component_health{component=\"control_ha\"}) or ((min(up{job=\"node\",role=\"control\"}) == bool 1) or vector(1))) == 0) or vector(0)",
+          "expr": "count(((label_replace(label_replace(label_replace(min((max(cdnfoundry_edge_gateway_active_revision) - min(cdnfoundry_edge_gateway_active_revision) <= bool 5)) * 2, \"check\", \"PoPs hold the latest artifact\", \"\", \"\"), \"about\", \"Every edge gateway runs a configuration revision within 5 of the newest one.\", \"\", \"\"), \"todo\", \"Open Fleet and rollouts and find the edge that is behind; check its agent log.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"PoPs hold the latest artifact\", \"\", \"\"), \"about\", \"Every edge gateway runs a configuration revision within 5 of the newest one.\", \"\", \"\"), \"todo\", \"Open Fleet and rollouts and find the edge that is behind; check its agent log.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((cdnfoundry_dns_deployments_drifted == bool 0)) * 2, \"check\", \"DNS serials match desired\", \"\", \"\"), \"about\", \"No DNS cluster serves an older zone than the control plane wants.\", \"\", \"\"), \"todo\", \"Open DNS authoritative; reconcile the drifted zones from their domains.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"DNS serials match desired\", \"\", \"\"), \"about\", \"No DNS cluster serves an older zone than the control plane wants.\", \"\", \"\"), \"todo\", \"Open DNS authoritative; reconcile the drifted zones from their domains.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((sum(cdnfoundry_pool_dns_fail_static) == bool 0)) * 2, \"check\", \"No pool held on its last answers\", \"\", \"\"), \"about\", \"No pool is in fail-static, where DNS keeps the last answers because no edge looks healthy.\", \"\", \"\"), \"todo\", \"Open PoP fleet; bring an edge of that pool back to ready.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"No pool held on its last answers\", \"\", \"\"), \"about\", \"No pool is in fail-static, where DNS keeps the last answers because no edge looks healthy.\", \"\", \"\"), \"todo\", \"Open PoP fleet; bring an edge of that pool back to ready.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((min(cdnfoundry_edge_identity_expires_seconds) > bool 30 * 86400)) * 2, \"check\", \"No edge identity near expiry\", \"\", \"\"), \"about\", \"Every edge client certificate is valid for more than 30 days.\", \"\", \"\"), \"todo\", \"Rotate the identity of the edge named in Fleet and rollouts.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"No edge identity near expiry\", \"\", \"\"), \"about\", \"Every edge client certificate is valid for more than 30 days.\", \"\", \"\"), \"todo\", \"Rotate the identity of the edge named in Fleet and rollouts.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min(cdnfoundry_component_health{component=\"edge_placements\"}) * 2, \"check\", \"No placement stuck deploying\", \"\", \"\"), \"about\", \"No domain has waited too long for a new pool or cell to become ready.\", \"\", \"\"), \"todo\", \"Open the Operations screen in the admin panel and read the failing placement.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"No placement stuck deploying\", \"\", \"\"), \"about\", \"No domain has waited too long for a new pool or cell to become ready.\", \"\", \"\"), \"todo\", \"Open the Operations screen in the admin panel and read the failing placement.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((max(cdnfoundry_queue_oldest_job_age_seconds) < bool 900)) * 2, \"check\", \"Queue latency under bound\", \"\", \"\"), \"about\", \"The oldest waiting job in every queue is younger than 15 minutes.\", \"\", \"\"), \"todo\", \"Open Control plane; scale the busy lane or restart its worker.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"Queue latency under bound\", \"\", \"\"), \"about\", \"The oldest waiting job in every queue is younger than 15 minutes.\", \"\", \"\"), \"todo\", \"Open Control plane; scale the busy lane or restart its worker.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((sum(increase(alertmanager_notifications_total{integration=\"webhook\"}[1h])) > bool 0)) * 2, \"check\", \"Watchdog delivered within the hour\", \"\", \"\"), \"about\", \"Alertmanager delivered its always-firing watchdog in the last hour, so alerts can reach people.\", \"\", \"\"), \"todo\", \"Check the notifier container and the alert receiver in Platform settings.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"Watchdog delivered within the hour\", \"\", \"\"), \"about\", \"Alertmanager delivered its always-firing watchdog in the last hour, so alerts can reach people.\", \"\", \"\"), \"todo\", \"Check the notifier container and the alert receiver in Platform settings.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((cdnfoundry_tls_certificates_expiring == bool 0)) * 2, \"check\", \"No certificate near expiry unrenewed\", \"\", \"\"), \"about\", \"No active certificate is close to expiry without a renewal in progress.\", \"\", \"\"), \"todo\", \"Open TLS posture; renew or reissue the certificate named there.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"No certificate near expiry unrenewed\", \"\", \"\"), \"about\", \"No active certificate is close to expiry without a renewal in progress.\", \"\", \"\"), \"todo\", \"Open TLS posture; renew or reissue the certificate named there.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min(cdnfoundry_component_health{component=\"backups\"}) * 2, \"check\", \"Backup fresh and checks pass\", \"\", \"\"), \"about\", \"The last backup is recent enough and its restore check passed.\", \"\", \"\"), \"todo\", \"Open Backups; run a backup with Fleet and read why the last one failed.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"Backup fresh and checks pass\", \"\", \"\"), \"about\", \"The last backup is recent enough and its restore check passed.\", \"\", \"\"), \"todo\", \"Open Backups; run a backup with Fleet and read why the last one failed.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((sum(increase(vector_component_discarded_events_total{intentional!=\"true\"}[1h])) == bool 0) * (sum(increase(vector_component_errors_total{component_id=~\"clickhouse_.*\"}[1h])) == bool 0)) * 2, \"check\", \"Vector drops nothing, ClickHouse accepts\", \"\", \"\"), \"about\", \"In the last hour Vector dropped no event by accident and ClickHouse refused no write.\", \"\", \"\"), \"todo\", \"Open Telemetry pipeline; check ClickHouse disk and Vector buffers.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"Vector drops nothing, ClickHouse accepts\", \"\", \"\"), \"about\", \"In the last hour Vector dropped no event by accident and ClickHouse refused no write.\", \"\", \"\"), \"todo\", \"Open Telemetry pipeline; check ClickHouse disk and Vector buffers.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((cdnfoundry_control_ha_state{state=\"degraded\"} == bool 0)) * 2, \"check\", \"Control HA state not degraded\", \"\", \"\"), \"about\", \"The two-node control plane is not in its degraded state.\", \"\", \"\"), \"todo\", \"Run the Fleet control status command and follow the control HA runbook.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"Control HA state not degraded\", \"\", \"\"), \"about\", \"The two-node control plane is not in its degraded state.\", \"\", \"\"), \"todo\", \"Run the Fleet control status command and follow the control HA runbook.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((cdnfoundry_control_valkey_replica_linked == bool 1) * (cdnfoundry_control_fingerprint_mismatch == bool 0)) * 2, \"check\", \"Valkey linked, secrets match\", \"\", \"\"), \"about\", \"The standby Valkey follows the primary and both control nodes hold the same secrets.\", \"\", \"\"), \"todo\", \"Re-run the control HA setup step for the standby node.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"Valkey linked, secrets match\", \"\", \"\"), \"about\", \"The standby Valkey follows the primary and both control nodes hold the same secrets.\", \"\", \"\"), \"todo\", \"Re-run the control HA setup step for the standby node.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((cdnfoundry_control_edges_missing_addresses == bool 0)) * 2, \"check\", \"PoPs hold the control addresses\", \"\", \"\"), \"about\", \"Every edge knows the addresses of both control nodes.\", \"\", \"\"), \"todo\", \"Push the control addresses again from Fleet.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"PoPs hold the control addresses\", \"\", \"\"), \"about\", \"Every edge knows the addresses of both control nodes.\", \"\", \"\"), \"todo\", \"Push the control addresses again from Fleet.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min(cdnfoundry_component_health{component=\"control_ha\"}) * 2, \"check\", \"Services run on the primary node\", \"\", \"\"), \"about\", \"The control services run on the node that holds the primary role.\", \"\", \"\"), \"todo\", \"Follow the control HA runbook to fence and fail over.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"Services run on the primary node\", \"\", \"\"), \"about\", \"The control services run on the node that holds the primary role.\", \"\", \"\"), \"todo\", \"Follow the control HA runbook to fence and fail over.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((min(up{job=\"node\",role=\"control\"}) == bool 1)) * 2, \"check\", \"Standby watched\", \"\", \"\"), \"about\", \"Prometheus reaches the node exporter of every control node.\", \"\", \"\"), \"todo\", \"Check the standby host and its node exporter.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"Standby watched\", \"\", \"\"), \"about\", \"Prometheus reaches the node exporter of every control node.\", \"\", \"\"), \"todo\", \"Check the standby host and its node exporter.\", \"\", \"\"))) == 1) or vector(0)",
           "instant": true,
-          "legendFormat": "failing",
+          "legendFormat": "not reported",
           "range": false,
           "refId": "A"
         }
       ],
-      "title": "Checks failing",
+      "title": "Not reported",
       "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Checks that pass now.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "match": "null+nan",
+                "result": {
+                  "color": "text",
+                  "text": "No data yet"
+                }
+              },
+              "type": "special"
+            }
+          ],
+          "noValue": "No traffic",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 16,
+        "y": 0
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count(((label_replace(label_replace(label_replace(min((max(cdnfoundry_edge_gateway_active_revision) - min(cdnfoundry_edge_gateway_active_revision) <= bool 5)) * 2, \"check\", \"PoPs hold the latest artifact\", \"\", \"\"), \"about\", \"Every edge gateway runs a configuration revision within 5 of the newest one.\", \"\", \"\"), \"todo\", \"Open Fleet and rollouts and find the edge that is behind; check its agent log.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"PoPs hold the latest artifact\", \"\", \"\"), \"about\", \"Every edge gateway runs a configuration revision within 5 of the newest one.\", \"\", \"\"), \"todo\", \"Open Fleet and rollouts and find the edge that is behind; check its agent log.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((cdnfoundry_dns_deployments_drifted == bool 0)) * 2, \"check\", \"DNS serials match desired\", \"\", \"\"), \"about\", \"No DNS cluster serves an older zone than the control plane wants.\", \"\", \"\"), \"todo\", \"Open DNS authoritative; reconcile the drifted zones from their domains.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"DNS serials match desired\", \"\", \"\"), \"about\", \"No DNS cluster serves an older zone than the control plane wants.\", \"\", \"\"), \"todo\", \"Open DNS authoritative; reconcile the drifted zones from their domains.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((sum(cdnfoundry_pool_dns_fail_static) == bool 0)) * 2, \"check\", \"No pool held on its last answers\", \"\", \"\"), \"about\", \"No pool is in fail-static, where DNS keeps the last answers because no edge looks healthy.\", \"\", \"\"), \"todo\", \"Open PoP fleet; bring an edge of that pool back to ready.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"No pool held on its last answers\", \"\", \"\"), \"about\", \"No pool is in fail-static, where DNS keeps the last answers because no edge looks healthy.\", \"\", \"\"), \"todo\", \"Open PoP fleet; bring an edge of that pool back to ready.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((min(cdnfoundry_edge_identity_expires_seconds) > bool 30 * 86400)) * 2, \"check\", \"No edge identity near expiry\", \"\", \"\"), \"about\", \"Every edge client certificate is valid for more than 30 days.\", \"\", \"\"), \"todo\", \"Rotate the identity of the edge named in Fleet and rollouts.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"No edge identity near expiry\", \"\", \"\"), \"about\", \"Every edge client certificate is valid for more than 30 days.\", \"\", \"\"), \"todo\", \"Rotate the identity of the edge named in Fleet and rollouts.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min(cdnfoundry_component_health{component=\"edge_placements\"}) * 2, \"check\", \"No placement stuck deploying\", \"\", \"\"), \"about\", \"No domain has waited too long for a new pool or cell to become ready.\", \"\", \"\"), \"todo\", \"Open the Operations screen in the admin panel and read the failing placement.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"No placement stuck deploying\", \"\", \"\"), \"about\", \"No domain has waited too long for a new pool or cell to become ready.\", \"\", \"\"), \"todo\", \"Open the Operations screen in the admin panel and read the failing placement.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((max(cdnfoundry_queue_oldest_job_age_seconds) < bool 900)) * 2, \"check\", \"Queue latency under bound\", \"\", \"\"), \"about\", \"The oldest waiting job in every queue is younger than 15 minutes.\", \"\", \"\"), \"todo\", \"Open Control plane; scale the busy lane or restart its worker.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"Queue latency under bound\", \"\", \"\"), \"about\", \"The oldest waiting job in every queue is younger than 15 minutes.\", \"\", \"\"), \"todo\", \"Open Control plane; scale the busy lane or restart its worker.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((sum(increase(alertmanager_notifications_total{integration=\"webhook\"}[1h])) > bool 0)) * 2, \"check\", \"Watchdog delivered within the hour\", \"\", \"\"), \"about\", \"Alertmanager delivered its always-firing watchdog in the last hour, so alerts can reach people.\", \"\", \"\"), \"todo\", \"Check the notifier container and the alert receiver in Platform settings.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"Watchdog delivered within the hour\", \"\", \"\"), \"about\", \"Alertmanager delivered its always-firing watchdog in the last hour, so alerts can reach people.\", \"\", \"\"), \"todo\", \"Check the notifier container and the alert receiver in Platform settings.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((cdnfoundry_tls_certificates_expiring == bool 0)) * 2, \"check\", \"No certificate near expiry unrenewed\", \"\", \"\"), \"about\", \"No active certificate is close to expiry without a renewal in progress.\", \"\", \"\"), \"todo\", \"Open TLS posture; renew or reissue the certificate named there.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"No certificate near expiry unrenewed\", \"\", \"\"), \"about\", \"No active certificate is close to expiry without a renewal in progress.\", \"\", \"\"), \"todo\", \"Open TLS posture; renew or reissue the certificate named there.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min(cdnfoundry_component_health{component=\"backups\"}) * 2, \"check\", \"Backup fresh and checks pass\", \"\", \"\"), \"about\", \"The last backup is recent enough and its restore check passed.\", \"\", \"\"), \"todo\", \"Open Backups; run a backup with Fleet and read why the last one failed.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"Backup fresh and checks pass\", \"\", \"\"), \"about\", \"The last backup is recent enough and its restore check passed.\", \"\", \"\"), \"todo\", \"Open Backups; run a backup with Fleet and read why the last one failed.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((sum(increase(vector_component_discarded_events_total{intentional!=\"true\"}[1h])) == bool 0) * (sum(increase(vector_component_errors_total{component_id=~\"clickhouse_.*\"}[1h])) == bool 0)) * 2, \"check\", \"Vector drops nothing, ClickHouse accepts\", \"\", \"\"), \"about\", \"In the last hour Vector dropped no event by accident and ClickHouse refused no write.\", \"\", \"\"), \"todo\", \"Open Telemetry pipeline; check ClickHouse disk and Vector buffers.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"Vector drops nothing, ClickHouse accepts\", \"\", \"\"), \"about\", \"In the last hour Vector dropped no event by accident and ClickHouse refused no write.\", \"\", \"\"), \"todo\", \"Open Telemetry pipeline; check ClickHouse disk and Vector buffers.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((cdnfoundry_control_ha_state{state=\"degraded\"} == bool 0)) * 2, \"check\", \"Control HA state not degraded\", \"\", \"\"), \"about\", \"The two-node control plane is not in its degraded state.\", \"\", \"\"), \"todo\", \"Run the Fleet control status command and follow the control HA runbook.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"Control HA state not degraded\", \"\", \"\"), \"about\", \"The two-node control plane is not in its degraded state.\", \"\", \"\"), \"todo\", \"Run the Fleet control status command and follow the control HA runbook.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((cdnfoundry_control_valkey_replica_linked == bool 1) * (cdnfoundry_control_fingerprint_mismatch == bool 0)) * 2, \"check\", \"Valkey linked, secrets match\", \"\", \"\"), \"about\", \"The standby Valkey follows the primary and both control nodes hold the same secrets.\", \"\", \"\"), \"todo\", \"Re-run the control HA setup step for the standby node.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"Valkey linked, secrets match\", \"\", \"\"), \"about\", \"The standby Valkey follows the primary and both control nodes hold the same secrets.\", \"\", \"\"), \"todo\", \"Re-run the control HA setup step for the standby node.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((cdnfoundry_control_edges_missing_addresses == bool 0)) * 2, \"check\", \"PoPs hold the control addresses\", \"\", \"\"), \"about\", \"Every edge knows the addresses of both control nodes.\", \"\", \"\"), \"todo\", \"Push the control addresses again from Fleet.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"PoPs hold the control addresses\", \"\", \"\"), \"about\", \"Every edge knows the addresses of both control nodes.\", \"\", \"\"), \"todo\", \"Push the control addresses again from Fleet.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min(cdnfoundry_component_health{component=\"control_ha\"}) * 2, \"check\", \"Services run on the primary node\", \"\", \"\"), \"about\", \"The control services run on the node that holds the primary role.\", \"\", \"\"), \"todo\", \"Follow the control HA runbook to fence and fail over.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"Services run on the primary node\", \"\", \"\"), \"about\", \"The control services run on the node that holds the primary role.\", \"\", \"\"), \"todo\", \"Follow the control HA runbook to fence and fail over.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((min(up{job=\"node\",role=\"control\"}) == bool 1)) * 2, \"check\", \"Standby watched\", \"\", \"\"), \"about\", \"Prometheus reaches the node exporter of every control node.\", \"\", \"\"), \"todo\", \"Check the standby host and its node exporter.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"Standby watched\", \"\", \"\"), \"about\", \"Prometheus reaches the node exporter of every control node.\", \"\", \"\"), \"todo\", \"Check the standby host and its node exporter.\", \"\", \"\"))) == 2) or vector(0)",
+          "instant": true,
+          "legendFormat": "passing",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Passing",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Every daily check, failures first: its state, what it checks, and what to do when it fails.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "noValue": "\u2013",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(.*_id|rule|domain|asn|id)$"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "State"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "0": {
+                        "color": "red",
+                        "index": 0,
+                        "text": "Fail"
+                      },
+                      "1": {
+                        "color": "text",
+                        "index": 1,
+                        "text": "Not reported"
+                      },
+                      "2": {
+                        "color": "green",
+                        "index": 2,
+                        "text": "Pass"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 130
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Check"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 300
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(What it checks|When it fails)$"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "auto",
+                  "wrapText": true
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 30,
+        "w": 24,
+        "x": 0,
+        "y": 4
+      },
+      "id": 4,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(label_replace(label_replace(label_replace(min((max(cdnfoundry_edge_gateway_active_revision) - min(cdnfoundry_edge_gateway_active_revision) <= bool 5)) * 2, \"check\", \"PoPs hold the latest artifact\", \"\", \"\"), \"about\", \"Every edge gateway runs a configuration revision within 5 of the newest one.\", \"\", \"\"), \"todo\", \"Open Fleet and rollouts and find the edge that is behind; check its agent log.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"PoPs hold the latest artifact\", \"\", \"\"), \"about\", \"Every edge gateway runs a configuration revision within 5 of the newest one.\", \"\", \"\"), \"todo\", \"Open Fleet and rollouts and find the edge that is behind; check its agent log.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((cdnfoundry_dns_deployments_drifted == bool 0)) * 2, \"check\", \"DNS serials match desired\", \"\", \"\"), \"about\", \"No DNS cluster serves an older zone than the control plane wants.\", \"\", \"\"), \"todo\", \"Open DNS authoritative; reconcile the drifted zones from their domains.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"DNS serials match desired\", \"\", \"\"), \"about\", \"No DNS cluster serves an older zone than the control plane wants.\", \"\", \"\"), \"todo\", \"Open DNS authoritative; reconcile the drifted zones from their domains.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((sum(cdnfoundry_pool_dns_fail_static) == bool 0)) * 2, \"check\", \"No pool held on its last answers\", \"\", \"\"), \"about\", \"No pool is in fail-static, where DNS keeps the last answers because no edge looks healthy.\", \"\", \"\"), \"todo\", \"Open PoP fleet; bring an edge of that pool back to ready.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"No pool held on its last answers\", \"\", \"\"), \"about\", \"No pool is in fail-static, where DNS keeps the last answers because no edge looks healthy.\", \"\", \"\"), \"todo\", \"Open PoP fleet; bring an edge of that pool back to ready.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((min(cdnfoundry_edge_identity_expires_seconds) > bool 30 * 86400)) * 2, \"check\", \"No edge identity near expiry\", \"\", \"\"), \"about\", \"Every edge client certificate is valid for more than 30 days.\", \"\", \"\"), \"todo\", \"Rotate the identity of the edge named in Fleet and rollouts.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"No edge identity near expiry\", \"\", \"\"), \"about\", \"Every edge client certificate is valid for more than 30 days.\", \"\", \"\"), \"todo\", \"Rotate the identity of the edge named in Fleet and rollouts.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min(cdnfoundry_component_health{component=\"edge_placements\"}) * 2, \"check\", \"No placement stuck deploying\", \"\", \"\"), \"about\", \"No domain has waited too long for a new pool or cell to become ready.\", \"\", \"\"), \"todo\", \"Open the Operations screen in the admin panel and read the failing placement.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"No placement stuck deploying\", \"\", \"\"), \"about\", \"No domain has waited too long for a new pool or cell to become ready.\", \"\", \"\"), \"todo\", \"Open the Operations screen in the admin panel and read the failing placement.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((max(cdnfoundry_queue_oldest_job_age_seconds) < bool 900)) * 2, \"check\", \"Queue latency under bound\", \"\", \"\"), \"about\", \"The oldest waiting job in every queue is younger than 15 minutes.\", \"\", \"\"), \"todo\", \"Open Control plane; scale the busy lane or restart its worker.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"Queue latency under bound\", \"\", \"\"), \"about\", \"The oldest waiting job in every queue is younger than 15 minutes.\", \"\", \"\"), \"todo\", \"Open Control plane; scale the busy lane or restart its worker.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((sum(increase(alertmanager_notifications_total{integration=\"webhook\"}[1h])) > bool 0)) * 2, \"check\", \"Watchdog delivered within the hour\", \"\", \"\"), \"about\", \"Alertmanager delivered its always-firing watchdog in the last hour, so alerts can reach people.\", \"\", \"\"), \"todo\", \"Check the notifier container and the alert receiver in Platform settings.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"Watchdog delivered within the hour\", \"\", \"\"), \"about\", \"Alertmanager delivered its always-firing watchdog in the last hour, so alerts can reach people.\", \"\", \"\"), \"todo\", \"Check the notifier container and the alert receiver in Platform settings.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((cdnfoundry_tls_certificates_expiring == bool 0)) * 2, \"check\", \"No certificate near expiry unrenewed\", \"\", \"\"), \"about\", \"No active certificate is close to expiry without a renewal in progress.\", \"\", \"\"), \"todo\", \"Open TLS posture; renew or reissue the certificate named there.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"No certificate near expiry unrenewed\", \"\", \"\"), \"about\", \"No active certificate is close to expiry without a renewal in progress.\", \"\", \"\"), \"todo\", \"Open TLS posture; renew or reissue the certificate named there.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min(cdnfoundry_component_health{component=\"backups\"}) * 2, \"check\", \"Backup fresh and checks pass\", \"\", \"\"), \"about\", \"The last backup is recent enough and its restore check passed.\", \"\", \"\"), \"todo\", \"Open Backups; run a backup with Fleet and read why the last one failed.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"Backup fresh and checks pass\", \"\", \"\"), \"about\", \"The last backup is recent enough and its restore check passed.\", \"\", \"\"), \"todo\", \"Open Backups; run a backup with Fleet and read why the last one failed.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((sum(increase(vector_component_discarded_events_total{intentional!=\"true\"}[1h])) == bool 0) * (sum(increase(vector_component_errors_total{component_id=~\"clickhouse_.*\"}[1h])) == bool 0)) * 2, \"check\", \"Vector drops nothing, ClickHouse accepts\", \"\", \"\"), \"about\", \"In the last hour Vector dropped no event by accident and ClickHouse refused no write.\", \"\", \"\"), \"todo\", \"Open Telemetry pipeline; check ClickHouse disk and Vector buffers.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"Vector drops nothing, ClickHouse accepts\", \"\", \"\"), \"about\", \"In the last hour Vector dropped no event by accident and ClickHouse refused no write.\", \"\", \"\"), \"todo\", \"Open Telemetry pipeline; check ClickHouse disk and Vector buffers.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((cdnfoundry_control_ha_state{state=\"degraded\"} == bool 0)) * 2, \"check\", \"Control HA state not degraded\", \"\", \"\"), \"about\", \"The two-node control plane is not in its degraded state.\", \"\", \"\"), \"todo\", \"Run the Fleet control status command and follow the control HA runbook.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"Control HA state not degraded\", \"\", \"\"), \"about\", \"The two-node control plane is not in its degraded state.\", \"\", \"\"), \"todo\", \"Run the Fleet control status command and follow the control HA runbook.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((cdnfoundry_control_valkey_replica_linked == bool 1) * (cdnfoundry_control_fingerprint_mismatch == bool 0)) * 2, \"check\", \"Valkey linked, secrets match\", \"\", \"\"), \"about\", \"The standby Valkey follows the primary and both control nodes hold the same secrets.\", \"\", \"\"), \"todo\", \"Re-run the control HA setup step for the standby node.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"Valkey linked, secrets match\", \"\", \"\"), \"about\", \"The standby Valkey follows the primary and both control nodes hold the same secrets.\", \"\", \"\"), \"todo\", \"Re-run the control HA setup step for the standby node.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((cdnfoundry_control_edges_missing_addresses == bool 0)) * 2, \"check\", \"PoPs hold the control addresses\", \"\", \"\"), \"about\", \"Every edge knows the addresses of both control nodes.\", \"\", \"\"), \"todo\", \"Push the control addresses again from Fleet.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"PoPs hold the control addresses\", \"\", \"\"), \"about\", \"Every edge knows the addresses of both control nodes.\", \"\", \"\"), \"todo\", \"Push the control addresses again from Fleet.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min(cdnfoundry_component_health{component=\"control_ha\"}) * 2, \"check\", \"Services run on the primary node\", \"\", \"\"), \"about\", \"The control services run on the node that holds the primary role.\", \"\", \"\"), \"todo\", \"Follow the control HA runbook to fence and fail over.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"Services run on the primary node\", \"\", \"\"), \"about\", \"The control services run on the node that holds the primary role.\", \"\", \"\"), \"todo\", \"Follow the control HA runbook to fence and fail over.\", \"\", \"\")) or (label_replace(label_replace(label_replace(min((min(up{job=\"node\",role=\"control\"}) == bool 1)) * 2, \"check\", \"Standby watched\", \"\", \"\"), \"about\", \"Prometheus reaches the node exporter of every control node.\", \"\", \"\"), \"todo\", \"Check the standby host and its node exporter.\", \"\", \"\") or label_replace(label_replace(label_replace(vector(1), \"check\", \"Standby watched\", \"\", \"\"), \"about\", \"Prometheus reaches the node exporter of every control node.\", \"\", \"\"), \"todo\", \"Check the standby host and its node exporter.\", \"\", \"\"))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{check}}",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Daily checks",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {
+              "Value": 0,
+              "about": 2,
+              "check": 1,
+              "todo": 3
+            },
+            "renameByName": {
+              "Value": "State",
+              "about": "What it checks",
+              "check": "Check",
+              "todo": "When it fails"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "desc": false,
+                "field": "State"
+              }
+            ]
+          }
+        }
+      ],
+      "type": "table"
     }
   ],
   "refresh": "30s",

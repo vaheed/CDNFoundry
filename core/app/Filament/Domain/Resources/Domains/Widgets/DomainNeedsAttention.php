@@ -37,7 +37,7 @@ class DomainNeedsAttention extends Widget
         }
         $failedDeployments = $domain->dnsDeployments()->whereNotNull('last_error')->count();
         if ($failedDeployments > 0 && auth()->user()?->isAdmin()) {
-            $problems[] = ['text' => "{$failedDeployments} DNS deployment(s) failed", 'fix' => 'Reconcile authoritative DNS from Domain actions.'];
+            $problems[] = ['text' => $failedDeployments === 1 ? 'A DNS deployment failed' : "{$failedDeployments} DNS deployments failed", 'fix' => 'Choose Reconcile in the DNS deployment section below.'];
         }
         $placementError = $domain->edgePlacement()->value('last_error');
         if (filled($placementError)) {

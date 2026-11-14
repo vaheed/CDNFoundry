@@ -10,6 +10,8 @@ use App\Filament\Domain\Widgets\AnalyticsUsage;
 use App\Jobs\BuildUsageRollups;
 use App\Models\Domain;
 use App\Models\Operation;
+use App\Models\PlatformRuleset;
+use App\Models\SecurityRule;
 use App\Models\UsageRollup;
 use App\Models\User;
 use App\Support\AnalyticsStore;
@@ -262,5 +264,59 @@ class AnalyticsApiTest extends TestCase
         $domain->users()->attach($user, ['created_at' => now()]);
 
         return [$user, $domain];
+    }
+
+    public function test_mitigated_requests_are_domain_scoped_filtered_masked_and_name_their_rule(): void
+    {
+        $user = User::factory()->create();
+        $domain = Domain::query()->create(['name' => 'mitigated.example', 'display_name' => 'M', 'revision' => 1, 'lifecycle_state' => 'active']);
+        $domain->users()->attach($user->id);
+        $own = $domain->securityRules()->create(['name' => 'Block admin probes', 'action' => 'block', 'priority' => 10, 'conditions' => [['field' => 'path', 'operator' => 'starts_with', 'value' => '/admin']], 'fingerprint' => 'a']);
+        $ruleset = PlatformRuleset::query()->create(['name' => 'Provider rules', 'applies_to_all' => true]);
+        $platform = $ruleset->rules()->create(['action' => 'block', 'priority' => 1, 'conditions' => [['field' => 'path', 'operator' => 'equals', 'value' => '/secret']], 'fingerprint' => 'b']);
+        $row = fn (string $rule, string $path) => ['occurred_at' => '2026-11-13 10:00:00.000', 'event_id' => (string) Str::uuid(), 'hostname' => 'mitigated.example', 'method' => 'GET', 'path' => $path, 'status' => 403,
+            'security_action' => 'block', 'security_reason' => 'custom_rule_block', 'security_rule' => $rule, 'attack_score' => 7, 'country' => 'DE', 'asn' => 64500, 'user_agent' => 'sqlmap/1.7', 'request_id' => 'abc', 'client_ip' => '203.0.113.77'];
+        Http::fake([config('services.clickhouse.url').'*' => Http::response(collect([$row("r{$own->id}", '/admin/x'), $row("p{$platform->id}", '/secret'), $row('waf', '/?q=1'), $row('r999999', '/gone')])->map(fn ($item) => json_encode($item))->implode("\n"))]);
+
+        $response = $this->actingAs($user)->getJson("/api/domains/{$domain->id}/security/mitigations?action=blocked&score_max=20&country=DE&asn=64500&path=/a&user_agent=SQLMAP&rule=r{$own->id}&request_id=abc")->assertOk();
+        $items = $response->json('data');
+        $this->assertSame(['domain', 'platform', 'managed', 'removed'], array_column(array_column($items, 'rule'), 'type'));
+        $this->assertSame('Block admin probes', $items[0]['rule']['label']);
+        $this->assertSame('Platform ruleset: Provider rules', $items[1]['rule']['label']);
+        $this->assertStringNotContainsString('/secret"', json_encode(array_column($items, 'rule')));
+        $this->assertSame('203.0.113.0/24', $items[0]['client_ip']);
+        $this->assertSame(7, $response->json('meta.retention_days'));
+        $this->assertSame(500, $response->json('meta.maximum_rows'));
+        Http::assertSent(function ($request): bool {
+            $query = $request->data() + [];
+            parse_str(parse_url($request->url(), PHP_URL_QUERY) ?? '', $query);
+
+            return str_contains($request->body(), 'positionCaseInsensitiveUTF8(user_agent') && ($query['param_asn'] ?? null) === '64500' && ($query['param_score_max'] ?? null) === '20' && ($query['param_limit'] ?? null) === '500' && ($query['param_rule'] ?? null) === 'r'.SecurityRule::query()->value('id');
+        });
+
+        $this->actingAs($user)->getJson("/api/domains/{$domain->id}/security/mitigations?score_max=100")->assertUnprocessable();
+        $this->actingAs($user)->getJson("/api/domains/{$domain->id}/security/mitigations?action=everything")->assertUnprocessable();
+        $this->actingAs(User::factory()->create())->getJson("/api/domains/{$domain->id}/security/mitigations")->assertNotFound();
+    }
+
+    public function test_security_views_count_all_requests_by_band_action_country_network_path_and_agent(): void
+    {
+        $user = User::factory()->create();
+        $domain = Domain::query()->create(['name' => 'sec-views.example', 'display_name' => 'S', 'revision' => 1, 'lifecycle_state' => 'active']);
+        $domain->users()->attach($user->id);
+        Http::fake([config('services.clickhouse.url').'*' => Http::response(json_encode(['attack_band' => 1, 'requests' => 10, 'mitigated' => 4]))]);
+
+        foreach (['bands', 'actions', 'countries', 'asns'] as $view) {
+            $this->actingAs($user)->getJson("/api/domains/{$domain->id}/analytics/security/$view")->assertOk()->assertJsonPath('data.0.mitigated', 4);
+        }
+        // Paths and user agents come from stored request events, so they are limited to 24 hours like the other raw views.
+        foreach (['paths', 'agents'] as $view) {
+            $this->actingAs($user)->getJson("/api/domains/{$domain->id}/analytics/security/$view")->assertOk();
+            $this->actingAs($user)->getJson("/api/domains/{$domain->id}/analytics/security/$view?from=".urlencode(now()->subDays(3)->toIso8601String()))->assertUnprocessable();
+        }
+        $this->actingAs($user)->getJson("/api/domains/{$domain->id}/analytics/security/bands?from=".urlencode(now()->subDays(3)->toIso8601String()))->assertOk();
+        Http::assertSent(fn ($request) => str_contains($request->body(), 'FROM cdnf.security_hourly') && str_contains($request->body(), "sumIf(requests, action != 'allowed')"));
+        Http::assertSent(fn ($request) => str_contains($request->body(), 'FROM cdnf.edge_events') && str_contains($request->body(), "event_type = 'request'"));
+        $this->actingAs(User::factory()->create())->getJson("/api/domains/{$domain->id}/analytics/security/bands")->assertNotFound();
     }
 }

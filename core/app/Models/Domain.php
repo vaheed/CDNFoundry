@@ -22,7 +22,21 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
-#[Fillable(['name', 'display_name', 'lifecycle_state', 'revision', 'nameservers_verified_at', 'nameservers_verified_by', 'disabled_at', 'deprovision_after', 'proxy_settings', 'active_edge_revision', 'cache_settings', 'cache_epoch', 'cache_development_mode_until', 'tls_mode', 'active_tls_certificate_id', 'security_settings', 'security_state', 'automatic_security_state', 'security_overlay_sequence', 'security_state_changed_at', 'waf_profile', 'delegation_token', 'delegation_nameservers', 'claim_expires_at'])]
+/**
+ * Detection settings added after the schema snapshot that static analysis reads; each is a validated typed array or null.
+ *
+ * @property CarbonImmutable|null $incident_expires_at
+ * @property-read int|null $failing_destinations_count
+ * @property-read int|null $new_scripts_count
+ * @property array{threshold: int, period_minutes: int}|null $security_alert
+ * @property array{login_paths: list<array<string, mixed>>}|null $credential_check
+ * @property array{kinds: list<string>}|null $sensitive_data_check
+ * @property array{endpoints: list<string>, prompt_field: string}|null $ai_protection
+ * @property array{title: string, base_path: string, maximum_body_bytes: int, operations: list<array<string, mixed>>}|null $api_schema
+ * @property array{maximum_reports_per_minute: int, baseline_minutes: int, enabled_at: string}|null $client_security
+ * @property CarbonImmutable|null $registration_expires_at
+ */
+#[Fillable(['name', 'display_name', 'lifecycle_state', 'revision', 'nameservers_verified_at', 'nameservers_verified_by', 'disabled_at', 'deprovision_after', 'proxy_settings', 'active_edge_revision', 'cache_settings', 'cache_epoch', 'cache_development_mode_until', 'tls_mode', 'active_tls_certificate_id', 'security_settings', 'security_state', 'automatic_security_state', 'security_overlay_sequence', 'security_state_changed_at', 'waf_profile', 'waf_tuning', 'security_alert', 'credential_check', 'sensitive_data_check', 'ai_protection', 'api_schema', 'client_security', 'delegation_token', 'delegation_nameservers', 'claim_expires_at'])]
 class Domain extends Model
 {
     use SoftDeletes;
@@ -223,6 +237,11 @@ class Domain extends Model
         return self::query()->whereIn('name', $ancestors)->exists();
     }
 
+    public function logPushDestinations(): HasMany
+    {
+        return $this->hasMany(LogPushDestination::class);
+    }
+
     public function users(): BelongsToMany
     {
         return $this->belongsToMany(User::class)->withPivot('created_at');
@@ -293,6 +312,11 @@ class Domain extends Model
         return $this->hasOne(TlsOrder::class)->orderByDesc('created_at')->orderByDesc('id');
     }
 
+    public function clientScriptSightings(): HasMany
+    {
+        return $this->hasMany(ClientScriptSighting::class);
+    }
+
     public function securityRules(): HasMany
     {
         return $this->hasMany(SecurityRule::class);
@@ -327,6 +351,7 @@ class Domain extends Model
         return $this->hasMany(UsageRollup::class);
     }
 
+    /** @return BelongsTo<TlsCertificate, $this> */
     public function activeTlsCertificate(): BelongsTo
     {
         return $this->belongsTo(TlsCertificate::class, 'active_tls_certificate_id');
@@ -335,6 +360,7 @@ class Domain extends Model
     protected function casts(): array
     {
         return [
+            'incident_started_at' => 'immutable_datetime', 'incident_expires_at' => 'immutable_datetime',
             'delegation_nameservers' => 'array',
             'claim_expires_at' => 'immutable_datetime',
             'lifecycle_state' => DomainLifecycleState::class,
@@ -351,7 +377,7 @@ class Domain extends Model
             'proxy_settings' => 'array',
             'cache_settings' => 'array',
             'cache_development_mode_until' => 'immutable_datetime',
-            'security_settings' => 'array',
+            'security_settings' => 'array', 'waf_tuning' => 'array', 'security_alert' => 'array', 'credential_check' => 'array', 'sensitive_data_check' => 'array', 'ai_protection' => 'array', 'api_schema' => 'array', 'client_security' => 'array',
             'security_state_changed_at' => 'immutable_datetime',
             'active_edge_revision' => 'integer',
             'revision_changed_at' => 'immutable_datetime',

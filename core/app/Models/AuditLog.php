@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Impersonation;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -31,6 +32,12 @@ class AuditLog extends Model
         array $metadata = [],
         ?string $ipAddress = null,
     ): self {
+        // A change made while an administrator acts as a user is the user's change, made by that administrator.
+        $impersonator = Impersonation::impersonatorId();
+        if ($impersonator !== null && ! str_starts_with($action, 'user.impersonation_')) {
+            $metadata['impersonated_by'] = $impersonator;
+        }
+
         return self::query()->create([
             'actor_id' => $actor?->getKey(),
             'action' => $action,

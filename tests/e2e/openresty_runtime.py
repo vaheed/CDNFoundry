@@ -2,6 +2,8 @@
 """Real OpenResty HTTP runtime qualification; no browser automation."""
 
 import json
+import re
+import hashlib
 import os
 import pathlib
 import subprocess
@@ -169,14 +171,116 @@ def security_overlay(task_id: str, sequence: int, state_name: str, limits: dict 
     )
 
 
+def curl(host: str, path: str = "/", headers: tuple[str, ...] = (), method: str = "GET", data: str | None = None, container: str = NAME) -> tuple[int, str, str]:
+    """One request from inside the cell's network namespace. Returns the status, the raw header block, and the body."""
+    command = ["docker", "run", "--rm", "--network", f"container:{container}", "curlimages/curl:8.16.0", "-sS", "-i", "--max-redirs", "0", "-X", method, "-H", f"Host: {host}"]
+    for header in headers:
+        command += ["-H", header]
+    if data is not None:
+        command += ["--data-binary", data]
+    command.append(f"http://127.0.0.1:8080{path}")
+    output = run(*command, check=False).stdout
+    head, _, body = re.split(r"(\r?\n\r?\n)", output, maxsplit=1) if re.search(r"\r?\n\r?\n", output) else (output, "", "")
+    return int(head.split()[1]), head, body
+
+
+def incident_overlay(task_id: str, sequence: int, seconds: int, challenge: bool = True, container: str = NAME, **overrides) -> subprocess.CompletedProcess[str]:
+    incident = {"expires_at": int(time.time()) + seconds, "waf": {"mode": "block", "sensitivity": "high"}, "methods": ["GET", "HEAD", "OPTIONS", "POST"],
+                "max_body_bytes": 1024, "challenge": challenge, "challenge_bypass_prefixes": ["/api/"], **overrides}
+    payload = {"task_id": task_id, "action": "security_overlay", "domain_id": 7701, "sequence": sequence, "state": "restricted",
+               "limits": {"requests_per_second": 1000, "request_burst": 1000}, "incident": incident}
+    return run("docker", "exec", container, "wget", "-q", "-O-", "--header=X-Edge-Status-Token: runtime-test-token", "--header=Content-Type: application/json",
+               f"--post-data={json.dumps(payload, separators=(',', ':'))}", "http://127.0.0.1:9080/control", check=False)
+
+
+def solve_challenge(seed: str, bits: int = 16) -> int:
+    counter = 0
+    while True:
+        digest = hashlib.sha256(f"{seed}:{counter}".encode()).digest()
+        leading = 0
+        for byte in digest:
+            if byte == 0:
+                leading += 8
+                continue
+            leading += 8 - byte.bit_length()
+            break
+        if leading >= bits:
+            return counter
+        counter += 1
+
+
+def qualify_incident_profile() -> None:
+    html = ("Accept: text/html",)
+    assert curl("overlay.example")[0] == 200, "no profile, no challenge"
+    attack = "/?q=%3Cscript%3Ealert(document.cookie)%3C%2Fscript%3E%20union%20select%20password%20from%20users"
+    assert curl("overlay.example", attack)[0] == 200, "this domain's own firewall profile is off, so the payload passes"
+    assert incident_overlay("incident-bad-method", 6, 60, methods=["GET", "TRACE"]).returncode != 0, "an unknown method is refused"
+    assert incident_overlay("incident-bad-bypass", 6, 60, challenge_bypass_prefixes=["no-slash"]).returncode != 0
+    assert incident_overlay("incident-on", 7, 300).returncode == 0
+
+    # A page load with no token gets the challenge page; anything else with no token is refused outright.
+    status, head, body = curl("overlay.example", "/", html)
+    assert status == 403 and "Checking your browser" in body and "noscript" in body and 'role="status"' in body and "Content-Security-Policy" in head and "no-store" in head.lower(), (status, head)
+    seed = re.search(r'const seed="([0-9a-f.]+)"', body).group(1)
+    assert curl("overlay.example", "/", ("Accept: */*",))[0] == 403 and "Checking" not in curl("overlay.example", "/", ("Accept: */*",))[2]
+    # Marked API paths are not challenged, and the profile's method and body limits apply.
+    assert curl("overlay.example", "/api/status")[0] != 403
+    assert curl("overlay.example", "/", method="PUT", data="x")[0] == 405 and curl("overlay.example", "/", method="DELETE")[0] == 405
+    assert curl("overlay.example", "/", method="POST", data="a" * 2048)[0] == 413
+
+    # A wrong answer, a forged seed, and a seed for another client are refused.
+    assert curl("overlay.example", "/.cdnf/challenge", method="POST", data=f"seed={seed}&counter=1")[0] == 403
+    assert curl("overlay.example", "/.cdnf/challenge", method="POST", data="seed=7701.1.16.deadbeef&counter=1")[0] == 403
+    assert curl("overlay.example", "/.cdnf/challenge", ("User-Agent: Another/1",), "POST", f"seed={seed}&counter={solve_challenge(seed)}")[0] == 403, "a seed is bound to the browser that got it"
+
+    # A correct answer gives a token; the seed cannot be replayed; the token passes until its expiry.
+    answer = f"seed={seed}&counter={solve_challenge(seed)}"
+    status, head, _ = curl("overlay.example", "/.cdnf/challenge", method="POST", data=answer)
+    assert status == 204 and "cdnf_chal=" in head and "HttpOnly" in head and "SameSite=Lax" in head, head
+    cookie = re.search(r"cdnf_chal=([0-9a-f.]+)", head).group(1)
+    assert curl("overlay.example", "/.cdnf/challenge", method="POST", data=answer)[0] == 403, "a solved seed is single use"
+    assert curl("overlay.example", "/", html + (f"Cookie: cdnf_chal={cookie}",))[0] == 200
+    assert curl("overlay.example", "/", ("Accept: */*", f"Cookie: cdnf_chal={cookie}"))[0] == 200
+    assert curl("overlay.example", attack, ("Accept: */*", f"Cookie: cdnf_chal={cookie}"))[0] == 403, "the profile turns the firewall on in blocking mode"
+    # A token is bound to the domain, the client, and the browser, and its signature is checked.
+    forged = cookie[:-1] + ("0" if cookie[-1] != "0" else "1")
+    assert curl("overlay.example", "/", html + (f"Cookie: cdnf_chal={forged}",))[0] == 403
+    assert curl("overlay.example", "/", html + ("User-Agent: Another/1", f"Cookie: cdnf_chal={cookie}"))[0] == 403
+    other = cookie.split(".")
+    other[0] = "7702"
+    assert curl("overlay.example", "/", html + (f"Cookie: cdnf_chal={'.'.join(other)}",))[0] == 403, "a token for another domain means nothing"
+    assert curl("runtime.example")[0] == 200, "the profile is scoped to its own domain"
+
+    # A scripted flood never reaches the origin: every request is refused, and issuing challenges is itself rate limited.
+    flood = run("docker", "run", "--rm", "--network", f"container:{NAME}", "curlimages/curl:8.16.0", "-s", "-w", "%{http_code}\n", "-H", "Host: overlay.example", "-H", "Accept: text/html", "-H", "User-Agent: flood/1",
+                *["-o", "/dev/null", "http://127.0.0.1:8080/"] * 60, check=False).stdout.split()
+    assert len(flood) == 60 and "200" not in flood and flood.count("429") > 0 and set(flood) <= {"403", "429"}, flood
+
+    # The cell ends the profile by its own clock, with no operator action.
+    assert incident_overlay("incident-short", 8, 3).returncode == 0
+    assert curl("overlay.example", "/", html)[0] in (403, 429), "still refused while the profile is on"
+    time.sleep(5)
+    assert curl("overlay.example", "/", html)[0] == 200, "the profile expired on its own"
+    # Turning it on and then off with a normal overlay restores the snapshot.
+    assert incident_overlay("incident-again", 9, 300).returncode == 0 and curl("overlay.example", "/", html)[0] in (403, 429)
+    assert security_overlay("incident-off", 10, "normal", None).returncode == 0 and curl("overlay.example", "/", html)[0] == 200
+    # An older sequence is ignored while a newer overlay is stored; once a normal overlay removes the entry the agent, not the cell, remembers the sequence.
+    assert incident_overlay("incident-newer", 12, 300).returncode == 0 and incident_overlay("incident-older", 11, 5).returncode == 0
+    assert curl("overlay.example", "/", html)[0] in (403, 429), "an older overlay never replaces a newer one"
+    assert security_overlay("incident-cleanup", 13, "normal", None).returncode == 0
+
+
 def worker_children(container: str, master: str) -> str:
     return run("docker", "exec", container, "cat", f"/proc/{master}/task/{master}/children").stdout.strip()
 
 
 def main() -> None:
     run("docker", "compose", "-f", "compose.dev.yml", "up", "-d", "--force-recreate", "origin-http")
-    run("docker", "build", "-t", "cdnfoundry/edge-agent:test", "edge-agent")
-    run("docker", "build", "-f", "docker/openresty/Dockerfile", "-t", "cdnfoundry/edge-runtime:test", ".")
+    # CDNF_SKIP_IMAGE_BUILD reuses cdnfoundry/edge-agent:test and cdnfoundry/edge-runtime:test (tagged from existing images); the cells
+    # always mount the current runtime and configuration files, so only the image layers are reused.
+    if not os.environ.get("CDNF_SKIP_IMAGE_BUILD"):
+        run("docker", "build", "-t", "cdnfoundry/edge-agent:test", "edge-agent")
+        run("docker", "build", "-f", "docker/openresty/Dockerfile", "-t", "cdnfoundry/edge-runtime:test", ".")
     with tempfile.TemporaryDirectory(prefix="cdnf-e2e-") as directory:
         os.chmod(directory, 0o755)
         temporary = pathlib.Path(directory)
@@ -217,9 +321,18 @@ def main() -> None:
         for cache_host in (
             "admission.example", "admission-limit.example", "origin-policy.example",
             "small-object.example", "stale.example", "no-stale.example", "single-flight.example", "overlay.example",
+            "rules.example",
         ):
             initial["hosts"][cache_host] = state({cache_host: "cache-origin.example"}, 1)["hosts"][cache_host]
         initial["hosts"]["overlay.example"]["domain_id"] = 7701
+        initial["hosts"]["rules.example"]["cache"].update({
+            "ignore_cookie_names": ["_ga", "_ga_*"],
+            "path_rules": [
+                {"match": "prefix", "value": "/live/", "action": "bypass"},
+                {"match": "suffix", "value": ".php", "action": "bypass"},
+                {"match": "prefix", "value": "/origin-ttl", "action": "ttl", "ttl_seconds": 600},
+            ],
+        })
         initial["hosts"]["admission-limit.example"]["security"] = {
             "limits": {"cache_admissions_per_second": 1},
         }
@@ -323,6 +436,11 @@ def main() -> None:
             known = wait_for("runtime.example")
             runtime_logs = run("docker", "logs", NAME, check=False)
             assert known.returncode == 0 and '"host":"origin-one.example"' in known.stdout, known.stderr + runtime_logs.stdout + runtime_logs.stderr
+            if os.environ.get("CDNF_ONLY_INCIDENT"):
+                # A focused run of the incident profile against the real runtime, for a change that touches only that.
+                qualify_incident_profile()
+                print("incident profile runtime qualification passed")
+                return
             assert "X-CDNF-Cache: MISS" in known.stderr, known.stderr
             cached = request("runtime.example")
             assert cached.returncode == 0 and "X-CDNF-Cache: HIT" in cached.stderr, cached.stderr
@@ -393,6 +511,25 @@ def main() -> None:
             assert "X-CDNF-Cache: BYPASS" in mixed_cookie.stderr, mixed_cookie.stderr
             ignored_cookie = request_with("runtime.example", headers=("Cookie: session_id=present",))
             assert "X-CDNF-Cache: BYPASS" not in ignored_cookie.stderr, ignored_cookie.stderr
+            # Analytics cookies on the ignore list, including a prefix entry, never make a request personal.
+            for _ in range(2):
+                analytics = request_with("rules.example", "/analytics", headers=("Cookie: _ga=1; _ga_ABC123=2",))
+            assert "X-CDNF-Cache: HIT" in analytics.stderr, analytics.stderr
+            prefix_miss = request_with("rules.example", "/analytics", headers=("Cookie: _ga=1; _gax=2",))
+            assert "X-CDNF-Cache: BYPASS" in prefix_miss.stderr, prefix_miss.stderr
+            # Path rules: a bypass prefix and suffix are never stored; an unmatched path caches normally.
+            for path in ("/live/feed", "/index.php"):
+                for _ in range(2):
+                    bypassed = request_with("rules.example", path)
+                assert "X-CDNF-Cache: BYPASS" in bypassed.stderr, (path, bypassed.stderr)
+            for _ in range(2):
+                unmatched = request_with("rules.example", "/plain")
+            assert "X-CDNF-Cache: HIT" in unmatched.stderr, unmatched.stderr
+            # A TTL rule replaces the origin's one-second lifetime for its path.
+            request_with("rules.example", "/origin-ttl")
+            time.sleep(2.5)
+            ttl_rule = request_with("rules.example", "/origin-ttl")
+            assert "X-CDNF-Cache: HIT" in ttl_rule.stderr and "s-maxage=600" in ttl_rule.stderr, ttl_rule.stderr
             # A bypassed response keeps the origin's cache headers; the edge never adds "public".
             assert "s-maxage" not in cookie_bypass.stderr and "public" not in cookie_bypass.stderr, cookie_bypass.stderr
             # Two sessions alternate on one URL: no response may carry the other session's cookie value.
@@ -545,6 +682,7 @@ def main() -> None:
             assert security_overlay("overlay-negative", 6, "restricted", {"requests_per_second": -1}).returncode != 0
             assert security_overlay("overlay-normal", 6, "normal", None).returncode == 0
             assert "200 OK" in request("overlay.example").stderr, "a normal overlay restores the snapshot limits"
+            qualify_incident_profile()
             control_response = run(
                 "docker", "exec", NAME, "wget", "-q", "-O-", "--header=X-Edge-Status-Token: runtime-test-token",
                 "--header=Content-Type: application/json",

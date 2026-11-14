@@ -12,6 +12,7 @@ use App\Support\GrafanaExploreUrl;
 use App\Support\SystemHealth;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Redis;
 use Mockery;
 use Tests\TestCase;
@@ -57,8 +58,8 @@ class FilamentPanelAccessTest extends TestCase
             ->assertSee('Overview')
             ->assertSee('Needs attention')->assertSee('Service is degraded')
             ->assertDontSee('Investigation context');
-        $this->actingAs($admin)->get('/app')->assertForbidden();
-        $this->actingAs($user)->get('/app')->assertOk()->assertSee('Assigned domains')->assertSee('Start serving a domain');
+        $this->actingAs($admin)->get('/app')->assertRedirect('/admin');
+        $this->actingAs($user)->get('/app')->assertOk()->assertSee('Start serving a domain')->assertDontSee('Your domains');
         $this->actingAs($user)->get('/admin')->assertForbidden();
     }
 
@@ -290,6 +291,23 @@ class FilamentPanelAccessTest extends TestCase
             ->assertOk()
             ->assertSee($assigned->display_name)
             ->assertDontSee($unassigned->display_name);
+    }
+
+    public function test_domain_dashboard_shows_traffic_what_needs_attention_and_each_domain(): void
+    {
+        $user = User::factory()->create();
+        $pending = Domain::query()->create(['name' => 'pending-dashboard.example.test', 'display_name' => 'Pending dashboard domain', 'waf_profile' => 'balanced']);
+        $attacked = Domain::query()->create(['name' => 'attacked-dashboard.example.test', 'display_name' => 'Attacked dashboard domain', 'lifecycle_state' => 'active', 'nameservers_verified_at' => now()]);
+        $attacked->forceFill(['incident_started_at' => now(), 'incident_expires_at' => now()->addHour()])->save();
+        $pending->users()->attach($user);
+        $attacked->users()->attach($user);
+        Http::fake([config('services.clickhouse.url').'*' => Http::response('', 500)]);
+
+        $this->actingAs($user)->get('/app')->assertOk()
+            ->assertSee('Your domains')->assertSee('Pending dashboard domain')->assertSee('Recommended')
+            ->assertSee('Traffic figures are unavailable')
+            ->assertSee('Needs attention')->assertSee('Nameservers are not verified')->assertSee('Under attack mode is on')
+            ->assertSeeInOrder(['Under attack mode is on', 'Nameservers are not verified']);
     }
 
     public function test_domain_view_relation_managers_are_mutable_in_both_panels(): void

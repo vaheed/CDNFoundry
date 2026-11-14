@@ -68,9 +68,9 @@ Refreshes every 30s.
 | Cache status mix | Requests per second by cache status. |
 | Hit ratio over time | Requests served from cache, as a share of all requests. |
 | Cache fill by PoP | How full the cache volume of each cell is. |
-| Purge volume | Cache purge requests per hour. |
+| Purge volume | Cache purge requests per hour over the last 7 days, whatever range the dashboard shows. |
 | Purge propagation time | Longest time a purge took to apply on every PoP, over the last hour. |
-| Evictions | Cache evictions are not exported by the cells; this shows the cache volume ratio that precedes them. |
+| Cache fill by cell | How full each cell's cache volume is. The cells do not count evictions, so a volume near full is the signal. |
 
 ### DNS authoritative
 
@@ -102,7 +102,7 @@ Refreshes every 30s.
 | --- | --- |
 | Edge p50 | Median time to serve a request. |
 | Edge p95 | 95th percentile time to serve a request. |
-| Origin share | How much of the edge p95 is the origin's p95. |
+| Origin p95 vs edge p95 | The origin p95 divided by the edge p95. Above 1 means the origins are slower than the edge answers, which is expected when most requests are cache hits. |
 | TTFB p95 | 95th percentile time for an origin to send its first byte. |
 | Edge latency by PoP | 95th percentile edge time per PoP. |
 | Edge latency by protocol | 95th percentile edge time per HTTP version. |
@@ -111,7 +111,7 @@ Refreshes every 30s.
 
 ### Global traffic
 
-Every traffic measure summed across all PoPs, then split by region, PoP, pool, protocol, IP version, country, and ASN.
+Every traffic measure summed across all PoPs, then split by region, PoP, protocol, IP version, country, ASN, and domain.
 
 Refreshes every 30s.
 
@@ -125,9 +125,9 @@ Refreshes every 30s.
 | Origin p95 | 95th percentile time an origin takes to answer. |
 | Requests by region | Requests per second by region. |
 | Requests by PoP | Requests per second for each PoP. |
-| Requests by pool | Requests per second by pool, from the 1-minute, hourly, or daily rollup. |
-| Requests by protocol | Requests by HTTP version. |
-| Requests by IP version | Requests from IPv4 and IPv6 clients. |
+| Bandwidth by PoP | Bits per second sent to clients, per PoP. |
+| Requests by protocol | Requests per second by HTTP version. |
+| Requests by IP version | Requests per second from IPv4 and IPv6 clients. |
 | Top countries | Countries sending the most requests. |
 | Top ASNs (last 7 days) | Client networks sending the most requests. ASNs are kept in raw events only, so this covers at most 7 days. |
 | Top domains by requests | Hostnames with the most requests. |
@@ -150,7 +150,7 @@ Refreshes every 10s.
 | Alerts | Alerts firing now. |
 | PoPs by health | Every enabled PoP by country, green when its heartbeat is fresh and red when it is not. |
 | Probe results | The latest result of every synthetic probe, per PoP and IP version. 1 is up, 0 is down. |
-| Firing alerts | Every firing alert with its team, severity, and start time. Open the dashboard column to see the cause at the time it started. |
+| Alerts | Every firing alert with how long it has been firing. The full table with team, severity, and dashboard is on Now. |
 | Requests by status class | Requests per second across the selected PoPs, split by response class. |
 | 5xx and p95 | 5xx ratio and edge p95 on one axis pair. |
 
@@ -265,8 +265,8 @@ Refreshes every 30s.
 | Sign-ins by result | Sign-ins per second by result and surface. |
 | Token use by ability | API requests per second by token ability. |
 | Recent sign-ins | Successful sign-ins by account and network. Addresses are masked to /24 or /48. |
-| Settings, domain, and security-rule changes | Audit entries for platform settings, domains, and security rules. |
-| Audit entries per hour | All audit entries per hour. |
+| Settings and rule changes | Audit entries for platform settings, domains, and security rules. |
+| Audit entries per hour | All audit entries per hour over the last 7 days, whatever range the dashboard shows. |
 
 ### DNS abuse
 
@@ -286,7 +286,7 @@ Refreshes every 30s.
 | Zones with the most NXDOMAIN | Zones where random names are asked most often. |
 | Query types | Query types by volume. ANY, TXT, and DNSKEY are the ones used to amplify. |
 | Top client networks | Client networks sending the most DNS queries in the last 7 days, as /24 or /48. |
-| Amplification-prone queries | ANY, TXT, and DNSKEY queries per interval. |
+| Amplification-prone queries | ANY, TXT, and DNSKEY queries per hour over the last 24 hours, whatever range the dashboard shows. |
 
 ### L7 attack and flood
 
@@ -302,7 +302,7 @@ Refreshes every 30s.
 | Top countries | Countries sending the most requests. |
 | Top user agents | User agents seen most often in the last 7 days. |
 | Top paths | Paths requested most often in the last 7 days. |
-| Cache abuse events | Requests flagged as cache abuse, by minute. |
+| Cache abuse events | Requests flagged as cache abuse, per second. |
 | Requests by PoP | Request rate per PoP; a flood shows as one line leaving the others. |
 
 ### Security overview
@@ -320,7 +320,11 @@ Refreshes every 30s.
 | Security events by reason | Security events by class: waf, block, cache abuse, emergency mode, and WAF body limit. |
 | Blocks per PoP | Blocked requests per second by PoP. |
 | Top attacked domains | Hostnames with the most blocked requests. |
-| Blocks over time | Blocked requests over time. |
+| Blocks over time | Blocked requests per second. |
+| Attack score bands | Requests scored as an attack per interval, by band, over the last 7 days at most. Band 1 is a weak signal (score under 20), band 5 a near-certain attack (80 and over). Requests scored zero are not drawn. |
+| Blocks and logs by reason | Why the edge acted on a request: rate limits, custom rules, the WAF, and cache abuse protection. |
+| Client-side reports | Browser reports of blocked scripts and connections that reached the edge, per hour. |
+| Custom rules that matched | Domain rules that matched most, by rule name, over the last 7 days. |
 | Firing alerts | Every firing alert with its team, severity, and start time. Open the dashboard column to see the cause at the time it started. |
 
 ### Telemetry integrity
@@ -337,7 +341,7 @@ Refreshes every 30s.
 | Ingest delay | Seconds between now and the newest event stored in ClickHouse. |
 | Rejected and forged events | Events Vector refused, by component. |
 | Dropped events and insert failures | Buffer drops and delivery errors per second. |
-| Events stored by PoP | Events per minute ClickHouse stored, per PoP. A PoP that goes flat is not delivering. |
+| Events stored by PoP | Events per second ClickHouse stored, per PoP. A PoP that goes flat is not delivering. |
 
 ### TLS posture
 
@@ -351,8 +355,8 @@ Refreshes every 30s.
 | Expiring in 14 days | Active certificates that expire within 14 days. |
 | ACME fail | Managed certificate orders that failed in the last 24 hours. |
 | Slowest issuance | Longest managed certificate issuance in the last 24 hours. |
-| Handshake failures by reason | Failed handshakes by reason. |
-| Handshake failures by protocol | Failed handshakes by TLS version. |
+| Handshake failures by reason | Failed handshakes per hour by reason over the last 24 hours, whatever range the dashboard shows. |
+| Handshake failures by protocol | Failed handshakes per hour by TLS version over the last 24 hours, whatever range the dashboard shows. |
 | Protocol mix | Requests by TLS version. |
 | Cipher mix | Requests by negotiated cipher. |
 | Certificates by expiry | Active certificates, soonest to expire first. |
@@ -370,7 +374,7 @@ Refreshes every 30s.
 | Body-limit hits | Requests refused because their body exceeded the WAF inspection limit. |
 | Exclusions in use | WAF exclusions that have not expired. |
 | Processing time p95 | 95th percentile WAF processing time per request. |
-| WAF actions | Requests by WAF action. |
+| WAF actions | Requests per second by WAF action. |
 | WAF processing time | Average and 95th percentile WAF processing time. |
 | Top rules | The WAF rules matched most often in the last 7 days. Select a rule to list its requests below. |
 | Top rules by domain | Which hostnames trigger each rule. |
@@ -392,7 +396,7 @@ Refreshes every 30s.
 | Last backup size | Size of the newest verified backup. |
 | Backups healthy | 1 when the backup component reports healthy: a fresh backup, a passing restic check, and a passing restore preflight. |
 | Failed backups (7d) | Backups that failed in the last 7 days. |
-| Backup size | Size of each verified backup. |
+| Backup size | Size of each verified backup over the last 30 days, whatever range the dashboard shows, because backups run once a day. |
 | Recent backups | The newest backups with their result. |
 
 ### Control plane
@@ -406,7 +410,7 @@ Refreshes every 30s.
 | Unhealthy | Components reporting degraded or unavailable. |
 | Failed ops | Operations that failed in the failed-operations window. |
 | Bad jobs | Queue jobs that failed in the same window. |
-| API p95 | 95th percentile API request time. |
+| API p95 | 95th percentile API request time over the last 5 minutes. |
 | Panel p95 | 95th percentile panel request time. |
 | ACME fail | Managed certificate orders that failed in the last 24 hours. |
 | Component health | Every control-plane component with its state. A red row names what to open first. |
@@ -418,17 +422,20 @@ Refreshes every 30s.
 | Scheduler | 1 while the scheduler's durable heartbeat is fresh. |
 | ACME orders | Managed certificate orders that finished in the last 24 hours. |
 | ACME issuance time | Longest managed certificate issuance in the last 24 hours. |
+| Alert deliveries | Alerts Alertmanager sent to the notifier and receivers each second, and the ones that failed. Platform notification channels (webhooks, Slack, and so on) report in the panel under Notification channels. |
 
 ### Daily checks
 
-Every daily check the platform makes visible, each with its pass or fail state.
+Every daily check the platform makes visible: which fail, which are not reported, and what to do.
 
 Refreshes every 30s.
 
 | Panel | What it shows |
 | --- | --- |
-| Daily checks | Every daily check as pass or fail. A red tile is a failed check; open its runbook from the Now dashboard. |
-| Checks failing | Daily checks that fail now. |
+| Failing | Checks that fail now. Each one is listed first in the table below with what to do. |
+| Not reported | Checks whose metric is not reported, usually because the part is not installed (a second control node) or has not reported yet. |
+| Passing | Checks that pass now. |
+| Daily checks | Every daily check, failures first: its state, what it checks, and what to do when it fails. |
 
 ### Data stores
 
@@ -578,8 +585,8 @@ Refreshes every 30s.
 | Panel | What it shows |
 | --- | --- |
 | Domains side by side | The selected hostnames with requests, errors, cache hit, bytes, and latency, for support to compare. |
-| Requests by domain | Requests over time for the selected hostnames. |
-| 5xx by domain | Server errors over time for the selected hostnames. |
+| Requests by domain | Requests per second for the selected hostnames. |
+| 5xx by domain | Server errors per second for the selected hostnames. |
 | Cache hit by domain | Share of requests served from cache. |
 | Latency by domain | 95th percentile edge time. |
 
@@ -597,12 +604,12 @@ Refreshes every 30s.
 | Cache hit | Share of requests served from cache. |
 | Edge p95 | 95th percentile time to serve a request. |
 | Origin p95 | 95th percentile origin response time. |
-| Requests | Requests over time by status class. |
-| Cache status | Requests over time by cache status. |
+| Requests | Requests per second by status class. |
+| Cache status | Requests per second by cache status. |
 | Origin latency | 95th percentile origin time and origin errors. |
-| Security events | Blocked and classified requests over time. |
+| Security events | Blocked and classified requests per second. |
 | TLS certificates | The domain's certificates and when they expire. |
-| DNS queries | DNS queries over time for the domain's zone. |
+| DNS queries | DNS queries per hour for the domain's zone over the last 24 hours, whatever range the dashboard shows. |
 | Purge history | Recent cache purges for the domain. |
 | Configuration changes | Edge configuration published for the domain, newest first. |
 | Requests by status code | The status codes the domain returned in the range. |
@@ -622,7 +629,7 @@ Refreshes every 30s.
 | Hottest cache | Highest cache fill of any cell now. |
 | Hottest connections | Highest connection use of any cell now. |
 | Hottest CPU | Highest CPU use of any host now. |
-| First to run out | Days until the first cache is forecast to fill, 30-day linear forecast. |
+| First to run out | Days until the first cache is forecast to fill, by a linear forecast from the last 7 days. Shows "Not within a year" when no cache is on course to fill. |
 | Forecast: first PoP to run out | Forecast cache fill in 30 days per PoP and cell. A value at or above 1 means the cache is full by then. The first row runs out first. |
 | Cache headroom per PoP | Free share of the cache volume, per PoP. |
 | Connection headroom per PoP | Free share of the connection budget, per PoP. |
@@ -642,9 +649,9 @@ Refreshes every 30s.
 | New domains (30d) | Domains created in the last 30 days. |
 | Traffic growth (30d) | Requests in the last 30 days against the 30 days before. |
 | Bandwidth growth (30d) | Bytes sent in the last 30 days against the 30 days before. |
-| Domains by month | Domains created per month. |
-| Traffic by month | Requests per month. |
-| Bandwidth by month | Bytes sent per month. |
+| Domains by month | Domains created per month, over the last year. |
+| Traffic by month | Requests per month, over the last year. |
+| Bandwidth by month | Bytes sent per month, over the last year. |
 | Top growing domains | Hostnames whose requests grew most against the previous 30 days. |
 
 ### Usage and billing
@@ -662,17 +669,17 @@ Refreshes every 30s.
 | Usage by domain | Bandwidth, 95th-percentile bandwidth, and requests per domain for the selected range. |
 | Usage by region | Bandwidth and requests per region for the selected range. |
 | Bandwidth by PoP | Bits per second sent, per PoP, at 5-minute resolution. |
-| Monthly bandwidth | Bytes sent per month. |
+| Monthly bandwidth | Bytes sent per month, over the last year. |
 | Billing rollups | Hourly usage rollups kept in the control database, which the monthly report uses. |
-| Download by edge | Bytes sent to clients, headers included, per edge host. SQL: SELECT edge_id, sum(bytes_sent) FROM cdnf.edge_volume_hourly WHERE $__timeFilter(interval_start) GROUP BY edge_id |
-| Download by cell | Bytes sent to clients per serving cell. SQL: SELECT cell, sum(bytes_sent) FROM cdnf.edge_volume_hourly WHERE $__timeFilter(interval_start) GROUP BY cell |
+| Download by edge | Bytes sent to clients, headers included, per edge host. SQL: SELECT edge_id, sum(bytes_sent) FROM cdnf.edge_volume_hourly WHERE interval_start >= toStartOfHour($__fromTime) GROUP BY edge_id |
+| Download by cell | Bytes sent to clients per serving cell. SQL: SELECT cell, sum(bytes_sent) FROM cdnf.edge_volume_hourly WHERE interval_start >= toStartOfHour($__fromTime) GROUP BY cell |
 | Download by domain | Bytes sent to clients per domain. |
 | Download by country | Bytes sent to clients per client country. |
 | Upload by edge | Request bytes received from clients (the request length, headers included) per edge host. |
 | Upload by cell | Request bytes received from clients per serving cell. |
 | Upload by domain | Request bytes received from clients per domain. |
 | Upload by country | Request bytes received from clients per client country. |
-| Bandwidth by edge: download and upload | Bits per second per edge host, live from Prometheus. Origin-side traffic is not measured. |
+| Bandwidth by edge | Bits per second each edge host sent (download) and received (upload), live from Prometheus. Origin-side traffic is not measured. |
 
 ## Samples
 

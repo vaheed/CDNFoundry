@@ -30,7 +30,12 @@ Schedule::command('cdnf:edge:prune-revisions')->dailyAt('02:30')->withoutOverlap
 Schedule::job(new ReconcilePlatformDnsIdentity)->everyMinute()->withoutOverlapping();
 Schedule::command('cdnf:tls:dispatch-maintenance')->hourly()->withoutOverlapping();
 Schedule::command('cdnf:tls:dispatch-maintenance --orders-only')->everyFiveMinutes()->withoutOverlapping();
+Schedule::command('cdnf:security:expire-incidents')->everyMinute()->withoutOverlapping();
 Schedule::command('cdnf:security:reconcile-readiness')->everyMinute()->withoutOverlapping();
+Schedule::command('cdnf:notifications:origin-errors')->everyFiveMinutes()->withoutOverlapping();
+Schedule::command('cdnf:client-security:sync-scripts')->everyMinute()->withoutOverlapping();
+Schedule::command('cdnf:notifications:security-mitigations')->everyMinute()->withoutOverlapping();
+Schedule::command('cdnf:log-push:dispatch')->everyMinute()->withoutOverlapping();
 Schedule::command('cdnf:health:publish')->everyMinute()->withoutOverlapping();
 Schedule::command('cdnf:waf:expire-exclusions')->everyMinute()->withoutOverlapping();
 Schedule::command('cdnf:usage:finalize')->hourlyAt(20)->withoutOverlapping();

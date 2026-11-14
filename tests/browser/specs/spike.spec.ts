@@ -13,7 +13,8 @@ test.describe('administrator overview', () => {
         await expect(page.getByTestId('overview-recent')).toBeVisible({ timeout: 20_000 });
         await expect(page.getByTestId('sidebar-version')).toHaveText(/^v\d+\.\d+\.\d+/);
         await expectAccessible(page);
-        await expect(page).toHaveScreenshot('overview.png', { fullPage: true });
+        // Recent operations list audit entries other specs create while they run, so the region is masked and the rest is compared.
+        await expect(page).toHaveScreenshot('overview.png', { fullPage: true, mask: [page.getByTestId('overview-recent')] });
     });
 
     test('opens global search with the keyboard', async ({ page, isMobile }) => {
@@ -41,7 +42,8 @@ test.describe('domains', () => {
         await expect(page.getByRole('tab', { name: /DNS records/ })).toBeVisible();
         await expect(page.getByTestId('domain-attention')).toBeVisible();
         await expect(page.getByTestId('domain-overview')).toBeVisible();
-        await expect(page.getByTestId('domain-quick-actions')).toBeVisible();
+        await expect(page.getByTestId('overview-section-protection')).toBeVisible();
+        await expect(page.getByTestId('domain-quick-actions')).toHaveCount(0);
         await expectAccessible(page);
         await expect(page).toHaveScreenshot('domain-detail.png', { fullPage: true });
     });
@@ -52,7 +54,7 @@ test.describe('domains', () => {
         await settle(page);
         await page.getByText('alpha-browser.example').first().click();
         await settle(page);
-        await page.getByRole('button', { name: 'Domain actions', exact: true }).click();
+        await page.getByTestId('domain-more-actions').click();
         await page.getByTestId('domain-delete-action').click();
         const dialog = page.getByRole('alertdialog');
         await expect(dialog.getByText('Delete alpha-browser.example?')).toBeVisible();
@@ -83,12 +85,15 @@ test.describe('domains', () => {
     });
 });
 
-test('quick action opens its form in a side sheet', async ({ page }) => {
+test('a section action opens its form, and each action is shown once', async ({ page }) => {
     await signIn(page, 'admin', 'admin@browser.test', adminPassword);
     await page.goto('/admin/domains');
     await page.getByText('alpha-browser.example').first().click();
     await settle(page);
-    await page.getByTestId('domain-quick-purge-cache').click();
+    for (const action of ['purge-cache', 'cache-settings', 'development-mode', 'waf-profile', 'ai-protection', 'proxy-defaults']) {
+        await expect(page.getByTestId(`overview-action-${action}`)).toHaveCount(1);
+    }
+    await page.getByTestId('overview-action-purge-cache').click();
     await expect(page.getByRole('heading', { name: 'Purge cache', level: 2 })).toBeVisible();
 });
 

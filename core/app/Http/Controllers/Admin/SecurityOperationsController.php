@@ -19,11 +19,6 @@ use Illuminate\Support\Facades\DB;
 
 class SecurityOperationsController extends Controller
 {
-    public function protect(Request $request, Domain $domain): JsonResponse
-    {
-        return $this->state($request, $domain, 'restricted');
-    }
-
     public function quarantine(Request $request, Domain $domain): JsonResponse
     {
         abort_unless($domain->dnsRecords()->where('mode', 'proxied')->exists(), 409, 'Only a proxied domain can be quarantined.');
@@ -110,12 +105,13 @@ class SecurityOperationsController extends Controller
                     'state' => 'deploying', 'drain_after' => null, 'last_error' => null,
                 ]);
             }
-            SecurityEvent::query()->create([
-                'domain_id' => $locked->id, 'state' => $state,
-                'reason_code' => $state === 'quarantined' ? 'domain_quarantined' : 'domain_restricted',
-                'details' => ['reason' => $data['reason'] ?? null, 'actor_id' => $request->user()->id, 'target_pool_id' => $pool?->id],
-                'occurred_at' => now(),
-            ]);
+            if ($state === 'quarantined') {
+                SecurityEvent::query()->create([
+                    'domain_id' => $locked->id, 'state' => $state, 'reason_code' => 'domain_quarantined',
+                    'details' => ['reason' => $data['reason'] ?? null, 'actor_id' => $request->user()->id, 'target_pool_id' => $pool?->id],
+                    'occurred_at' => now(),
+                ]);
+            }
             AuditLog::record($request->user(), "security.domain_$state", $locked, ['revision' => $locked->revision, 'target_pool_id' => $pool?->id], $request->ip());
             if (in_array($state, ['recovering', 'normal'], true)) {
                 ChangeAutomaticSecurityState::execute($locked, 'normal', 'operator_return_to_normal', ['actor_id' => $request->user()->id]);

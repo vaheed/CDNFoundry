@@ -20,8 +20,18 @@ final class ManagedWaf
 
     public static function compile(Domain $domain): array
     {
+        $profile = self::profile($domain->waf_profile);
+        $tuning = ManagedWafTuning::normalize($domain->waf_tuning);
+        // A tuned paranoia level or threshold replaces the profile's own, but never turns an Off domain on.
+        if ($profile['name'] !== 'off') {
+            $profile['paranoia_level'] = $tuning['paranoia_level'] ?? $profile['paranoia_level'];
+            $profile['inbound_threshold'] = $tuning['inbound_threshold'] ?? $profile['inbound_threshold'];
+        }
+
         return [
-            ...self::profile($domain->waf_profile),
+            ...$profile,
+            'tuning' => $tuning,
+            ...($profile['name'] === 'off' ? ['off_categories' => [], 'off_rules' => [], 'log_only_rules' => []] : ManagedWafTuning::forEdge($domain->waf_tuning)),
             'ruleset' => config('security.waf.ruleset'),
             // Exclusions are inert until a per-rule, per-target removal exists.
             'exclusions' => [],

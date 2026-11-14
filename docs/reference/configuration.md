@@ -36,6 +36,8 @@ Limits that the software enforces are listed in the [limits reference](limits.md
 | `MANAGEMENT_NETWORKS` | control | Space-separated CIDRs allowed to reach the administrator panel, the administrator API, Horizon, the metrics endpoint, and Grafana. Everyone else gets a bare `403`; `/app`, the customer API, and the status page stay open. Empty restricts nothing. Fleet writes it from `management_networks` plus the fleet's node addresses |
 | `CORS_ALLOWED_ORIGINS` | control | Space-separated browser origins allowed to call the API. Empty allows none; there is no wildcard |
 | `CONTENT_SECURITY_POLICY` | control | `enforce` (default), `report-only`, or `off` for the panels' and API's `Content-Security-Policy` |
+| `SECURITY_RATE_LIMIT_RULES` | control | Most rate-limit rules one domain may hold (default 20, hard ceiling 50) |
+| `SECURITY_RULE_LIST_VALUES` | control | Most values in one rule list (default 100, hard ceiling 100) |
 | `TELEMETRY_HOSTNAME` | control/telemetry | Public telemetry-ingest hostname in independent management DNS |
 | `CONTROL_PUBLIC_IPV4_ALLOWLIST` | gateways | Exact control/worker sources allowed through the control and telemetry gateways |
 | `CONTROL_PUBLIC_IPV6_ALLOWLIST` | gateways | Optional IPv6 control/worker sources for the same gateways |
@@ -146,6 +148,7 @@ object storage; other Restic backends need their own credential/mount wiring.
 | `CLICKHOUSE_DATABASE` | internal/default | Database queried by Laravel; Compose fixes `cdnf` |
 | `GEOIP_DATABASE` | edge runtime | MMDB file path; Compose fixes `/mmdb/GeoLite2-City.mmdb` |
 | `PROMETHEUS_URL` | optional control | Default `http://prometheus:9090` |
+| `LOKI_URL` | optional control | Default `http://loki:3100`. The health page checks Loki readiness here. |
 | `ALERTMANAGER_URL` | optional control | Default `http://alertmanager:9093`. The health page reads the running configuration from it to report whether alerts have a receiver |
 | `VECTOR_METRICS_URL` | optional control | Vector metrics probe URL when overridden |
 | `MMDB_STALE_HOURS` | optional control | Health threshold; default `48` |
@@ -384,7 +387,8 @@ this fixture at a staging or production cell. These are not deployment settings.
 | Variable | Required | Meaning and default |
 | --- | --- | --- |
 | `REDIS_QUEUE_RETRY_AFTER` | control | Seconds before a queued job that is still reserved is delivered again; default `3900`. It must stay above every Horizon worker timeout and every job `$timeout`. The longest is the control backup at 3700 seconds. A lower value delivers a running job a second time. `make config-check` runs `QueueTimingContractTest` to enforce this. When a worker dies without cleanup, the job is redelivered after this interval, and the scheduled repair jobs cover the gap |
-| `ALERT_WEBHOOK_URL` | host running Alertmanager | Optional. Where Alertmanager sends alerts; when empty it starts but sends nothing. Must be an `https://` URL when set |
-| `ALERT_WEBHOOK_ALLOW_HTTP` | optional | Set `true` to allow an `http://` webhook URL in development |
+| `ALERT_RECEIVER_URL` | host running Alertmanager | Optional. Where Alertmanager posts alerts; default `http://web:8080/internal/alertmanager` on the control network. Set it only for a dedicated monitoring host |
+| `NOTIFIER_TEST_PROVIDER_URL` | development only | Replaces the Telegram, Discord, and Slack hosts with a fake receiver. It is ignored in production |
+| `LOG_PUSH_TEST_CA_FILE` | development only | A CA file that lets the log pusher trust a fake receiver's private certificate in qualification. It is ignored in production |
 | `EDGE_NETWORK_SUBNET` | edge | Subnet of the private edge network. Compose requires it |
 | `EDGE_PROXY_PROTOCOL_TRUSTED_CIDRS` | cells | Networks whose PROXY protocol headers a cell honors. Production Compose sets it from `EDGE_NETWORK_SUBNET` |

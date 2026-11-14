@@ -7,6 +7,8 @@ use App\Filament\Admin\Resources\Users\Pages\CreateUser;
 use App\Filament\Admin\Resources\Users\Pages\EditUser;
 use App\Filament\Admin\Resources\Users\Pages\ListUsers;
 use App\Models\User;
+use App\Support\Impersonation;
+use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -32,8 +34,8 @@ class UserResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
-            TextInput::make('name')->required()->maxLength(255),
-            TextInput::make('email')->email()->required()->maxLength(255)->unique(ignoreRecord: true),
+            TextInput::make('name')->placeholder('Your Name')->required()->maxLength(255),
+            TextInput::make('email')->placeholder('email@example.com')->email()->required()->maxLength(255)->unique(ignoreRecord: true),
             Select::make('type')->options([
                 UserType::Admin->value => 'Administrator',
                 UserType::User->value => 'Domain user',
@@ -58,6 +60,17 @@ class UserResource extends Resource
                 TextColumn::make('created_at')->dateTime()->sortable(),
             ])
             ->recordActions([
+                Action::make('impersonate')->label('Login as')->icon('phosphor-sign-in')->color('gray')
+                    ->extraAttributes(['data-testid' => 'user-impersonate-action'])
+                    ->visible(fn (User $record): bool => Impersonation::allowed(auth()->user(), $record))
+                    ->requiresConfirmation()->modalHeading(fn (User $record): string => "Login as {$record->name}?")
+                    ->modalDescription('The domain panel opens as this user, with their domains and permissions. It is recorded in the audit log, and everything you change is recorded as theirs, made by you. Return with the banner at the top of the page.')
+                    ->modalSubmitActionLabel('Login as')
+                    ->action(function (User $record) {
+                        Impersonation::start(request(), $record);
+
+                        return redirect('/app');
+                    }),
                 EditAction::make(),
             ])
             ->defaultSort('id');

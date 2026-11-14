@@ -17,18 +17,7 @@
           },
           "inspect": false
         },
-        "mappings": [
-          {
-            "options": {
-              "match": "null+nan",
-              "result": {
-                "color": "text",
-                "text": "No data yet"
-              }
-            },
-            "type": "special"
-          }
-        ],
+        "mappings": [],
         "noValue": "\u2013",
         "thresholds": {
           "mode": "absolute",
@@ -44,6 +33,70 @@
       "overrides": [
         {
           "matcher": {
+            "id": "byRegexp",
+            "options": "^(.*_id|rule|domain|asn|id)$"
+          },
+          "properties": [
+            {
+              "id": "unit",
+              "value": "none"
+            },
+            {
+              "id": "decimals",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "matcher": {
+            "id": "byName",
+            "options": "Cause"
+          },
+          "properties": [
+            {
+              "id": "custom.minWidth",
+              "value": 220
+            }
+          ]
+        },
+        {
+          "matcher": {
+            "id": "byName",
+            "options": "Team"
+          },
+          "properties": [
+            {
+              "id": "custom.width",
+              "value": 90
+            }
+          ]
+        },
+        {
+          "matcher": {
+            "id": "byName",
+            "options": "Severity"
+          },
+          "properties": [
+            {
+              "id": "custom.width",
+              "value": 90
+            }
+          ]
+        },
+        {
+          "matcher": {
+            "id": "byName",
+            "options": "PoP"
+          },
+          "properties": [
+            {
+              "id": "custom.width",
+              "value": 110
+            }
+          ]
+        },
+        {
+          "matcher": {
             "id": "byName",
             "options": "Since"
           },
@@ -51,6 +104,10 @@
             {
               "id": "unit",
               "value": "dateTimeFromNow"
+            },
+            {
+              "id": "custom.width",
+              "value": 130
             }
           ]
         },
@@ -60,6 +117,156 @@
             "options": "Dashboard"
           },
           "properties": [
+            {
+              "id": "mappings",
+              "value": [
+                {
+                  "options": {
+                    "cdnf-access-audit": {
+                      "index": 0,
+                      "text": "Access and audit"
+                    },
+                    "cdnf-backups": {
+                      "index": 1,
+                      "text": "Backups and recovery"
+                    },
+                    "cdnf-cache": {
+                      "index": 2,
+                      "text": "Cache"
+                    },
+                    "cdnf-capacity": {
+                      "index": 3,
+                      "text": "Capacity"
+                    },
+                    "cdnf-control-plane": {
+                      "index": 4,
+                      "text": "Control plane"
+                    },
+                    "cdnf-daily-checks": {
+                      "index": 5,
+                      "text": "Daily checks"
+                    },
+                    "cdnf-data-stores": {
+                      "index": 6,
+                      "text": "Data stores"
+                    },
+                    "cdnf-dns-abuse": {
+                      "index": 7,
+                      "text": "DNS abuse"
+                    },
+                    "cdnf-dns-authoritative": {
+                      "index": 8,
+                      "text": "DNS authoritative"
+                    },
+                    "cdnf-domain-comparison": {
+                      "index": 9,
+                      "text": "Domain comparison"
+                    },
+                    "cdnf-domain-overview": {
+                      "index": 10,
+                      "text": "Domain overview"
+                    },
+                    "cdnf-edge-latency": {
+                      "index": 11,
+                      "text": "Edge latency"
+                    },
+                    "cdnf-fleet-rollouts": {
+                      "index": 12,
+                      "text": "Fleet and rollouts"
+                    },
+                    "cdnf-global-traffic": {
+                      "index": 13,
+                      "text": "Global traffic"
+                    },
+                    "cdnf-growth": {
+                      "index": 14,
+                      "text": "Growth"
+                    },
+                    "cdnf-hosts-containers": {
+                      "index": 15,
+                      "text": "Hosts and containers"
+                    },
+                    "cdnf-incident": {
+                      "index": 16,
+                      "text": "Incident view"
+                    },
+                    "cdnf-l7-flood": {
+                      "index": 17,
+                      "text": "L7 attack and flood"
+                    },
+                    "cdnf-logs-explorer": {
+                      "index": 18,
+                      "text": "Logs explorer"
+                    },
+                    "cdnf-noc-wall": {
+                      "index": 19,
+                      "text": "NOC wall"
+                    },
+                    "cdnf-now": {
+                      "index": 20,
+                      "text": "Now"
+                    },
+                    "cdnf-origin-health": {
+                      "index": 21,
+                      "text": "Origin health"
+                    },
+                    "cdnf-pop-detail": {
+                      "index": 22,
+                      "text": "PoP detail"
+                    },
+                    "cdnf-pop-fleet": {
+                      "index": 23,
+                      "text": "PoP fleet"
+                    },
+                    "cdnf-propagation": {
+                      "index": 24,
+                      "text": "Config & purge propagation"
+                    },
+                    "cdnf-query-samples": {
+                      "index": 25,
+                      "text": "Query samples"
+                    },
+                    "cdnf-request-trace": {
+                      "index": 26,
+                      "text": "Request trace"
+                    },
+                    "cdnf-security-overview": {
+                      "index": 27,
+                      "text": "Security overview"
+                    },
+                    "cdnf-slos": {
+                      "index": 28,
+                      "text": "SLOs"
+                    },
+                    "cdnf-synthetic-probes": {
+                      "index": 29,
+                      "text": "Synthetic probes"
+                    },
+                    "cdnf-telemetry-integrity": {
+                      "index": 30,
+                      "text": "Telemetry integrity"
+                    },
+                    "cdnf-telemetry-pipeline": {
+                      "index": 31,
+                      "text": "Telemetry pipeline"
+                    },
+                    "cdnf-tls-posture": {
+                      "index": 32,
+                      "text": "TLS posture"
+                    },
+                    "cdnf-usage-billing": {
+                      "index": 33,
+                      "text": "Usage and billing"
+                    },
+                    "cdnf-waf": {
+                      "index": 34,
+                      "text": "WAF"
+                    }
+                  },
+                  "type": "value"
+                }
+              ]
+            },
             {
               "id": "links",
               "value": [

@@ -12,6 +12,7 @@ use App\Models\TlsOrder;
 use App\Support\AcmeClient;
 use App\Support\AcmeDnsPropagation;
 use App\Support\ManagedCertificateNames;
+use App\Support\Notifications\EventPublisher;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -363,6 +364,7 @@ class IssueManagedCertificate implements ShouldBeUnique, ShouldQueue
             Operation::coalesceDomain('edge.domain_reconcile', $domain->id);
             ReconcileDnsZone::dispatch($domain->id)->afterCommit();
             ReconcileEdgeDomain::dispatch($domain->id)->afterCommit();
+            EventPublisher::publish('certificate.issued', $domain, "Certificate issued for {$domain->name}", 'Expires '.$certificate->expires_at->toDateString().'.');
         });
     }
 

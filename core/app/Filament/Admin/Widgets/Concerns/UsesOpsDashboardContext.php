@@ -13,9 +13,6 @@ trait UsesOpsDashboardContext
 {
     use InteractsWithPageFilters;
 
-    /** False where the chart is already on the telemetry page it would link to. */
-    public bool $showDrilldown = true;
-
     public static function canView(): bool
     {
         return auth()->user() instanceof User && auth()->user()->isAdmin() && ! auth()->user()->isDisabled();

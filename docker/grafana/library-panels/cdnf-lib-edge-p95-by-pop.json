@@ -24,6 +24,7 @@
             "mode": "off"
           }
         },
+        "decimals": 0,
         "mappings": [
           {
             "options": {
@@ -36,6 +37,7 @@
             "type": "special"
           }
         ],
+        "min": 0,
         "noValue": "\u2013",
         "thresholds": {
           "mode": "absolute",

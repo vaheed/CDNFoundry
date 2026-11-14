@@ -66,14 +66,6 @@ Import the credentials of an existing host.
 | `--public-ipv6` `PUBLIC_IPV6` | Public IPv6 address |
 | `--bind-ipv4` `BIND_IPV4` | IPv4 address the services bind to |
 
-## alert-webhook
-
-Show or set where Alertmanager sends alerts (an https:// URL; optional, and an empty value turns notifications off).
-
-| Option | Meaning |
-| --- | --- |
-| `--url` `URL` | The https:// URL to save, or an empty value to turn notifications off; omit to show the current one |
-
 ## apply-config
 
 Deploy re-rendered configs to the nodes whose bundle changed.

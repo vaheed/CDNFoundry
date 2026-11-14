@@ -638,7 +638,7 @@
       "id": 7,
       "options": {
         "displayMode": "gradient",
-        "namePlacement": "left",
+        "namePlacement": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
           "calcs": [
@@ -716,7 +716,7 @@
       "id": 8,
       "options": {
         "displayMode": "gradient",
-        "namePlacement": "left",
+        "namePlacement": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
           "calcs": [
@@ -790,7 +790,7 @@
       "id": 9,
       "options": {
         "displayMode": "gradient",
-        "namePlacement": "left",
+        "namePlacement": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
           "calcs": [
@@ -864,7 +864,7 @@
       "id": 10,
       "options": {
         "displayMode": "gradient",
-        "namePlacement": "left",
+        "namePlacement": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
           "calcs": [
@@ -896,7 +896,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "ANY, TXT, and DNSKEY queries per interval.",
+      "description": "ANY, TXT, and DNSKEY queries per hour over the last 24 hours, whatever range the dashboard shows.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -948,6 +948,7 @@
         "x": 12,
         "y": 20
       },
+      "hideTimeOverride": true,
       "id": 11,
       "options": {
         "legend": {
@@ -974,6 +975,7 @@
           "refId": "A"
         }
       ],
+      "timeFrom": "24h",
       "title": "Amplification-prone queries",
       "type": "timeseries"
     }

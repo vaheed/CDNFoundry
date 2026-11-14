@@ -701,7 +701,7 @@
       "id": 7,
       "options": {
         "displayMode": "gradient",
-        "namePlacement": "left",
+        "namePlacement": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
           "calcs": [
@@ -779,7 +779,7 @@
       "id": 8,
       "options": {
         "displayMode": "gradient",
-        "namePlacement": "left",
+        "namePlacement": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
           "calcs": [
@@ -853,7 +853,7 @@
       "id": 9,
       "options": {
         "displayMode": "gradient",
-        "namePlacement": "left",
+        "namePlacement": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
           "calcs": [
@@ -937,6 +937,7 @@
         "x": 0,
         "y": 20
       },
+      "hideTimeOverride": true,
       "id": 10,
       "options": {
         "legend": {
@@ -963,6 +964,7 @@
           "refId": "A"
         }
       ],
+      "timeFrom": "6h",
       "title": "Failover events",
       "type": "timeseries"
     }

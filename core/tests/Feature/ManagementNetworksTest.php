@@ -2,10 +2,23 @@
 
 namespace Tests\Feature;
 
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
 use Tests\TestCase;
 
 class ManagementNetworksTest extends TestCase
 {
+    use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        // Symfony keeps the trusted proxies in static state, so an earlier request would hide a check that runs
+        // before TrustProxies. Every test starts from the state of a fresh PHP-FPM worker.
+        Request::setTrustedProxies([], -1);
+    }
+
     private function viaCaddy(string $client): array
     {
         return ['REMOTE_ADDR' => '172.20.0.5', 'HTTP_X_FORWARDED_FOR' => $client, 'HTTP_X_FORWARDED_PROTO' => 'https'];
@@ -35,6 +48,21 @@ class ManagementNetworksTest extends TestCase
         }
     }
 
+    public function test_a_signed_in_domain_user_outside_the_management_networks_uses_the_whole_customer_panel(): void
+    {
+        config(['security.management_networks' => '198.51.100.0/24 2001:db8::/32']);
+        $user = User::factory()->create();
+
+        foreach (['203.0.113.9', '2001:db9::7'] as $client) {
+            foreach (['/app', '/app/api-tokens', '/app/analytics', '/app/profile'] as $path) {
+                $response = $this->actingAs($user)->call('GET', $path, [], [], [], $this->viaCaddy($client));
+                $this->assertNotSame(403, $response->getStatusCode(), "{$path} from {$client}");
+            }
+        }
+        // The administrator panel stays closed to the same client, whoever is signed in.
+        $this->actingAs($user)->call('GET', '/admin', [], [], [], $this->viaCaddy('203.0.113.9'))->assertForbidden();
+    }
+
     public function test_inside_clients_and_direct_internal_callers_pass(): void
     {
         config(['security.management_networks' => '198.51.100.0/24 2001:db8::/32']);
@@ -43,6 +71,13 @@ class ManagementNetworksTest extends TestCase
         $this->assertNotSame(403, $this->call('GET', '/admin/login', [], [], [], $this->viaCaddy('2001:db8::7'))->getStatusCode());
         // Prometheus and other containers reach the application directly, with no forwarded address.
         $this->assertNotSame(403, $this->call('GET', '/api/admin/edges', [], [], [], ['REMOTE_ADDR' => '172.20.0.9'])->getStatusCode());
+    }
+
+    public function test_the_forwarded_client_is_judged_on_the_first_request_of_a_fresh_worker(): void
+    {
+        config(['security.management_networks' => '198.51.100.0/24']);
+
+        $this->call('GET', '/admin/login', [], [], [], $this->viaCaddy('198.51.100.77'))->assertSuccessful();
     }
 
     public function test_an_empty_list_restricts_nothing(): void

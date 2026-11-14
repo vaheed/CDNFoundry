@@ -199,7 +199,7 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
+        "w": 5,
         "x": 0,
         "y": 0
       },
@@ -283,7 +283,7 @@
       "gridPos": {
         "h": 4,
         "w": 6,
-        "x": 6,
+        "x": 5,
         "y": 0
       },
       "id": 2,
@@ -322,13 +322,13 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "How much of the edge p95 is the origin's p95.",
+      "description": "The origin p95 divided by the edge p95. Above 1 means the origins are slower than the edge answers, which is expected when most requests are cache hits.",
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "thresholds"
           },
-          "decimals": 0,
+          "decimals": 1,
           "mappings": [
             {
               "options": {
@@ -351,14 +351,14 @@
               }
             ]
           },
-          "unit": "percent"
+          "unit": "suffix: x"
         },
         "overrides": []
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 12,
+        "w": 7,
+        "x": 11,
         "y": 0
       },
       "id": 3,
@@ -382,14 +382,14 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "100 * (1000 * histogram_quantile(0.95, sum by (le) (cdnf:edge_origin_latency_bucket:rate5m{region=~\"$region\",pop=~\"$pop\",edge=~\"$edge\"}))) / (1000 * histogram_quantile(0.95, sum by (le) (cdnf:edge_latency_bucket:rate5m{region=~\"$region\",pop=~\"$pop\",edge=~\"$edge\"})))",
+          "expr": "(1000 * histogram_quantile(0.95, sum by (le) (cdnf:edge_origin_latency_bucket:rate5m{region=~\"$region\",pop=~\"$pop\",edge=~\"$edge\"}))) / (1000 * histogram_quantile(0.95, sum by (le) (cdnf:edge_latency_bucket:rate5m{region=~\"$region\",pop=~\"$pop\",edge=~\"$edge\"})))",
           "instant": true,
-          "legendFormat": "share",
+          "legendFormat": "ratio",
           "range": false,
           "refId": "A"
         }
       ],
-      "title": "Origin share",
+      "title": "Origin p95 vs edge p95",
       "type": "stat"
     },
     {
@@ -500,6 +500,7 @@
               "mode": "off"
             }
           },
+          "displayName": "${__field.labels.pop}",
           "mappings": [
             {
               "options": {
@@ -554,7 +555,7 @@
           "editorType": "sql",
           "format": 0,
           "queryType": "timeSeries",
-          "rawSql": "SELECT * FROM (SELECT $__timeInterval(interval_start) AS time, pop, quantilesTDigestMerge(0.5, 0.95, 0.99)(edge_latency_q)[2] AS p95 FROM cdnf.edge_traffic_1m WHERE interval_start >= $__fromTime - INTERVAL 1 MINUTE AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 0 AND 172800 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, pop UNION ALL SELECT $__timeInterval(interval_start) AS time, pop, quantilesTDigestMerge(0.5, 0.95, 0.99)(edge_latency_q)[2] AS p95 FROM cdnf.edge_traffic_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 172801 AND 34560000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, pop UNION ALL SELECT $__timeInterval(interval_start) AS time, pop, quantilesTDigestMerge(0.5, 0.95, 0.99)(edge_latency_q)[2] AS p95 FROM cdnf.edge_traffic_daily WHERE interval_start >= toStartOfDay($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 34560001 AND 10000000000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, pop) ORDER BY time",
+          "rawSql": "SELECT * FROM (SELECT $__timeInterval(interval_start) AS time, if(pop = '', 'not recorded', pop) AS pop, quantilesTDigestMerge(0.5, 0.95, 0.99)(edge_latency_q)[2] AS p95 FROM cdnf.edge_traffic_1m WHERE interval_start >= $__fromTime - INTERVAL 1 MINUTE AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 0 AND 172800 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, pop UNION ALL SELECT $__timeInterval(interval_start) AS time, if(pop = '', 'not recorded', pop) AS pop, quantilesTDigestMerge(0.5, 0.95, 0.99)(edge_latency_q)[2] AS p95 FROM cdnf.edge_traffic_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 172801 AND 34560000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, pop UNION ALL SELECT $__timeInterval(interval_start) AS time, if(pop = '', 'not recorded', pop) AS pop, quantilesTDigestMerge(0.5, 0.95, 0.99)(edge_latency_q)[2] AS p95 FROM cdnf.edge_traffic_daily WHERE interval_start >= toStartOfDay($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 34560001 AND 10000000000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, pop) ORDER BY time",
           "refId": "A"
         }
       ],
@@ -586,6 +587,7 @@
               "mode": "off"
             }
           },
+          "displayName": "${__field.labels.protocol}",
           "mappings": [
             {
               "options": {
@@ -640,7 +642,7 @@
           "editorType": "sql",
           "format": 0,
           "queryType": "timeSeries",
-          "rawSql": "SELECT * FROM (SELECT $__timeInterval(interval_start) AS time, protocol, quantilesTDigestMerge(0.5, 0.95, 0.99)(edge_latency_q)[2] AS p95 FROM cdnf.edge_traffic_1m WHERE interval_start >= $__fromTime - INTERVAL 1 MINUTE AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 0 AND 172800 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, protocol UNION ALL SELECT $__timeInterval(interval_start) AS time, protocol, quantilesTDigestMerge(0.5, 0.95, 0.99)(edge_latency_q)[2] AS p95 FROM cdnf.edge_traffic_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 172801 AND 34560000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, protocol UNION ALL SELECT $__timeInterval(interval_start) AS time, protocol, quantilesTDigestMerge(0.5, 0.95, 0.99)(edge_latency_q)[2] AS p95 FROM cdnf.edge_traffic_daily WHERE interval_start >= toStartOfDay($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 34560001 AND 10000000000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, protocol) ORDER BY time",
+          "rawSql": "SELECT * FROM (SELECT $__timeInterval(interval_start) AS time, if(protocol = '', 'not recorded', protocol) AS protocol, quantilesTDigestMerge(0.5, 0.95, 0.99)(edge_latency_q)[2] AS p95 FROM cdnf.edge_traffic_1m WHERE interval_start >= $__fromTime - INTERVAL 1 MINUTE AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 0 AND 172800 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, protocol UNION ALL SELECT $__timeInterval(interval_start) AS time, if(protocol = '', 'not recorded', protocol) AS protocol, quantilesTDigestMerge(0.5, 0.95, 0.99)(edge_latency_q)[2] AS p95 FROM cdnf.edge_traffic_hourly WHERE interval_start >= toStartOfHour($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 172801 AND 34560000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, protocol UNION ALL SELECT $__timeInterval(interval_start) AS time, if(protocol = '', 'not recorded', protocol) AS protocol, quantilesTDigestMerge(0.5, 0.95, 0.99)(edge_latency_q)[2] AS p95 FROM cdnf.edge_traffic_daily WHERE interval_start >= toStartOfDay($__fromTime) AND interval_start <= $__toTime AND dateDiff('second', $__fromTime, $__toTime) BETWEEN 34560001 AND 10000000000 AND $__conditionalAll(region IN (${region:singlequote}), $region) AND $__conditionalAll(pop IN (${pop:singlequote}), $pop) AND $__conditionalAll(edge_id IN (${edge:singlequote}), $edge) AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, protocol) ORDER BY time",
           "refId": "A"
         }
       ],
@@ -788,7 +790,7 @@
       "id": 8,
       "options": {
         "displayMode": "gradient",
-        "namePlacement": "left",
+        "namePlacement": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
           "calcs": [

@@ -28,9 +28,13 @@ their documented bounds.
 | Asynchronous import threshold | over 64 KiB or over 100 physical lines |
 | URL purge | 100 URLs, 2,048 characters each, 128 KiB payload |
 | Cache key | 128 query arguments; none is cached beyond that |
+| Cache path rules | 16 per domain; ignored cookie names 32 |
 | Persisted URL purges per PoP | 50,000 keys, kept one year |
 | Outstanding purges (pending or running) | 1,000 per domain |
-| Security rules | 1,000 per domain, 500 per import |
+| Platform rulesets | 10 rulesets, 100 rules per ruleset, 500 listed domains per ruleset |
+| Rule presets | 50 user agents, 50 file extensions, and 48 allowed referer hosts per domain |
+| Managed WAF adjustments | 100 disabled rules and 100 log-only rules per domain, from the pinned ruleset's catalog |
+| Security rules | 1,000 per domain, 500 per import, 5 conditions per rule, 100 values per list condition, 20 rate-limit rules (ceiling 50) |
 | Usage export | 10,000 rows |
 | TLS upload | 16 KiB leaf, 64 KiB chain, 16 KiB key. Keys: RSA 2048 to 4096 bits, or EC P-256 or P-384 |
 

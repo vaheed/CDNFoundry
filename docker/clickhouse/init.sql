@@ -37,6 +37,12 @@ CREATE TABLE IF NOT EXISTS cdnf.edge_events
     waf_processing_us UInt32 DEFAULT 0,
     waf_body_limit LowCardinality(String) DEFAULT 'none',
     waf_exclusion_id UInt64 DEFAULT 0,
+    security_rule LowCardinality(String) DEFAULT '',
+    client_report String DEFAULT '',
+    attack_score UInt8 DEFAULT 0,
+    attack_score_sqli UInt8 DEFAULT 0,
+    attack_score_xss UInt8 DEFAULT 0,
+    attack_score_rce UInt8 DEFAULT 0,
     request_time_ms UInt32 DEFAULT 0,
     upstream_connect_ms Nullable(UInt32),
     upstream_header_ms Nullable(UInt32),
@@ -110,6 +116,26 @@ SELECT toStartOfHour(occurred_at) AS interval_start, domain_id, hostname, status
        countIf(security_action = 'block') AS security_blocks
 FROM cdnf.edge_events
 GROUP BY interval_start, domain_id, hostname, status, cache_status, country, continent, edge_id;
+
+CREATE TABLE IF NOT EXISTS cdnf.security_hourly
+(
+    interval_start DateTime('UTC'), domain_id UInt64, attack_band UInt8,
+    action LowCardinality(String), reason LowCardinality(String),
+    country LowCardinality(String), asn UInt32, requests UInt64
+)
+ENGINE = SummingMergeTree
+PARTITION BY toYYYYMM(interval_start)
+ORDER BY (domain_id, interval_start, attack_band, action, reason, country, asn)
+TTL interval_start + INTERVAL 400 DAY DELETE;
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS cdnf.security_hourly_mv TO cdnf.security_hourly DEFINER = cdnf SQL SECURITY DEFINER AS
+SELECT toStartOfHour(occurred_at) AS interval_start, domain_id,
+       multiIf(attack_score = 0, 0, attack_score < 20, 1, attack_score < 40, 2, attack_score < 60, 3, attack_score < 80, 4, 5) AS attack_band,
+       multiIf(security_action = 'block', 'blocked', security_rule != '', 'logged', 'allowed') AS action,
+       security_reason AS reason, country, asn, count() AS requests
+FROM cdnf.edge_events
+WHERE event_type = 'request'
+GROUP BY interval_start, domain_id, attack_band, action, reason, country, asn;
 
 CREATE TABLE IF NOT EXISTS cdnf.dns_hourly
 (

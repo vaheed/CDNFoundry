@@ -1,0 +1,141 @@
+{
+  "model": {
+    "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+    },
+    "description": "Every firing alert with how long it has been firing. The full table with team, severity, and dashboard is on Now.",
+    "fieldConfig": {
+      "defaults": {
+        "color": {
+          "mode": "thresholds"
+        },
+        "custom": {
+          "align": "auto",
+          "cellOptions": {
+            "type": "auto"
+          },
+          "inspect": false
+        },
+        "mappings": [],
+        "noValue": "\u2013",
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            {
+              "color": "text",
+              "value": null
+            }
+          ]
+        },
+        "unit": "short"
+      },
+      "overrides": [
+        {
+          "matcher": {
+            "id": "byRegexp",
+            "options": "^(.*_id|rule|domain|asn|id)$"
+          },
+          "properties": [
+            {
+              "id": "unit",
+              "value": "none"
+            },
+            {
+              "id": "decimals",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "matcher": {
+            "id": "byName",
+            "options": "Cause"
+          },
+          "properties": [
+            {
+              "id": "custom.minWidth",
+              "value": 150
+            }
+          ]
+        },
+        {
+          "matcher": {
+            "id": "byName",
+            "options": "Since"
+          },
+          "properties": [
+            {
+              "id": "unit",
+              "value": "dateTimeFromNow"
+            },
+            {
+              "id": "custom.width",
+              "value": 110
+            }
+          ]
+        }
+      ]
+    },
+    "options": {
+      "cellHeight": "sm",
+      "footer": {
+        "show": false
+      },
+      "showHeader": true,
+      "sortBy": [
+        {
+          "desc": true,
+          "displayName": "Since"
+        }
+      ]
+    },
+    "targets": [
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "expr": "ALERTS_FOR_STATE{alertname!=\"Watchdog\"} * 1000 and ignoring(alertstate) ALERTS{alertstate=\"firing\",alertname!=\"Watchdog\"}",
+        "format": "table",
+        "instant": true,
+        "legendFormat": "firing",
+        "range": false,
+        "refId": "A"
+      }
+    ],
+    "title": "Alerts",
+    "transformations": [
+      {
+        "id": "filterFieldsByName",
+        "options": {
+          "include": {
+            "names": [
+              "alertname",
+              "Value"
+            ]
+          }
+        }
+      },
+      {
+        "id": "organize",
+        "options": {
+          "excludeByName": {
+            "Time": true
+          },
+          "indexByName": {
+            "Cause": 0,
+            "Since": 1
+          },
+          "renameByName": {
+            "Value": "Since",
+            "alertname": "Cause"
+          }
+        }
+      }
+    ],
+    "type": "table"
+  },
+  "name": "Alerts",
+  "uid": "cdnf-lib-firing-alerts-compact"
+}

@@ -169,18 +169,7 @@
             },
             "inspect": false
           },
-          "mappings": [
-            {
-              "options": {
-                "match": "null+nan",
-                "result": {
-                  "color": "text",
-                  "text": "No data yet"
-                }
-              },
-              "type": "special"
-            }
-          ],
+          "mappings": [],
           "noValue": "\u2013",
           "thresholds": {
             "mode": "absolute",
@@ -194,6 +183,22 @@
           "unit": "short"
         },
         "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(.*_id|rule|domain|asn|id)$"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
           {
             "matcher": {
               "id": "byName",
@@ -229,6 +234,22 @@
                 "value": {
                   "type": "color-text"
                 }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "(Applied|Latest) revision"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 0
               }
             ]
           },
@@ -444,7 +465,8 @@
           "id": "organize",
           "options": {
             "excludeByName": {
-              "Time": true
+              "Time": true,
+              "node": true
             },
             "renameByName": {
               "Value #A": "Heartbeat age",
@@ -832,6 +854,7 @@
               "mode": "off"
             }
           },
+          "decimals": 0,
           "mappings": [
             {
               "options": {
@@ -854,7 +877,7 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "none"
         },
         "overrides": []
       },

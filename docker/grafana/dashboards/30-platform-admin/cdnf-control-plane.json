@@ -390,7 +390,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "95th percentile API request time.",
+      "description": "95th percentile API request time over the last 5 minutes.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -403,13 +403,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No API requests"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "No API requests",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -479,7 +479,7 @@
           "color": {
             "mode": "thresholds"
           },
-          "decimals": 3,
+          "decimals": 0,
           "mappings": [
             {
               "options": {
@@ -584,18 +584,7 @@
             },
             "inspect": false
           },
-          "mappings": [
-            {
-              "options": {
-                "match": "null+nan",
-                "result": {
-                  "color": "text",
-                  "text": "No data yet"
-                }
-              },
-              "type": "special"
-            }
-          ],
+          "mappings": [],
           "noValue": "\u2013",
           "thresholds": {
             "mode": "absolute",
@@ -609,6 +598,22 @@
           "unit": "short"
         },
         "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(.*_id|rule|domain|asn|id)$"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
           {
             "matcher": {
               "id": "byName",
@@ -716,18 +721,7 @@
             },
             "inspect": false
           },
-          "mappings": [
-            {
-              "options": {
-                "match": "null+nan",
-                "result": {
-                  "color": "text",
-                  "text": "No data yet"
-                }
-              },
-              "type": "special"
-            }
-          ],
+          "mappings": [],
           "noValue": "\u2013",
           "thresholds": {
             "mode": "absolute",
@@ -743,6 +737,22 @@
         "overrides": [
           {
             "matcher": {
+              "id": "byRegexp",
+              "options": "^(.*_id|rule|domain|asn|id)$"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
               "id": "byName",
               "options": "p95"
             },
@@ -753,7 +763,7 @@
               },
               {
                 "id": "decimals",
-                "value": 3
+                "value": 0
               }
             ]
           }
@@ -1443,6 +1453,107 @@
         }
       ],
       "title": "ACME issuance time",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Alerts Alertmanager sent to the notifier and receivers each second, and the ones that failed. Platform notification channels (webhooks, Slack, and so on) report in the panel under Notification channels.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [
+            {
+              "options": {
+                "match": "null+nan",
+                "result": {
+                  "color": "text",
+                  "text": "No data yet"
+                }
+              },
+              "type": "special"
+            }
+          ],
+          "noValue": "\u2013",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 38
+      },
+      "id": 16,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (integration) (rate(alertmanager_notifications_total[5m])) > 0",
+          "instant": false,
+          "legendFormat": "sent {{integration}}",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (integration) (rate(alertmanager_notifications_failed_total[5m])) > 0",
+          "instant": false,
+          "legendFormat": "failed {{integration}}",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Alert deliveries",
       "type": "timeseries"
     }
   ],

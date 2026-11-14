@@ -405,7 +405,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Days until the first cache is forecast to fill, 30-day linear forecast.",
+      "description": "Days until the first cache is forecast to fill, by a linear forecast from the last 7 days. Shows \"Not within a year\" when no cache is on course to fill.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -422,6 +422,16 @@
                 }
               },
               "type": "special"
+            },
+            {
+              "options": {
+                "from": 365,
+                "result": {
+                  "text": "Not within a year"
+                },
+                "to": 1000000000.0
+              },
+              "type": "range"
             }
           ],
           "noValue": "\u2013",
@@ -465,7 +475,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "clamp_min(min(((1 - cdnfoundry_cell_capacity_ratio{resource=\"cache\"}) / clamp_min(deriv(cdnfoundry_cell_capacity_ratio{resource=\"cache\"}[7d]), 1e-12)) / 86400), 0)",
+          "expr": "clamp_max(clamp_min(min(((1 - cdnfoundry_cell_capacity_ratio{resource=\"cache\"}) / clamp_min(deriv(cdnfoundry_cell_capacity_ratio{resource=\"cache\"}[7d]), 1e-12)) / 86400), 0), 365)",
           "instant": true,
           "legendFormat": "days",
           "range": false,
@@ -493,18 +503,7 @@
             },
             "inspect": false
           },
-          "mappings": [
-            {
-              "options": {
-                "match": "null+nan",
-                "result": {
-                  "color": "text",
-                  "text": "No data yet"
-                }
-              },
-              "type": "special"
-            }
-          ],
+          "mappings": [],
           "noValue": "\u2013",
           "thresholds": {
             "mode": "absolute",
@@ -518,6 +517,22 @@
           "unit": "percentunit"
         },
         "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(.*_id|rule|domain|asn|id)$"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
           {
             "matcher": {
               "id": "byName",
@@ -591,15 +606,27 @@
       "title": "Forecast: first PoP to run out",
       "transformations": [
         {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "pop",
+                "cell",
+                "Value"
+              ]
+            }
+          }
+        },
+        {
           "id": "organize",
           "options": {
             "excludeByName": {
-              "Time": true,
-              "__name__": true,
-              "instance": true,
-              "job": true,
-              "resource": true,
-              "status": true
+              "Time": true
+            },
+            "indexByName": {
+              "Cell": 1,
+              "Fill in 30 days": 2,
+              "PoP": 0
             },
             "renameByName": {
               "Value": "Fill in 30 days",

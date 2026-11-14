@@ -43,7 +43,7 @@ class EdgePoolResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
-            TextInput::make('name')->label(FilamentHelp::label('Name', 'Creating a pool does not attach any edge or consume any cell. Assign both explicitly after creation.'))->required()->maxLength(100)->unique(ignoreRecord: true),
+            TextInput::make('name')->label(FilamentHelp::label('Name', 'Creating a pool does not attach any edge or consume any cell. Assign both explicitly after creation.'))->placeholder('shared-eu')->required()->maxLength(100)->unique(ignoreRecord: true),
             Select::make('kind')->label(FilamentHelp::label('Kind', 'Use Shared for normal Anycast service. Reserved is controlled capacity, Dedicated is exceptional single-tenant isolation, and Quarantine is only for risky traffic. Kind does not select addresses or edges.'))->options(['shared' => 'Shared', 'reserved' => 'Reserved', 'quarantine' => 'Quarantine', 'dedicated' => 'Dedicated'])->required(),
             Select::make('cache_profile')->label(FilamentHelp::label('Cache profile', 'Sets bounded per-cell disk, temporary space, minimum-free, inactive, object, and admission ceilings. Changing it reconciles assigned domains.'))->options(['small' => 'Small', 'standard' => 'Standard', 'large' => 'Large', 'streaming' => 'Streaming'])->required()->default('standard'),
             Select::make('compression_profile')->label(FilamentHelp::label('Compression profile', 'Standard safely delivers Gzip. Maximum savings also enables Brotli with a lower concurrency ceiling and is limited to reserved or dedicated pools.'))->options(['off' => 'Off', 'standard' => 'Standard', 'maximum_savings' => 'Maximum savings'])->required()->default('standard')
@@ -64,14 +64,14 @@ class EdgePoolResource extends Resource
             Select::make('routing_mode')->label(FilamentHelp::label('Routing mode', 'Simple Anycast only binds and publishes the shared pair. CDNFoundry never announces or withdraws BGP routes; the network operator/provider owns routing.'))->options(['geo_unicast' => 'Geo-Unicast', 'simple_anycast' => 'Simple Anycast'])->required()->default('geo_unicast')->live(),
             TextInput::make('anycast_ipv4')->label(FilamentHelp::label('Anycast IPv4', 'One distinct Anycast address pair belongs to one pool. Create a second pool only for a second distinct pair.'))->ipv4()->nullable()->visible(fn (Get $get): bool => $get('routing_mode') === 'simple_anycast'),
             TextInput::make('anycast_ipv6')->label(FilamentHelp::label('Anycast IPv6', 'At least one address is required. Every explicitly attached edge binds this same pair after local readiness is acknowledged.'))->ipv6()->nullable()->visible(fn (Get $get): bool => $get('routing_mode') === 'simple_anycast'),
-            TextInput::make('minimum_ready_cells')->numeric()->minValue(1)->maxValue(32)->required()->default(1),
-            TextInput::make('replicas_per_edge')->label(FilamentHelp::label('Replicas per edge', 'Normal placement is one stable cell per edge. Replication is bounded and only valid for reserved or dedicated pools.'))->numeric()->minValue(1)->maxValue(3)->required()->default(1)
+            TextInput::make('minimum_ready_cells')->label(FilamentHelp::label('Minimum ready cells', 'Ready cells each edge needs before DNS publishes the pool on that edge. A cell it needs cannot be removed while the pool is enabled.'))->placeholder('1')->numeric()->minValue(1)->maxValue(32)->required()->default(1),
+            TextInput::make('replicas_per_edge')->label(FilamentHelp::label('Replicas per edge', 'Normal placement is one stable cell per edge. Replication is bounded and only valid for reserved or dedicated pools.'))->placeholder('1')->numeric()->minValue(1)->maxValue(3)->required()->default(1)
                 ->rule(fn (Get $get) => function (string $attribute, mixed $value, \Closure $fail) use ($get): void {
                     if ((int) $value > 1 && ! in_array($get('kind'), ['reserved', 'dedicated'], true)) {
                         $fail('Replicated placement is limited to reserved and dedicated pools.');
                     }
                 }),
-            TextInput::make('maximum_domains_per_cell')->numeric()->minValue(1)->maxValue(100000)->required()->default(20000),
+            TextInput::make('maximum_domains_per_cell')->label(FilamentHelp::label('Maximum domains per cell', 'Placement stops adding domains to a cell that holds this many and uses another cell of the pool.'))->placeholder('20000')->numeric()->minValue(1)->maxValue(100000)->required()->default(20000),
         ]);
     }
 

@@ -25,6 +25,7 @@ use App\Models\Domain;
 use App\Models\Edge;
 use App\Models\Operation;
 use App\Models\User;
+use App\Support\FilamentHelp;
 use App\Support\SystemHealth;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Toggle;
@@ -80,7 +81,7 @@ class AdminDashboard extends Dashboard
                     Select::make('edge_id')->label('Edge')->placeholder('All edges')->searchable()->native(false)
                         ->getSearchResultsUsing(fn (string $search): array => Edge::query()->where('name', 'like', '%'.$search.'%')->orderBy('name')->limit(50)->pluck('name', 'id')->all())
                         ->getOptionLabelUsing(fn (mixed $value): ?string => Edge::query()->find($value)?->name),
-                    Toggle::make('compare')->label('Compare previous period')->default(true)->inline(false),
+                    Toggle::make('compare')->label(FilamentHelp::label('Compare previous period', 'Shows each number beside the same length of time just before the chosen range, and a dashed line on the charts.'))->default(true)->inline(false),
                 ]),
         ]);
     }
@@ -231,8 +232,10 @@ class AdminDashboard extends Dashboard
             'scheduler' => 'Confirm the scheduler container is running every minute and can write its cache heartbeat.',
             'clickhouse' => 'Check ClickHouse health and follow the telemetry outage runbook.',
             'vector' => 'Check Vector health, sources, disk buffers, and ClickHouse delivery.',
+            'prometheus' => 'Start the Prometheus container and check its disk. While it is down no metric is collected and no alert can fire.',
+            'loki' => 'Start the Loki container and check its disk. Operational logs are not stored while it is down.',
             'host_clock' => 'Check Prometheus node time metrics and synchronize hosts with NTP.',
-            'alert_receiver' => 'Alerts fire but nobody is told. Set the alert webhook with `cdnfoundry-fleet alert-webhook` or on the Fleet Deploy page, then apply the config.',
+            'alert_receiver' => 'Alertmanager is down or has no receiver, so alerts reach nobody. Start Alertmanager, re-apply the telemetry configuration with Fleet, and add a channel under Notifications.',
             'mmdb' => 'Run the MMDB updater and verify the database file is readable and current.',
             'edges', 'edge_control', 'edge_listeners', 'edge_cells', 'service_pools' => 'Open Edge network, inspect the named edge/pool, then verify heartbeat, gateway, and assigned cell readiness.',
             'edge_configuration', 'edge_placements' => 'Inspect failed operations and deployment rejections, then reconcile only the affected domain or edge.',

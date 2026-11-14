@@ -92,6 +92,19 @@ detach).
 A user with domain assignments or active API tokens cannot be permanently
 deleted. Remove assignments and revoke tokens first.
 
+## Login as a domain user
+
+An administrator can open the domain panel as a domain user to see exactly what they see, for example to answer a
+support question. Open **Users**, choose **Login as** on the user's row, and confirm. The domain panel opens as that
+user, with their domains and permissions, and the user's password is not needed.
+
+- A banner on every page says whose account you are using. **Return to admin** ends it and opens **Users** again.
+- Starting and ending are audit entries (`user.impersonation_started` and `user.impersonation_ended`). Every change while you act as
+  them is recorded as the user's, with `impersonated_by` set to your user ID. The user is not notified.
+- You cannot create an API token or change the user's profile or password while acting as them, so nothing you create
+  outlives the session in their name.
+- It is offered only for active domain users: never for another administrator, a disabled user, or yourself.
+
 ## Disabled accounts
 
 In the panel, open the user and choose **Disable access** (or **Enable access**).

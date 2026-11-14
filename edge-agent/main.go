@@ -36,7 +36,7 @@ import (
 	"time"
 )
 
-var version = "2.0.8"
+var version = "2.1.0"
 
 const (
 	generationMismatchGrace       = 15 * time.Second
@@ -309,6 +309,7 @@ type edgeTask struct {
 		OverlaySequence    uint64            `json:"overlay_sequence"`
 		OverlayState       string            `json:"state"`
 		OverlayLimits      map[string]int64  `json:"limits"`
+		OverlayIncident    *securityIncident `json:"incident"`
 		Origin             struct {
 			Host              string `json:"host"`
 			Scheme            string `json:"scheme"`

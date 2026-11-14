@@ -19,6 +19,12 @@ parameters:
 			path: app/Actions/DispatchEmergencyMode.php
 
 		-
+			message: '#^Cannot call method toIso8601String\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Actions/EndIncidentProfile.php
+
+		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
 			identifier: property.notFound
 			count: 3
@@ -55,6 +61,12 @@ parameters:
 			path: app/Actions/PromoteReadyEdgePlacements.php
 
 		-
+			message: '#^Cannot access property \$value on string\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Actions/StartIncidentProfile.php
+
+		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$domain_id\.$#'
 			identifier: property.notFound
 			count: 1
@@ -63,13 +75,19 @@ parameters:
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
 			identifier: property.notFound
-			count: 1
+			count: 2
 			path: app/Console/Commands/DispatchManagedTlsMaintenance.php
 
 		-
 			message: '#^Call to an undefined method Illuminate\\Contracts\\Cache\\Lock\:\:refresh\(\)\.$#'
 			identifier: method.notFound
 			count: 2
+			path: app/Console/Commands/DispatchManagedTlsMaintenance.php
+
+		-
+			message: '#^Parameter \#2 \$domain of static method App\\Support\\Notifications\\EventPublisher\:\:publish\(\) expects App\\Models\\Domain\|null, Illuminate\\Database\\Eloquent\\Model\|null given\.$#'
+			identifier: argument.type
+			count: 1
 			path: app/Console/Commands/DispatchManagedTlsMaintenance.php
 
 		-
@@ -367,6 +385,48 @@ parameters:
 			path: app/Filament/Admin/Resources/Operations/OperationResource.php
 
 		-
+			message: '#^Cannot call method domains\(\) on Illuminate\\Database\\Eloquent\\Model\|int\|string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Filament/Admin/Resources/PlatformRulesets/Pages/EditPlatformRuleset.php
+
+		-
+			message: '#^Parameter \#1 \$ruleset of static method App\\Support\\PlatformRulesets\:\:saveRuleset\(\) expects App\\Models\\PlatformRuleset\|null, Illuminate\\Database\\Eloquent\\Model given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Filament/Admin/Resources/PlatformRulesets/Pages/EditPlatformRuleset.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\PlatformRulesetRule\:\:\$conditions\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Filament/Admin/Resources/PlatformRulesets/RelationManagers/RulesRelationManager.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\PlatformRulesetRule\:\:\$rate_limit\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Filament/Admin/Resources/PlatformRulesets/RelationManagers/RulesRelationManager.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:rules\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Filament/Admin/Resources/PlatformRulesets/RelationManagers/RulesRelationManager.php
+
+		-
+			message: '#^Parameter \#1 \$ruleset of static method App\\Support\\PlatformRulesets\:\:deleteRule\(\) expects App\\Models\\PlatformRuleset, Illuminate\\Database\\Eloquent\\Model given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Filament/Admin/Resources/PlatformRulesets/RelationManagers/RulesRelationManager.php
+
+		-
+			message: '#^Parameter \#1 \$ruleset of static method App\\Support\\PlatformRulesets\:\:saveRule\(\) expects App\\Models\\PlatformRuleset, Illuminate\\Database\\Eloquent\\Model given\.$#'
+			identifier: argument.type
+			count: 2
+			path: app/Filament/Admin/Resources/PlatformRulesets/RelationManagers/RulesRelationManager.php
+
+		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$type\.$#'
 			identifier: property.notFound
 			count: 1
@@ -409,24 +469,6 @@ parameters:
 			path: app/Filament/Admin/Widgets/EdgeHealthTable.php
 
 		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$active\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Filament/Domain/Pages/DomainDashboard.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$pending_delegation\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Filament/Domain/Pages/DomainDashboard.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$total\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Filament/Domain/Pages/DomainDashboard.php
-
-		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$activePool\.$#'
 			identifier: property.notFound
 			count: 2
@@ -463,21 +505,9 @@ parameters:
 			path: app/Filament/Domain/Resources/Domains/DomainDetailSections.php
 
 		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$expires_at\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Filament/Domain/Resources/Domains/DomainDetailSections.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$fingerprint_sha256\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Filament/Domain/Resources/Domains/DomainDetailSections.php
-
-		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$last_error\.$#'
 			identifier: property.notFound
-			count: 4
+			count: 3
 			path: app/Filament/Domain/Resources/Domains/DomainDetailSections.php
 
 		-
@@ -489,7 +519,7 @@ parameters:
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$names\.$#'
 			identifier: property.notFound
-			count: 2
+			count: 1
 			path: app/Filament/Domain/Resources/Domains/DomainDetailSections.php
 
 		-
@@ -519,7 +549,7 @@ parameters:
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$status\.$#'
 			identifier: property.notFound
-			count: 3
+			count: 2
 			path: app/Filament/Domain/Resources/Domains/DomainDetailSections.php
 
 		-
@@ -601,6 +631,12 @@ parameters:
 			path: app/Filament/Domain/Resources/Domains/Pages/ViewDomain.php
 
 		-
+			message: '#^Cannot access property \$api_schema on Illuminate\\Database\\Eloquent\\Model\|int\|string\.$#'
+			identifier: property.nonObject
+			count: 4
+			path: app/Filament/Domain/Resources/Domains/Pages/ViewDomain.php
+
+		-
 			message: '#^Cannot access property \$cache_development_mode_until on Illuminate\\Database\\Eloquent\\Model\|int\|string\.$#'
 			identifier: property.nonObject
 			count: 2
@@ -657,7 +693,7 @@ parameters:
 		-
 			message: '#^Cannot access property \$security_state on Illuminate\\Database\\Eloquent\\Model\|int\|string\.$#'
 			identifier: property.nonObject
-			count: 3
+			count: 2
 			path: app/Filament/Domain/Resources/Domains/Pages/ViewDomain.php
 
 		-
@@ -668,6 +704,12 @@ parameters:
 
 		-
 			message: '#^Cannot access property \$waf_profile on Illuminate\\Database\\Eloquent\\Model\|int\|string\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Filament/Domain/Resources/Domains/Pages/ViewDomain.php
+
+		-
+			message: '#^Cannot access property \$waf_tuning on Illuminate\\Database\\Eloquent\\Model\|int\|string\.$#'
 			identifier: property.nonObject
 			count: 1
 			path: app/Filament/Domain/Resources/Domains/Pages/ViewDomain.php
@@ -715,9 +757,27 @@ parameters:
 			path: app/Filament/Domain/Resources/Domains/Pages/ViewDomain.php
 
 		-
+			message: '#^Parameter \#1 \$domain of static method App\\Actions\\EndIncidentProfile\:\:execute\(\) expects App\\Models\\Domain, Illuminate\\Database\\Eloquent\\Model\|int\|string\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Filament/Domain/Resources/Domains/Pages/ViewDomain.php
+
+		-
+			message: '#^Parameter \#1 \$domain of static method App\\Actions\\StartIncidentProfile\:\:execute\(\) expects App\\Models\\Domain, Illuminate\\Database\\Eloquent\\Model\|int\|string\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Filament/Domain/Resources/Domains/Pages/ViewDomain.php
+
+		-
 			message: '#^Parameter \#1 \$domain of static method App\\Support\\BindZone\:\:export\(\) expects App\\Models\\Domain, Illuminate\\Database\\Eloquent\\Model\|int\|string\|null given\.$#'
 			identifier: argument.type
 			count: 1
+			path: app/Filament/Domain/Resources/Domains/Pages/ViewDomain.php
+
+		-
+			message: '#^Parameter \#1 \$domain of static method App\\Support\\IncidentProfile\:\:active\(\) expects App\\Models\\Domain, Illuminate\\Database\\Eloquent\\Model\|int\|string\|null given\.$#'
+			identifier: argument.type
+			count: 2
 			path: app/Filament/Domain/Resources/Domains/Pages/ViewDomain.php
 
 		-
@@ -733,7 +793,19 @@ parameters:
 			path: app/Filament/Domain/Resources/Domains/Pages/ViewDomain.php
 
 		-
+			message: '#^Parameter \#2 \$domain of method App\\Http\\Controllers\\DetectionSettingsController\:\:update\(\) expects App\\Models\\Domain, Illuminate\\Database\\Eloquent\\Model\|int\|string\|null given\.$#'
+			identifier: argument.type
+			count: 5
+			path: app/Filament/Domain/Resources/Domains/Pages/ViewDomain.php
+
+		-
 			message: '#^Parameter \#2 \$domain of method App\\Http\\Controllers\\DnsDeploymentController\:\:reconcile\(\) expects App\\Models\\Domain, Illuminate\\Database\\Eloquent\\Model\|int\|string\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Filament/Domain/Resources/Domains/Pages/ViewDomain.php
+
+		-
+			message: '#^Parameter \#2 \$domain of method App\\Http\\Controllers\\SecurityAlertController\:\:update\(\) expects App\\Models\\Domain, Illuminate\\Database\\Eloquent\\Model\|int\|string\|null given\.$#'
 			identifier: argument.type
 			count: 1
 			path: app/Filament/Domain/Resources/Domains/Pages/ViewDomain.php
@@ -743,6 +815,24 @@ parameters:
 			identifier: argument.type
 			count: 1
 			path: app/Filament/Domain/Resources/Domains/Pages/ViewDomain.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$client_security\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Filament/Domain/Resources/Domains/RelationManagers/ClientScriptsRelationManager.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:clientScriptSightings\(\)\.$#'
+			identifier: method.notFound
+			count: 3
+			path: app/Filament/Domain/Resources/Domains/RelationManagers/ClientScriptsRelationManager.php
+
+		-
+			message: '#^Parameter \#2 \$domain of method App\\Http\\Controllers\\ClientSecurityController\:\:approve\(\) expects App\\Models\\Domain, Illuminate\\Database\\Eloquent\\Model given\.$#'
+			identifier: argument.type
+			count: 2
+			path: app/Filament/Domain/Resources/Domains/RelationManagers/ClientScriptsRelationManager.php
 
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$disabled_at\.$#'
@@ -825,13 +915,55 @@ parameters:
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
 			identifier: property.notFound
-			count: 4
+			count: 2
+			path: app/Filament/Domain/Resources/Domains/RelationManagers/LogPushRelationManager.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:logPushDestinations\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Filament/Domain/Resources/Domains/RelationManagers/LogPushRelationManager.php
+
+		-
+			message: '#^Parameter \#1 \$domain of static method App\\Support\\LogPush\\DestinationData\:\:assertRoom\(\) expects App\\Models\\Domain, Illuminate\\Database\\Eloquent\\Model given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Filament/Domain/Resources/Domains/RelationManagers/LogPushRelationManager.php
+
+		-
+			message: '#^Parameter \#1 \$domain of method App\\Support\\AnalyticsStore\:\:mitigations\(\) expects App\\Models\\Domain, Illuminate\\Database\\Eloquent\\Model given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Filament/Domain/Resources/Domains/RelationManagers/SecurityEventsRelationManager.php
+
+		-
+			message: '#^Parameter \#1 \$domain of static method App\\Support\\DomainSecurityRules\:\:create\(\) expects App\\Models\\Domain, Illuminate\\Database\\Eloquent\\Model given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Filament/Domain/Resources/Domains/RelationManagers/SecurityEventsRelationManager.php
+
+		-
+			message: '#^Parameter \#1 \$domain of static method App\\Support\\MitigationRules\:\:describe\(\) expects App\\Models\\Domain, Illuminate\\Database\\Eloquent\\Model given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Filament/Domain/Resources/Domains/RelationManagers/SecurityEventsRelationManager.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\SecurityRule\:\:\$conditions\.$#'
+			identifier: property.notFound
+			count: 2
 			path: app/Filament/Domain/Resources/Domains/RelationManagers/SecurityRulesRelationManager.php
 
 		-
-			message: '#^Anonymous function should return App\\Models\\SecurityRule but returns Illuminate\\Database\\Eloquent\\Model\.$#'
-			identifier: return.type
+			message: '#^Access to an undefined property App\\Models\\SecurityRule\:\:\$rate_limit\.$#'
+			identifier: property.notFound
 			count: 1
+			path: app/Filament/Domain/Resources/Domains/RelationManagers/SecurityRulesRelationManager.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 3
 			path: app/Filament/Domain/Resources/Domains/RelationManagers/SecurityRulesRelationManager.php
 
 		-
@@ -844,6 +976,54 @@ parameters:
 			message: '#^Parameter \#1 \$domain of method App\\Filament\\Domain\\Resources\\Domains\\RelationManagers\\SecurityRulesRelationManager\:\:reconcile\(\) expects App\\Models\\Domain, Illuminate\\Database\\Eloquent\\Model given\.$#'
 			identifier: argument.type
 			count: 4
+			path: app/Filament/Domain/Resources/Domains/RelationManagers/SecurityRulesRelationManager.php
+
+		-
+			message: '#^Parameter \#1 \$domain of method App\\Filament\\Domain\\Resources\\Domains\\RelationManagers\\SecurityRulesRelationManager\:\:refuseDuplicate\(\) expects App\\Models\\Domain, Illuminate\\Database\\Eloquent\\Model given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Filament/Domain/Resources/Domains/RelationManagers/SecurityRulesRelationManager.php
+
+		-
+			message: '#^Parameter \#1 \$domain of static method App\\Support\\DomainSecurityRules\:\:create\(\) expects App\\Models\\Domain, Illuminate\\Database\\Eloquent\\Model given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Filament/Domain/Resources/Domains/RelationManagers/SecurityRulesRelationManager.php
+
+		-
+			message: '#^Parameter \#1 \$domain of static method App\\Support\\PlatformRulesets\:\:matchesLast24Hours\(\) expects App\\Models\\Domain, Illuminate\\Database\\Eloquent\\Model given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Filament/Domain/Resources/Domains/RelationManagers/SecurityRulesRelationManager.php
+
+		-
+			message: '#^Parameter \#1 \$domain of static method App\\Support\\PlatformRulesets\:\:namesFor\(\) expects App\\Models\\Domain, Illuminate\\Database\\Eloquent\\Model given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Filament/Domain/Resources/Domains/RelationManagers/SecurityRulesRelationManager.php
+
+		-
+			message: '#^Parameter \#1 \$domain of static method App\\Support\\SecurityPresets\:\:current\(\) expects App\\Models\\Domain, Illuminate\\Database\\Eloquent\\Model given\.$#'
+			identifier: argument.type
+			count: 2
+			path: app/Filament/Domain/Resources/Domains/RelationManagers/SecurityRulesRelationManager.php
+
+		-
+			message: '#^Parameter \#1 \$domain of static method App\\Support\\SecurityPresets\:\:hotlinkRules\(\) expects App\\Models\\Domain, Illuminate\\Database\\Eloquent\\Model given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Filament/Domain/Resources/Domains/RelationManagers/SecurityRulesRelationManager.php
+
+		-
+			message: '#^Parameter \#1 \$domain of static method App\\Support\\SecurityPresets\:\:replace\(\) expects App\\Models\\Domain, Illuminate\\Database\\Eloquent\\Model given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Filament/Domain/Resources/Domains/RelationManagers/SecurityRulesRelationManager.php
+
+		-
+			message: '#^Parameter \#1 \$domain of static method App\\Support\\SecurityRuleData\:\:assertRateLimitCapacity\(\) expects App\\Models\\Domain, Illuminate\\Database\\Eloquent\\Model given\.$#'
+			identifier: argument.type
+			count: 1
 			path: app/Filament/Domain/Resources/Domains/RelationManagers/SecurityRulesRelationManager.php
 
 		-
@@ -871,15 +1051,9 @@ parameters:
 			path: app/Filament/Domain/Resources/Domains/RelationManagers/WafExclusionsRelationManager.php
 
 		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$expires_at\.$#'
-			identifier: property.notFound
-			count: 2
-			path: app/Filament/Domain/Resources/Domains/Widgets/DomainKpiStrip.php
-
-		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$last_error\.$#'
 			identifier: property.notFound
-			count: 2
+			count: 1
 			path: app/Filament/Domain/Resources/Domains/Widgets/DomainNeedsAttention.php
 
 		-
@@ -887,6 +1061,12 @@ parameters:
 			identifier: nullsafe.neverNull
 			count: 1
 			path: app/Filament/Domain/Resources/Domains/Widgets/DomainNeedsAttention.php
+
+		-
+			message: '#^PHPDoc tag @param references unknown parameter\: \$rows$#'
+			identifier: parameter.notFound
+			count: 1
+			path: app/Filament/Domain/Widgets/AnalyticsSecurityBreakdowns.php
 
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
@@ -911,6 +1091,12 @@ parameters:
 			identifier: argument.type
 			count: 1
 			path: app/Filament/Shared/Pages/EditProfile.php
+
+		-
+			message: '#^Access to an undefined property App\\Filament\\Shared\\Pages\\NotificationChannels\:\:\$eventChoices\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Filament/Shared/Pages/NotificationChannels.php
 
 		-
 			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:cells\(\)\.$#'
@@ -1027,6 +1213,12 @@ parameters:
 			path: app/Http/Controllers/AuthController.php
 
 		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Pagination\\AbstractCursorPaginator\<int,Illuminate\\Database\\Eloquent\\Model\>\:\:through\(\) expects callable\(Illuminate\\Database\\Eloquent\\Model, int\)\: array\{id\: int, kind\: string, page\: string, resource\: string, first_seen_at\: string, last_seen_at\: string, status\: string, approved_at\: string\|null\}, Closure\(App\\Models\\ClientScriptSighting\)\: array\{id\: int, kind\: string, page\: string, resource\: string, first_seen_at\: string, last_seen_at\: string, status\: string, approved_at\: string\|null\} given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Http/Controllers/ClientSecurityController.php
+
+		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
 			identifier: property.notFound
 			count: 3
@@ -1129,6 +1321,18 @@ parameters:
 			path: app/Http/Controllers/GeoDnsController.php
 
 		-
+			message: '#^Cannot call method toIso8601String\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Http/Controllers/IncidentProfileController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 3
+			path: app/Http/Controllers/LogPushController.php
+
+		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
 			identifier: property.notFound
 			count: 1
@@ -1139,12 +1343,6 @@ parameters:
 			identifier: nullsafe.neverNull
 			count: 1
 			path: app/Http/Controllers/MetricsController.php
-
-		-
-			message: '#^Anonymous function should return App\\Models\\SecurityRule but returns Illuminate\\Database\\Eloquent\\Model\.$#'
-			identifier: return.type
-			count: 1
-			path: app/Http/Controllers/SecurityController.php
 
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$expires_at\.$#'
@@ -1183,12 +1381,6 @@ parameters:
 			path: app/Http/Controllers/TlsController.php
 
 		-
-			message: '#^Parameter \#1 \$certificate of method App\\Http\\Controllers\\TlsController\:\:certificateData\(\) expects App\\Models\\TlsCertificate, Illuminate\\Database\\Eloquent\\Model given\.$#'
-			identifier: argument.type
-			count: 1
-			path: app/Http/Controllers/TlsController.php
-
-		-
 			message: '#^Parameter \#1 \$callback of method Illuminate\\Pagination\\AbstractCursorPaginator\<int,Laravel\\Sanctum\\PersonalAccessToken\>\:\:through\(\) expects callable\(Laravel\\Sanctum\\PersonalAccessToken, int\)\: array\{id\: int, name\: string, token_last_six\: string\|null, abilities\: array\|null, expires_at\: string\|null, domain_ids\: list\<int\>, last_used_at\: string\|null, created_at\: string\|null\}, Closure\(App\\Models\\ApiToken\)\: array\{id\: int, name\: string, token_last_six\: string\|null, abilities\: array\|null, expires_at\: string\|null, domain_ids\: list\<int\>, last_used_at\: string\|null, created_at\: string\|null\} given\.$#'
 			identifier: argument.type
 			count: 1
@@ -1199,6 +1391,12 @@ parameters:
 			identifier: argument.type
 			count: 1
 			path: app/Http/Controllers/UsageController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Domain\:\:\$waf_tuning\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/WafController.php
 
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$active_pool_id\.$#'
@@ -1585,6 +1783,186 @@ parameters:
 			path: app/Http/Resources/EdgeRevisionResource.php
 
 		-
+			message: '#^Access to an undefined property App\\Http\\Resources\\LogPushDestinationResource\:\:\$bytes_pushed\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Resources/LogPushDestinationResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Http\\Resources\\LogPushDestinationResource\:\:\$consecutive_failures\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Resources/LogPushDestinationResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Http\\Resources\\LogPushDestinationResource\:\:\$created_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Resources/LogPushDestinationResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Http\\Resources\\LogPushDestinationResource\:\:\$datasets\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Resources/LogPushDestinationResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Http\\Resources\\LogPushDestinationResource\:\:\$destination_hint\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Resources/LogPushDestinationResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Http\\Resources\\LogPushDestinationResource\:\:\$domain_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Resources/LogPushDestinationResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Http\\Resources\\LogPushDestinationResource\:\:\$failures_total\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Resources/LogPushDestinationResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Http\\Resources\\LogPushDestinationResource\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Resources/LogPushDestinationResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Http\\Resources\\LogPushDestinationResource\:\:\$kind\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Resources/LogPushDestinationResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Http\\Resources\\LogPushDestinationResource\:\:\$lag_seconds\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Resources/LogPushDestinationResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Http\\Resources\\LogPushDestinationResource\:\:\$last_delivery_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Resources/LogPushDestinationResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Http\\Resources\\LogPushDestinationResource\:\:\$last_error\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Resources/LogPushDestinationResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Http\\Resources\\LogPushDestinationResource\:\:\$last_gap_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Resources/LogPushDestinationResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Http\\Resources\\LogPushDestinationResource\:\:\$name\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Resources/LogPushDestinationResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Http\\Resources\\LogPushDestinationResource\:\:\$next_run_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Resources/LogPushDestinationResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Http\\Resources\\LogPushDestinationResource\:\:\$rows_pushed\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Resources/LogPushDestinationResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Http\\Resources\\LogPushDestinationResource\:\:\$status\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Resources/LogPushDestinationResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Http\\Resources\\LogPushDestinationResource\:\:\$truncate_client_ip\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Resources/LogPushDestinationResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Http\\Resources\\NotificationChannelResource\:\:\$consecutive_failures\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Resources/NotificationChannelResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Http\\Resources\\NotificationChannelResource\:\:\$created_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Resources/NotificationChannelResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Http\\Resources\\NotificationChannelResource\:\:\$destination_hint\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Resources/NotificationChannelResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Http\\Resources\\NotificationChannelResource\:\:\$events\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Resources/NotificationChannelResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Http\\Resources\\NotificationChannelResource\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Resources/NotificationChannelResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Http\\Resources\\NotificationChannelResource\:\:\$last_error\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Resources/NotificationChannelResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Http\\Resources\\NotificationChannelResource\:\:\$last_failure_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Resources/NotificationChannelResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Http\\Resources\\NotificationChannelResource\:\:\$last_success_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Resources/NotificationChannelResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Http\\Resources\\NotificationChannelResource\:\:\$name\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Resources/NotificationChannelResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Http\\Resources\\NotificationChannelResource\:\:\$paused_reason\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Resources/NotificationChannelResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Http\\Resources\\NotificationChannelResource\:\:\$status\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Resources/NotificationChannelResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Http\\Resources\\NotificationChannelResource\:\:\$type\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Resources/NotificationChannelResource.php
+
+		-
 			message: '#^Access to an undefined property App\\Http\\Resources\\OperationResource\:\:\$attempts\.$#'
 			identifier: property.notFound
 			count: 1
@@ -1732,6 +2110,18 @@ parameters:
 			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:isDisabled\(\)\.$#'
 			identifier: method.notFound
 			count: 1
+			path: app/Jobs/DeliverNotification.php
+
+		-
+			message: '#^Cannot call method lt\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Jobs/DeliverNotification.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:isDisabled\(\)\.$#'
+			identifier: method.notFound
+			count: 1
 			path: app/Jobs/DispatchOriginTest.php
 
 		-
@@ -1759,6 +2149,12 @@ parameters:
 			path: app/Jobs/IssueManagedCertificate.php
 
 		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$expires_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Jobs/IssueManagedCertificate.php
+
+		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$hostname\.$#'
 			identifier: property.notFound
 			count: 1
@@ -1775,6 +2171,30 @@ parameters:
 			identifier: property.notFound
 			count: 2
 			path: app/Jobs/IssueManagedCertificate.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Jobs/PushDomainLogs.php
+
+		-
+			message: '#^Argument of an invalid type string supplied for foreach, only iterables are supported\.$#'
+			identifier: foreach.nonIterable
+			count: 1
+			path: app/Jobs/PushDomainLogs.php
+
+		-
+			message: '#^Dead catch \- Throwable is never thrown in the try block\.$#'
+			identifier: catch.neverThrown
+			count: 1
+			path: app/Jobs/PushDomainLogs.php
+
+		-
+			message: '#^Parameter \#2 \$domain of static method App\\Support\\Notifications\\EventPublisher\:\:publish\(\) expects App\\Models\\Domain\|null, Illuminate\\Database\\Eloquent\\Model\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Jobs/PushDomainLogs.php
 
 		-
 			message: '#^Using nullsafe property access "\?\-\>id" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
@@ -1797,7 +2217,7 @@ parameters:
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$expires_at\.$#'
 			identifier: property.notFound
-			count: 2
+			count: 1
 			path: app/Jobs/ReconcileEdgeDomain.php
 
 		-
@@ -1865,6 +2285,12 @@ parameters:
 			identifier: method.notFound
 			count: 1
 			path: app/Logging/ConfigureStructuredLogging.php
+
+		-
+			message: '#^Cannot call method toIso8601String\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 3
+			path: app/Models/ClientScriptSighting.php
 
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
@@ -1957,6 +2383,12 @@ parameters:
 			path: app/Models/EdgeTask.php
 
 		-
+			message: '#^Parameter \#2 \$haystack of function in_array expects array, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Models/NotificationChannel.php
+
+		-
 			message: '#^Call to an undefined method Laravel\\Sanctum\\PersonalAccessToken\:\:domains\(\)\.$#'
 			identifier: method.notFound
 			count: 1
@@ -1973,6 +2405,18 @@ parameters:
 			identifier: return.type
 			count: 1
 			path: app/Models/User.php
+
+		-
+			message: '#^Parameter \#2 \$event of method App\\Notifications\\Channels\\ProviderChannel\:\:deliver\(\) expects App\\Notifications\\PlatformEvent, Illuminate\\Notifications\\Notification given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Notifications/Channels/ProviderChannel.php
+
+		-
+			message: '#^Match expression does not handle remaining value\: string$#'
+			identifier: match.unhandled
+			count: 1
+			path: app/Notifications/PlatformEvent.php
 
 		-
 			message: '#^Access to an undefined property App\\Models\\DnsCluster\:\:\$healthy\.$#'
@@ -2113,6 +2557,12 @@ parameters:
 			path: app/Support/DomainNameserverVerification.php
 
 		-
+			message: '#^Anonymous function should return App\\Models\\SecurityRule but returns Illuminate\\Database\\Eloquent\\Model\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Support/DomainSecurityRules.php
+
+		-
 			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:isSimpleAnycast\(\)\.$#'
 			identifier: method.notFound
 			count: 2
@@ -2125,10 +2575,40 @@ parameters:
 			path: app/Support/EdgePoolRoutingData.php
 
 		-
+			message: '#^Match expression does not handle remaining value\: string$#'
+			identifier: match.unhandled
+			count: 2
+			path: app/Support/LogPush/LogDatasets.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Domain\:\:\$waf_tuning\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Support/ManagedWaf.php
+
+		-
 			message: '#^Using nullsafe property access "\?\-\>customer_nameserver_pairs" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
 			identifier: nullsafe.neverNull
 			count: 1
 			path: app/Support/NameserverPairs.php
+
+		-
+			message: '#^Match expression does not handle remaining value\: mixed$#'
+			identifier: match.unhandled
+			count: 1
+			path: app/Support/Notifications/ChannelData.php
+
+		-
+			message: '#^Method App\\Support\\Notifications\\ChannelData\:\:webhook\(\) never assigns null to &\$signing so it can be removed from the by\-ref type\.$#'
+			identifier: parameterByRef.unusedType
+			count: 1
+			path: app/Support/Notifications/ChannelData.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:isDisabled\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Support/Notifications/EventPublisher.php
 
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$continent_code\.$#'
@@ -2141,6 +2621,48 @@ parameters:
 			identifier: property.notFound
 			count: 1
 			path: app/Support/PlatformDnsZone.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\PlatformRulesetRule\:\:\$conditions\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Support/PlatformRulesets.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\PlatformRulesetRule\:\:\$rate_limit\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Support/PlatformRulesets.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Support/PlatformRulesets.php
+
+		-
+			message: '#^Anonymous function should return App\\Models\\PlatformRulesetRule but returns Illuminate\\Database\\Eloquent\\Model\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Support/PlatformRulesets.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,Illuminate\\Database\\Eloquent\\Model\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Support/PlatformRulesets.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,Illuminate\\Database\\Eloquent\\Model\>\:\:map\(\) expects callable\(Illuminate\\Database\\Eloquent\\Model, int\)\: array\{id\: lowercase\-string&non\-falsy\-string, ruleset\: string, name\: string\|null, conditions\: mixed, rate_limit\: mixed, action\: string, priority\: int\}, Closure\(App\\Models\\PlatformRulesetRule\)\: array\{id\: lowercase\-string&non\-falsy\-string, ruleset\: string, name\: string\|null, conditions\: mixed, rate_limit\: mixed, action\: string, priority\: int\} given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Support/PlatformRulesets.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Support\\Collection\<int,App\\Models\\PlatformRuleset\>\:\:flatMap\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Support/PlatformRulesets.php
 
 		-
 			message: '#^Access to an undefined property App\\Models\\SystemSetting\:\:\$values\.$#'
@@ -2227,10 +2749,34 @@ parameters:
 			path: app/Support/PowerDnsZone.php
 
 		-
-			message: '#^Match expression does not handle remaining value\: mixed$#'
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$action\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Support/SecurityPresets.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$conditions\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Support/SecurityPresets.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$enabled\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Support/SecurityPresets.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Support\\HigherOrderCollectionProxy\<string, Illuminate\\Database\\Eloquent\\Model, Illuminate\\Database\\Eloquent\\Collection\<int, Illuminate\\Database\\Eloquent\\Model\>\>\:\:\$enabled\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Support/SecurityPresets.php
+
+		-
+			message: '#^Match expression does not handle remaining value\: string$#'
 			identifier: match.unhandled
 			count: 1
-			path: app/Support/SecurityConfig.php
+			path: app/Support/SecurityRuleData.php
 
 		-
 			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Builder\<Illuminate\\Database\\Eloquent\\Model\>\:\:readyForTraffic\(\)\.$#'

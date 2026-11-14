@@ -37,6 +37,9 @@ class CacheController extends Controller
         if (array_diff(array_keys($data['status_ttl_seconds']), array_keys(CachePolicy::DEFAULT_TTLS)) !== []) {
             throw ValidationException::withMessages(['status_ttl_seconds' => 'TTL policy may contain only approved HTTP status codes.']);
         }
+        if (($errors = CachePolicy::pathRuleErrors($data['path_rules'])) !== []) {
+            throw ValidationException::withMessages($errors);
+        }
         DB::transaction(function () use ($domain, $data, $request): void {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
             $locked->update(['cache_settings' => $data, 'revision' => $locked->revision + 1]);

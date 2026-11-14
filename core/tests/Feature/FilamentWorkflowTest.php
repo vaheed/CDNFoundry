@@ -469,18 +469,39 @@ class FilamentWorkflowTest extends TestCase
         $component = fn () => Livewire::test(ViewDomain::class, ['record' => $domain->id]);
 
         $component()->assertSee('Cache UI')->assertSee('cache-ui.example.test')
-            ->assertSee('Domain actions')->assertSee('Delivery')->assertSee('Cache')->assertSee('TLS')
+            ->assertSee('More actions')->assertSee('Delivery')->assertSee('Cache')->assertSee('TLS')->assertSee('Protection')
             ->assertDontSee('Deploy proxy configuration')
-            ->assertSee('Cache settings')->assertSee('Enable development mode')->assertSee('Purge cache')
+            ->assertSeeHtml('data-testid="overview-action-cache-settings"')->assertSeeHtml('data-testid="overview-action-development-mode"')->assertSeeHtml('data-testid="overview-action-purge-cache"')
             ->callAction('cacheSettings', data: [
                 'enabled' => true, 'edge_ttl_seconds' => 600, 'browser_ttl_seconds' => 120,
                 'maximum_object_bytes' => 104857600, 'respect_origin_headers' => true,
-                'query_policy' => 'include_all', 'query_parameters' => [], 'ignore_cookie_names' => ['session_id'],
+                'query_policy' => 'include_all', 'query_parameters' => [], 'ignore_cookie_names' => ['session_id', '_ga_*'],
+                'path_rules' => [
+                    ['match' => 'prefix', 'value' => '/static/', 'action' => 'ttl', 'ttl_seconds' => 86400],
+                    ['match' => 'suffix', 'value' => '.php', 'action' => 'bypass', 'ttl_seconds' => null],
+                ],
                 'status_ttl_seconds' => ['200' => 600, '404' => 30], 'admission_requests' => 2,
                 'stale_if_error_seconds' => 30, 'stale_while_revalidate_seconds' => 15,
                 'mode' => 'normal', 'maximum_variants_per_resource' => 16,
             ])->assertHasNoActionErrors();
         $this->assertSame(600, $domain->refresh()->cache_settings['edge_ttl_seconds']);
+        $this->assertSame(['session_id', '_ga_*'], $domain->cache_settings['ignore_cookie_names']);
+        $this->assertSame([
+            ['match' => 'prefix', 'value' => '/static/', 'action' => 'ttl', 'ttl_seconds' => 86400],
+            ['match' => 'suffix', 'value' => '.php', 'action' => 'bypass', 'ttl_seconds' => null],
+        ], $domain->cache_settings['path_rules']);
+        $component()->callAction('cacheSettings', data: [
+            ...$domain->cache_settings,
+            'path_rules' => [['match' => 'prefix', 'value' => 'static', 'action' => 'bypass', 'ttl_seconds' => null]],
+        ])->assertHasActionErrors(['path_rules.0.value']);
+        $component()->callAction('cacheSettings', data: [
+            ...$domain->cache_settings,
+            'path_rules' => [['match' => 'prefix', 'value' => '/a/', 'action' => 'ttl', 'ttl_seconds' => '']],
+        ])->assertHasActionErrors(['path_rules.0.ttl_seconds']);
+        $component()->callAction('cacheSettings', data: [
+            ...$domain->cache_settings,
+            'path_rules' => [['match' => 'prefix', 'value' => 'static', 'action' => 'bypass', 'ttl_seconds' => '']],
+        ])->assertHasActionErrors(['path_rules.0.value']);
 
         $component()->callAction('developmentMode', data: ['duration_minutes' => 30])->assertHasNoActionErrors();
         $this->assertTrue($domain->refresh()->cache_development_mode_until->isFuture());
@@ -532,6 +553,57 @@ class FilamentWorkflowTest extends TestCase
         Queue::assertPushed(ReconcileEdgeDomain::class, fn (ReconcileEdgeDomain $job): bool => $job->domainId === $domain->id);
     }
 
+    public function test_the_waf_dialog_saves_adjustments_to_the_managed_rules(): void
+    {
+        Queue::fake();
+        EdgePool::query()->where('kind', 'shared')->update(['waf_capable' => true, 'waf_runtime_version' => 'sha256:test']);
+        $admin = User::factory()->admin()->create();
+        $domain = Domain::query()->create(['name' => 'waf-ui.example.test', 'display_name' => 'WAF UI', 'revision' => 1]);
+        Filament::setCurrentPanel(Filament::getPanel('admin'));
+        $this->actingAs($admin);
+
+        Livewire::test(ViewDomain::class, ['record' => $domain->id])
+            ->mountAction('wafProfile')
+            ->assertSet('mountedActions.0.data.profile', 'off')
+            ->fillForm(['profile' => 'balanced', 'paranoia_level' => 2, 'inbound_threshold' => 7, 'disabled_categories' => ['xss'], 'disabled_rules' => [942100], 'log_only_rules' => [913100]])
+            ->callMountedAction()
+            ->assertHasNoActionErrors();
+
+        $domain->refresh();
+        $this->assertSame('balanced', $domain->waf_profile);
+        $this->assertSame(['paranoia_level' => 2, 'inbound_threshold' => 7, 'disabled_categories' => ['xss'], 'disabled_rules' => [942100], 'log_only_rules' => [913100]], $domain->waf_tuning);
+        Queue::assertPushed(ReconcileEdgeDomain::class);
+
+        // The dialog opens with the saved adjustments, and clearing every field clears the tuning.
+        Livewire::test(ViewDomain::class, ['record' => $domain->id])
+            ->mountAction('wafProfile')
+            ->assertSet('mountedActions.0.data.disabled_rules', [942100])
+            ->fillForm(['paranoia_level' => null, 'inbound_threshold' => null, 'disabled_categories' => [], 'disabled_rules' => [], 'log_only_rules' => []])
+            ->callMountedAction()
+            ->assertHasNoActionErrors();
+        $this->assertNull($domain->refresh()->waf_tuning);
+    }
+
+    public function test_the_security_alert_dialog_saves_shows_and_removes_the_threshold(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $domain = Domain::query()->create(['name' => 'alert-ui.example.test', 'display_name' => 'Alert UI', 'revision' => 1]);
+        Filament::setCurrentPanel(Filament::getPanel('admin'));
+        $this->actingAs($admin);
+
+        Livewire::test(ViewDomain::class, ['record' => $domain->id])
+            ->assertDontSee('Remove alert')->mountAction('securityAlert')->assertSet('mountedActions.0.data.period_minutes', 5)
+            ->fillForm(['threshold' => 250, 'period_minutes' => 15])->callMountedAction()->assertHasNoActionErrors();
+        $this->assertSame(['threshold' => 250, 'period_minutes' => 15], $domain->refresh()->security_alert);
+
+        Livewire::test(ViewDomain::class, ['record' => $domain->id])
+            ->mountAction('securityAlert')->assertSet('mountedActions.0.data.threshold', 250)
+            ->fillForm(['threshold' => 0])->callMountedAction()->assertHasActionErrors(['threshold']);
+        $this->assertSame(250, $domain->refresh()->security_alert['threshold']);
+        Livewire::test(ViewDomain::class, ['record' => $domain->id])->callAction(['securityAlert', 'turnOff']);
+        $this->assertNull($domain->refresh()->security_alert);
+    }
+
     public function test_domain_can_be_deleted_from_the_domain_page_and_the_action_then_disappears(): void
     {
         Queue::fake();
@@ -560,17 +632,17 @@ class FilamentWorkflowTest extends TestCase
         $this->actingAs($admin);
 
         Livewire::test(ViewDomain::class, ['record' => $domain->id])
-            ->assertSee('Start maintenance')
-            ->assertSee('Enable Under Attack mode')
-            ->assertSee('Web application firewall')
-            ->assertDontSee('Restrict domain')
+            ->assertSeeHtml('data-testid="overview-action-start-maintenance"')
+            ->assertSee('Under attack mode')
+            ->assertDontSee('Enable Under Attack mode')
+            ->assertSee('Firewall (WAF)')
             ->callAction('startMaintenance', data: ['body' => 'Planned maintenance'])
             ->assertHasNoActionErrors();
 
         $this->assertSame(['status' => 503, 'body' => 'Planned maintenance'], $domain->refresh()->proxy_settings['maintenance']);
 
         Livewire::test(ViewDomain::class, ['record' => $domain->id])
-            ->assertSee('End maintenance')
+            ->assertSeeHtml('data-testid="overview-action-end-maintenance"')
             ->callAction('endMaintenance')
             ->assertHasNoActionErrors();
 

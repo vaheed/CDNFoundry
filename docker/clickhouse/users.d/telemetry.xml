@@ -66,6 +66,7 @@
         <query>GRANT SELECT ON cdnf.dns_events</query>
         <query>GRANT SELECT ON cdnf.edge_hourly</query>
         <query>GRANT SELECT ON cdnf.dns_hourly</query>
+        <query>GRANT SELECT ON cdnf.security_hourly</query>
         <query>GRANT SELECT ON cdnf.edge_daily</query>
         <query>GRANT SELECT ON cdnf.dns_daily</query>
         <query>GRANT SELECT ON cdnf.edge_traffic_1m</query>

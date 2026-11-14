@@ -108,7 +108,7 @@ def main() -> None:
 
     status, components = request("GET", "/api/admin/system/components", token=token)
     assert status == 200 and components["data"]["status"] in {"healthy", "degraded", "unavailable"}, components
-    assert set(components["data"]["queues"]) == {"interactive", "dns", "edge", "verification", "tls", "purge", "bulk_maintenance"}
+    assert set(components["data"]["queues"]) == {"interactive", "dns", "edge", "verification", "tls", "purge", "bulk_maintenance", "notifications", "log-push"}
     assert request("GET", "/metrics")[0] == 404
 
     key = str(uuid.uuid4())

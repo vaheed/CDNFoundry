@@ -38,7 +38,7 @@ erDiagram
 | Edge | `edge_pools` (kind, routing mode, optional pool-owned Anycast pair), `edge_pool_endpoints` (explicit per-edge participation/readiness and Geo-Unicast pairs), `edges`, `edge_cells`, `domain_edge_placements`, `edge_revisions`, `edge_artifacts`, `edge_tasks`, `domain_edge_cells`, `edge_probe_results` |
 | Cache | domain cache fields and `cache_purges` linked to edge tasks |
 | TLS | `tls_certificates`, `tls_orders`, `acme_accounts`, `acme_challenges` |
-| Security | domain security state, `security_rules`, `waf_exclusions`, `security_events`, `emergency_modes` |
+| Security | domain security state, `security_rules`, `platform_rulesets`, `platform_ruleset_rules`, `platform_ruleset_domains`, `waf_exclusions`, `security_events`, `emergency_modes` |
 | Analytics and operations | `usage_rollups`, `generated_reports`, `backups`, `fleet_releases`, `fleet_rollouts`, `fleet_rollout_edges`, `control_nodes`, `control_plane_state`, Laravel jobs and failed jobs |
 | Product policy | `system_settings`: JSONB groups checked against `core/config/platform.php` |
 

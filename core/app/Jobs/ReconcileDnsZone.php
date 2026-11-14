@@ -8,6 +8,7 @@ use App\Models\DnsDeployment;
 use App\Models\Domain;
 use App\Models\DomainEdgePlacement;
 use App\Models\Operation;
+use App\Support\Notifications\EventPublisher;
 use App\Support\PlatformSettings;
 use App\Support\PowerDnsClient;
 use App\Support\PowerDnsZone;
@@ -57,6 +58,11 @@ class ReconcileDnsZone implements ShouldBeUniqueUntilProcessing, ShouldQueue
     public function failed(Throwable $exception): void
     {
         $this->operations()->update(['status' => 'failed', 'error' => mb_substr($exception->getMessage(), 0, 4000), 'finished_at' => now()]);
+        // The job has used its retry budget, so one notification is sent for the exhausted run.
+        $domain = Domain::query()->find($this->domainId);
+        if ($domain !== null) {
+            EventPublisher::publish('dns.deployment_failed', $domain, "DNS deployment failed for {$domain->name}", mb_substr($exception->getMessage(), 0, 300));
+        }
     }
 
     public function handle(PowerDnsClient $client): void

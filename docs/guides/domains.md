@@ -178,7 +178,7 @@ service. The panel then shows **Unknown** and nothing else changes.
 `dns_lifecycle.deprovision_delay_days`. After that, the scheduler removes the
 zone in bounded steps and retires the domain.
 
-**Delete** is in the **Domain actions** menu on the domain page, and in the API as
+**Delete** is in the **More actions** menu on the domain page, and in the API as
 `DELETE /api/domains/{domain}`. It asks for confirmation and states the delay before
 the zone is removed. It starts retirement in the background. It does not remove the row at
 once. Each PoP must acknowledge its tombstone first, and the name then stays

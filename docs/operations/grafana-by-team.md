@@ -109,8 +109,11 @@ For the response steps, follow the [runbooks](runbooks.md).
 **Start with:** **Control plane**. It shows component health, API and panel
 latency, Horizon queues, scheduler runs, failed jobs, and ACME orders.
 
-**Every day:** open **Daily checks**. It lists every daily check with a pass or
-fail state. Then check **Backups and recovery** for the age of the last backup
+**Every day:** open **Daily checks**. It counts the checks that fail, are not
+reported, and pass, and lists each one with what it checks and what to do when it
+fails, failures first. **Not reported** means the metric behind it is missing,
+usually because that part is not installed (a second control node), not that it
+failed. Then check **Backups and recovery** for the age of the last backup
 and the result of the last integrity check.
 
 | You see | Open |

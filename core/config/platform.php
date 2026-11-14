@@ -118,6 +118,31 @@ return [
                 ],
             ],
         ],
+        'notifications' => [
+            'label' => 'Notifications',
+            'description' => 'Delivery limits for Telegram, Discord, Slack, and webhook notifications sent by the notifier. Administrator channels always work; this group governs domain-user channels and bounds.',
+            'fields' => [
+                'domain_user_channels' => ['type' => 'boolean', 'label' => 'Domain users can add notification channels', 'default' => false, 'description' => 'When on, a domain user adds Telegram, Discord, or Slack channels and receives events for assigned domains only. When off, existing user channels stop sending and are kept.', 'rules' => ['required', 'boolean']],
+                'max_channels_per_user' => ['type' => 'integer', 'label' => 'Channels per user', 'default' => 5, 'description' => 'Maximum notification channels one domain user may keep.', 'rules' => ['required', 'integer', 'between:1,20']],
+                'max_platform_channels' => ['type' => 'integer', 'label' => 'Platform channels', 'default' => 20, 'description' => 'Maximum administrator channels for the whole platform.', 'rules' => ['required', 'integer', 'between:1,100']],
+                'channel_messages_per_minute' => ['type' => 'integer', 'label' => 'Messages per channel per minute', 'default' => 6, 'description' => 'Further events inside the minute are merged into one digest message sent when the minute ends.', 'rules' => ['required', 'integer', 'between:1,60']],
+                'pause_after_failures' => ['type' => 'integer', 'label' => 'Pause after consecutive failures', 'default' => 10, 'description' => 'A channel whose deliveries fail this many times in a row is paused and its owner sees why. Resume it after fixing the destination.', 'rules' => ['required', 'integer', 'between:3,100']],
+                'origin_error_percent' => ['type' => 'integer', 'label' => 'Origin error threshold (percent)', 'default' => 20, 'description' => 'A domain whose requests failed at the origin at or above this share over five minutes sends one "origin errors" notification, then waits an hour.', 'rules' => ['required', 'integer', 'between:1,100']],
+                'origin_error_min_requests' => ['type' => 'integer', 'label' => 'Origin error minimum requests', 'default' => 100, 'description' => 'A domain needs at least this many requests in the five minutes before its origin error share is judged.', 'rules' => ['required', 'integer', 'between:10,100000']],
+            ],
+        ],
+        'log_push' => [
+            'label' => 'Log push',
+            'description' => 'Lets domain users send the logs of their own domains to an endpoint they control. Central platform logs are not affected.',
+            'fields' => [
+                'domain_user_log_push' => ['type' => 'boolean', 'label' => 'Domain users can push logs to their own endpoint', 'default' => false, 'description' => 'When off, every push stops within a minute and the destinations are kept.', 'rules' => ['required', 'boolean']],
+                'max_destinations_per_domain' => ['type' => 'integer', 'label' => 'Destinations per domain', 'default' => 2, 'description' => 'Maximum log push destinations one domain may have.', 'rules' => ['required', 'integer', 'between:1,5']],
+                'max_destinations' => ['type' => 'integer', 'label' => 'Destinations on the platform', 'default' => 2000, 'description' => 'Maximum log push destinations across all domains. It bounds the worker time spent each minute.', 'rules' => ['required', 'integer', 'between:1,20000']],
+                'batch_rows' => ['type' => 'integer', 'label' => 'Rows per batch', 'default' => 5000, 'description' => 'Maximum rows in one delivery. A batch is compressed before it is sent.', 'rules' => ['required', 'integer', 'between:100,50000']],
+                'max_batches_per_run' => ['type' => 'integer', 'label' => 'Batches per destination per minute', 'default' => 5, 'description' => 'A destination that is behind catches up over several minutes instead of holding the worker.', 'rules' => ['required', 'integer', 'between:1,20']],
+                'failure_notify_after' => ['type' => 'integer', 'label' => 'Notify after failures', 'default' => 5, 'description' => 'A destination that fails this many deliveries in a row sends one "log push failing" notification.', 'rules' => ['required', 'integer', 'between:1,100']],
+            ],
+        ],
         'rate_limits' => [
             'label' => 'API rate limits',
             'description' => 'Per-identity request limits that protect interactive and runtime API lanes.',

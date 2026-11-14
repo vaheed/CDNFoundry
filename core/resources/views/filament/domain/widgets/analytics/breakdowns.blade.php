@@ -1,8 +1,8 @@
 <x-filament-widgets::widget>
-    <x-filament::section heading="Breakdown" data-testid="analytics-breakdowns">
-        <x-filament::tabs label="Breakdown" class="cdn-widget-tabs">
+    <x-filament::section :heading="$heading ?? 'Breakdown'" :data-testid="$sectionId ?? 'analytics-breakdowns'">
+        <x-filament::tabs :label="$heading ?? 'Breakdown'" class="cdn-widget-tabs">
             @foreach ($tabs as $key => $label)
-                <x-filament::tabs.item :active="$active === $key" wire:click="selectTab('{{ $key }}')" data-testid="analytics-breakdown-{{ $key }}">{{ $label }}</x-filament::tabs.item>
+                <x-filament::tabs.item :active="$active === $key" wire:click="selectTab('{{ $key }}')" data-testid="{{ $prefix ?? 'analytics-breakdown' }}-{{ $key }}">{{ $label }}</x-filament::tabs.item>
             @endforeach
         </x-filament::tabs>
         <div class="mt-3" wire:loading.class="opacity-60" wire:target="selectTab,showMore,showFewer">
@@ -19,7 +19,7 @@
                     @foreach ($rows as $row)
                         <tr>@foreach ($columns as $key => $label)
                             @if ($key === 'label')
-                                <td class="px-3 py-2 font-medium" @if (mb_strlen($row[$key]) > 40) title="{{ $row[$key] }}" @endif><span @class(['cdn-code' => $active === 'paths'])>{{ $row[$key] }}</span></td>
+                                <td class="px-3 py-2 font-medium" @if (mb_strlen($row[$key]) > 40) title="{{ $row[$key] }}" @endif><span @class(['cdn-code' => in_array($active, ['paths', 'agents'], true)])>{{ $row[$key] }}</span></td>
                             @elseif ($key === 'secondary')
                                 <td class="hidden px-3 py-2 md:table-cell">{{ $row[$key] }}</td>
                             @else
@@ -28,7 +28,7 @@
                         @endforeach</tr>
                     @endforeach
                 </x-ui.data-table>
-                @include('filament.domain.widgets.analytics.more', ['hasMore' => $hasMore, 'expanded' => $this->limit > 10, 'more' => 'showMore', 'fewer' => 'showFewer', 'testid' => 'analytics-breakdown-more'])
+                @include('filament.domain.widgets.analytics.more', ['hasMore' => $hasMore, 'expanded' => $this->limit > 10, 'more' => 'showMore', 'fewer' => 'showFewer', 'testid' => ($prefix ?? 'analytics-breakdown').'-more'])
             @endif
         </div>
     </x-filament::section>

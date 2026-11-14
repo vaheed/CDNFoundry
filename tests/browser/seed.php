@@ -11,10 +11,15 @@ use App\Models\Edge;
 use App\Models\EdgePool;
 use App\Models\EdgeProbeResult;
 use App\Models\EdgeRevision;
+use App\Models\LogPushDestination;
+use App\Models\NotificationChannel;
 use App\Models\Operation;
+use App\Models\PlatformRuleset;
+use App\Models\SystemSetting;
 use App\Models\SecurityEvent;
 use App\Models\User;
 use App\Support\DnsRecordData;
+use App\Support\SecurityRuleData;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
@@ -146,4 +151,68 @@ AuditLog::record(null, 'security.automatic_state_changed', $showcase, ['from' =>
     ->forceFill(['created_at' => now()->subMinutes(2)])->save();
 AuditLog::record(null, 'security.automatic_state_changed', $showcase, ['from' => 'suspected', 'to' => 'normal', 'cause' => 'quiet_period', 'quiet_minutes' => 10, 'overlay_sequence' => 2])
     ->forceFill(['created_at' => now()->subMinute()])->save();
+
+// Notifications: the switch for domain users is on, with an administrator channel, a user channel, and a paused channel whose reason is long.
+$notifications = SystemSetting::query()->findOrFail('notifications');
+$notifications->update(['values' => [...$notifications->values, 'domain_user_channels' => true]]);
+foreach ([
+    [null, 'telegram', 'Operations chat for the whole platform on call rotation', 'Telegram chat -1001234567890', null, 'paused', 'Paused so the browser suite makes no outbound calls: the stack runs queues synchronously.'],
+    [null, 'webhook', 'Pager bridge', 'Webhook to alerts.example.com', null, 'paused', 'Paused so the browser suite makes no outbound calls: the stack runs queues synchronously.'],
+    [$user->id, 'slack', 'Team channel', 'Slack webhook on hooks.slack.com, ending wxyz', ['certificate.failed', 'dns.deployment_failed'], 'active', null],
+    [$user->id, 'discord', 'Weekend alerts with a deliberately long channel name to check truncation', 'Discord webhook on discord.com, ending 6789', ['certificate.expiring'], 'paused',
+        'Paused after 10 failed deliveries in a row. Last error: Discord answered HTTP 404, so the webhook was probably deleted on the Discord side.'],
+] as [$owner, $type, $name, $hint, $events, $status, $reason]) {
+    $channel = new NotificationChannel(['user_id' => $owner, 'type' => $type, 'name' => $name, 'destination_hint' => $hint, 'events' => $events, 'status' => $status,
+        'consecutive_failures' => $status === 'paused' ? 10 : 0, 'paused_reason' => $reason, 'last_error' => $reason === null ? null : 'Discord answered HTTP 404.']);
+    $channel->storeSecrets(['webhook_url' => 'https://example.invalid/never-used', 'bot_token' => 'x', 'chat_id' => '1']);
+    $channel->save();
+}
+
+// Custom rules on the first assigned domain: a long name, IPv6, a list, and a five-condition rule, each with a different action.
+$rulesDomain = Domain::query()->whereHas('users', fn ($users) => $users->whereKey($user->id))->orderBy('id')->firstOrFail();
+foreach ([
+    ['Block the admin area for visitors from outside the European Union with a deliberately long name', 'block', 10, [['field' => 'path', 'operator' => 'starts_with', 'value' => '/admin'], ['field' => 'continent', 'operator' => 'not_equals', 'value' => 'EU']]],
+    ['Allow the office network', 'allow', 20, [['field' => 'client_ip', 'operator' => 'in_list', 'value' => ['203.0.113.0/24', '2001:db8:abcd::/48']]]],
+    [null, 'challenge', 30, [['field' => 'path', 'operator' => 'starts_with', 'value' => '/login'], ['field' => 'method', 'operator' => 'equals', 'value' => 'POST'], ['field' => 'header', 'name' => 'x-api-key', 'operator' => 'equals', 'value' => 'none'], ['field' => 'cookie_present', 'operator' => 'equals', 'name' => 'session', 'value' => false], ['field' => 'body_size', 'operator' => 'less_than', 'value' => 4096]]],
+] as [$name, $action, $priority, $conditions]) {
+    $rulesDomain->securityRules()->create(['name' => $name, 'action' => $action, 'priority' => $priority, 'conditions' => $conditions, 'fingerprint' => SecurityRuleData::fingerprint($conditions, $action)]);
+}
+
+// Client-side security on the same domain: awkward origins (IPv6, punycode, a long address) and one baseline entry among the new ones.
+$rulesDomain->update(['client_security' => ['maximum_reports_per_minute' => 120, 'baseline_minutes' => 60, 'enabled_at' => now()->subDay()->toIso8601String()]]);
+foreach ([
+    ['script', '/checkout', 'https://cdn.example.net', now()->subHours(20), 'baseline'],
+    ['script', '/checkout', 'https://xn--bcher-kva.example', now()->subHours(3), 'reported'],
+    ['connection', '/products/a-very-long-page-name/with/nested/segments/that/keep/going/until/it/is/cut', 'https://tracking-and-analytics-collector.some-extremely-long-vendor-domain.example', now()->subMinutes(12), 'reported'],
+    ['script', '/', 'https://[2001:db8::10]:8443', now()->subMinutes(5), 'reported'],
+    ['script', '/cart', 'inline', now()->subMinutes(2), 'reported'],
+] as [$kind, $page, $resource, $seen, $source]) {
+    $rulesDomain->clientScriptSightings()->create(['kind' => $kind, 'page_path' => $page, 'resource' => $resource, 'first_seen_at' => $seen, 'last_seen_at' => $seen, 'approved_at' => $source === 'baseline' ? $seen : null, 'source' => $source]);
+}
+
+// Platform rulesets: one for a chosen list (the domain above) with a rate limit, and one for every domain, with long names.
+$provider = PlatformRuleset::query()->create(['name' => 'Known scanner paths and credential-stuffing endpoints across every customer site we host', 'description' => 'Blocks requests that probe for admin pages and slows repeated login attempts', 'enabled' => true, 'applies_to_all' => false, 'created_by' => $admin->id]);
+$provider->domains()->attach($rulesDomain->id);
+foreach ([
+    ['Block admin page probes', 'block', 10, [['field' => 'path', 'operator' => 'starts_with', 'value' => '/wp-admin']], null],
+    ['Slow repeated logins', 'block', 20, [['field' => 'path', 'operator' => 'equals', 'value' => '/login']], ['key' => 'client_ip_path', 'threshold' => 20, 'period_seconds' => 60, 'duration_seconds' => 300]],
+] as [$name, $action, $priority, $conditions, $rate]) {
+    $provider->rules()->create(['name' => $name, 'action' => $action, 'priority' => $priority, 'conditions' => $conditions, 'rate_limit' => $rate, 'fingerprint' => SecurityRuleData::fingerprint($conditions, $action, $rate)]);
+}
+PlatformRuleset::query()->create(['name' => 'Disabled test ruleset', 'enabled' => false, 'applies_to_all' => true, 'created_by' => $admin->id]);
+
+// Log push: the switch is on, and the first assigned domain has a healthy destination and a failing one with a long error.
+$logPush = SystemSetting::query()->findOrFail('log_push');
+$logPush->update(['values' => [...$logPush->values, 'domain_user_log_push' => true]]);
+$pushDomain = Domain::query()->whereHas('users', fn ($users) => $users->whereKey($user->id))->orderBy('id')->firstOrFail();
+foreach ([
+    ['SIEM at the security team with a long descriptive name to check truncation', 'https', 'HTTPS to logs.security-team.example-company.co.uk', ['http_requests', 'security_events'], 0, null, 48210, 12_400_000, 41],
+    ['Archive bucket', 's3', 'S3 bucket cdn-logs on s3.eu-west-1.amazonaws.com', ['dns_queries'], 6, 'The destination answered HTTP 503. The receiver at logs.example.com is overloaded, so batches are retried with a growing delay and nothing is skipped.', 912, 220_000, 3600],
+] as [$name, $kind, $hint, $datasets, $failures, $error, $rows, $bytes, $lag]) {
+    $destination = new LogPushDestination(['domain_id' => $pushDomain->id, 'kind' => $kind, 'name' => $name, 'datasets' => $datasets, 'destination_hint' => $hint, 'status' => 'active', 'cursors' => [],
+        'consecutive_failures' => $failures, 'failures_total' => $failures, 'rows_pushed' => $rows, 'bytes_pushed' => $bytes, 'lag_seconds' => $lag, 'last_error' => $error,
+        'last_delivery_at' => now()->subMinutes($failures > 0 ? 40 : 1), 'next_run_at' => $failures > 0 ? now()->addMinutes(20) : null]);
+    $destination->storeSecrets(['url' => 'https://example.invalid/never-used', 'auth' => 'bearer', 'bearer_token' => 'never-used-token']);
+    $destination->save();
+}
 echo "browser seed complete\n";

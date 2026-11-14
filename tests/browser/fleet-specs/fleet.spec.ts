@@ -124,14 +124,14 @@ test('destructive actions cannot be submitted without their typed confirmation',
 test('restore refuses a wrong confirmation with a readable error', async ({ page }) => {
     await page.goto('/backups');
     const form = page.locator('form[action="/backups/restore"]');
-    await form.getByLabel('Snapshot ID', { exact: true }).fill('a'.repeat(64));
+    await form.getByLabel(/^Snapshot ID/).fill('a'.repeat(64));
     await form.getByLabel(/Type RESTORE/).fill('RESTORE');
     // The pattern needs the phrase and a snapshot ID, so the browser blocks a bare word before it is sent.
     await form.getByRole('button', { name: 'Restore' }).click();
     await expect(page).toHaveURL(/\/backups$/);
     expect(await form.getByLabel(/Type RESTORE/).evaluate((el: HTMLInputElement) => el.validity.patternMismatch)).toBe(true);
     // A well-formed phrase for a different snapshot passes the browser; the server wants the exact snapshot it was given.
-    await form.getByLabel('Snapshot ID', { exact: true }).fill('a'.repeat(64));
+    await form.getByLabel(/^Snapshot ID/).fill('a'.repeat(64));
     await form.getByLabel(/Type RESTORE/).fill('RESTORE ' + 'b'.repeat(64));
     await form.getByRole('button', { name: 'Restore' }).click();
     await expect(page.getByRole('alert')).toContainText('Type exactly: RESTORE ' + 'a'.repeat(64));
@@ -210,7 +210,7 @@ test('the config page saves the backup setting and refuses a log host that does 
     await noHorizontalOverflow(page);
     const backups = page.locator('form[action="/config/feature/backups"]');
     await backups.getByLabel('Backups').selectOption('control');
-    await backups.getByLabel('Repository').fill('s3:https://storage.example/bucket/cdnfoundry');
+    await backups.getByLabel(/^Repository/).fill('s3:https://storage.example/bucket/cdnfoundry');
     await backups.getByRole('button', { name: 'Save backups' }).click();
     await expect(page.locator('.flash')).toContainText('Backups settings saved');
     await expect(page.locator('form[action="/config/feature/backups"] select[name="mode"]')).toHaveValue('control');

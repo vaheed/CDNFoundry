@@ -21,6 +21,11 @@ export async function signIn(page: Page, panel: 'admin' | 'app', email: string, 
     sessions.set(panel, await page.context().cookies());
 }
 
+/** Remembers the cookies the page holds now as the panel's session, for a test that ends with a new session id (acting as another user and back regenerates it). */
+export async function rememberSession(page: Page, panel: 'admin' | 'app'): Promise<void> {
+    sessions.set(panel, await page.context().cookies());
+}
+
 /** Applies the project's color scheme through Filament's theme store so dark mode is deterministic. */
 export async function settle(page: Page): Promise<void> {
     await page.waitForLoadState('networkidle');

@@ -1,5 +1,5 @@
 import { test, expect, type ConsoleMessage, type Page } from '@playwright/test';
-import { dashboards, adminUser, adminPassword, signIn, waitForPanels, screenshotPath } from './helpers';
+import { dashboards, adminUser, adminPassword, signIn, waitForPanels, screenshotPath, drawnPanelTitles } from './helpers';
 
 // Every dashboard, on each screen, over each time range: no error, no empty panel, no truncated title, no query text,
 // loadable variables, resolving links, and a quiet console.
@@ -34,34 +34,44 @@ for (const dashboard of dashboards()) {
             const responses = await collectQueries(page);
             await signIn(page, adminUser, adminPassword);
             const kiosk = info.project.name === 'kiosk' ? '&kiosk' : '';
-            await page.goto(`/d/${dashboard.uid}?orgId=1&from=${ranges[range]}&to=now${kiosk}${sampleInput[dashboard.uid] ?? ''}`);
+            // refresh= turns auto-refresh off, so no query restarts between the checks and the screenshot.
+            await page.goto(`/d/${dashboard.uid}?orgId=1&from=${ranges[range]}&to=now&refresh=${kiosk}${sampleInput[dashboard.uid] ?? ''}`);
             await waitForPanels(page);
+
+            // Every panel the dashboard defines is drawn: a blank dashboard is a failure, not a pass.
+            const drawn = await drawnPanelTitles(page);
+            const defined = dashboard.panels.filter((panel) => panel.type !== 'row').map((panel) => panel.title);
+            expect(defined.filter((title) => !drawn.includes(title)), 'panels that were not drawn').toEqual([]);
 
             // No panel reports an error or a failed query.
             const failed = responses.filter((response) => /"error"\s*:/.test(response.body)).map((response) => response.body.slice(0, 240));
             expect(failed, 'query errors').toEqual([]);
-            await expect(page.locator('[data-testid="data-testid Panel status error"], [aria-label="Panel status error"]')).toHaveCount(0);
+            const erroring = await page.locator('[data-testid="data-testid Panel status error"], [aria-label="Panel status error"]').evaluateAll((badges) =>
+                badges.map((badge) => badge.closest('section')?.querySelector('h2')?.textContent?.trim() ?? 'panel'));
+            expect(erroring, 'panels that report an error').toEqual([]);
 
             // No empty panel against the seeded normal scenario.
             if (expectData) {
                 const empty = await page.locator('[data-testid="data-testid panel content"], section[data-testid^="data-testid Panel header"]').evaluateAll(() => {
                     return Array.from(document.querySelectorAll('[class*="panel-content"], [data-testid="data-testid panel content"]'))
                         .filter((element) => /^No data/i.test((element as HTMLElement).innerText.trim()))
-                        .map((element) => (element.closest('section') as HTMLElement | null)?.getAttribute('aria-label') ?? 'panel');
+                        .map((element) => element.closest('section')?.querySelector('h2')?.textContent?.trim() ?? 'panel');
                 });
                 expect(empty, 'panels that show No data').toEqual([]);
             }
 
-            // No panel title is cut off, and no panel prints its query.
+            // No panel title is cut off, and no panel prints its query. A function call is a name and an opening parenthesis
+            // with no space and no number after it, so a label such as "Burn rate (1h)" is not query text.
             const truncated = await page.locator('section h2, section h2 *').evaluateAll((titles) =>
                 titles.filter((title) => (title as HTMLElement).offsetParent !== null && title.textContent && title.scrollWidth > title.clientWidth + 1).map((title) => title.textContent));
             expect(truncated, 'truncated panel titles').toEqual([]);
             const printed = await page.locator('section').evaluateAll((sections) =>
-                sections.filter((section) => /\b(sum|rate|histogram_quantile|increase|count_over_time)\s*\(/.test((section as HTMLElement).innerText)).map((section) => section.getAttribute('aria-label')));
+                sections.filter((section) => /\b(sum|rate|histogram_quantile|increase|count_over_time)\((?!\d)/.test((section as HTMLElement).innerText)).map((section) => section.getAttribute('aria-label')));
             expect(printed, 'panels that show query text').toEqual([]);
 
             expect(messages, 'browser console errors').toEqual([]);
-            await page.screenshot({ path: screenshotPath(info.project.name, range, dashboard.uid), fullPage: kiosk === '' });
+            // The viewport already holds the whole dashboard; a full-page capture would stitch Grafana's inner scroller.
+            await page.screenshot({ path: screenshotPath(info.project.name, range, dashboard.uid) });
         });
     }
 }
@@ -73,8 +83,9 @@ test.describe('variables and links', () => {
             await signIn(page, adminUser, adminPassword);
             await page.goto(`/d/${dashboard.uid}?orgId=1&from=now-6h&to=now`);
             await waitForPanels(page);
-            for (const name of ['region', 'pop', 'edge']) {
-                const picker = page.getByTestId(`data-testid Dashboard template variables Variable Value DropDown value link text ${name}`).or(page.locator(`[data-testid*="Variable"][data-testid*="${name}"]`)).first();
+            // Grafana names a variable's picker by its label and its value link by the value, so each is found by its label.
+            for (const label of ['Region', 'PoP', 'Edge']) {
+                const picker = page.getByTestId('data-testid template variable').filter({ has: page.getByTestId(`data-testid Dashboard template variables submenu Label ${label}`) }).first();
                 await expect(picker).toBeVisible();
                 await expect(picker).toContainText(/All/);
             }

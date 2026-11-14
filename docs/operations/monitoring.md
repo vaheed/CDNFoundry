@@ -61,6 +61,9 @@ The system reports these components.
 - Horizon master state and each queue.
 - Scheduler heartbeat.
 - ClickHouse and Vector probes.
+- Prometheus and Loki readiness (**Metrics and alert rules**, **Operational logs**). With Prometheus down no metric is collected and no
+  alert can fire, so the control plane checks it directly.
+- Alertmanager reachability and a configured receiver (**Alert delivery**).
 - Maximum host clock offset, read from Prometheus.
 - MMDB (GeoIP database) presence, readability, size, and age.
 - Enabled and fresh edges, and listener readiness.
@@ -119,9 +122,11 @@ The rule files in `docker/prometheus/` define more alerts for edge gateways, tra
 
 ### Alert delivery
 
-Alertmanager sends every alert to one webhook, `ALERT_WEBHOOK_URL`. The webhook is optional. With no value, Alertmanager starts with receivers that send nothing: alerts still fire and show in Prometheus and Alertmanager, but nobody is notified. Set the value and restart Alertmanager (in Fleet, save it on **Config** and deploy) to start receiving them. A value that is not an `https://` URL is refused. Development sets `ALERT_WEBHOOK_ALLOW_HTTP=true` and points the URL at the `alert-sink` container.
+Alertmanager groups alerts and posts each group to a private receiver in the control plane (`/internal/alertmanager`), authenticated with the monitoring token. The receiver queues one message for the administrator channels, and the `notifier` container delivers it to Telegram, Discord, Slack, or a webhook. Add the channels in **Governance, Notifications**; see [Notifications](../guides/notifications.md). With no channel, alerts still fire and show in Prometheus and Alertmanager, but nobody is notified. Alertmanager reaches the receiver on the control network at `http://web:8080/internal/alertmanager`; a dedicated monitoring host sets `ALERT_RECEIVER_URL` in a Compose override.
 
-Prometheus also fires an always-on `Watchdog` alert. Alertmanager forwards it like any other alert and repeats it every minute. If your notifier stops receiving `Watchdog`, alerting is broken. Point the webhook at a service that pages you when `Watchdog` stops arriving.
+The receiver is bounded. It stores nothing, reads no database rows, ignores an identical payload for a minute, and is rate limited at the web container. A group of thousands of alerts is one message with a count and the first ten summaries.
+
+Prometheus also fires an always-on `Watchdog` alert. Alertmanager repeats it every minute, and the receiver records its arrival as a heartbeat instead of sending it. Watch `Watchdog` in Prometheus, or from an outside monitor, to know that alerting works.
 
 | Alert | Fires when |
 | --- | --- |

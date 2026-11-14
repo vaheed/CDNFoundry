@@ -45,9 +45,39 @@ export function screenshotPath(project: string, range: string, uid: string): str
 
 /** Wait until every panel has finished loading, the way a person waits for the spinners to stop. */
 export async function waitForPanels(page: Page): Promise<void> {
+    const loading = page.locator('[data-testid="data-testid Panel loading bar"], [aria-label="Panel loading bar"]');
+    const settled = async () => {
+        await expect(loading).toHaveCount(0, { timeout: 90_000 });
+        await expect(page.getByRole('button', { name: 'Cancel' })).toHaveCount(0, { timeout: 90_000 });
+    };
     await page.waitForLoadState('domcontentloaded');
-    await expect(page.locator('[data-testid="data-testid Panel loading bar"], [aria-label="Panel loading bar"]')).toHaveCount(0, { timeout: 90_000 });
-    await expect(page.getByRole('button', { name: 'Cancel' })).toHaveCount(0, { timeout: 90_000 });
-    await page.waitForTimeout(1500);
-    await expect(page.locator('[data-testid="data-testid Panel loading bar"], [aria-label="Panel loading bar"]')).toHaveCount(0, { timeout: 30_000 });
+    await settled();
+    // Grafana draws a panel only when it is in view, and scrolls the dashboard inside its own container. A viewport as tall
+    // as that container's content draws every panel at once, so each is queried, checked, and in the screenshot.
+    const width = page.viewportSize()?.width ?? 1440;
+    await page.locator('section h2').first().waitFor({ timeout: 60_000 });
+    // The grid lays out after the first panel exists; wait until the page height stops changing before measuring it.
+    let last = -1;
+    for (let stable = 0; stable < 3;) {
+        await page.waitForTimeout(500);
+        const now = await page.evaluate(() => Math.max(document.body.scrollHeight, document.documentElement.scrollHeight));
+        stable = now === last ? stable + 1 : 0;
+        last = now;
+    }
+    for (let attempt = 0; attempt < 6; attempt++) {
+        // Grafana scrolls the whole page (the body), and panels grow it as they draw, so the height is read again each time.
+        const overflow = await page.evaluate(() => Math.max(0, Math.max(document.body.scrollHeight, document.documentElement.scrollHeight) - window.innerHeight));
+        if (overflow === 0) break;
+        const height = page.viewportSize()?.height ?? 900;
+        await page.setViewportSize({ width, height: Math.min(height + overflow + 40, 16_000) });
+        await page.waitForTimeout(500);
+        await settled();
+    }
+    await page.waitForTimeout(1000);
+    await settled();
+}
+
+/** Titles of the panels drawn on the page. */
+export async function drawnPanelTitles(page: Page): Promise<string[]> {
+    return page.locator('section h2').evaluateAll((titles) => titles.filter((title) => (title as HTMLElement).offsetParent !== null).map((title) => (title.textContent ?? '').trim()));
 }
