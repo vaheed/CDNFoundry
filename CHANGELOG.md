@@ -9,7 +9,7 @@ single source of truth; `make version-check` enforces it.
 
 ### Added
 
-- The admin Traffic and telemetry page shows the analytics a domain user sees (summary, charts, per-domain table, breakdowns, security breakdowns, recent logs) over every verified domain or the one chosen. The Customers list gains an Owner column and a nameserver verification filter.
+- The admin Customers list gains an Owner column and a nameserver verification filter.
 
 ### Changed
 
@@ -17,6 +17,7 @@ single source of truth; `make version-check` enforces it.
 
 ### Fixed
 
+- The browser challenge keeps a visitor's token when their address changes inside an IPv6 prefix or their browser updates. A token and a seed are bound to the client key (an IPv6 address counts under its prefix, as in rate limiting), not the exact address and User-Agent; `EDGE_CHALLENGE_BIND_USER_AGENT=true` restores the stricter binding. The proof-of-work difficulty is configurable per cell with `EDGE_CHALLENGE_BITS` (12 to 24, default 16). Tokens are still per cell.
 - The admin edge page shows how many client connections are open across the edge's cells and how many connections the gateway has served since it started, so a gateway active count of zero can be told apart from a gateway that has seen no traffic. A cell no longer counts the agent's own status request as an open connection, so an idle cell reports none.
 - Security events from busy cells are reported fairly. A cell reported only the first 20 domain and reason pairs it happened to see, the agent kept the first 20 across all cells, and the control plane refused more than 20, so a noisy domain could keep other domains' events, escalation evidence and alerts out for an hour. A cell now sends up to 100 entries with every recently active domain getting a slot before any domain gets a second, reports how many domains did not fit (`security_domains_dropped`), and the agent sends only entries whose total changed. The control plane accepts up to 200 entries and counts the excess instead of failing the heartbeat.
 - **Back up now** on a fresh S3 bucket no longer fails with `repository does not exist: unable to open config file`: the control backup initialises a missing restic repository before its first snapshot, and still refuses to touch one that exists but cannot be opened.
