@@ -24,7 +24,7 @@ rules.NAME = NAME
 run = base.run
 
 SAMPLE_NUMBER = "4111111111111111"
-IBAN = "GB82WEST12345698765432"
+SAMPLE_ACCOUNT = "GB82WEST12345698765432"
 SAMPLE_LIVE_ID = "AKIAIOSFODNN7EXAMPLE"
 SAMPLE_PEM = "-----BEGIN RSA PRIVATE KEY-----\nMIIBOgIBAAJBAKj34GkxFhD90vcNLYLInFEX6Ppy1tPf9Cnzj4p4WGeKLs1Pt8Qu\n-----END RSA PRIVATE KEY-----"
 LEAKED = "password"
@@ -54,7 +54,7 @@ def origin_files(directory: pathlib.Path) -> None:
     root.mkdir()
     (root / "card.txt").write_text(f"Receipt\ncard: {SAMPLE_NUMBER}\nthanks")
     (root / "spaced.txt").write_text("card 4111 1111 1111 1111 expires soon")
-    (root / "iban.json").write_text(json.dumps({"account": IBAN}))
+    (root / "iban.json").write_text(json.dumps({"account": SAMPLE_ACCOUNT}))
     (root / "key.txt").write_text(SAMPLE_PEM)
     (root / "apikey.js").write_text(f'const key = "{SAMPLE_LIVE_ID}";')
     (root / "clean.txt").write_text("Order 20240101123456 shipped at 1700000000000. Nothing sensitive here.")
@@ -179,7 +179,7 @@ def qualify(directory: pathlib.Path) -> None:
     # no secret, hash, or matched value reaches a log or the status the cell reports
     everything = run("docker", "logs", NAME, check=False)
     text = everything.stdout + everything.stderr + dump
-    for secret in (LEAKED + '"', FRESH, hashlib.sha256(LEAKED.encode()).hexdigest()[:16], SAMPLE_NUMBER, IBAN, SAMPLE_LIVE_ID, "PRIVATE KEY", "jane.doe@example.com"):
+    for secret in (LEAKED + '"', FRESH, hashlib.sha256(LEAKED.encode()).hexdigest()[:16], SAMPLE_NUMBER, SAMPLE_ACCOUNT, SAMPLE_LIVE_ID, "PRIVATE KEY", "jane.doe@example.com"):
         assert secret not in text, secret
 
     # measured cost: the median request time with and without each detection, on the same cell
