@@ -2,13 +2,6 @@
 
 namespace App\Filament\Admin\Pages;
 
-use App\Filament\Domain\Widgets\AnalyticsBreakdowns;
-use App\Filament\Domain\Widgets\AnalyticsDomainTable;
-use App\Filament\Domain\Widgets\AnalyticsRecentLogs;
-use App\Filament\Domain\Widgets\AnalyticsResponsesChart;
-use App\Filament\Domain\Widgets\AnalyticsSecurityBreakdowns;
-use App\Filament\Domain\Widgets\AnalyticsSummary;
-use App\Filament\Domain\Widgets\AnalyticsTrafficChart;
 use App\Http\Controllers\Admin\UsageController;
 use App\Models\Domain;
 use App\Models\Edge;
@@ -61,33 +54,6 @@ class Telemetry extends Page
     protected static ?int $navigationSort = 10;
 
     protected string $view = 'filament.admin.pages.telemetry';
-
-    /**
-     * The analytics a domain user sees, over every verified domain or the one chosen above. The widgets read their scope from
-     * these filters; `platform` is honored only for administrators.
-     */
-    protected function getFooterWidgets(): array
-    {
-        return [
-            AnalyticsSummary::class, AnalyticsTrafficChart::class, AnalyticsResponsesChart::class, AnalyticsDomainTable::class,
-            AnalyticsBreakdowns::class, AnalyticsSecurityBreakdowns::class, AnalyticsRecentLogs::class,
-        ];
-    }
-
-    public function getFooterWidgetsColumns(): int|array
-    {
-        return ['default' => 1, 'xl' => 2];
-    }
-
-    /** @return array<string, mixed> */
-    public function getWidgetData(): array
-    {
-        return ['pageFilters' => [
-            'platform' => true,
-            'range' => $this->range,
-            'domains' => filled($this->domain) && Domain::query()->verified()->whereKey($this->domain)->exists() ? [(string) $this->domain] : [],
-        ]];
-    }
 
     /** @return array{domains: array<int, string>, edges: array<string, string>} */
     public function getFilterOptionsProperty(): array

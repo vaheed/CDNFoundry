@@ -28,12 +28,6 @@ class AnalyticsDomainTable extends Widget
         $this->limit = 10;
     }
 
-    /** The domain panel's own pages are for domain users; the administrator's table lists names only. */
-    private function linksToDomains(): bool
-    {
-        return ($this->pageFilters['platform'] ?? false) !== true;
-    }
-
     protected function getViewData(): array
     {
         $scope = $this->analyticsScope();
@@ -53,7 +47,7 @@ class AnalyticsDomainTable extends Widget
 
                 return [
                     'name' => $domain->name,
-                    'url' => $this->linksToDomains() ? DomainResource::getUrl('view', ['record' => $domain], panel: 'app') : null,
+                    'url' => DomainResource::getUrl('view', ['record' => $domain], panel: 'app'),
                     'requests' => number_format($requests),
                     'bandwidth' => $this->formatBytes(((int) $row['bytes_in']) + ((int) $row['bytes_out'])),
                     'cache' => $requests === 0 ? '0.0%' : number_format(100 * ((int) $row['cache_hits']) / $requests, 1).'%',

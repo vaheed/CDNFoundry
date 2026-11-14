@@ -10,7 +10,7 @@
                     <x-slot:header><tr><th class="text-left">Domain</th><th class="text-right">Requests</th><th class="text-right">Bandwidth</th><th class="hidden text-right md:table-cell">Cache hits</th><th class="hidden text-right md:table-cell">Origin errors</th></tr></x-slot:header>
                     @foreach ($rows as $row)
                         <tr>
-                            <td class="px-3 py-2">@if ($row['url'])<a class="cdn-table-link" href="{{ $row['url'] }}" wire:navigate>{{ $row['name'] }}</a>@else{{ $row['name'] }}@endif</td>
+                            <td class="px-3 py-2"><a class="cdn-table-link" href="{{ $row['url'] }}" wire:navigate>{{ $row['name'] }}</a></td>
                             <td class="px-3 py-2 text-right tabular-nums">{{ $row['requests'] }}</td>
                             <td class="px-3 py-2 text-right tabular-nums">{{ $row['bandwidth'] }}</td>
                             <td class="hidden px-3 py-2 text-right tabular-nums md:table-cell">{{ $row['cache'] }}</td>
