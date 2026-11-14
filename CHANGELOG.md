@@ -17,6 +17,7 @@ single source of truth; `make version-check` enforces it.
 
 ### Fixed
 
+- Security events from busy cells are reported fairly. A cell reported only the first 20 domain and reason pairs it happened to see, the agent kept the first 20 across all cells, and the control plane refused more than 20, so a noisy domain could keep other domains' events, escalation evidence and alerts out for an hour. A cell now sends up to 100 entries with every recently active domain getting a slot before any domain gets a second, reports how many domains did not fit (`security_domains_dropped`), and the agent sends only entries whose total changed. The control plane accepts up to 200 entries and counts the excess instead of failing the heartbeat.
 - **Back up now** on a fresh S3 bucket no longer fails with `repository does not exist: unable to open config file`: the control backup initialises a missing restic repository before its first snapshot, and still refuses to touch one that exists but cannot be opened.
 - The Analytics focus filter on the admin Traffic and telemetry page no longer shows "Analytics unavailable" for the Traffic, Cache and DNS focuses. Their ClickHouse queries ordered by a name that is both a stored column and an aggregate alias, which ClickHouse rejects while `prefer_column_name_to_alias` is on.
 

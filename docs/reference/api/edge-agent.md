@@ -109,7 +109,7 @@ checks against every reason the cell runtime can raise.
 `clients` (0 to 1000) is how many distinct clients caused escalating events of the
 domain on the cell in the last five minutes, counted up to 16. The control plane
 tightens a domain automatically only when it is at least 10, and a cell that omits
-it counts as 0. The same file lists, as `non_escalating`, the reasons that never
+it counts as 0. The report is bounded and fair: a cell sends at most 100 entries, every domain with recent events gets one before any domain gets a second, and the agent sends only entries whose total changed since the control plane last accepted them. The control plane accepts up to 200 entries per heartbeat and counts any beyond that in `advisory_entries_dropped` instead of failing the heartbeat. A cell reports in `capacity.security_domains_dropped` how many active domains did not fit. The same file lists, as `non_escalating`, the reasons that never
 count toward a state change.
 
 ## Task contract
