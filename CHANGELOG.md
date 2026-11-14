@@ -7,6 +7,15 @@ single source of truth; `make version-check` enforces it.
 
 ## [Unreleased]
 
+### Fixed
+
+- The Fleet web Backups form now takes the S3 access key ID and secret access key, which it saves into the vault without showing them again.
+- A domain whose nameservers are not verified can only be given DNS records: the WAF, security, cache, TLS, proxy, analytics, and log pages are hidden, the API answers them with `409 domain_not_verified`, and Geo-DNS and proxied records are refused until verification.
+- The attack score, action, country, and network breakdowns on the domain Analytics page now include events stored before the `security_hourly` rollup existed (a ClickHouse migration backfills them).
+- Next now works on the domain Security events list.
+- Analytics breakdown and recent-event tables no longer cut off headings such as "Mitigated share", DNS response names, or client addresses.
+- The System DNS identity "Add" buttons read "Add nameserver" and "Add pair" instead of printing the tooltip markup.
+
 ## [2.1.1] - 2026-11-14
 
 Fixes an upgrade from 2.0.8 that stopped in `clickhouse-migrate`. See the [release notes](docs/operations/releases/v2.1.1.md).

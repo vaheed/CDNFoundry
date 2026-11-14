@@ -36,6 +36,9 @@ These HTTP statuses map to codes:
 | 429 | `too_many_requests`, with `Retry-After` |
 | 5xx | `server_error` |
 
+A domain whose nameservers are not verified answers every route except its own record, status, verification,
+and DNS record routes with `409 domain_not_verified`.
+
 A domain you cannot view answers `404 not_found`, exactly like a domain that does
 not exist. This stops anyone from guessing domain IDs. A missing resource always
 answers with the fixed message "The requested resource was not found." The

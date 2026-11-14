@@ -110,6 +110,12 @@ hostnames with A and AAAA records.
 2. Remove old DS records left from a previous DNS provider. CDNFoundry zones are not signed.
 3. Wait for propagation, then verify again. Partial propagation never verifies.
 
+Until the nameservers are verified a domain accepts only DNS records. The domain page shows the
+delegation and the DNS records tab; the cache, TLS, WAF, security, proxy, analytics, and log pages are
+hidden, and the API answers them with `409 domain_not_verified`. Records are saved but not published:
+Geo-DNS and proxied records are refused until verification, and nothing reaches a DNS node or an edge.
+Right after verification the zone publishes every saved record.
+
 Pending zones serve only SOA and NS records. A pending subdomain of a zone that
 CDNFoundry already hosts is not published, so it cannot hide the parent's records.
 
