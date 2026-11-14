@@ -38,6 +38,10 @@ def main() -> None:
                        'isolated-grafana' if readonly else 'isolated-clickhouse',
                        '--query', sql, check=check)
 
+        # The previous release's own schema, so the migrations run against a database that genuinely lacks the new columns.
+        previous_init = Path(directory) / 'previous-init.sql'
+        previous_init.write_text(run('git', '-C', str(ROOT), 'show', 'v2.0.8:docker/clickhouse/init.sql').stdout)
+
         def start(image: str) -> None:
             run('docker', 'run', '-d', '--name', name, '--network', 'none', '--memory', '2g',
                 '--log-opt', 'max-size=10m', '--log-opt', 'max-file=2',
@@ -48,7 +52,7 @@ def main() -> None:
                 '-e', 'CLICKHOUSE_INGEST_PASSWORD=isolated-ingest', '-e', 'CLICKHOUSE_READER_PASSWORD=isolated-reader',
                 '-e', 'CLICKHOUSE_ZONES_PASSWORD=isolated-zones',
                 '-v', f'{data}:/var/lib/clickhouse',
-                '-v', f'{ROOT}/docker/clickhouse/init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro',
+                '-v', f'{previous_init if image == PREVIOUS else ROOT / "docker/clickhouse/init.sql"}:/docker-entrypoint-initdb.d/10-init.sql:ro',
                 '-v', f'{ROOT}/docker/clickhouse/users.d/grafana.xml:/etc/clickhouse-server/users.d/grafana.xml:ro',
                 '-v', f'{ROOT}/docker/clickhouse/users.d/telemetry.xml:/etc/clickhouse-server/users.d/telemetry.xml:ro', image)
             for _ in range(90):
