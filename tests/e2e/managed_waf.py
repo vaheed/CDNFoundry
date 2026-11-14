@@ -6,6 +6,7 @@ import os
 import pathlib
 import subprocess
 import tempfile
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -105,7 +106,13 @@ def main() -> None:
                       "grep -q 'id:941100' /etc/cdnfoundry/crs/rules/REQUEST-941-APPLICATION-ATTACK-XSS.conf")
             assert crs.returncode == 0
             attack = "/?q=%3Cscript%3Ealert(1)%3C/script%3E"
-            assert "200 OK" in request("off.waf.test", attack)
+            # The container was just started: wait for the cell to listen instead of racing its startup.
+            deadline = time.monotonic() + 60
+            first = request("off.waf.test", attack)
+            while "200 OK" not in first and time.monotonic() < deadline:
+                time.sleep(1)
+                first = request("off.waf.test", attack)
+            assert "200 OK" in first, first
             assert "200 OK" in request("balanced.waf.test", "/?clean=1")
             monitor = request("monitor.waf.test", attack)
             assert "200 OK" in monitor, monitor
