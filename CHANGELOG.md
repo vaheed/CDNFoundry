@@ -13,6 +13,10 @@ Fixes an upgrade from 2.0.8 that stopped in `clickhouse-migrate`. See the [relea
 
 ### Fixed
 
+- A Fleet rollback now runs the health gate on the restored release and reports a node that fails it, instead of
+  counting a successful `start.sh` as a rollback. The control gate also checks that the administrator panel answers.
+- Fleet validation refuses a host that holds files outside any release (a `compose.*.yml` overlay or a `hotfix`
+  directory), because swaps and rollbacks would silently drop them.
 - The ClickHouse migration that adds `edge_events.security_rule` now runs before the `security_hourly` view that reads it,
   so upgrading a 2.0.8 database no longer fails with `UNKNOWN_IDENTIFIER`.
 - The ClickHouse upgrade qualification starts from the previous release's own schema.

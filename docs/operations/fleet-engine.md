@@ -178,13 +178,17 @@ confirmation and then applies the plan. Nodes whose images and configs do not ch
 1. Order: DNS hosts, then PoPs, then control (a standby first, then a planned switchover, then the old active node),
    then monitoring. The first node of the first changed role is the canary. Nodes go one at a time.
 2. Pre-pull fetches every new image and verifies its digest before anything restarts.
-3. The new bundle is uploaded next to the active one and validated on the node: the bundle's `validate.sh` and the
+3. The new bundle is uploaded next to the active one and validated on the node. Validation refuses a host whose
+   `/opt/cdnfoundry` holds files that belong to no release (a `compose.*.yml` overlay or a `hotfix` directory), because a
+   swap or rollback starts the services from the bundle alone and would silently drop them. Ship the change in a release.
+   Then the bundle is checked by: the bundle's `validate.sh` and the
    service's own validator (`nginx -t`, `dnsdist --check-config`, `caddy validate`, `promtool check config`,
    `amtool check-config`, `vector validate`). A config that fails is never activated.
 4. Activation swaps the directories and runs `start.sh`. Only a bundle that passed its health gate becomes the rollback
    target. The gate waits a bounded time and checks that every long-running service is running and healthy, DNS answers
    over UDP and TCP (any reply proves serving; a PoP without zones answers REFUSED), ports 80 and 443 accept connections,
-   all on the node's bind addresses over IPv4 and IPv6, and control answers `/api/health` on its own hostname. If activation or the gate fails, that node returns to its previous bundle and the roll stops.
+   all on the node's bind addresses over IPv4 and IPv6, control answers `/api/health` on its own hostname, and the administrator panel answers its login page to the control host's own
+   address (a bare 403 there means the management-network check refuses everyone). If activation or the gate fails, that node returns to its previous bundle and the roll stops.
    When the manifest forbids mixed versions, nodes that already upgraded return too.
 5. Progress is journaled per step. If the SSH connection drops, run the same command again and it continues after the
    last finished step.
@@ -193,7 +197,8 @@ confirmation and then applies the plan. Nodes whose images and configs do not ch
 
 `cdnfoundry-fleet apply-config` does the same for a changed configuration at the same release.
 `cdnfoundry-fleet rollback [--node N]` returns nodes to the previous bundle. Without `--node` it rolls back the
-whole fleet. A rollback never reverses a database migration. If a release holds an irreversible migration, you
+whole fleet. A rollback restarts the previous bundle and then runs the same health gate on it; a node that restarts but
+fails the gate is reported as failed, not rolled back. A rollback never reverses a database migration. If a release holds an irreversible migration, you
 cannot roll it back. Restore from backup instead.
 
 Major versions of PostgreSQL, ClickHouse, and Valkey are not part of an ordinary upgrade; follow the guided upgrade
