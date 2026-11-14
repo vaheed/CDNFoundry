@@ -7,6 +7,14 @@ single source of truth; `make version-check` enforces it.
 
 ## [Unreleased]
 
+### Added
+
+- The admin Traffic and telemetry page shows the analytics a domain user sees (summary, charts, per-domain table, breakdowns, security breakdowns, recent logs) over every verified domain or the one chosen. The Customers list gains an Owner column and a nameserver verification filter.
+
+### Changed
+
+- Domain pickers in the admin panel list verified domains only, so a name that several users have claimed is no longer listed more than once.
+
 ### Fixed
 
 - **Back up now** on a fresh S3 bucket no longer fails with `repository does not exist: unable to open config file`: the control backup initialises a missing restic repository before its first snapshot, and still refuses to touch one that exists but cannot be opened.
