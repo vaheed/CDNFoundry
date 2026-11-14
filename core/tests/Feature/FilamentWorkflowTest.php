@@ -100,7 +100,7 @@ class FilamentWorkflowTest extends TestCase
         $admin = User::factory()->admin()->create();
         $user = User::factory()->create();
         $disabled = User::factory()->disabled()->create();
-        $domain = Domain::query()->create(['name' => 'assignment-ui.example.test', 'display_name' => 'Assignment UI']);
+        $domain = Domain::query()->create(['name' => 'assignment-ui.example.test', 'display_name' => 'Assignment UI', 'nameservers_verified_at' => now()]);
         Filament::setCurrentPanel(Filament::getPanel('admin'));
         $this->actingAs($admin);
 
@@ -342,7 +342,7 @@ class FilamentWorkflowTest extends TestCase
     public function test_geo_cname_without_a_continent_saves_and_owner_conflicts_are_visible(): void
     {
         $admin = User::factory()->admin()->create();
-        $domain = Domain::query()->create(['name' => 'geo-ui.example.test', 'display_name' => 'Geo UI', 'revision' => 1]);
+        $domain = Domain::query()->create(['name' => 'geo-ui.example.test', 'display_name' => 'Geo UI', 'revision' => 1, 'nameservers_verified_at' => now()]);
         Filament::setCurrentPanel(Filament::getPanel('admin'));
         $this->actingAs($admin);
 
@@ -391,7 +391,7 @@ class FilamentWorkflowTest extends TestCase
     public function test_plain_http_proxy_form_normalizes_tls_fields_and_reports_origin_errors(): void
     {
         $admin = User::factory()->admin()->create();
-        $domain = Domain::query()->create(['name' => 'proxy-ui.example.test', 'display_name' => 'Proxy UI', 'revision' => 1]);
+        $domain = Domain::query()->create(['name' => 'proxy-ui.example.test', 'display_name' => 'Proxy UI', 'revision' => 1, 'nameservers_verified_at' => now()]);
         Filament::setCurrentPanel(Filament::getPanel('admin'));
         $this->actingAs($admin);
         $component = fn () => Livewire::test(DnsRecordsRelationManager::class, [
@@ -472,7 +472,7 @@ class FilamentWorkflowTest extends TestCase
     public function test_cache_actions_save_visible_bounded_state_and_queue_purges(): void
     {
         $admin = User::factory()->admin()->create();
-        $domain = Domain::query()->create(['name' => 'cache-ui.example.test', 'display_name' => 'Cache UI', 'revision' => 1]);
+        $domain = Domain::query()->create(['name' => 'cache-ui.example.test', 'display_name' => 'Cache UI', 'revision' => 1, 'nameservers_verified_at' => now()]);
         Filament::setCurrentPanel(Filament::getPanel('admin'));
         $this->actingAs($admin);
         $component = fn () => Livewire::test(ViewDomain::class, ['record' => $domain->id]);
@@ -526,6 +526,7 @@ class FilamentWorkflowTest extends TestCase
         $domain = Domain::query()->create([
             'name' => 'custom-tls-ui.example.test',
             'display_name' => 'Custom TLS UI',
+            'nameservers_verified_at' => now(),
             'revision' => 1,
         ]);
         Filament::setCurrentPanel(Filament::getPanel('admin'));
@@ -544,7 +545,7 @@ class FilamentWorkflowTest extends TestCase
     {
         Queue::fake();
         $admin = User::factory()->admin()->create();
-        $domain = Domain::query()->create(['name' => 'security-ui.example.test', 'display_name' => 'Security UI', 'revision' => 1]);
+        $domain = Domain::query()->create(['name' => 'security-ui.example.test', 'display_name' => 'Security UI', 'revision' => 1, 'nameservers_verified_at' => now()]);
         Filament::setCurrentPanel(Filament::getPanel('admin'));
         $this->actingAs($admin);
 
@@ -567,7 +568,7 @@ class FilamentWorkflowTest extends TestCase
         Queue::fake();
         EdgePool::query()->where('kind', 'shared')->update(['waf_capable' => true, 'waf_runtime_version' => 'sha256:test']);
         $admin = User::factory()->admin()->create();
-        $domain = Domain::query()->create(['name' => 'waf-ui.example.test', 'display_name' => 'WAF UI', 'revision' => 1]);
+        $domain = Domain::query()->create(['name' => 'waf-ui.example.test', 'display_name' => 'WAF UI', 'revision' => 1, 'nameservers_verified_at' => now()]);
         Filament::setCurrentPanel(Filament::getPanel('admin'));
         $this->actingAs($admin);
 
@@ -596,7 +597,7 @@ class FilamentWorkflowTest extends TestCase
     public function test_the_security_alert_dialog_saves_shows_and_removes_the_threshold(): void
     {
         $admin = User::factory()->admin()->create();
-        $domain = Domain::query()->create(['name' => 'alert-ui.example.test', 'display_name' => 'Alert UI', 'revision' => 1]);
+        $domain = Domain::query()->create(['name' => 'alert-ui.example.test', 'display_name' => 'Alert UI', 'revision' => 1, 'nameservers_verified_at' => now()]);
         Filament::setCurrentPanel(Filament::getPanel('admin'));
         $this->actingAs($admin);
 
@@ -617,7 +618,7 @@ class FilamentWorkflowTest extends TestCase
     {
         Queue::fake();
         $admin = User::factory()->admin()->create();
-        $domain = Domain::query()->create(['name' => 'delete-ui.example.test', 'display_name' => 'Delete UI', 'revision' => 1, 'lifecycle_state' => 'active']);
+        $domain = Domain::query()->create(['name' => 'delete-ui.example.test', 'display_name' => 'Delete UI', 'revision' => 1, 'lifecycle_state' => 'active', 'nameservers_verified_at' => now()]);
         Filament::setCurrentPanel(Filament::getPanel('admin'));
         $this->actingAs($admin);
 
@@ -636,7 +637,7 @@ class FilamentWorkflowTest extends TestCase
     {
         Queue::fake();
         $admin = User::factory()->admin()->create();
-        $domain = Domain::query()->create(['name' => 'maintenance-ui.example.test', 'display_name' => 'Maintenance UI', 'revision' => 1]);
+        $domain = Domain::query()->create(['name' => 'maintenance-ui.example.test', 'display_name' => 'Maintenance UI', 'revision' => 1, 'nameservers_verified_at' => now()]);
         Filament::setCurrentPanel(Filament::getPanel('admin'));
         $this->actingAs($admin);
 
@@ -693,7 +694,7 @@ class FilamentWorkflowTest extends TestCase
     {
         Queue::fake();
         $admin = User::factory()->admin()->create();
-        $domain = Domain::query()->create(['name' => 'usage-ui.example.test', 'display_name' => 'Usage UI']);
+        $domain = Domain::query()->create(['name' => 'usage-ui.example.test', 'display_name' => 'Usage UI', 'nameservers_verified_at' => now()]);
         Filament::setCurrentPanel(Filament::getPanel('admin'));
         $this->actingAs($admin);
 
@@ -719,7 +720,7 @@ class FilamentWorkflowTest extends TestCase
     public function test_domain_delivery_status_lists_active_and_target_cells_by_edge(): void
     {
         $admin = User::factory()->admin()->create();
-        $domain = Domain::query()->create(['name' => 'cells-ui.example.test', 'display_name' => 'Cells UI', 'revision' => 4]);
+        $domain = Domain::query()->create(['name' => 'cells-ui.example.test', 'display_name' => 'Cells UI', 'revision' => 4, 'nameservers_verified_at' => now()]);
         $source = EdgePool::query()->where('kind', 'shared')->firstOrFail();
         $target = EdgePool::query()->where('kind', 'quarantine')->firstOrFail();
         $edge = Edge::query()->create(['name' => 'cells-ui-edge', 'country_code' => 'IR', 'continent_code' => 'AS']);
@@ -795,7 +796,7 @@ class FilamentWorkflowTest extends TestCase
     {
         Queue::fake();
         $admin = User::factory()->admin()->create();
-        $domain = Domain::query()->create(['name' => 'move-ui.example.test', 'display_name' => 'Move UI', 'revision' => 5]);
+        $domain = Domain::query()->create(['name' => 'move-ui.example.test', 'display_name' => 'Move UI', 'revision' => 5, 'nameservers_verified_at' => now()]);
         $domain->dnsRecords()->create(DnsRecordData::validate([
             'type' => 'A', 'name' => 'www', 'content' => '192.0.2.25', 'ttl' => 300, 'mode' => 'proxied',
             'origin' => [
@@ -875,6 +876,7 @@ class FilamentWorkflowTest extends TestCase
         $domain = Domain::query()->create([
             'name' => 'reconcile-ui.example.test',
             'display_name' => 'Reconcile UI',
+            'nameservers_verified_at' => now(),
             'lifecycle_state' => DomainLifecycleState::Active,
             'revision' => 3,
         ]);

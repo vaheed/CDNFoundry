@@ -319,7 +319,7 @@ class SecurityApiTest extends TestCase
     private function ownedDomain(bool $proxied = false): array
     {
         $user = User::factory()->create();
-        $domain = Domain::query()->create(['name' => 'security.example.test', 'display_name' => 'Security', 'revision' => 1, 'lifecycle_state' => 'active']);
+        $domain = Domain::query()->create(['name' => 'security.example.test', 'display_name' => 'Security', 'revision' => 1, 'lifecycle_state' => 'active', 'nameservers_verified_at' => now()]);
         $domain->users()->attach($user);
         if ($proxied) {
             $domain->dnsRecords()->create([

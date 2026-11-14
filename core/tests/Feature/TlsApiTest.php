@@ -290,7 +290,7 @@ class TlsApiTest extends TestCase
     private function proxiedDomain(): array
     {
         $user = User::factory()->create();
-        $domain = Domain::query()->create(['name' => 'example.test', 'display_name' => 'Example', 'revision' => 1]);
+        $domain = Domain::query()->create(['name' => 'example.test', 'display_name' => 'Example', 'revision' => 1, 'nameservers_verified_at' => now()]);
         $domain->users()->attach($user);
         $domain->dnsRecords()->create([
             'type' => 'A', 'name' => 'www.example.test', 'content' => '8.8.8.8', 'ttl' => 300, 'mode' => 'proxied',

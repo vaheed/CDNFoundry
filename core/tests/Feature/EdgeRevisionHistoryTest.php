@@ -52,7 +52,7 @@ class EdgeRevisionHistoryTest extends TestCase
     public function test_revision_listing_exposes_an_explicit_field_list_and_never_key_material(): void
     {
         $user = User::factory()->create();
-        $domain = Domain::query()->create(['name' => 'revision-leak.example.test', 'display_name' => 'Leak', 'revision' => 1]);
+        $domain = Domain::query()->create(['name' => 'revision-leak.example.test', 'display_name' => 'Leak', 'revision' => 1, 'nameservers_verified_at' => now()]);
         $domain->users()->attach($user);
         $key = "-----BEGIN PRIVATE KEY-----\nSECRETKEYMATERIAL\n-----END PRIVATE KEY-----";
         EdgeRevision::query()->create([

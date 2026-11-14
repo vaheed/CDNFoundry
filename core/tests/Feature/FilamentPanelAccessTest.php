@@ -271,7 +271,7 @@ class FilamentPanelAccessTest extends TestCase
     {
         $user = User::factory()->create();
         $other = User::factory()->create();
-        $domain = Domain::query()->create(['name' => 'example.test', 'display_name' => 'example.test']);
+        $domain = Domain::query()->create(['name' => 'example.test', 'display_name' => 'example.test', 'nameservers_verified_at' => now()]);
         $domain->users()->attach($user);
 
         $this->actingAs($user)->get('/app/domains')->assertOk();
@@ -282,8 +282,8 @@ class FilamentPanelAccessTest extends TestCase
     public function test_domain_dashboard_lists_only_assigned_recent_domains(): void
     {
         $user = User::factory()->create();
-        $assigned = Domain::query()->create(['name' => 'assigned-dashboard.example.test', 'display_name' => 'Assigned dashboard domain']);
-        $unassigned = Domain::query()->create(['name' => 'private-dashboard.example.test', 'display_name' => 'Private dashboard domain']);
+        $assigned = Domain::query()->create(['name' => 'assigned-dashboard.example.test', 'display_name' => 'Assigned dashboard domain', 'nameservers_verified_at' => now()]);
+        $unassigned = Domain::query()->create(['name' => 'private-dashboard.example.test', 'display_name' => 'Private dashboard domain', 'nameservers_verified_at' => now()]);
         $assigned->users()->attach($user);
 
         $this->actingAs($user)
@@ -314,7 +314,7 @@ class FilamentPanelAccessTest extends TestCase
     {
         $admin = User::factory()->admin()->create();
         $user = User::factory()->create();
-        $domain = Domain::query()->create(['name' => 'mutable.example.test', 'display_name' => 'mutable.example.test']);
+        $domain = Domain::query()->create(['name' => 'mutable.example.test', 'display_name' => 'mutable.example.test', 'nameservers_verified_at' => now()]);
         $domain->users()->attach($user);
 
         $this->assertFalse(Filament::getPanel('admin')->hasReadOnlyRelationManagersOnResourceViewPagesByDefault());
@@ -329,6 +329,7 @@ class FilamentPanelAccessTest extends TestCase
         $domain = Domain::query()->create([
             'name' => 'proxy-settings.example.test',
             'display_name' => 'Proxy settings example',
+            'nameservers_verified_at' => now(),
             'proxy_settings' => [
                 'enabled' => true,
                 'redirect_https' => false,

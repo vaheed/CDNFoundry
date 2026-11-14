@@ -121,6 +121,12 @@ class Domain extends Model
         return $this->delegation_nameservers ?? [];
     }
 
+    /** Whether the owner proved the delegation. Until then only DNS records can be edited and nothing reaches an edge. */
+    public function isVerified(): bool
+    {
+        return $this->nameservers_verified_at !== null;
+    }
+
     /**
      * A pending claim that must not publish a zone: the name is already held by another domain, or
      * an older pending claim owns the delegation zone. Verification only needs the parent delegation.

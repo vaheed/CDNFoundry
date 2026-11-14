@@ -44,7 +44,7 @@ class TokenScopeTest extends TestCase
     public function test_a_read_token_cannot_write_and_cannot_mint_tokens(): void
     {
         $user = User::factory()->create();
-        $domain = Domain::query()->create(['name' => 'scoped.example.com', 'display_name' => 'Scoped']);
+        $domain = Domain::query()->create(['name' => 'scoped.example.com', 'display_name' => 'Scoped', 'nameservers_verified_at' => now()]);
         $domain->users()->attach($user);
         $token = $this->issue($user, ['abilities' => ['read']]);
 
@@ -58,7 +58,7 @@ class TokenScopeTest extends TestCase
     public function test_a_dns_token_reaches_only_dns_routes_and_a_purge_token_only_purges(): void
     {
         $user = User::factory()->create();
-        $domain = Domain::query()->create(['name' => 'abilities.example.com', 'display_name' => 'Abilities']);
+        $domain = Domain::query()->create(['name' => 'abilities.example.com', 'display_name' => 'Abilities', 'nameservers_verified_at' => now()]);
         $domain->users()->attach($user);
         $dns = $this->issue($user, ['abilities' => ['dns']]);
         $purge = $this->issue($user, ['abilities' => ['purge']]);
@@ -74,8 +74,8 @@ class TokenScopeTest extends TestCase
     public function test_a_domain_scoped_token_sees_only_its_domains_even_for_an_administrator(): void
     {
         $admin = User::factory()->create(['type' => UserType::Admin]);
-        $first = Domain::query()->create(['name' => 'first.example.com', 'display_name' => 'First']);
-        $second = Domain::query()->create(['name' => 'second.example.com', 'display_name' => 'Second']);
+        $first = Domain::query()->create(['name' => 'first.example.com', 'display_name' => 'First', 'nameservers_verified_at' => now()]);
+        $second = Domain::query()->create(['name' => 'second.example.com', 'display_name' => 'Second', 'nameservers_verified_at' => now()]);
         $token = $this->issue($admin, ['abilities' => ['*'], 'domain_ids' => [$first->id]]);
 
         $this->as($token)->getJson('/api/domains')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $first->id);
@@ -88,7 +88,7 @@ class TokenScopeTest extends TestCase
     public function test_a_token_cannot_be_scoped_to_a_domain_its_owner_cannot_see(): void
     {
         $user = User::factory()->create();
-        $foreign = Domain::query()->create(['name' => 'foreign.example.com', 'display_name' => 'Foreign']);
+        $foreign = Domain::query()->create(['name' => 'foreign.example.com', 'display_name' => 'Foreign', 'nameservers_verified_at' => now()]);
         $full = $user->createToken('full', ['*'], now()->addDay())->plainTextToken;
 
         $this->as($full)->postJson('/api/me/tokens', ['name' => 'bad', 'domain_ids' => [$foreign->id]])->assertStatus(403);

@@ -22,7 +22,7 @@ class ClientSecurityTest extends TestCase
     private function ownedDomain(): array
     {
         $user = User::factory()->create();
-        $domain = Domain::query()->create(['name' => 'shop.example', 'display_name' => 'shop.example', 'revision' => 1, 'lifecycle_state' => 'active']);
+        $domain = Domain::query()->create(['name' => 'shop.example', 'display_name' => 'shop.example', 'revision' => 1, 'lifecycle_state' => 'active', 'nameservers_verified_at' => now()]);
         $domain->users()->attach($user->id);
 
         return [$user, $domain];
@@ -110,7 +110,7 @@ class ClientSecurityTest extends TestCase
     {
         Queue::fake();
         [$user, $domain] = $this->ownedDomain();
-        $other = Domain::query()->create(['name' => 'other.example', 'display_name' => 'other.example', 'revision' => 1, 'lifecycle_state' => 'active']);
+        $other = Domain::query()->create(['name' => 'other.example', 'display_name' => 'other.example', 'revision' => 1, 'lifecycle_state' => 'active', 'nameservers_verified_at' => now()]);
         $this->reports($other, [['script', '/', 'https://x.example', now('UTC')->format('Y-m-d H:i:s.v')]]);
         $this->artisan('cdnf:client-security:sync-scripts')->assertSuccessful();
         $this->assertSame(0, $other->clientScriptSightings()->count());

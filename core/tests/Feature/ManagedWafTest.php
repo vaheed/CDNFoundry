@@ -200,7 +200,7 @@ class ManagedWafTest extends TestCase
     private function ownedDomain(): array
     {
         $user = User::factory()->create();
-        $domain = Domain::query()->create(['name' => 'waf.example.test', 'display_name' => 'WAF', 'revision' => 1, 'lifecycle_state' => 'active']);
+        $domain = Domain::query()->create(['name' => 'waf.example.test', 'display_name' => 'WAF', 'revision' => 1, 'lifecycle_state' => 'active', 'nameservers_verified_at' => now()]);
         $domain->users()->attach($user);
 
         return [$user, $domain];

@@ -56,7 +56,7 @@ class AnalyticsApiTest extends TestCase
     public function test_dns_scope_excludes_nested_domains_and_history_before_the_current_owner(): void
     {
         [$user, $domain] = $this->ownedDomain();
-        Domain::query()->create(['name' => 'shop.'.$domain->name, 'display_name' => 'Nested', 'revision' => 1]);
+        Domain::query()->create(['name' => 'shop.'.$domain->name, 'display_name' => 'Nested', 'revision' => 1, 'nameservers_verified_at' => now()]);
         Http::fake(['*' => Http::response('')]);
 
         $this->actingAs($user)->getJson("/api/domains/{$domain->id}/analytics/dns")->assertOk();
@@ -260,7 +260,7 @@ class AnalyticsApiTest extends TestCase
     private function ownedDomain(): array
     {
         $user = User::factory()->create();
-        $domain = Domain::query()->create(['name' => 'analytics.example.test', 'display_name' => 'Analytics', 'lifecycle_state' => DomainLifecycleState::Active, 'revision' => 1]);
+        $domain = Domain::query()->create(['name' => 'analytics.example.test', 'display_name' => 'Analytics', 'lifecycle_state' => DomainLifecycleState::Active, 'revision' => 1, 'nameservers_verified_at' => now()]);
         $domain->users()->attach($user, ['created_at' => now()]);
 
         return [$user, $domain];
@@ -269,7 +269,7 @@ class AnalyticsApiTest extends TestCase
     public function test_mitigated_requests_are_domain_scoped_filtered_masked_and_name_their_rule(): void
     {
         $user = User::factory()->create();
-        $domain = Domain::query()->create(['name' => 'mitigated.example', 'display_name' => 'M', 'revision' => 1, 'lifecycle_state' => 'active']);
+        $domain = Domain::query()->create(['name' => 'mitigated.example', 'display_name' => 'M', 'revision' => 1, 'lifecycle_state' => 'active', 'nameservers_verified_at' => now()]);
         $domain->users()->attach($user->id);
         $own = $domain->securityRules()->create(['name' => 'Block admin probes', 'action' => 'block', 'priority' => 10, 'conditions' => [['field' => 'path', 'operator' => 'starts_with', 'value' => '/admin']], 'fingerprint' => 'a']);
         $ruleset = PlatformRuleset::query()->create(['name' => 'Provider rules', 'applies_to_all' => true]);
@@ -302,7 +302,7 @@ class AnalyticsApiTest extends TestCase
     public function test_security_views_count_all_requests_by_band_action_country_network_path_and_agent(): void
     {
         $user = User::factory()->create();
-        $domain = Domain::query()->create(['name' => 'sec-views.example', 'display_name' => 'S', 'revision' => 1, 'lifecycle_state' => 'active']);
+        $domain = Domain::query()->create(['name' => 'sec-views.example', 'display_name' => 'S', 'revision' => 1, 'lifecycle_state' => 'active', 'nameservers_verified_at' => now()]);
         $domain->users()->attach($user->id);
         Http::fake([config('services.clickhouse.url').'*' => Http::response(json_encode(['attack_band' => 1, 'requests' => 10, 'mitigated' => 4]))]);
 

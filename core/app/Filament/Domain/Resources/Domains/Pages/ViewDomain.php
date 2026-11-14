@@ -8,6 +8,9 @@ use App\Actions\EndIncidentProfile;
 use App\Actions\StartIncidentProfile;
 use App\Enums\DomainLifecycleState;
 use App\Filament\Domain\Resources\Domains\DomainResource;
+use App\Filament\Domain\Resources\Domains\RelationManagers\DnsRecordsRelationManager;
+use App\Filament\Domain\Resources\Domains\RelationManagers\HistoryRelationManager;
+use App\Filament\Domain\Resources\Domains\RelationManagers\UsersRelationManager;
 use App\Filament\Domain\Resources\Domains\Widgets\DomainIncidentBanner;
 use App\Filament\Domain\Resources\Domains\Widgets\DomainKpiStrip;
 use App\Filament\Domain\Resources\Domains\Widgets\DomainNeedsAttention;
@@ -143,6 +146,17 @@ class ViewDomain extends ViewRecord
         return $this->record->display_name ?: $this->record->name;
     }
 
+    /** An unverified domain shows its DNS records, history, and users; every other tab opens after verification. */
+    public function getRelationManagers(): array
+    {
+        $managers = parent::getRelationManagers();
+        if ($this->getRecord()->isVerified()) {
+            return $managers;
+        }
+
+        return array_filter($managers, fn (string $manager): bool => in_array($manager, [DnsRecordsRelationManager::class, HistoryRelationManager::class, UsersRelationManager::class], true));
+    }
+
     public function hasCombinedRelationManagerTabsWithContent(): bool
     {
         return true;
@@ -175,7 +189,8 @@ class ViewDomain extends ViewRecord
 
     protected function getHeaderWidgets(): array
     {
-        return [DomainKpiStrip::class, DomainIncidentBanner::class, DomainNeedsAttention::class];
+        // An unverified domain has no traffic and no incident to show; only what still needs doing.
+        return $this->record->isVerified() ? [DomainKpiStrip::class, DomainIncidentBanner::class, DomainNeedsAttention::class] : [DomainNeedsAttention::class];
     }
 
     public function getHeaderWidgetsColumns(): int|array
@@ -815,8 +830,12 @@ class ViewDomain extends ViewRecord
             'moveEdgePool' => 'Move', 'rollbackProxy' => 'Roll back', 'proxyDefaults' => 'Save', 'cacheSettings' => 'Save', 'securitySettings' => 'Save', 'wafProfile' => 'Save',
             'securityAlert' => 'Save', 'credentialCheck' => 'Save', 'sensitiveDataCheck' => 'Save', 'aiProtection' => 'Save', 'apiSchema' => 'Save', 'clientSecurity' => 'Save'];
 
+        // Before the nameservers are verified only the delegation, the DNS records, and the domain itself can be changed.
+        $beforeVerification = ['verifyNameservers', 'forceVerifyNameservers', 'importZone', 'exportZone', 'activate', 'disable', 'deleteDomain'];
+
         return collect($actions)
             ->keyBy(fn (Action $action): string => $action->getName())
+            ->each(fn (Action $action, string $name) => in_array($name, $beforeVerification, true) ? null : $action->hidden(fn (): bool => ! $this->record->isVerified()))
             ->each(fn (Action $action, string $name) => isset($submit[$name]) ? $action->modalSubmitActionLabel($submit[$name]) : null)
             ->map(fn (Action $action): Action => match (true) {
                 in_array($action->getName(), $sheets, true) => $action->slideOver()->modalWidth(Width::TwoExtraLarge),

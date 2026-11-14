@@ -58,7 +58,7 @@ class ProxyRollbackSafetyTest extends TestCase
     private function domainWithRevision(array $origin, string $waf = 'off', string $tlsMode = 'managed'): array
     {
         $user = User::factory()->create();
-        $domain = Domain::query()->create(['name' => 'rollback.test', 'display_name' => 'Rollback', 'lifecycle_state' => 'active', 'revision' => 5]);
+        $domain = Domain::query()->create(['name' => 'rollback.test', 'display_name' => 'Rollback', 'lifecycle_state' => 'active', 'revision' => 5, 'nameservers_verified_at' => now()]);
         $domain->users()->attach($user);
         EdgeRevision::query()->create([
             'domain_id' => $domain->id, 'revision' => 1, 'checksum' => str_repeat('d', 64), 'status' => 'validated',
