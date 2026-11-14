@@ -283,3 +283,50 @@ func TestGatewayAnswersAnUnroutedPlainHTTPHostWith421ButClosesAnUnroutedTLSName(
 	_ = tls.Client(secure, &tls.Config{ServerName: "unrouted.test", MinVersion: tls.VersionTLS12}).Handshake()
 	waitFor(t, func() bool { return g.rejected.Load() == 2 }, func() string { return fmt.Sprintf("rejected=%d", g.rejected.Load()) })
 }
+
+func TestActiveConnectionsCountsAnOpenRoutedConnectionAndReleasesItWhenItCloses(t *testing.T) {
+	upstream, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer upstream.Close()
+	go func() {
+		for {
+			connection, err := upstream.Accept()
+			if err != nil {
+				return
+			}
+			go func() { _, _ = io.Copy(io.Discard, connection); connection.Close() }()
+		}
+	}()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	g := &gateway{}
+	g.table.Store(&routingTable{routes: map[string]string{"http|127.0.0.1|route.test": upstream.Addr().String()}})
+	go g.accept("127.0.0.1:80", listener)
+
+	open := func() net.Conn {
+		connection, err := net.DialTimeout("tcp", listener.Addr().String(), 2*time.Second)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := connection.Write([]byte("GET / HTTP/1.1\r\nHost: route.test\r\n\r\n")); err != nil {
+			t.Fatal(err)
+		}
+		return connection
+	}
+	first, second := open(), open()
+	waitFor(t, func() bool { return g.active.Load() == 2 && g.accepted.Load() == 2 }, func() string {
+		return fmt.Sprintf("active=%d accepted=%d", g.active.Load(), g.accepted.Load())
+	})
+	first.Close()
+	waitFor(t, func() bool { return g.active.Load() == 1 }, func() string { return fmt.Sprintf("active=%d", g.active.Load()) })
+	second.Close()
+	waitFor(t, func() bool { return g.active.Load() == 0 }, func() string { return fmt.Sprintf("active=%d", g.active.Load()) })
+	if g.accepted.Load() != 2 {
+		t.Fatalf("the lifetime counter keeps counting after the connections close: %d", g.accepted.Load())
+	}
+}

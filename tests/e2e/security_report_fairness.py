@@ -90,6 +90,8 @@ def main() -> None:
             assert len(set(domains)) == 100, "a domain took more than one slot while others were left out"
             assert 501 in domains, "the domain with the most events is in the report once"
             assert next(entry for entry in entries if entry["domain_id"] == 501)["count"] >= 50
+            # The agent's own status request is not a client connection, so an idle cell reports none.
+            assert payload["cell"]["capacity"]["active_connections"] == 0, payload["cell"]["capacity"]["active_connections"]
             dropped = payload["cell"]["capacity"]["security_domains_dropped"]
             assert dropped == DOMAINS - 100, f"the cell must say how many active domains did not fit, got {dropped}"
         finally:

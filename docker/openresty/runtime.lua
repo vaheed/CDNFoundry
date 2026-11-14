@@ -2562,7 +2562,8 @@ function M.passive_failures()
 				active_revision = state.sequence,
 				active_generation = state.generation_id,
                 openresty_version = ngx.config.nginx_version,
-                active_connections = tonumber(ngx.var.connections_active) or 0,
+                -- The agent's own status request is one of Nginx's open connections; the count is the clients'.
+                active_connections = math.max(0, (tonumber(ngx.var.connections_active) or 0) - 1),
                 requests_per_second = requests_per_second,
                 origin_connections = ngx.shared.runtime_limits:get("capacity:origin_connections") or 0,
                 cpu_usage = cpu_usage,
