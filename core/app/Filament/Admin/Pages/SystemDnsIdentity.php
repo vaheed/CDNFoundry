@@ -93,14 +93,14 @@ class SystemDnsIdentity extends Page
             Section::make('Authoritative nameservers')
                 ->description('At least two public authoritative endpoints. IPv6 is optional but validated when supplied.')
                 ->schema([
-                    Repeater::make('nameservers')->label(FilamentHelp::label('Nameservers', 'The NS set of the platform domain itself, with the glue addresses DNS nodes answer on. Two at least, for redundancy.'))->minItems(2)->maxItems(8)->schema([
+                    Repeater::make('nameservers')->label(FilamentHelp::label('Nameservers', 'The NS set of the platform domain itself, with the glue addresses DNS nodes answer on. Two at least, for redundancy.'))->addActionLabel('Add nameserver')->minItems(2)->maxItems(8)->schema([
                         TextInput::make('hostname')->label('Hostname')->placeholder('ns1.cdn.example.net')->required()->maxLength(253),
                         TextInput::make('ipv4')->label(FilamentHelp::label('IPv4', 'The public address this nameserver answers on, published as glue.'))->placeholder('192.0.2.53')->required()->ipv4(),
                         TextInput::make('ipv6')->label(FilamentHelp::label('IPv6', 'Optional. Leave empty for IPv4-only authoritative DNS.'))->placeholder('2001:db8::53')->ipv6(),
                     ])->columns(['default' => 1, 'md' => 3]),
                     Repeater::make('customer_pairs')->label(FilamentHelp::label('Customer nameserver pairs', 'The pairs customers set at their registrar. A domain is assigned one pair.'))
                         ->helperText('Readable pairs offered to customers for delegation, separate from the apex NS set above. Each pair needs two hostnames inside the platform domain with public addresses. A competing claim on a name always gets a different pair, so offer at least two.')
-                        ->minItems(1)->maxItems(8)->schema([
+                        ->addActionLabel('Add pair')->minItems(1)->maxItems(8)->schema([
                             TextInput::make('first_hostname')->label('First hostname')->placeholder('ada.ns.cdn.example.net')->required()->maxLength(253),
                             TextInput::make('first_ipv4')->label('First IPv4')->placeholder('192.0.2.53')->required()->ipv4(),
                             TextInput::make('first_ipv6')->label('First IPv6')->placeholder('2001:db8::53')->ipv6(),

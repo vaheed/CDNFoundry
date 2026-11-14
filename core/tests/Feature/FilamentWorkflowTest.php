@@ -64,6 +64,15 @@ class FilamentWorkflowTest extends TestCase
         $this->assertSame(['cary.ns.cdn.example.net', 'seri.ns.cdn.example.net', 'elfy.ns.cdn.example.net', 'orki.ns.cdn.example.net'], array_column($rows, 'hostname'));
     }
 
+    public function test_dns_identity_repeater_buttons_use_plain_text_instead_of_the_tooltip_markup(): void
+    {
+        $admin = User::factory()->admin()->create();
+        Filament::setCurrentPanel(Filament::getPanel('admin'));
+        $this->actingAs($admin);
+
+        Livewire::test(SystemDnsIdentity::class)->assertSee('Add nameserver')->assertSee('Add pair')->assertDontSee('Add to');
+    }
+
     public function test_user_panel_disable_revokes_tokens_and_delete_requires_revocation(): void
     {
         $admin = User::factory()->admin()->create();
