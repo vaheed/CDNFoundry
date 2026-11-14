@@ -163,9 +163,19 @@ local function record_security_event(reason)
         local key = "event:" .. tostring(ngx.ctx.security_domain) .. ":" .. reason
         -- Every key of one event expires together, so a reason that stops occurring
         -- leaves the next heartbeat instead of repeating forever.
-        events:incr(key, 1, 0, 3600)
-        events:set("host:" .. tostring(ngx.ctx.security_domain), ngx.ctx.security_hostname or "", 3600)
-        events:set("time:" .. tostring(ngx.ctx.security_domain) .. ":" .. reason, ngx.time(), 3600)
+        local count = events:incr(key, 1, 0, 3600)
+        local domain = tostring(ngx.ctx.security_domain)
+        events:set("host:" .. domain, ngx.ctx.security_hostname or "", 3600)
+        events:set("time:" .. domain .. ":" .. reason, ngx.time(), 3600)
+        -- The heartbeat finds a domain's reports through two per-domain keys instead of scanning every key: when the domain last had
+        -- an event, and which reasons it has counted. A domain keeps a bounded list, so it can never crowd out another.
+        events:set("act:" .. domain, ngx.time(), 3600)
+        if count == 1 then
+            local reasons = events:get("drs:" .. domain) or ""
+            if not (("," .. reasons .. ","):find("," .. reason .. ",", 1, true)) and #reasons < 1500 then
+                events:set("drs:" .. domain, reasons == "" and reason or (reasons .. "," .. reason), 7200)
+            end
+        end
         note_client_event(tostring(ngx.ctx.security_domain), reason)
     end
 end
@@ -2410,6 +2420,64 @@ local function distinct_clients(domain)
     return math.max(clients:get("evn:" .. domain .. ":" .. window) or 0, clients:get("evn:" .. domain .. ":" .. (window - 1)) or 0)
 end
 
+-- At most this many entries go to the agent in one report, and each domain with recent events gets one before any gets a second.
+local SECURITY_REPORT_ENTRIES = 100
+local SECURITY_REPORT_REASONS_PER_DOMAIN = 5
+local SECURITY_REPORT_ACTIVE_SECONDS = 600
+
+-- The security events of this cell for the heartbeat. Every domain that had an event recently is represented, most recently active
+-- first, with its busiest reason; the remaining room goes to second, third, and later reasons in the same rounds. A domain with
+-- thousands of events therefore takes one slot in each round, exactly like a domain with one. Returns the entries and how many
+-- active domains did not fit, so the cell can say it was cut short instead of silently dropping them.
+local function security_report()
+    local events = ngx.shared.security_limits
+    local now = ngx.time()
+    local seen, domains = {}, {}
+    for _, config in pairs(state.hosts) do
+        local id = config.domain_id
+        if id and not seen[id] then
+            seen[id] = true
+            local at = events:get("act:" .. id)
+            if at and now - at <= SECURITY_REPORT_ACTIVE_SECONDS then domains[#domains + 1] = {id = id, at = at} end
+        end
+    end
+    table.sort(domains, function(a, b) if a.at ~= b.at then return a.at > b.at end return a.id < b.id end)
+    local queues = {}
+    for _, domain in ipairs(domains) do
+        local id = tostring(domain.id)
+        local rows = {}
+        for reason in (events:get("drs:" .. id) or ""):gmatch("[^,]+") do
+            local count = events:get("event:" .. id .. ":" .. reason)
+            if count then rows[#rows + 1] = {reason = reason, count = count} end
+        end
+        table.sort(rows, function(a, b) return a.count > b.count end)
+        queues[#queues + 1] = {domain = id, rows = rows, clients = distinct_clients(id)}
+    end
+    local report, round = {}, 1
+    while #report < SECURITY_REPORT_ENTRIES and round <= SECURITY_REPORT_REASONS_PER_DOMAIN do
+        for _, queue in ipairs(queues) do
+            local row = queue.rows[round]
+            if row and #report < SECURITY_REPORT_ENTRIES then
+                report[#report + 1] = {
+                    domain_id = tonumber(queue.domain), hostname = events:get("host:" .. queue.domain),
+                    reason_code = row.reason, count = row.count,
+                    occurred_at = events:get("time:" .. queue.domain .. ":" .. row.reason) or now,
+                    -- How many distinct clients caused escalating events of this domain in the last five minutes (at most the cap).
+                    clients = queue.clients,
+                }
+            end
+        end
+        round = round + 1
+    end
+    local represented = {}
+    for _, entry in ipairs(report) do represented[entry.domain_id] = true end
+    local dropped = 0
+    for _, domain in ipairs(domains) do
+        if not represented[domain.id] then dropped = dropped + 1 end
+    end
+    return report, dropped
+end
+
 function M.passive_failures()
     local expected = os.getenv("EDGE_STATUS_TOKEN") or ""
     local supplied = ngx.req.get_headers()["x-edge-status-token"] or ""
@@ -2427,21 +2495,7 @@ function M.passive_failures()
             }
         end
     end
-    local security_events = {}
-    local event_dictionary = ngx.shared.security_limits
-    for _, key in ipairs(event_dictionary:get_keys(200)) do
-        local domain, reason = key:match("^event:([^:]+):([%w_]+)$")
-        if domain and reason and #security_events < 20 then
-            security_events[#security_events + 1] = {
-                domain_id = tonumber(domain), hostname = event_dictionary:get("host:" .. domain),
-                reason_code = reason, count = event_dictionary:get(key) or 0,
-                occurred_at = event_dictionary:get("time:" .. domain .. ":" .. reason) or ngx.time(),
-                -- How many distinct clients caused escalating events of this domain in the last five minutes (at most the cap).
-                clients = distinct_clients(domain),
-            }
-        end
-    end
-    table.sort(security_events, function(a, b) return a.count > b.count end)
+    local security_events, security_dropped = security_report()
     local assigned = 0
     local origins = {}
     for hostname, config in pairs(state.hosts) do
@@ -2503,6 +2557,8 @@ function M.passive_failures()
             overlays_restored = ngx.shared.runtime_limits:get("overlay:restored") == true,
 			capacity = {
 				assigned_domain_count = assigned,
+				-- Domains with recent security events that did not fit in this report, so a cut-short report is visible.
+				security_domains_dropped = security_dropped,
 				active_revision = state.sequence,
 				active_generation = state.generation_id,
                 openresty_version = ngx.config.nginx_version,

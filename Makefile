@@ -71,6 +71,7 @@ dev-e2e: dev-waf-image
 	python3 tests/e2e/rate_limit_isolation.py
 	python3 tests/e2e/ipv6_rate_limit_keys.py
 	python3 tests/e2e/client_containment.py
+	python3 tests/e2e/security_report_fairness.py
 	python3 tests/e2e/origin_failover.py
 
 dev-waf-image:
@@ -82,6 +83,7 @@ dev-waf-e2e: dev-waf-image
 	python3 tests/e2e/rate_limit_isolation.py
 	python3 tests/e2e/ipv6_rate_limit_keys.py
 	python3 tests/e2e/client_containment.py
+	python3 tests/e2e/security_report_fairness.py
 
 dev-gateway-e2e:
 	docker build -t cdnfoundry/edge-gateway:qualification edge-gateway
