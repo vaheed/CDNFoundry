@@ -133,7 +133,7 @@ class SecurityEventsRelationManager extends RelationManager
         $rows = $this->rows($filters);
         $slice = array_slice($rows, ($page - 1) * $perPage, $perPage);
 
-        return new LengthAwarePaginator(collect($slice)->mapWithKeys(fn (array $row): array => [$row['event_id'] => $row]), count($rows), $perPage, $page);
+        return new LengthAwarePaginator(collect($slice)->mapWithKeys(fn (array $row): array => [$row['event_id'] => $row]), count($rows), $perPage, $page, ['pageName' => $this->getTablePaginationPageName()]);
     }
 
     /** The rule sheet's values for a request: its path, country, network, and user agent as conditions, and a safe default action. */
