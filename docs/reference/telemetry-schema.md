@@ -53,7 +53,7 @@ from the collector's own settings and never reads them from the event.
 | `waf_score` | on a block, the configured inbound threshold the request reached or exceeded; zero otherwise |
 | `waf_action` | `off` (profile off), `monitor` (detection only), `pass` (inspected and allowed), or `block`. A block also sets `security_action=block` and `security_reason=waf_block` |
 | `waf_processing_us` | bounded processing time in microseconds |
-| `waf_body_limit` | `none` or `exceeded` |
+| `waf_body_limit` | the body-inspection result: `inspected` (the whole body was scored), `no_body` (the request had no body or an empty one), `exceeded` (over the limit), `unreadable`, `unsupported_enc` (a compressed body), `scoring_failed` (the scoring step failed and the request was inspected inline), or `none` when the profile is off |
 | `waf_exclusion_id` | numeric audit reference; zero means none |
 | `request_time_ms` | unsigned integer, 0 when the timing is missing or over 3,600 seconds |
 | `upstream_connect_ms`, `upstream_header_ms` | nullable unsigned integers, from the last upstream attempt |

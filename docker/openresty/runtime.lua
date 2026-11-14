@@ -3,6 +3,9 @@ local resolver = require "resty.dns.resolver"
 local balancer = require "ngx.balancer"
 local bit = require "bit"
 local cache_target = require "cache_key"
+local waf_body = require "waf_body"
+local domain_budget = require "domain_budget"
+local client_keys = require "client_key"
 local ffi = require "ffi"
 ffi.cdef[[
 int kill(int pid, int sig);
@@ -21,6 +24,21 @@ local certificate_cache_limit = 512
 local cache_control_directives
 local geo_database
 local asn_database
+-- The hostnames a cell serves, counted once per loaded state: the divisor of every per-domain budget.
+local counted_hosts = setmetatable({}, {__mode = "k"})
+
+local function hosts_on_cell()
+    local count = counted_hosts[state]
+    if not count then
+        count = 0
+        for _ in pairs(state.hosts) do count = count + 1 end
+        counted_hosts[state] = count
+    end
+    return count
+end
+
+-- Turns a client address into the key its counters use (see client_key.lua); assigned with the address helpers below.
+local client_limit_key
 
 -- Proves to the local Vector that an access-log line came from this cell. Other
 -- containers on the cell network do not hold the node secret, so Vector drops
@@ -66,6 +84,77 @@ local function effective_limits(config, security)
     return merged
 end
 
+-- Reasons that show a domain's own protections working, or traffic that never reached the domain. They are reported but never
+-- count toward containing a client or escalating a domain. The list is the "non_escalating" list of
+-- core/resources/contracts/security-event-reasons.json, which the control plane reads; tests/contract keeps the two equal.
+local ESCALATION_EXEMPT = {
+    domain_quarantined = true, edge_emergency_mode = true, client_temporarily_blocked = true,
+    invalid_method = true, unknown_host = true, unknown_sni = true,
+    sni_host_mismatch = true, incident_method = true, incident_body_size = true,
+    challenge_required = true, challenge_invalid = true, custom_rule_block = true,
+    custom_rule_challenge = true, custom_rule_log = true, custom_rule_rate_limited = true,
+    waf_rule_logged = true, waf_inspection_failed = true, rate_limit_state_full = true,
+    platform_rule_block = true, platform_rule_challenge = true, platform_rule_log = true,
+    platform_rule_rate_limited = true, sensitive_data_card = true, sensitive_data_iban = true,
+    sensitive_data_private_key = true, sensitive_data_api_key = true, schema_unknown_path = true,
+    schema_wrong_method = true, schema_missing_parameter = true, schema_invalid_parameter = true,
+    schema_body_too_large = true,
+}
+
+-- One client that causes this many escalating events in a minute is blocked on this cell for CLIENT_BAN_SECONDS, whatever the
+-- other clients of the domain do. The ban is local, bounded, and expires by itself.
+local CLIENT_EVENT_THRESHOLD = 20
+local CLIENT_BAN_SECONDS = 300
+-- The cell reports how many distinct clients caused escalating events in the last five minutes, up to this many, so the control
+-- plane escalates a whole domain only when the evidence is distributed. It remembers at most this many clients per domain.
+local EVIDENCE_WINDOW_SECONDS = 300
+local EVIDENCE_CLIENT_CAP = 16
+-- Each domain keeps its own share of client_events for per-client counters and bans (see domain_budget.lua).
+local CLIENT_COUNTER_FRACTION, CLIENT_BAN_FRACTION = 0.5, 0.25
+
+-- The key the request's client is counted under, set once the client address is known and read when an event is recorded.
+local function event_client()
+    local key = ngx.ctx.security_client
+    if key then return key end
+    return client_limit_key(ngx.var.remote_addr or "")
+end
+
+-- Notes who caused an escalating event: distinct-client evidence for the control plane, and a per-client count that contains a
+-- single noisy client. A client the dictionary has no room for is simply not tracked.
+local function note_client_event(domain, reason)
+    if ESCALATION_EXEMPT[reason] then return end
+    local client = event_client()
+    if not client or client == "" then return end
+    local clients = ngx.shared.client_events
+    if not clients then return end
+    local digest = ngx.md5(client)
+    local now = ngx.time()
+    local window = math.floor(now / EVIDENCE_WINDOW_SECONDS)
+    local count_key = "evn:" .. domain .. ":" .. window
+    if (clients:get(count_key) or 0) < EVIDENCE_CLIENT_CAP and clients:add("ev:" .. domain .. ":" .. window .. ":" .. digest, true, EVIDENCE_WINDOW_SECONDS * 2) then
+        clients:incr(count_key, 1, 0, EVIDENCE_WINDOW_SECONDS * 2)
+    end
+    local share = domain_budget.share(clients, hosts_on_cell())
+    local counter = "cs:" .. domain .. ":" .. digest .. ":" .. math.floor(now / 60)
+    local events = clients:get(counter)
+    if events == nil then
+        if not domain_budget.admit(clients, domain, "cs", 60, math.max(1, math.floor(share * CLIENT_COUNTER_FRACTION / 2))) then return end
+    end
+    events = clients:incr(counter, 1, 0, 120)
+    local ban = "cb:" .. domain .. ":" .. digest
+    if events and events >= CLIENT_EVENT_THRESHOLD and not clients:get(ban)
+        and domain_budget.admit(clients, domain, "cb", CLIENT_BAN_SECONDS, math.max(1, math.floor(share * CLIENT_BAN_FRACTION / 2))) then
+        clients:set(ban, true, CLIENT_BAN_SECONDS)
+        ngx.shared.runtime_limits:incr("capacity:client_bans", 1, 0)
+    end
+end
+
+-- Whether the request's client is serving a ban on this cell.
+local function client_banned(domain)
+    local clients = ngx.shared.client_events
+    return clients ~= nil and clients:get("cb:" .. domain .. ":" .. ngx.md5(event_client())) == true
+end
+
 -- Counts a security event for the reason and, when the request belongs to a domain, queues it for the next heartbeat.
 local function record_security_event(reason)
     ngx.shared.runtime_limits:incr("security:reason:" .. reason, 1, 0)
@@ -77,6 +166,7 @@ local function record_security_event(reason)
         events:incr(key, 1, 0, 3600)
         events:set("host:" .. tostring(ngx.ctx.security_domain), ngx.ctx.security_hostname or "", 3600)
         events:set("time:" .. tostring(ngx.ctx.security_domain) .. ":" .. reason, ngx.time(), 3600)
+        note_client_event(tostring(ngx.ctx.security_domain), reason)
     end
 end
 
@@ -235,7 +325,7 @@ local function enforce_challenge(config, incident, client, trusted)
     -- Only a person's page load gets the challenge; every other request without a token is refused, so a script never reaches the origin.
     local accepts_html = (method == "GET" or method == "HEAD") and (ngx.var.http_accept or ""):find("text/html", 1, true)
     if not accepts_html then return security_reject(403, "challenge_required") end
-    local issues = ngx.shared.runtime_limits:incr("challenge:issue:" .. ngx.md5(client) .. ":" .. math.floor(ngx.time() / 60), 1, 0, 120)
+    local issues = ngx.shared.runtime_limits:incr("challenge:issue:" .. ngx.md5(client_limit_key(client)) .. ":" .. math.floor(ngx.time() / 60), 1, 0, 120)
     if not issues or issues > CHALLENGE_ISSUES_PER_MINUTE then return security_reject(429, "client_rate_exceeded") end
     local issued = tostring(ngx.time())
     local binding = client_binding(client)
@@ -260,6 +350,22 @@ local function packed_address(address)
     local bytes = ffi.new("unsigned char[16]")
     if ffi.C.inet_pton(ipv6 and 10 or 2, address, bytes) ~= 1 then return nil end
     return ffi.string(bytes, ipv6 and 16 or 4)
+end
+
+-- The IPv6 prefix a client is counted under (EDGE_IPV6_RATE_PREFIX, 32 to 128, default 64) and the networks that keep their
+-- full address because many unrelated users share one prefix (EDGE_IPV6_EXACT_CIDRS, comma separated, at most 64). The settings
+-- are read once per worker; a value that is refused is logged and the default applies.
+local limit_key_function
+
+client_limit_key = function(address)
+    if not limit_key_function then
+        local prefix, refused_prefix = client_keys.prefix(os.getenv("EDGE_IPV6_RATE_PREFIX"))
+        if refused_prefix then ngx.log(ngx.ERR, "EDGE_IPV6_RATE_PREFIX must be a whole number from 32 to 128; using ", client_keys.DEFAULT_PREFIX) end
+        local exceptions, refused = client_keys.exceptions(os.getenv("EDGE_IPV6_EXACT_CIDRS"), packed_address)
+        if #refused > 0 then ngx.log(ngx.ERR, "EDGE_IPV6_EXACT_CIDRS ignores ", #refused, " entries that are not IPv6 networks or exceed the limit of ", client_keys.MAXIMUM_EXCEPTIONS) end
+        limit_key_function = client_keys.new({pack = packed_address, prefix = prefix, exceptions = exceptions})
+    end
+    return limit_key_function(address)
 end
 
 local function network_parts(cidr)
@@ -642,30 +748,38 @@ local SCORE_HOP_HEADERS = {
     expect = true, ["content-length"] = true, ["proxy-authorization"] = true, ["proxy-connection"] = true,
 }
 
--- The request body as text, or nil when it is too large to forward or cannot be read.
+-- The request body as text, or nil when it is absent, too large to forward, or cannot be read in full. Callers that only look for a
+-- field in the body use this; the WAF decides on the explicit outcome of waf_body.get instead.
 local function request_body_text(limit)
-    local length = tonumber(ngx.var.http_content_length) or 0
-    if length <= 0 or length > limit then return nil end
-    ngx.req.read_body()
-    local data = ngx.req.get_body_data()
-    if data then return data end
-    local path = ngx.req.get_body_file()
-    if not path then return nil end
-    local file = io.open(path, "rb")
-    if not file then return nil end
-    data = file:read(limit)
-    file:close()
-    return data
+    local outcome, data = waf_body.get(limit)
+    if outcome == "complete" then return data end
+    return nil
+end
+
+-- What a blocking WAF answers, and what telemetry records in waf_body_limit, when the body or its inspection is not complete.
+local WAF_FAILURES = {
+    too_large = {status = 413, reason = "waf_body_limit", telemetry = "exceeded"},
+    unreadable = {status = 400, reason = "waf_body_unreadable", telemetry = "unreadable"},
+    unsupported_encoding = {status = 415, reason = "waf_body_encoding", telemetry = "unsupported_enc"},
+    scoring_failed = {status = 503, reason = "waf_inspection_failed", telemetry = "scoring_failed"},
+}
+
+local function waf_body_limit(waf)
+    local configured = tonumber(waf.body_limit_bytes) or 0
+    if configured <= 0 then configured = waf_body.CEILING end
+    return math.max(1024, math.min(waf_body.CEILING, configured))
 end
 
 -- Asks ModSecurity for the CRS anomaly points of this request without blocking it: the request goes to the loopback
--- scoring listener, which answers with a redirect whose address carries the points. Returns nil when no score could be read,
--- and the request is then never scored. A body larger than the limit is not forwarded, so only its headers and address count.
+-- scoring listener, which answers with a redirect whose address carries the points. The listener receives the whole decoded body
+-- with its own Content-Length, whatever framing the client used. Returns the scores, or nil and the reason no score exists: the
+-- body was too large, unreadable or encoded, or the listener failed. A request without a score has not been inspected.
 local function score_request(body_limit, off_list)
+    local outcome, body = waf_body.get(body_limit)
+    if not waf_body.is_known(outcome) then return nil, outcome end
     local socket = ngx.socket.tcp()
     socket:settimeouts(200, 1000, 2000)
-    if not socket:connect("127.0.0.1", 9082) then return nil end
-    local body = request_body_text(body_limit)
+    if not socket:connect("127.0.0.1", 9082) then return nil, "scoring_failed" end
     local lines = {ngx.req.get_method() .. " " .. (ngx.var.request_uri or "/") .. " HTTP/1.1", "Connection: close"}
     if off_list and #off_list > 0 then lines[#lines + 1] = "X-CDNF-Internal-WAF-Off: ," .. table.concat(off_list, ",") .. "," end
     for name, value in pairs(ngx.req.get_headers(100, true)) do
@@ -679,7 +793,7 @@ local function score_request(body_limit, off_list)
     end
     lines[#lines + 1] = "Content-Length: " .. tostring(body and #body or 0)
     local sent = socket:send(table.concat(lines, "\r\n") .. "\r\n\r\n" .. (body or ""))
-    if not sent then socket:close(); return nil end
+    if not sent then socket:close(); return nil, "scoring_failed" end
     local status_line = socket:receive("*l")
     local location
     while status_line do
@@ -689,9 +803,9 @@ local function score_request(body_limit, off_list)
         if name and name:lower() == "location" then location = value end
     end
     socket:close()
-    if not status_line or not status_line:find(" 302 ", 1, true) or not location then return nil end
+    if not status_line or not status_line:find(" 302 ", 1, true) or not location then return nil, "scoring_failed" end
     local total, sqli, xss, rce = location:match("total=(%d*)&sqli=(%d*)&xss=(%d*)&rce=(%d*)")
-    if not total then return nil end
+    if not total then return nil, "scoring_failed" end
     return {
         total = tonumber(total) or 0, attack_score = points_to_score(total), attack_score_sqli = points_to_score(sqli),
         attack_score_xss = points_to_score(xss), attack_score_rce = points_to_score(rce),
@@ -1255,10 +1369,23 @@ end
 local RATE_PERIODS = {[10] = true, [60] = true, [600] = true}
 
 local function rate_key_value(limit, request)
-    if limit.key == "client_ip" then return request.client end
-    if limit.key == "client_ip_path" then return tostring(request.client) .. "|" .. tostring(request.path) end
+    if limit.key == "client_ip" then return request.client_key end
+    if limit.key == "client_ip_path" then return tostring(request.client_key) .. "|" .. tostring(request.path) end
     if limit.key == "header" then return header_value(request, tostring(limit.header_name or ""):lower()) end
     return nil
+end
+
+-- Counters take three quarters of a domain's share of rate_rules and mitigation markers the rest, so a flood of new client keys
+-- can never crowd out the marker that keeps an already mitigated client blocked. An entry lives for two windows, and counters
+-- come in three window lengths and markers in four length classes.
+local RATE_COUNTER_FRACTION, RATE_MARKER_FRACTION = 0.75, 0.25
+local MARKER_WIDTHS = {60, 600, 3600, 86400}
+
+local function marker_width(duration)
+    for _, width in ipairs(MARKER_WIDTHS) do
+        if duration <= width then return width end
+    end
+    return MARKER_WIDTHS[#MARKER_WIDTHS]
 end
 
 local function rate_limit_exceeded(config, rule, limit)
@@ -1267,16 +1394,34 @@ local function rate_limit_exceeded(config, rule, limit)
     if not value or value == "" then return false end
     local threshold, period, duration = tonumber(limit.threshold), tonumber(limit.period_seconds), tonumber(limit.duration_seconds)
     if not threshold or threshold < 1 or not RATE_PERIODS[period] or not duration or duration < 10 or duration > 86400 then return false end
-    local id = tostring(config.domain_id or config.domain) .. ":" .. tostring(rule.id) .. ":" .. ngx.md5(tostring(value))
+    local domain = tostring(config.domain_id or config.domain)
+    local id = domain .. ":" .. tostring(rule.id) .. ":" .. ngx.md5(tostring(value))
     if dictionary:get("m:" .. id) then return true end
     local counter = "c:" .. id .. ":" .. math.floor(ngx.time() / period)
+    local share = domain_budget.share(dictionary, hosts_on_cell())
+    -- A client key the domain has not counted yet takes one entry of the domain's own share. Beyond the share it is not counted,
+    -- and the first refusal in a window is reported, so one domain's key flood costs only that domain its counters.
+    if not dictionary:get(counter) then
+        local limit_per_window = math.max(1, math.floor(share * RATE_COUNTER_FRACTION / (2 * 3)))
+        local admitted, used = domain_budget.admit(dictionary, domain, "c" .. period, period, limit_per_window)
+        if not admitted then
+            if used == limit_per_window + 1 then record_security_event("rate_limit_state_full") end
+            return false
+        end
+    end
     local count = dictionary:incr(counter, 1, 0, period * 2)
     -- A full dictionary never blocks anyone: no count means no decision.
     if not count then return false end
     if count > threshold then
-        -- The count restarts when the mitigation ends, so a released client gets a fresh allowance.
-        dictionary:set("m:" .. id, true, duration)
-        dictionary:delete(counter)
+        -- The mitigation keeps its own share. When that is used up, the counter stays over its threshold, so the client is still
+        -- blocked until the window ends; it is not released early and it evicts nothing.
+        local width = marker_width(duration)
+        local limit_per_window = math.max(1, math.floor(share * RATE_MARKER_FRACTION / (2 * #MARKER_WIDTHS)))
+        if dictionary:get("m:" .. id) or domain_budget.admit(dictionary, domain, "m" .. width, width, limit_per_window) then
+            -- The count restarts when the mitigation ends, so a released client gets a fresh allowance.
+            dictionary:set("m:" .. id, true, duration)
+            dictionary:delete(counter)
+        end
         return true
     end
     return false
@@ -1521,20 +1666,29 @@ function M.prepare_waf()
     -- an attacker bypass CRS by adding a literal name. See docs/guides/managed-waf.md.
 end
 
+-- Admits the request body before any other work on it. The body is read from Nginx, so a chunked or HTTP/2 body without a
+-- Content-Length is judged exactly like one with it. A body that is too large, unreadable or content-encoded is refused when
+-- the WAF blocks and recorded when it only monitors; it is never reported as inspected.
 local function request_body_safety(config)
     local waf = config.waf or {}
     if waf.name == "off" then return end
-    local limit = math.max(1024, math.min(1048576, tonumber(waf.body_limit_bytes) or 1048576))
+    local limit = waf_body_limit(waf)
     local length = tonumber(ngx.var.http_content_length) or 0
+    local outcome, body
     if length > limit then
-        ngx.var.cdn_waf_body_limit = "exceeded"
-        if waf.blocking == true then return security_reject(413, "waf_body_limit") end
+        outcome = "too_large"
+    else
+        outcome, body = waf_body.get(limit)
+    end
+    local failure = WAF_FAILURES[outcome]
+    if failure then
+        ngx.var.cdn_waf_body_limit = failure.telemetry
+        if waf.blocking == true then return security_reject(failure.status, failure.reason) end
+        record_security_event(failure.reason)
         return
     end
-    if length > 0 and (ngx.var.http_content_type or ""):lower():find("application/json", 1, true) then
-        ngx.req.read_body()
-        local body = ngx.req.get_body_data()
-        if body and #body <= limit and not cjson.decode(body) then
+    if outcome == "complete" and (ngx.var.http_content_type or ""):lower():find("application/json", 1, true) then
+        if not cjson.decode(body) then
             return security_reject(400, "malformed_request_body")
         end
     end
@@ -1612,6 +1766,11 @@ function M.access()
     if size > (tonumber(limits.maximum_request_body_size) or 8388608) then return security_reject(413, "body_too_large") end
     if incident and size > (tonumber(incident.max_body_bytes) or 1048576) then return security_reject(413, "incident_body_size") end
     local client = client_address(security)
+    -- Counters use the client's key (an IPv6 address is reduced to its prefix); rules, geography and logs keep the address.
+    local client_counting_key = client_limit_key(client)
+    ngx.ctx.security_client = client_counting_key
+    -- A client that caused too many escalating events is contained here, before it costs the domain anything more.
+    if client_banned(tostring(ngx.ctx.security_domain)) then return security_reject(429, "client_temporarily_blocked") end
     local country, continent = geography(client)
     ngx.var.cdn_client_ip = client
     -- One internal header carries the address to the origin hop; nothing from
@@ -1624,7 +1783,7 @@ function M.access()
     local rules = rules_for(security)
     local request = {
         host = host, path = ngx.var.uri or "/", query_present = (ngx.var.args or "") ~= "", method = method,
-        country = country, continent = continent, asn = tonumber(ngx.var.cdn_asn) or 0, client = client,
+        country = country, continent = continent, asn = tonumber(ngx.var.cdn_asn) or 0, client = client, client_key = client_counting_key,
         user_agent = ngx.var.http_user_agent, referer = ngx.var.http_referer, content_type = ngx.var.http_content_type,
         referer_host = referer_host(ngx.var.http_referer), file_extension = (ngx.var.uri or "/"):match("%.([%w]+)$"),
         body_size = size, tls_version = ngx.var.https == "on" and (ngx.var.ssl_protocol or "none") or "none",
@@ -1655,7 +1814,7 @@ function M.access()
     local scoring = waf_mode == "block" or waf_mode == "monitor"
     if scoring or has_score_rule(rules) then
         if not scoring then ngx.req.set_header("X-CDNF-Internal-WAF-Paranoia", "1") end
-        local limit = math.max(1024, math.min(1048576, tonumber(waf_settings.body_limit_bytes) or 1048576))
+        local limit = waf_body_limit(waf_settings)
         -- Categories and rules the domain switched off are removed from the scoring pass. Log-only rules are removed from the
         -- score that decides, and a second pass without that removal shows whether one of them matched.
         local off = {}
@@ -1665,7 +1824,7 @@ function M.access()
         local log_only = waf_settings.log_only_rules or {}
         if #log_only > 0 and scoring then detected = score_request(limit, off) end
         for _, id in ipairs(log_only) do off[#off + 1] = tostring(id) end
-        local scores = score_request(limit, off)
+        local scores, failure_outcome = score_request(limit, off)
         if scores and detected and detected.total > scores.total then record_security_event("waf_rule_logged") end
         if scores then
             request.scores = scores
@@ -1673,8 +1832,24 @@ function M.access()
             ngx.var.cdn_attack_score_sqli = tostring(scores.attack_score_sqli)
             ngx.var.cdn_attack_score_xss = tostring(scores.attack_score_xss)
             ngx.var.cdn_attack_score_rce = tostring(scores.attack_score_rce)
-            -- The score decided; inspecting the same request again on its way to the origin would apply the unadjusted rules.
+            -- The score covers the whole request, headers and body, so it decided; inspecting the same request again on its way
+            -- to the origin would apply the unadjusted rules. Inline inspection is switched off only here, after a score exists.
+            if scoring then
+                ngx.var.cdn_waf_body_limit = (waf_body.get(limit) == "complete") and "inspected" or "no_body"
+            end
             ngx.req.set_header("X-CDNF-Internal-WAF-Mode", "off")
+        elseif scoring then
+            -- No score means the request was not scored. A body that was too large, unreadable or encoded cannot be inspected
+            -- by any engine, so a blocking WAF refuses it. When only the scoring listener failed, the whole request is still
+            -- complete: the mode is left as it is, so the inline engine inspects it, and the failure is recorded.
+            local failure = WAF_FAILURES[failure_outcome] or WAF_FAILURES.scoring_failed
+            ngx.var.cdn_waf_body_limit = failure.telemetry
+            if failure_outcome == "scoring_failed" or not WAF_FAILURES[failure_outcome] then
+                record_security_event(WAF_FAILURES.scoring_failed.reason)
+            elseif waf_mode == "block" then
+                return security_reject(failure.status, failure.reason)
+            end
+            -- A monitoring WAF already recorded an unusable body when it admitted it.
         end
     end
     for index, rule in ipairs(rules) do
@@ -1729,11 +1904,25 @@ function M.access()
         if challenged then return challenged end
     end
     local second = ngx.time()
-    local client_key = "security:req:client:" .. tostring(config.domain) .. ":" .. ngx.md5(client) .. ":" .. second
+    local client_key = "security:req:client:" .. tostring(config.domain) .. ":" .. ngx.md5(client_counting_key) .. ":" .. second
     local domain_key = "security:req:domain:" .. tostring(config.domain) .. ":" .. second
-    -- Attacker-controlled client cardinality must never evict control and
-    -- per-domain counters. Nginx's limit_req remains a fixed-memory fallback.
-    local client_requests = ngx.shared.traffic_limits:incr(client_key, 1, 0, 2)
+    -- Attacker-controlled client cardinality must never evict control and per-domain counters, nor another domain's client
+    -- counters. A client's counter takes one entry of the domain's own share of traffic_limits; beyond the share the client is
+    -- not counted per client, and the domain's own counter below still applies. Nginx's limit_req remains a fixed-memory fallback.
+    -- The client connection counters below need no budget: a domain's live connections are capped, and each releases its key.
+    local client_requests
+    local traffic = ngx.shared.traffic_limits
+    local share_per_second = math.max(1, math.floor(domain_budget.share(traffic, hosts_on_cell()) * 0.5 / 2))
+    if traffic:get(client_key) then
+        client_requests = traffic:incr(client_key, 1, 0, 2)
+    else
+        local admitted, used = domain_budget.admit(traffic, config.domain, "q", 1, share_per_second)
+        if admitted then
+            client_requests = traffic:incr(client_key, 1, 0, 2)
+        elseif used == share_per_second + 1 then
+            record_security_event("rate_limit_state_full")
+        end
+    end
     local domain_dictionary = ngx.shared.domain_limits
     local domain_requests = domain_dictionary:incr(domain_key, 1, 0, 2)
     if not domain_requests then return security_reject(503, "domain_rate_exceeded") end
@@ -1741,7 +1930,7 @@ function M.access()
     local burst = tonumber(limits.request_burst) or 200
     if client_requests and client_requests > rps + burst then return security_reject(429, "client_rate_exceeded") end
     if domain_requests and domain_requests > rps * 8 + burst then return security_reject(429, "domain_rate_exceeded") end
-    local client_connection_key = "security:conn:client:" .. tostring(config.domain) .. ":" .. ngx.md5(client)
+    local client_connection_key = "security:conn:client:" .. tostring(config.domain) .. ":" .. ngx.md5(client_counting_key)
     local domain_connection_key = "security:conn:domain:" .. tostring(config.domain)
     local client_connections = ngx.shared.traffic_limits:incr(client_connection_key, 1, 0)
     local domain_connections = domain_dictionary:incr(domain_connection_key, 1, 0)
@@ -2116,6 +2305,14 @@ local function record_waf_outcome()
     ngx.var.cdn_security_reason = "waf_block"
 end
 
+-- The key Nginx's own per-client request and connection limits count under; it runs in the rewrite phase, before those limits.
+-- A failure falls back to the address itself, so a key problem can only weaken the grouping, never stop a request.
+function M.client_limit_key(address)
+    local ok, key = pcall(client_limit_key, address)
+    if ok and key then return key end
+    return address
+end
+
 function M.finish()
     record_waf_outcome()
     local client_key = ngx.var.cdn_security_client_connection_key
@@ -2205,6 +2402,14 @@ function M.origin_failure()
     return ngx.exit(444)
 end
 
+-- Distinct clients that caused escalating events of one domain in the current or the previous five-minute window.
+local function distinct_clients(domain)
+    local clients = ngx.shared.client_events
+    if not clients then return 0 end
+    local window = math.floor(ngx.time() / EVIDENCE_WINDOW_SECONDS)
+    return math.max(clients:get("evn:" .. domain .. ":" .. window) or 0, clients:get("evn:" .. domain .. ":" .. (window - 1)) or 0)
+end
+
 function M.passive_failures()
     local expected = os.getenv("EDGE_STATUS_TOKEN") or ""
     local supplied = ngx.req.get_headers()["x-edge-status-token"] or ""
@@ -2231,6 +2436,8 @@ function M.passive_failures()
                 domain_id = tonumber(domain), hostname = event_dictionary:get("host:" .. domain),
                 reason_code = reason, count = event_dictionary:get(key) or 0,
                 occurred_at = event_dictionary:get("time:" .. domain .. ":" .. reason) or ngx.time(),
+                -- How many distinct clients caused escalating events of this domain in the last five minutes (at most the cap).
+                clients = distinct_clients(domain),
             }
         end
     end

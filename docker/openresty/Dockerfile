@@ -79,6 +79,8 @@ RUN sed -i 's/^SecRuleEngine .*/SecRuleEngine On/' /etc/cdnfoundry/modsecurity.c
     && sed -i 's/^SecAuditLogType .*/SecAuditLogType Serial/' /etc/cdnfoundry/modsecurity.conf \
     && sed -i 's#^SecAuditLog .*#SecAuditLog /dev/stderr#' /etc/cdnfoundry/modsecurity.conf \
     && sed -i 's/^SecDebugLogLevel .*/SecDebugLogLevel 0/' /etc/cdnfoundry/modsecurity.conf \
+    && sed -i 's/^SecRequestBodyNoFilesLimit .*/SecRequestBodyNoFilesLimit 1048576/' /etc/cdnfoundry/modsecurity.conf \
+    && grep -q '^SecRequestBodyNoFilesLimit 1048576$' /etc/cdnfoundry/modsecurity.conf \
     && sed -i 's#^SecUnicodeMapFile .*#SecUnicodeMapFile /etc/cdnfoundry/unicode.mapping 20127#' /etc/cdnfoundry/modsecurity.conf \
     && find /etc/cdnfoundry/crs/rules -type f -name '*.conf' -exec sed -i -E \
        -e 's/phase:([1-5]),/phase:\1,nolog,/g' \
@@ -89,6 +91,9 @@ COPY docker/nginx/cache-upstream.conf /etc/nginx/cache-upstream.conf
 COPY docker/nginx/origin-proxy.conf /etc/nginx/origin-proxy.conf
 COPY docker/openresty/runtime.lua /etc/cdnfoundry/runtime.lua
 COPY docker/openresty/cache_key.lua /etc/cdnfoundry/cache_key.lua
+COPY docker/openresty/waf_body.lua /etc/cdnfoundry/waf_body.lua
+COPY docker/openresty/domain_budget.lua /etc/cdnfoundry/domain_budget.lua
+COPY docker/openresty/client_key.lua /etc/cdnfoundry/client_key.lua
 COPY --chmod=755 docker/openresty/entrypoint.sh /usr/local/bin/cdnfoundry-edge-entrypoint
 
 ENTRYPOINT ["/usr/local/bin/cdnfoundry-edge-entrypoint"]

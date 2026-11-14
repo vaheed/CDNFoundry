@@ -151,9 +151,54 @@ listed. A domain with log-only rules is scored twice per request.
 A request that the cell scores is inspected once, in the scoring step, with the
 domain's adjustments applied. The cache location then skips its own second
 inspection of that request. Responses are not inspected: the managed WAF covers
-requests. If scoring is unavailable, the cell falls back to inspecting the request
-with the level's unadjusted defaults.
+requests. The cell switches inline inspection off only after the scoring step
+returned a score for the complete request. If scoring is unavailable, the cell
+inspects the request inline with the level's unadjusted defaults instead and
+records `scoring_failed`.
 :::
+
+## Request bodies
+
+The cell reads the request body from Nginx, after it decodes the transport
+framing, and sends that decoded body to the scoring step. Whether a body exists
+never depends on a `Content-Length` header, so these all give the same decision
+for the same entity:
+
+| Request | How the body arrives |
+| --- | --- |
+| HTTP/1.1 with `Content-Length` | Read as declared. A body shorter than its declared length is unreadable. |
+| HTTP/1.1 with `Transfer-Encoding: chunked` | The decoded entity is scored, never the chunk framing. |
+| HTTP/2 (TLS or cleartext) | The body of the stream is scored. HTTP/2 has no chunked encoding and usually no `Content-Length`. |
+
+The scoring step receives the whole body with its own correct length. Nginx
+keeps a small body in memory and spools a larger one to a temporary file. The cell
+reads both, up to the domain's body limit (1 MiB for Observe and Balanced, 256 KiB for
+Strict, and never more than 1 MiB). The limit applies with or without a
+`Content-Length`. Nginx's own 8 MiB request limit still bounds what is buffered
+before the cell checks the WAF limit. Request bodies are not written to any log.
+
+A request is inspected only when its body, or the absence of a body, is known
+in full. Every other case is an explicit result, never a clean one:
+
+| Result | Blocking levels (Balanced, Strict) | Observe |
+| --- | --- | --- |
+| No body, or an empty body | Scored on its headers and address. Recorded as `no_body`. | Same |
+| Whole body scored | Blocked at the threshold. Recorded as `inspected`. | Forwarded, recorded as `inspected` with its score |
+| Body over the limit | `413`, reason `waf_body_limit`, recorded as `exceeded` | Forwarded and recorded as `exceeded`; it has no score |
+| Body unreadable or cut off | `400`, reason `waf_body_unreadable`, recorded as `unreadable` | Forwarded and recorded as `unreadable` |
+| Compressed body (`Content-Encoding` other than `identity`) | `415`, reason `waf_body_encoding`, recorded as `unsupported_enc` | Forwarded and recorded as `unsupported_enc` |
+| Scoring step failed or answered with something that is not a score | Inspected inline instead, with the level's unadjusted defaults. Recorded as `scoring_failed`, with a `waf_inspection_failed` security event. | Same, detection only |
+
+The managed WAF scores the entity as the origin will read it, and a compressed
+body is not that entity. Clients that upload compressed request bodies to a domain
+on a blocking level get `415`; use Observe or send the body uncompressed. The
+engine parses URL-encoded forms, JSON, and multipart bodies by their
+`Content-Type`.
+
+A client cannot change any of this. The cell overwrites the internal WAF mode,
+threshold, and paranoia headers on every request, drops a client-supplied
+rule-removal header before scoring, and removes the internal headers before the
+request reaches the origin.
 
 ## 3. Review detections, then tighten
 
@@ -164,7 +209,8 @@ after you test the application.
 Responses to blocked requests are a controlled HTTP status. They never show
 matched data or rule text. Paths, parameter values, bodies, matched data, and raw
 ModSecurity messages never reach responses or CDNFoundry telemetry. Platform
-body admission can show only `waf_body_limit`.
+body admission can show `waf_body_limit`, `waf_body_unreadable`, or
+`waf_body_encoding`.
 
 ## Handle a false positive
 

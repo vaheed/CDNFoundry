@@ -301,12 +301,30 @@ rate** in the rule sheet, or send a `rate_limit` object in the API:
   rate-limit rule may have no conditions.
 - Rate-limit rules run after the domain's other custom rules and before the
   managed WAF. A client that an `allow` rule trusts is not counted.
+- **IPv6 clients count per prefix.** A host controls a whole IPv6 prefix, so a
+  client key is the first 64 bits of an IPv6 address, and a client cannot get a
+  fresh allowance by rotating addresses inside its /64. This applies to
+  rate-limit rules keyed by client address, to the baseline per-client request and
+  connection limits, to the challenge issue limit, and to Nginx's own per-client
+  limits. An IPv4 address, and the same address written as IPv4-mapped IPv6
+  (`::ffff:203.0.113.7`), is one client, and one IPv6 address written in different
+  ways is one client. Rule conditions, geography, and logs still use the real
+  address. Operators can change the prefix length and list networks that keep
+  per-address counting in [Configuration](../reference/configuration.md).
 - **Counts are per cell.** Each cell counts on its own with fixed time windows,
   so this is not a global count across locations. Over several cells a client can
   send up to the threshold on each one.
 - A domain may have 20 rate-limit rules (a platform setting, never above 50). The
-  counters live in fixed shared memory on the cell; when it is full, requests are
-  let through, never blocked.
+  counters live in fixed shared memory on the cell, and **each domain has its own
+  share of it**: an equal part of half the dictionary, divided by the hostnames
+  the cell serves, with a floor of 100 entries. Counters take three quarters of the
+  share and active mitigations the rest. A domain that sees more distinct keys
+  than its share (many client addresses or header values) stops counting the
+  extra keys until the window ends and records a `rate_limit_state_full` event, so
+  the extra keys are let through, never blocked. It cannot evict another domain's
+  counters or mitigations, and a client that is already mitigated stays blocked
+  until its duration ends. The per-client request counter of the baseline limits
+  works the same way, and the domain-wide counter still applies to every request.
 
 ### Presets: user agents and hotlinks
 
@@ -508,13 +526,27 @@ or `recovering`. Two sources set it, and the domain shows the stricter of the tw
   keeps the overlay across a restart because the agent replays it, and ignores an
   overlay with an older sequence.
 
-The rate is the number of events in the last five minutes: `suspected` at 50 or more,
-and `restricted` at 100 or more when the domain's quarantine policy is automatic. It
-is measured as the increase since the previous report, not as the cell's lifetime
-counter, so a counter that keeps growing or restarts does not trigger a change. A
-domain moves back one step (`restricted` to `recovering` to `normal`, or `suspected`
-to `normal`) after ten minutes without a new event. A domain an operator has
-restricted or quarantined is never changed automatically.
+The rate is the number of escalating events in the last five minutes: `suspected` at
+50 or more, and `restricted` at 100 or more when the domain's quarantine policy is
+automatic. It is measured as the increase since the previous report, not as the
+cell's lifetime counter, so a counter that keeps growing or restarts does not
+trigger a change. **The rate alone never changes a domain.** The events must also
+come from at least 10 distinct clients, as the cells report them, so one noisy
+client cannot make the domain stricter for everyone else. A cell that does not
+report clients gives no such evidence until it is upgraded. A domain moves back one
+step (`restricted` to `recovering` to `normal`, or `suspected` to `normal`) after
+ten minutes without a new event. A domain an operator has restricted or
+quarantined is never changed automatically.
+
+**One noisy client is contained on the cell instead.** A cell counts the escalating
+events each client causes, under the same client key as rate limiting (an IPv6
+client counts per prefix). A client that causes 20 in a minute is refused for five
+minutes with `429` and the reason `client_temporarily_blocked`, on that cell and for
+that domain only. The ban needs no control-plane round trip and ends by itself, and
+the refusals it causes are not escalating events. A client over its limit
+(`client_rate_exceeded`) and a client sending attacks (`waf_block`) are contained
+this way, while a crowd of such clients is the distributed evidence that tightens
+the domain.
 
 A domain's own protections never count against it. A request refused by a customer
 custom rule (`custom_rule_block`) or an operator restriction (`domain_restricted`), a method restriction (`invalid_method`), an

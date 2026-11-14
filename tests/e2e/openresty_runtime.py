@@ -260,10 +260,18 @@ def qualify_incident_profile() -> None:
     assert incident_overlay("incident-short", 8, 3).returncode == 0
     assert curl("overlay.example", "/", html)[0] in (403, 429), "still refused while the profile is on"
     time.sleep(5)
-    assert curl("overlay.example", "/", html)[0] == 200, "the profile expired on its own"
+    # The scripted flood above made this client cause many escalating events, so the cell contains it for a few minutes. Another
+    # client, reaching the cell from outside its network namespace, shows that the profile itself has ended.
+    address = run("docker", "inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}", NAME).stdout.strip()
+
+    def other_client() -> str:
+        return run("curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", "-H", "Host: overlay.example", "-H", "Accept: text/html", f"http://{address}:8080/").stdout.strip()
+
+    assert other_client() == "200", f"the profile expired on its own: {other_client()}"
+    assert curl("overlay.example", "/", html)[0] in (200, 429), "the flooding client is either served or contained, never challenged again"
     # Turning it on and then off with a normal overlay restores the snapshot.
     assert incident_overlay("incident-again", 9, 300).returncode == 0 and curl("overlay.example", "/", html)[0] in (403, 429)
-    assert security_overlay("incident-off", 10, "normal", None).returncode == 0 and curl("overlay.example", "/", html)[0] == 200
+    assert security_overlay("incident-off", 10, "normal", None).returncode == 0 and other_client() == "200"
     # An older sequence is ignored while a newer overlay is stored; once a normal overlay removes the entry the agent, not the cell, remembers the sequence.
     assert incident_overlay("incident-newer", 12, 300).returncode == 0 and incident_overlay("incident-older", 11, 5).returncode == 0
     assert curl("overlay.example", "/", html)[0] in (403, 429), "an older overlay never replaces a newer one"

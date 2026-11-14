@@ -6,7 +6,9 @@ import re
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-REASONS = json.loads((ROOT / "core/resources/contracts/security-event-reasons.json").read_text())["reasons"]
+CONTRACT = json.loads((ROOT / "core/resources/contracts/security-event-reasons.json").read_text())
+REASONS = CONTRACT["reasons"]
+NON_ESCALATING = CONTRACT["non_escalating"]
 LUA = (ROOT / "docker/openresty/runtime.lua").read_text()
 
 
@@ -28,6 +30,19 @@ class SecurityEventReasonsContract(unittest.TestCase):
         sources = LUA + "".join(p.read_text() for p in (ROOT / "docker").rglob("*.conf"))
         for reason in REASONS:
             self.assertIn(reason, sources, reason)
+
+    def test_the_reasons_that_never_escalate_are_listed_reasons_without_duplicates(self):
+        self.assertEqual(len(NON_ESCALATING), len(set(NON_ESCALATING)))
+        self.assertEqual(sorted(set(NON_ESCALATING) - set(REASONS)), [])
+
+    def test_the_cell_and_the_control_plane_agree_which_reasons_escalate(self):
+        block = re.search(r"local ESCALATION_EXEMPT = \{(.*?)\n\}", LUA, re.S)
+        self.assertIsNotNone(block)
+        in_cell = set(re.findall(r"([a-z_]+) = true", block.group(1)))
+        self.assertEqual(sorted(in_cell ^ set(NON_ESCALATING)), [])
+
+    def test_a_client_the_cell_contains_never_counts_toward_escalating_the_domain(self):
+        self.assertIn("client_temporarily_blocked", NON_ESCALATING)
 
 
 if __name__ == "__main__":
