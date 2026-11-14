@@ -7,6 +7,8 @@ use App\Filament\Domain\Resources\Domains\Pages\ViewDomain;
 use App\Filament\Domain\Resources\Domains\RelationManagers\DnsRecordsRelationManager;
 use App\Filament\Domain\Resources\Domains\RelationManagers\SecurityEventsRelationManager;
 use App\Filament\Domain\Resources\Domains\RelationManagers\SecurityRulesRelationManager;
+use App\Models\DnsCluster;
+use App\Models\DnsDeployment;
 use App\Models\Domain;
 use App\Models\PlatformDnsSetting;
 use App\Models\User;
@@ -93,5 +95,25 @@ class UnverifiedDomainTest extends TestCase
         $domain->forceFill(['nameservers_verified_at' => now(), 'lifecycle_state' => DomainLifecycleState::Active])->save();
         $verified = array_values(Livewire::test(ViewDomain::class, ['record' => $domain->getRouteKey()])->instance()->getRelationManagers());
         $this->assertContains(SecurityRulesRelationManager::class, $verified);
+    }
+
+    public function test_a_deleted_domain_waiting_for_retirement_is_not_reported_as_dns_drift(): void
+    {
+        [$user, $domain] = $this->pendingDomain();
+        DnsCluster::query()->create([
+            'name' => 'dns-eu-1', 'location' => 'eu-test', 'enabled' => true, 'api_url' => 'http://pdns.test', 'transfer_endpoint' => '192.0.2.10:5300',
+            'api_key' => 'private-test-key', 'server_id' => 'localhost', 'nameservers' => [['hostname' => 'ns1.test'], ['hostname' => 'ns2.test']], 'capacity_zones' => 1000,
+        ]);
+
+        $this->actingAs($user)->deleteJson("/api/domains/{$domain->id}")->assertStatus(202);
+
+        $deployment = DnsDeployment::query()->where('domain_id', $domain->id)->sole();
+        $this->assertSame(['pending', true], [$deployment->status, $deployment->tombstone]);
+        $this->assertSame(0, DnsDeployment::query()->drifted()->count());
+
+        $deployment->update(['status' => 'failed']);
+        $this->assertSame(1, DnsDeployment::query()->drifted()->count());
+        $deployment->update(['status' => 'pending', 'tombstone' => false]);
+        $this->assertSame(1, DnsDeployment::query()->drifted()->count());
     }
 }

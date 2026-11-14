@@ -159,7 +159,7 @@ final class SystemHealth
 
         $enabledClusters = DnsCluster::query()->where('enabled', true)->count();
         $badClusters = DnsCluster::query()->where('enabled', true)->where(fn ($query) => $query->where('last_health_status', '!=', 'healthy')->orWhereNull('last_health_at'))->count();
-        $dnsDrift = DnsDeployment::query()->whereIn('status', ['failed', 'pending'])->count();
+        $dnsDrift = DnsDeployment::query()->drifted()->count();
         $components['authoritative_dns'] = $this->state($enabledClusters === 0 ? 'degraded' : (($badClusters + $dnsDrift) > 0 ? 'degraded' : 'healthy'), ['enabled_clusters' => $enabledClusters, 'unhealthy_clusters' => $badClusters, 'drifted_deployments' => $dnsDrift]);
         $components['dns_deployments'] = $this->state($dnsDrift > 0 ? 'degraded' : 'healthy', ['drifted' => $dnsDrift]);
 

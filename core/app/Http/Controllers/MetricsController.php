@@ -84,7 +84,7 @@ class MetricsController extends Controller
         $lines[] = '# HELP cdnfoundry_status_summary One line naming what is wrong; the label is the sentence.';
         $lines[] = '# TYPE cdnfoundry_status_summary gauge';
         $lines[] = sprintf('cdnfoundry_status_summary{state="%s",summary="%s"} 1', $problems === [] ? 'healthy' : 'degraded', $problems === [] ? 'Healthy: every component reports in' : 'Degraded: '.implode(', ', $problems));
-        $lines[] = 'cdnfoundry_dns_deployments_drifted '.DnsDeployment::query()->whereIn('status', ['pending', 'failed'])->count();
+        $lines[] = 'cdnfoundry_dns_deployments_drifted '.DnsDeployment::query()->drifted()->count();
         $lines[] = 'cdnfoundry_edges_stale '.Edge::query()->where('enabled', true)->where(fn ($query) => $query->whereNull('last_heartbeat_at')->orWhere('last_heartbeat_at', '<', now()->subSeconds(app(PlatformSettings::class)->integer('edge_runtime', 'heartbeat_fresh_seconds'))))->count();
         $enabledEdges = Edge::query()->where('enabled', true)->get(['capacity']);
         $lines[] = 'cdnfoundry_edge_gateways_unready '.$enabledEdges->filter(fn (Edge $edge): bool => ! ($edge->capacity['gateway']['ready'] ?? false))->count();
@@ -189,7 +189,7 @@ class MetricsController extends Controller
 
         $lines[] = '# HELP cdnfoundry_dns_serial_pending_oldest_seconds Age of the oldest DNS deployment that has not reached its desired revision.';
         $lines[] = '# TYPE cdnfoundry_dns_serial_pending_oldest_seconds gauge';
-        $lines[] = 'cdnfoundry_dns_serial_pending_oldest_seconds '.$age(DnsDeployment::query()->whereIn('status', ['pending', 'deploying', 'failed'])->whereColumn('desired_revision', '>', 'deployed_revision')->min('updated_at'));
+        $lines[] = 'cdnfoundry_dns_serial_pending_oldest_seconds '.$age(DnsDeployment::query()->where('tombstone', false)->whereIn('status', ['pending', 'deploying', 'failed'])->whereColumn('desired_revision', '>', 'deployed_revision')->min('updated_at'));
 
         $day = now()->subDay();
         $lines[] = '# HELP cdnfoundry_acme_orders_day Managed certificate orders that finished in the last 24 hours, by result.';

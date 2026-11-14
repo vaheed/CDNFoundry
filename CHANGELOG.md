@@ -14,6 +14,7 @@ single source of truth; `make version-check` enforces it.
 
 ### Fixed
 
+- Deleting a domain no longer turns Authoritative DNS and DNS deployments degraded while its zone waits for retirement: a pending retirement is the plan, so only failed retirements and real pending deployments count as drift, in the health page and the `cdnfoundry_dns_deployments_drifted` metric.
 - The Fleet web Backups form now takes the S3 access key ID and secret access key, which it saves into the vault without showing them again.
 - A domain whose nameservers are not verified can only be given DNS records: the WAF, security, cache, TLS, proxy, analytics, and log pages are hidden, the API answers them with `409 domain_not_verified`, and Geo-DNS and proxied records are refused until verification.
 - The attack score, action, country, and network breakdowns on the domain Analytics page now include events stored before the `security_hourly` rollup existed (a ClickHouse migration backfills them).
