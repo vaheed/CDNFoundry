@@ -21,7 +21,7 @@ class SecurityAlertTest extends TestCase
     private function ownedDomain(string $name = 'alert.example'): array
     {
         $user = User::factory()->create();
-        $domain = Domain::query()->create(['name' => $name, 'display_name' => $name, 'revision' => 1, 'lifecycle_state' => 'active']);
+        $domain = Domain::query()->create(['name' => $name, 'display_name' => $name, 'revision' => 1, 'lifecycle_state' => 'active', 'nameservers_verified_at' => now()]);
         $domain->users()->attach($user->id);
 
         return [$user, $domain];
@@ -96,14 +96,14 @@ class SecurityAlertTest extends TestCase
         $this->channel();
         [, $domain] = $this->ownedDomain();
         $domain->update(['security_alert' => ['threshold' => 100, 'period_minutes' => 5]]);
-        $other = Domain::query()->create(['name' => 'quiet.example', 'display_name' => 'quiet', 'revision' => 1, 'lifecycle_state' => 'active']);
+        $other = Domain::query()->create(['name' => 'quiet.example', 'display_name' => 'quiet', 'revision' => 1, 'lifecycle_state' => 'active', 'nameservers_verified_at' => now()]);
         $other->update(['security_alert' => ['threshold' => 100, 'period_minutes' => 5]]);
 
         $this->report($domain, 'custom_rule_block', 500, 9);               // older than the period
         $this->report($domain, 'custom_rule_log', 500);                   // logged by a rule, never blocked
         $this->report($domain, 'waf_rule_logged', 500);
         $this->report($other, 'custom_rule_block', 99);                   // one short of its threshold, and not this domain's events
-        $noAlert = Domain::query()->create(['name' => 'unset.example', 'display_name' => 'unset', 'revision' => 1, 'lifecycle_state' => 'active']);
+        $noAlert = Domain::query()->create(['name' => 'unset.example', 'display_name' => 'unset', 'revision' => 1, 'lifecycle_state' => 'active', 'nameservers_verified_at' => now()]);
         $this->report($noAlert, 'custom_rule_block', 9999);
         $this->artisan('cdnf:notifications:security-mitigations')->assertSuccessful();
         Queue::assertNotPushed(DeliverNotification::class);

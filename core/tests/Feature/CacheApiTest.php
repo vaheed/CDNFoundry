@@ -248,7 +248,7 @@ class CacheApiTest extends TestCase
     private function ownedDomain(): array
     {
         $user = User::factory()->create();
-        $domain = Domain::query()->create(['name' => 'example.test', 'display_name' => 'Example', 'revision' => 1]);
+        $domain = Domain::query()->create(['name' => 'example.test', 'display_name' => 'Example', 'revision' => 1, 'nameservers_verified_at' => now()]);
         $domain->users()->attach($user);
 
         return [$user, $domain];

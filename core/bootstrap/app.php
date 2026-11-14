@@ -6,6 +6,7 @@ use App\Http\Middleware\AuthenticateEdge;
 use App\Http\Middleware\ControlEpoch;
 use App\Http\Middleware\EnforceTokenScope;
 use App\Http\Middleware\EnsureAccountIsActive;
+use App\Http\Middleware\EnsureDomainIsVerified;
 use App\Http\Middleware\EnsureHorizonAdmin;
 use App\Http\Middleware\EnsureUserIsAdmin;
 use App\Http\Middleware\IdempotentRequest;
@@ -49,6 +50,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'account.active' => EnsureAccountIsActive::class,
             'token.scope' => EnforceTokenScope::class,
             'admin' => EnsureUserIsAdmin::class,
+            'domain.verified' => EnsureDomainIsVerified::class,
             'idempotent' => IdempotentRequest::class,
             'horizon.admin' => EnsureHorizonAdmin::class,
             'edge.auth' => AuthenticateEdge::class,

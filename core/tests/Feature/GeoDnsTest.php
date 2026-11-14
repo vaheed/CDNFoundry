@@ -122,7 +122,7 @@ class GeoDnsTest extends TestCase
     private function ownedDomain(string $name = 'example.com'): array
     {
         $user = User::factory()->create();
-        $domain = Domain::query()->create(['name' => $name, 'display_name' => $name, 'lifecycle_state' => 'pending_verification', 'revision' => 1]);
+        $domain = Domain::query()->create(['name' => $name, 'display_name' => $name, 'lifecycle_state' => 'pending_verification', 'revision' => 1, 'nameservers_verified_at' => now()]);
         $domain->users()->attach($user);
 
         return [$user, $domain];

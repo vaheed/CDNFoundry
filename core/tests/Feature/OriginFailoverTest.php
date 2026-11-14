@@ -116,7 +116,7 @@ class OriginFailoverTest extends TestCase
     private function proxiedRecord(): array
     {
         $owner = User::factory()->create();
-        $domain = Domain::query()->create(['name' => 'failover-'.uniqid().'.example', 'display_name' => 'Failover', 'revision' => 1]);
+        $domain = Domain::query()->create(['name' => 'failover-'.uniqid().'.example', 'display_name' => 'Failover', 'revision' => 1, 'nameservers_verified_at' => now()]);
         $domain->users()->attach($owner);
         $record = $domain->dnsRecords()->create([
             'type' => 'A', 'name' => 'www.'.$domain->name, 'content' => '8.8.8.8',

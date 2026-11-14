@@ -63,7 +63,7 @@ def main() -> None:
         request("POST", "/api/admin/notification-channels", {"type": "webhook", "name": "e2e scripts webhook", "webhook_url": f"http://{address}:8080/webhook"}, admin_token)
         domain_id = int(artisan(
             f"$u=App\\Models\\User::query()->where('email',{php_string(admin_email)})->first();"
-            f"$d=App\\Models\\Domain::query()->create(['name'=>{php_string(domain_name)},'display_name'=>'scripts','lifecycle_state'=>'active','revision'=>1]);"
+            f"$d=App\\Models\\Domain::query()->create(['name'=>{php_string(domain_name)},'display_name'=>'scripts','lifecycle_state'=>'active','nameservers_verified_at'=>now(),'revision'=>1]);"
             "$d->users()->attach($u->id,['created_at'=>now()]);echo $d->id;"))
         sightings = f"/api/domains/{domain_id}/security/client-side/scripts"
         expect_error(422, "PUT", f"/api/domains/{domain_id}/security/client-side", payload={"maximum_reports_per_minute": 5}, token=admin_token)

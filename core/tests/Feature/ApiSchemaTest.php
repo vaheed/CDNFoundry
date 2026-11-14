@@ -18,7 +18,7 @@ class ApiSchemaTest extends TestCase
     private function ownedDomain(): array
     {
         $user = User::factory()->create();
-        $domain = Domain::query()->create(['name' => 'api.example', 'display_name' => 'api.example', 'revision' => 1, 'lifecycle_state' => 'active']);
+        $domain = Domain::query()->create(['name' => 'api.example', 'display_name' => 'api.example', 'revision' => 1, 'lifecycle_state' => 'active', 'nameservers_verified_at' => now()]);
         $domain->users()->attach($user->id);
 
         return [$user, $domain];

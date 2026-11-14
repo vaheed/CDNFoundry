@@ -7,6 +7,25 @@ single source of truth; `make version-check` enforces it.
 
 ## [Unreleased]
 
+## [2.1.2] - 2026-11-14
+
+Limits an unverified domain to DNS records and keeps PostgreSQL small. See the [release notes](docs/operations/releases/v2.1.2.md).
+
+### Added
+
+- `cdnf:usage:compact` sums hourly usage into daily rows after 35 days and daily rows into monthly rows after a year, with the same totals, so `usage_rollups` stops growing by a row per domain per hour.
+- `cdnf:history:prune`, `queue:prune-failed`, and `sanctum:prune-expired` run daily: finished edge tasks, cache purges, certificate orders, expired name holds, old failed jobs, and expired tokens no longer accumulate in PostgreSQL. New retention settings control the windows. A migration adds the settings, the `month` granularity, and the supporting indexes.
+
+### Fixed
+
+- Deleting a domain no longer turns Authoritative DNS and DNS deployments degraded while its zone waits for retirement: a pending retirement is the plan, so only failed retirements and real pending deployments count as drift, in the health page and the `cdnfoundry_dns_deployments_drifted` metric.
+- The Fleet web Backups form now takes the S3 access key ID and secret access key, which it saves into the vault without showing them again.
+- A domain whose nameservers are not verified can only be given DNS records: the WAF, security, cache, TLS, proxy, analytics, and log pages are hidden, the API answers them with `409 domain_not_verified`, and Geo-DNS and proxied records are refused until verification.
+- The attack score, action, country, and network breakdowns on the domain Analytics page now include events stored before the `security_hourly` rollup existed (a ClickHouse migration backfills them).
+- Next now works on the domain Security events list.
+- Analytics breakdown and recent-event tables no longer cut off headings such as "Mitigated share", DNS response names, or client addresses.
+- The System DNS identity "Add" buttons read "Add nameserver" and "Add pair" instead of printing the tooltip markup.
+
 ## [2.1.1] - 2026-11-14
 
 Fixes an upgrade from 2.0.8 that stopped in `clickhouse-migrate`. See the [release notes](docs/operations/releases/v2.1.1.md).

@@ -10,7 +10,7 @@ final class DnsRecordData
     public const TYPES = ['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'NS', 'CAA', 'SRV', 'PTR'];
 
     /** @return array<string,mixed> */
-    public static function validate(array $input, string $zone): array
+    public static function validate(array $input, string $zone, bool $verified = true): array
     {
         if (isset($input['type']) && is_string($input['type'])) {
             $input['type'] = strtoupper($input['type']);
@@ -27,7 +27,12 @@ final class DnsRecordData
             'geo' => ['required_if:mode,geo_dns', 'nullable', 'array'],
             'origin' => ['required_if:mode,proxied', 'nullable', 'array'],
         ]);
-        $validator->after(function ($validator) use ($input, $zone): void {
+        $validator->after(function ($validator) use ($input, $zone, $verified): void {
+            if (! $verified && in_array($input['mode'] ?? 'dns_only', ['geo_dns', 'proxied'], true)) {
+                $validator->errors()->add('mode', 'Geo-DNS and proxied records become available after the nameservers are verified. Until then, records are DNS only.');
+
+                return;
+            }
             try {
                 $type = strtoupper((string) ($input['type'] ?? ''));
                 $name = self::normalizeOwner((string) ($input['name'] ?? ''), $zone);

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -17,6 +18,15 @@ class DnsDeployment extends Model
     public function cluster(): BelongsTo
     {
         return $this->belongsTo(DnsCluster::class, 'dns_cluster_id');
+    }
+
+    /**
+     * Deployments that are behind or broken. A deleted domain keeps a pending tombstone until its retirement date, which
+     * is the plan and not drift; only a failed retirement counts.
+     */
+    public function scopeDrifted(Builder $query): Builder
+    {
+        return $query->where(fn (Builder $drifted) => $drifted->where('status', 'failed')->orWhere(fn (Builder $pending) => $pending->where('status', 'pending')->where('tombstone', false)));
     }
 
     protected function casts(): array

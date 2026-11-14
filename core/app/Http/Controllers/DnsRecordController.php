@@ -45,7 +45,7 @@ class DnsRecordController extends Controller
         Gate::authorize('update', $domain);
         $record = DB::transaction(function () use ($request, $domain): DnsRecord {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
-            $data = DnsRecordData::validate($request->all(), $locked->name);
+            $data = DnsRecordData::validate($request->all(), $locked->name, $locked->isVerified());
             $this->assertCanManageDelegation($request, $data['type']);
             if ($locked->dnsRecords()->count() >= self::RECORDS_PER_DOMAIN_LIMIT) {
                 throw ValidationException::withMessages(['record' => 'The domain has reached the 10,000 record limit.']);
@@ -79,7 +79,7 @@ class DnsRecordController extends Controller
             $current = DnsRecord::query()->where('domain_id', $locked->id)->lockForUpdate()->findOrFail($record->id);
             $existing = $current->only(['type', 'name', 'content', 'ttl', 'priority', 'weight', 'port', 'mode', 'origin']);
             $existing['geo'] = $current->geo_config;
-            $data = DnsRecordData::validate(array_merge($existing, $request->all()), $locked->name);
+            $data = DnsRecordData::validate(array_merge($existing, $request->all()), $locked->name, $locked->isVerified());
             $this->assertCanManageDelegation($request, $current->type);
             $this->assertCanManageDelegation($request, $data['type']);
             $this->assertValidFinalZone($locked, collect([$data]), collect([$current->id]));
@@ -163,7 +163,7 @@ class DnsRecordController extends Controller
 
             foreach ($validated['actions'] as $offset => $action) {
                 if ($action['action'] === 'create') {
-                    $data = DnsRecordData::validate($action['record'], $locked->name);
+                    $data = DnsRecordData::validate($action['record'], $locked->name, $locked->isVerified());
                     $this->assertCanManageDelegation($request, $data['type']);
                     $key = 'new-'.$offset;
                     $final->put($key, $data);
@@ -182,7 +182,7 @@ class DnsRecordController extends Controller
 
                     continue;
                 }
-                $data = DnsRecordData::validate(array_merge($final->get($record->id), $action['record']), $locked->name);
+                $data = DnsRecordData::validate(array_merge($final->get($record->id), $action['record']), $locked->name, $locked->isVerified());
                 $this->assertCanManageDelegation($request, $data['type']);
                 $final->put($record->id, $data);
                 $updates[] = [$record, $data];

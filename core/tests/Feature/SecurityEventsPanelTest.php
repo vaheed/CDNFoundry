@@ -68,6 +68,19 @@ class SecurityEventsPanelTest extends TestCase
         $this->assertSame('block', $created->action);
     }
 
+    public function test_the_next_page_shows_the_older_events(): void
+    {
+        [, $domain] = $this->eventsDomain();
+        $events = collect(range(1, 30))->map(fn (int $number): array => $this->event('waf', sprintf('/probe-%02d', $number), 'waf_block'))->all();
+        $this->fakeEvents($events);
+
+        // The button must name the page the table reads, or Next changes nothing.
+        $pageName = $this->manager($domain)->instance()->getTablePaginationPageName();
+        $this->manager($domain)->assertSee('/probe-01')->assertDontSee('/probe-30')->assertSeeHtml("nextPage('{$pageName}')")
+            ->call('nextPage', $pageName)
+            ->assertSee('/probe-30')->assertDontSee('/probe-01');
+    }
+
     public function test_an_exception_runs_before_the_rule_that_fired_and_skips_the_managed_firewall_for_its_events(): void
     {
         [, $domain] = $this->eventsDomain();

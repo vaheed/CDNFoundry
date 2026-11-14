@@ -21,7 +21,7 @@ class IncidentProfilePanelTest extends TestCase
         Queue::fake();
         Filament::setCurrentPanel(Filament::getPanel('admin'));
         $user = User::factory()->admin()->create(['name' => 'Responder One']);
-        $domain = Domain::query()->create(['name' => 'panel-incident.example', 'display_name' => 'Panel', 'revision' => 1, 'lifecycle_state' => 'active']);
+        $domain = Domain::query()->create(['name' => 'panel-incident.example', 'display_name' => 'Panel', 'revision' => 1, 'lifecycle_state' => 'active', 'nameservers_verified_at' => now()]);
         $domain->users()->attach($user->id);
         $this->actingAs($user);
 

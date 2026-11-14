@@ -56,7 +56,7 @@ class EdgeProxyTest extends TestCase
             $edge->update(['identity_certificate' => $signed['certificate'], 'identity_certificate_serial' => $signed['serial'], 'identity_certificate_expires_at' => now()->addDay()]);
         }
         $cell = $assigned->cells()->create(['slot' => 1, 'status' => 'ready']);
-        $domain = Domain::query()->create(['name' => 'sealed.test', 'display_name' => 'Sealed', 'lifecycle_state' => 'active', 'revision' => 1]);
+        $domain = Domain::query()->create(['name' => 'sealed.test', 'display_name' => 'Sealed', 'lifecycle_state' => 'active', 'revision' => 1, 'nameservers_verified_at' => now()]);
         $secret = "-----BEGIN PRIVATE KEY-----\nSEALEDKEYMATERIAL\n-----END PRIVATE KEY-----";
         $certificate = $domain->tlsCertificates()->create([
             'kind' => 'custom', 'status' => 'active', 'certificate_pem' => 'cert', 'chain_pem' => '', 'private_key_ciphertext' => $secret,
@@ -101,7 +101,7 @@ class EdgeProxyTest extends TestCase
         $cell = $edge->cells()->create(['slot' => 1, 'status' => 'ready']);
         $reports = [];
         foreach (['assigned', 'unassigned'] as $scope) {
-            $domain = Domain::query()->create(['name' => $scope.'.test', 'display_name' => $scope, 'lifecycle_state' => 'active', 'revision' => 1]);
+            $domain = Domain::query()->create(['name' => $scope.'.test', 'display_name' => $scope, 'lifecycle_state' => 'active', 'revision' => 1, 'nameservers_verified_at' => now()]);
             $record = $domain->dnsRecords()->create(['name' => $domain->name, 'type' => 'A', 'content' => '8.8.8.8', 'content_hash' => hash('sha256', '8.8.8.8'), 'mode' => 'proxied', 'ttl' => 60]);
             if ($scope === 'assigned') {
                 DomainEdgeCell::query()->create(['domain_id' => $domain->id, 'edge_id' => $edge->id, 'replica' => 1, 'active_cell_id' => $cell->id, 'desired_revision' => 1, 'state' => 'active']);
@@ -629,7 +629,7 @@ class EdgeProxyTest extends TestCase
     private function ownedDomain(): array
     {
         $user = User::factory()->create();
-        $domain = Domain::query()->create(['name' => uniqid('d').'.example', 'display_name' => 'Example', 'revision' => 1]);
+        $domain = Domain::query()->create(['name' => uniqid('d').'.example', 'display_name' => 'Example', 'revision' => 1, 'nameservers_verified_at' => now()]);
         $domain->users()->attach($user);
 
         return [$user, $domain];

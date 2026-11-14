@@ -57,7 +57,7 @@ def main() -> None:
         # The domain's owner sets the alert through the API; a stranger cannot.
         domain_id = int(artisan(
             f"$u=App\\Models\\User::query()->where('email',{php_string(admin_email)})->first();"
-            f"$d=App\\Models\\Domain::query()->create(['name'=>{php_string(domain_name)},'display_name'=>'alert','lifecycle_state'=>'active','revision'=>1]);"
+            f"$d=App\\Models\\Domain::query()->create(['name'=>{php_string(domain_name)},'display_name'=>'alert','lifecycle_state'=>'active','nameservers_verified_at'=>now(),'revision'=>1]);"
             "$d->users()->attach($u->id,['created_at'=>now()]);echo $d->id;"))
         request("PUT", f"/api/domains/{domain_id}/security/alert", {"threshold": 500, "period_minutes": 5}, admin_token)
         _, stored = request("GET", f"/api/domains/{domain_id}/security/alert", token=admin_token)

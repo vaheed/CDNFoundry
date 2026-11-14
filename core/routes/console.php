@@ -42,6 +42,10 @@ Schedule::command('cdnf:usage:finalize')->hourlyAt(20)->withoutOverlapping();
 Schedule::command('cdnf:audit:prune')->dailyAt('03:10')->withoutOverlapping();
 Schedule::command('cdnf:security-events:prune')->dailyAt('03:20')->withoutOverlapping();
 Schedule::command('cdnf:operations:prune')->dailyAt('03:30')->withoutOverlapping();
+Schedule::command('cdnf:history:prune')->dailyAt('03:35')->withoutOverlapping();
+Schedule::command('cdnf:usage:compact')->dailyAt('03:45')->withoutOverlapping();
+Schedule::command('queue:prune-failed', ['--hours' => 2160])->dailyAt('03:50')->withoutOverlapping();
+Schedule::command('sanctum:prune-expired', ['--hours' => 24])->dailyAt('03:55')->withoutOverlapping();
 // The monthly usage report waits a day after month end, so the last hour's rollup is final. The operations report is weekly.
 Schedule::command('cdnf:reports:build usage')->monthlyOn(2, '03:40')->withoutOverlapping();
 Schedule::command('cdnf:reports:build operations')->weeklyOn(1, '06:00')->withoutOverlapping();

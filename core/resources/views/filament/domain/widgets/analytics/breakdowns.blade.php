@@ -14,7 +14,7 @@
             @elseif ($state === 'no_data')
                 <x-ui.widget-state state="no_data" description="Nothing was recorded for these domains in this range." />
             @else
-                <x-ui.data-table :caption="$tabs[$active]" fixed>
+                <x-ui.data-table :caption="$tabs[$active]" auto>
                     <x-slot:header><tr>@foreach ($columns as $key => $label)<th @class(['text-left' => in_array($key, ['label', 'secondary'], true), 'text-right' => ! in_array($key, ['label', 'secondary'], true), 'hidden md:table-cell' => $key === 'secondary'])>{{ $label }}</th>@endforeach</tr></x-slot:header>
                     @foreach ($rows as $row)
                         <tr>@foreach ($columns as $key => $label)

@@ -35,7 +35,7 @@ class ErrorContractTest extends TestCase
     public function test_an_oversized_purge_payload_has_its_own_code(): void
     {
         $user = User::factory()->create();
-        $domain = Domain::query()->create(['name' => 'big.example', 'display_name' => 'Big', 'revision' => 1, 'lifecycle_state' => 'active']);
+        $domain = Domain::query()->create(['name' => 'big.example', 'display_name' => 'Big', 'revision' => 1, 'lifecycle_state' => 'active', 'nameservers_verified_at' => now()]);
         $domain->users()->attach($user);
 
         $this->actingAs($user)->postJson("/api/domains/{$domain->id}/cache/purge", ['type' => 'urls', 'urls' => ['https://big.example/'.str_repeat('a', 130 * 1024)]])

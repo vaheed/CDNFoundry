@@ -29,7 +29,7 @@ class SecurityRulesPanelTest extends TestCase
         Queue::fake();
         Filament::setCurrentPanel(Filament::getPanel('app'));
         $user = User::factory()->create();
-        $domain = Domain::query()->create(['name' => 'rules-panel.example', 'display_name' => 'Rules', 'revision' => 1, 'lifecycle_state' => 'active']);
+        $domain = Domain::query()->create(['name' => 'rules-panel.example', 'display_name' => 'Rules', 'revision' => 1, 'lifecycle_state' => 'active', 'nameservers_verified_at' => now()]);
         $domain->users()->attach($user->id);
         $this->actingAs($user);
 
@@ -83,7 +83,7 @@ class SecurityRulesPanelTest extends TestCase
         Queue::fake();
         Filament::setCurrentPanel(Filament::getPanel('app'));
         $user = User::factory()->create();
-        $domain = Domain::query()->create(['name' => 'rate-panel.example', 'display_name' => 'Rate', 'revision' => 1, 'lifecycle_state' => 'active']);
+        $domain = Domain::query()->create(['name' => 'rate-panel.example', 'display_name' => 'Rate', 'revision' => 1, 'lifecycle_state' => 'active', 'nameservers_verified_at' => now()]);
         $domain->users()->attach($user->id);
         $this->actingAs($user);
 
@@ -114,7 +114,7 @@ class SecurityRulesPanelTest extends TestCase
         Queue::fake();
         Filament::setCurrentPanel(Filament::getPanel('app'));
         $user = User::factory()->create();
-        $domain = Domain::query()->create(['name' => 'presets-panel.example', 'display_name' => 'Presets', 'revision' => 1, 'lifecycle_state' => 'active']);
+        $domain = Domain::query()->create(['name' => 'presets-panel.example', 'display_name' => 'Presets', 'revision' => 1, 'lifecycle_state' => 'active', 'nameservers_verified_at' => now()]);
         $domain->users()->attach($user->id);
         $this->actingAs($user);
 
@@ -136,7 +136,7 @@ class SecurityRulesPanelTest extends TestCase
         Queue::fake();
         Filament::setCurrentPanel(Filament::getPanel('app'));
         $user = User::factory()->create();
-        $domain = Domain::query()->create(['name' => 'edit-hydrate.example', 'display_name' => 'Edit', 'revision' => 1, 'lifecycle_state' => 'active']);
+        $domain = Domain::query()->create(['name' => 'edit-hydrate.example', 'display_name' => 'Edit', 'revision' => 1, 'lifecycle_state' => 'active', 'nameservers_verified_at' => now()]);
         $domain->users()->attach($user->id);
         $this->actingAs($user);
         $conditions = [
@@ -164,7 +164,7 @@ class SecurityRulesPanelTest extends TestCase
         Queue::fake();
         Filament::setCurrentPanel(Filament::getPanel('app'));
         $user = User::factory()->create();
-        $domain = Domain::query()->create(['name' => 'needs-ai.example', 'display_name' => 'Needs AI', 'revision' => 1, 'lifecycle_state' => 'active']);
+        $domain = Domain::query()->create(['name' => 'needs-ai.example', 'display_name' => 'Needs AI', 'revision' => 1, 'lifecycle_state' => 'active', 'nameservers_verified_at' => now()]);
         $domain->users()->attach($user->id);
         $this->actingAs($user);
         $rule = ['action' => 'block', 'priority' => 10, 'enabled' => true, 'conditions' => [['field' => 'prompt_injection_score', 'operator' => 'less_than', 'value_number' => '30']]];
@@ -189,7 +189,7 @@ class SecurityRulesPanelTest extends TestCase
     {
         Filament::setCurrentPanel(Filament::getPanel('app'));
         $user = User::factory()->create();
-        $domain = Domain::query()->create(['name' => 'one-control.example', 'display_name' => 'One', 'revision' => 1, 'lifecycle_state' => 'active']);
+        $domain = Domain::query()->create(['name' => 'one-control.example', 'display_name' => 'One', 'revision' => 1, 'lifecycle_state' => 'active', 'nameservers_verified_at' => now()]);
         $domain->users()->attach($user->id);
         $this->actingAs($user);
 

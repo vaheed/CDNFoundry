@@ -148,7 +148,7 @@ def main() -> None:
             email = f"e2e-logpush-{suffix}-{e2e.RUN_ID}@example.test"
             name = f"e2e-logpush-{suffix}-{e2e.RUN_ID}.example.test"
             artisan("$u=App\\Models\\User::query()->create(['name'=>'Push " + suffix + "','email'=>" + php_string(email) + ",'password'=>Illuminate\\Support\\Facades\\Hash::make(" + php_string(e2e.USER_PASSWORD)
-                    + "),'type'=>'user']);$d=App\\Models\\Domain::query()->create(['name'=>" + php_string(name) + ",'display_name'=>" + php_string(name) + ",'revision'=>1,'lifecycle_state'=>'active']);$d->users()->attach($u->id);")
+                    + "),'type'=>'user']);$d=App\\Models\\Domain::query()->create(['name'=>" + php_string(name) + ",'display_name'=>" + php_string(name) + ",'revision'=>1,'lifecycle_state'=>'active','nameservers_verified_at'=>now()]);$d->users()->attach($u->id);")
             users.append(email)
             token = login(email, e2e.USER_PASSWORD)
             _, listed = request("GET", "/api/domains", token=token)

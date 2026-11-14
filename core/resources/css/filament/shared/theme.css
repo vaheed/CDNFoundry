@@ -927,6 +927,21 @@ body,
     width: 6.5rem;
 }
 
+/* An auto table sizes number and address columns to their full content, so a heading such as "Mitigated share" or a
+   masked IPv6 client is never cut; only the first column gives way, with an ellipsis. */
+.cdn-data-table--auto th,
+.cdn-data-table--auto td {
+    white-space: nowrap;
+}
+
+.cdn-data-table--auto th:first-child,
+.cdn-data-table--auto td:first-child {
+    width: 100%;
+    max-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 /* A name in a table that opens its page: ink text, link color on hover, no permanent underline. */
 .cdn-table-link {
     color: var(--cdn-text-strong);

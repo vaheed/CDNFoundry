@@ -39,7 +39,7 @@ class LogPushTest extends TestCase
     private function owner(string $name = 'push.example'): array
     {
         $user = User::factory()->create();
-        $domain = Domain::query()->create(['name' => $name, 'display_name' => $name, 'revision' => 1, 'lifecycle_state' => 'active']);
+        $domain = Domain::query()->create(['name' => $name, 'display_name' => $name, 'revision' => 1, 'lifecycle_state' => 'active', 'nameservers_verified_at' => now()]);
         $domain->users()->attach($user->id);
 
         return [$user, $domain];

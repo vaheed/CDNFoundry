@@ -112,6 +112,9 @@ class DnsRecordsRelationManager extends RelationManager
                     ->label(FilamentHelp::label('Mode', 'Geo-DNS answers directly. Proxied records send traffic through the domain\'s assigned service pool: the apex publishes managed A/AAAA answers, while subdomains publish a pool-specific CNAME.'))
                     ->options(function (Get $get): array {
                         $options = ['dns_only' => 'DNS only'];
+                        if (! ($this->getOwnerRecord() instanceof Domain && $this->getOwnerRecord()->isVerified())) {
+                            return $options;
+                        }
                         if (in_array($get('type'), GeoDnsConfig::SUPPORTED_TYPES, true)) {
                             $options['geo_dns'] = 'Geo-DNS';
                         }
@@ -378,7 +381,7 @@ class DnsRecordsRelationManager extends RelationManager
         $domain = $this->getOwnerRecord();
         $record = DB::transaction(function () use ($domain, $input): DnsRecord {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
-            $data = $this->validateRecordForForm($input, $locked->name);
+            $data = $this->validateRecordForForm($input, $locked->name, $locked->isVerified());
             abort_if($data['type'] === 'NS' && auth()->user()?->isAdmin() !== true, 403, 'Only administrators can manage delegated NS records.');
             $rows = $locked->dnsRecords()->lockForUpdate()->get()->map(fn (DnsRecord $item): array => $this->row($item))->push($data);
             $this->assertZoneValidForForm($rows, $locked->name);
@@ -401,7 +404,7 @@ class DnsRecordsRelationManager extends RelationManager
         $domain = $this->getOwnerRecord();
         DB::transaction(function () use ($domain, $record, $input): void {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
-            $data = $this->validateRecordForForm($input, $locked->name);
+            $data = $this->validateRecordForForm($input, $locked->name, $locked->isVerified());
             abort_if($data['type'] === 'NS' && auth()->user()?->isAdmin() !== true, 403, 'Only administrators can manage delegated NS records.');
             $rows = $locked->dnsRecords()->lockForUpdate()->whereKeyNot($record->id)->get()->map(fn (DnsRecord $item): array => $this->row($item))->push($data);
             $this->assertZoneValidForForm($rows, $locked->name);
@@ -608,10 +611,10 @@ class DnsRecordsRelationManager extends RelationManager
         return $this->desiredRoutingTarget;
     }
 
-    private function validateRecordForForm(array $input, string $zone): array
+    private function validateRecordForForm(array $input, string $zone, bool $verified = true): array
     {
         try {
-            return DnsRecordData::validate($input, $zone);
+            return DnsRecordData::validate($input, $zone, $verified);
         } catch (ValidationException $exception) {
             $originFields = ['host', 'port', 'scheme', 'host_header', 'sni', 'verify_tls', 'connect_timeout_ms', 'response_timeout_ms', 'retry_count', 'websocket', 'health_check'];
             $messages = [];

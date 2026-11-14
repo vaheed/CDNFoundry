@@ -56,6 +56,11 @@ class DomainDetailSections
             fn (array $row): bool => ! ($row['value'] === null || $row['value'] === '' || $row['value'] === []) || $row['badge'] !== null || $row['empty'] !== null,
         ))];
 
+        if (! $domain->isVerified()) {
+            // Nothing is delivered, protected, or cached before the delegation is proven, so those cards would only be empty.
+            return ['left' => array_map($visible, [self::delegation($domain)]), 'right' => array_map($visible, [self::dns($domain)])];
+        }
+
         return [
             'left' => array_map($visible, [self::delegation($domain), self::dns($domain), self::delivery($domain)]),
             'right' => array_map($visible, [self::protection($domain), self::tls($domain), self::cache($domain)]),

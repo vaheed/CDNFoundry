@@ -536,7 +536,9 @@ class FleetWeb:
             "/config/feature/backups", "Save backups", fields=(
                 f'<label>Backups<select name="mode" data-testid="backups-mode">{options(("disabled", "control", "all-stateful"), backups["mode"], {"disabled": "Off", "control": "Control plane", "all-stateful": "Every stateful host"})}</select></label>'
                 f'<label>Repository<input name="repository" value="{esc(backups.get("repository") or "")}" autocomplete="off" placeholder="s3:https://storage.example/bucket/cdnfoundry"><span class="hint">The restic repository location, for example an S3 bucket URL.</span></label>'
-                f'<label>Region<input name="region" value="{esc(backups.get("region") or "us-east-1")}" autocomplete="off" placeholder="us-east-1"></label>'))
+                f'<label>Region<input name="region" value="{esc(backups.get("region") or "us-east-1")}" autocomplete="off" placeholder="us-east-1"></label>'
+                '<label>Access key ID<input name="access_key" type="password" autocomplete="off" spellcheck="false" placeholder="Leave empty to keep the saved key"><span class="hint">The S3 access key for the repository. It is stored in the Fleet vault and never shown again.</span></label>'
+                '<label>Secret access key<input name="secret_key" type="password" autocomplete="off" spellcheck="false" placeholder="Leave empty to keep the saved key"></label>'))
         return ('<p class="hint">Saving changes the plan only. Use Deploy changes below to send it to the hosts.</p>' + monitoring + central + backup)
 
     def _tls_section(self, state: dict[str, Any]) -> str:
@@ -1065,7 +1067,14 @@ class FleetWeb:
             if not config["mode"]:
                 raise ValidationError("Choose a mode")
             config = {k: v for k, v in config.items() if k in {"monitoring": ("mode", "host"), "logs": ("mode", "host", "endpoint"), "backups": ("mode", "repository", "region")}[feature]}
-            return self._sync(f"configure-{feature}", lambda e: e.configure_feature(feature, config), "/config", f"{feature.capitalize()} settings saved. Deploy the changes to send them to the hosts.")
+            credentials = {name: form.get(field, "").strip() for name, field in (("backup-access-key", "access_key"), ("backup-secret-key", "secret_key")) if feature == "backups" and form.get(field, "").strip()}
+
+            def save_feature(e: FleetEngine) -> None:
+                e.configure_feature(feature, config)
+                for name, value in credentials.items():
+                    e.store.write_secret(name, value)
+
+            return self._sync(f"configure-{feature}", save_feature, "/config", f"{feature.capitalize()} settings saved. Deploy the changes to send them to the hosts.")
         if path == "/config/apply":
             return job("Deploy changed configs", lambda e: e.apply_config(), "config")
         if path == "/rollback/run":

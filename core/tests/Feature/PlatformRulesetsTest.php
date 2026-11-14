@@ -19,7 +19,7 @@ class PlatformRulesetsTest extends TestCase
 
     private function domain(string $name): Domain
     {
-        return Domain::query()->create(['name' => $name, 'display_name' => $name, 'revision' => 1, 'lifecycle_state' => 'active']);
+        return Domain::query()->create(['name' => $name, 'display_name' => $name, 'revision' => 1, 'lifecycle_state' => 'active', 'nameservers_verified_at' => now()]);
     }
 
     private function rule(string $path = '/wp-login.php', string $action = 'block'): array

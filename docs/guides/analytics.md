@@ -145,6 +145,11 @@ After the configured delay, the scheduler finalizes the latest complete hour.
 The `usage_rollups` table stores request, DNS, ingress, and egress counts per
 hour, with a status. Rebuilding the same hour gives the same result.
 
+To keep the control database small for years, a daily job sums old rows without changing any total: hourly rows
+older than 35 days become one row per day, and daily rows older than a year become one row per month. Monthly rows are
+kept for good, about 12 rows per domain and year. A summed day or month is final and is never rebuilt. The usage
+endpoints return rows of any granularity, so read the `granularity` field.
+
 Use `GET /api/domains/{domain}/usage` for a cursor-paginated list and
 `GET /api/domains/{domain}/usage/export` for an export. Administrators have the same
 endpoints under `/api/admin/usage`. Exports hold at most 10,000 rows and
