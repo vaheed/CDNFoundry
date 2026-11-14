@@ -231,7 +231,12 @@ def qualify_incident_profile() -> None:
     # A wrong answer, a forged seed, and a seed for another client are refused.
     assert curl("overlay.example", "/.cdnf/challenge", method="POST", data=f"seed={seed}&counter=1")[0] == 403
     assert curl("overlay.example", "/.cdnf/challenge", method="POST", data="seed=7701.1.16.deadbeef&counter=1")[0] == 403
-    assert curl("overlay.example", "/.cdnf/challenge", ("User-Agent: Another/1",), "POST", f"seed={seed}&counter={solve_challenge(seed)}")[0] == 403, "a seed is bound to the browser that got it"
+    # The seed is bound to the client, not to its browser string (see tests/e2e/challenge_binding.py): another client, reaching the cell
+    # from outside its network namespace, cannot use it.
+    cell_address = run("docker", "inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}", NAME).stdout.strip()
+    foreign = run("curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", "-X", "POST", "-H", "Host: overlay.example", "-H", "Accept: text/html",
+                  "--data", f"seed={seed}&counter={solve_challenge(seed)}", f"http://{cell_address}:8080/.cdnf/challenge").stdout.strip()
+    assert foreign == "403", f"a seed is bound to the client that got it: {foreign}"
 
     # A correct answer gives a token; the seed cannot be replayed; the token passes until its expiry.
     answer = f"seed={seed}&counter={solve_challenge(seed)}"
@@ -242,10 +247,12 @@ def qualify_incident_profile() -> None:
     assert curl("overlay.example", "/", html + (f"Cookie: cdnf_chal={cookie}",))[0] == 200
     assert curl("overlay.example", "/", ("Accept: */*", f"Cookie: cdnf_chal={cookie}"))[0] == 200
     assert curl("overlay.example", attack, ("Accept: */*", f"Cookie: cdnf_chal={cookie}"))[0] == 403, "the profile turns the firewall on in blocking mode"
-    # A token is bound to the domain, the client, and the browser, and its signature is checked.
+    # A token is bound to the domain and the client, and its signature is checked.
     forged = cookie[:-1] + ("0" if cookie[-1] != "0" else "1")
     assert curl("overlay.example", "/", html + (f"Cookie: cdnf_chal={forged}",))[0] == 403
-    assert curl("overlay.example", "/", html + ("User-Agent: Another/1", f"Cookie: cdnf_chal={cookie}"))[0] == 403
+    # The token follows the client, not its browser string: another User-Agent from the same client is still accepted, unless the cell
+    # is set to bind it too (tests/e2e/challenge_binding.py).
+    assert curl("overlay.example", "/", html + ("User-Agent: Another/1", f"Cookie: cdnf_chal={cookie}"))[0] == 200
     other = cookie.split(".")
     other[0] = "7702"
     assert curl("overlay.example", "/", html + (f"Cookie: cdnf_chal={'.'.join(other)}",))[0] == 403, "a token for another domain means nothing"

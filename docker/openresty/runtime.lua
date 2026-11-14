@@ -220,7 +220,21 @@ local function incident_for(config)
 end
 
 local CHALLENGE_PATH = "/.cdnf/challenge"
+-- The proof-of-work difficulty in leading zero bits: 16 by default, settable per cell with EDGE_CHALLENGE_BITS from 12 (a few
+-- thousand hashes) to 24 (millions, noticeable on a phone). A value outside that range is refused and the default applies.
 local CHALLENGE_BITS = 16
+do
+    local configured = os.getenv("EDGE_CHALLENGE_BITS")
+    local bits = tonumber(configured)
+    if bits and bits == math.floor(bits) and bits >= 12 and bits <= 24 then
+        CHALLENGE_BITS = bits
+    elseif configured and configured ~= "" then
+        ngx.log(ngx.ERR, "EDGE_CHALLENGE_BITS must be a whole number from 12 to 24; using 16")
+    end
+end
+-- A token follows its client across the client's own address changes: it is bound to the client key (an IPv6 address counts under its
+-- prefix), not to the exact address. Binding to the User-Agent as well is a stricter option, EDGE_CHALLENGE_BIND_USER_AGENT=true.
+local CHALLENGE_BIND_USER_AGENT = os.getenv("EDGE_CHALLENGE_BIND_USER_AGENT") == "true"
 local CHALLENGE_SEED_SECONDS = 300
 local CHALLENGE_ISSUES_PER_MINUTE = 30
 local CHALLENGE_TOKEN_SECONDS = 3600
@@ -254,9 +268,11 @@ local function constant_time_equal(a, b)
     return difference == 0
 end
 
--- A token and a seed are bound to one domain, one client address, and one user agent.
+-- A token and a seed are bound to one domain and one client key, and to the user agent only when the cell is set to bind it.
 local function client_binding(client)
-    return resty_string.to_hex(sha256_raw(tostring(client) .. "|" .. (ngx.var.http_user_agent or ""))):sub(1, 16)
+    local key = tostring(client_limit_key(client))
+    local material = CHALLENGE_BIND_USER_AGENT and (key .. "|" .. (ngx.var.http_user_agent or "")) or key
+    return resty_string.to_hex(sha256_raw(material)):sub(1, 16)
 end
 
 local function valid_challenge_token(config, client)

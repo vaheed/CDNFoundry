@@ -54,8 +54,13 @@ plane is unreachable.
 
 **The browser challenge.** A visitor's page load without a token gets a short page that asks the browser to solve a small
 computation (about a second on a current device) and then continues on its own. The answer is single use and is bound to the
-visitor's address and browser; the token it earns works until the profile ends or for an hour, whichever is sooner, and is
-the only cookie the profile sets. Requests that are not page loads (scripts, bots, API clients) and have no token are refused.
+visitor, not to one address: an IPv6 visitor counts under its prefix (the same grouping as rate limiting), so a phone that
+changes address inside its network keeps its token, and an IPv4 visitor counts per address. The browser string is not part of
+the binding, so a browser update does not lose the token; a cell can bind it as well with `EDGE_CHALLENGE_BIND_USER_AGENT=true`.
+The token it earns works until the profile ends or for an hour, whichever is sooner, and is the only cookie the profile sets.
+A token is valid on the cell that issued it; another cell or another point of presence challenges the visitor again.
+The difficulty is 16 bits by default, and `EDGE_CHALLENGE_BITS` (12 to 24) changes it for a cell. See
+[Configuration](../reference/configuration.md). Requests that are not page loads (scripts, bots, API clients) and have no token are refused.
 Paths under `/api/` and `/.well-known/`, and visitors that one of your own allow rules matches, are not challenged. The page
 explains itself to screen readers and tells a visitor without JavaScript what to do. The check needs HTTPS, because browsers
 only offer the cryptography it uses on secure pages. Each address can be issued only a limited number of challenges a minute, so
