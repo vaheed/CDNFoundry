@@ -7,6 +7,10 @@ single source of truth; `make version-check` enforces it.
 
 ## [Unreleased]
 
+## [2.1.2] - 2026-11-14
+
+Limits an unverified domain to DNS records and keeps PostgreSQL small. See the [release notes](docs/operations/releases/v2.1.2.md).
+
 ### Added
 
 - `cdnf:usage:compact` sums hourly usage into daily rows after 35 days and daily rows into monthly rows after a year, with the same totals, so `usage_rollups` stops growing by a row per domain per hour.
