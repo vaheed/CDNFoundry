@@ -138,6 +138,50 @@ At about 2,000 requests per second or more from one address the cell banned the 
 
 The deployment directory was byte-identical to its backup after the override was removed, cell-06 is back to 0.5 CPU, 512 MB and 128 PIDs with its original mounts, the domain WAF profile and security settings equal the originals, the temporary API token was deleted, and all containers, volumes and record counts match the start.
 
+## Scale run: control plane, DNS onboarding, telemetry
+
+This run asked what a 50,000 domain deployment needs. Synthetic domains (all named with a `qual-` prefix, removed afterwards) were added in steps, and each component was measured. Staging has no hardware that can hold 50,000 live domains, so the larger figures are extrapolated and marked as estimates.
+
+### Measured
+
+| Item | Result |
+| --- | --- |
+| Control database, 50,005 domains and 150,000 DNS records | 145 MB total, up 76 MB from 1,005 domains, about 1.5 KB per domain |
+| Bulk insert of 49,000 domains and 147,000 records | 27 seconds |
+| Zone onboarding, 1,000 active zones of 3 records through the normal job path | about 10 minutes, about 1.6 zones per second |
+| Onboarding bottleneck | The PowerDNS primary's PostgreSQL ran at 80 to 100 % of one core |
+| Edge PowerDNS memory | 67.6 MB with 3 zones, 76 MB with 1,003 zones, about 8 KB per zone |
+| PowerDNS primary database | 10 MB for 3,600 records |
+| DNS query rate with 1,003 zones | the same ceiling as with 3 zones: about 16,000 queries per second, 9,800 at 1.9 % loss |
+| API request, authenticated read | 0.38 to 0.42 s each, with 1,005 or 50,005 domains alike; the framework floor (`/up`) is 0.18 s |
+| API throughput, 4 to 16 concurrent clients | 7 to 10 requests per second |
+| API throughput with the PHP pool raised from 5 to 16 workers | no change (9.6 against 9.75 requests per second) |
+| Scheduler container | 0.5 to 1 core at all times: about 30 `artisan` commands a minute, each about 1 CPU second to start, whatever the domain count |
+| ClickHouse storage per event | 49 bytes (edge events), 24 bytes (DNS events), compressed |
+| ClickHouse system logs | 3.1 GB beside 32 MB of telemetry after eight days |
+
+### What this means
+
+- **Domain count is cheap; zone onboarding and traffic are not.** The database, API latency and DNS serving did not change between 1,000 and 50,000 domains. Putting 50,000 zones into PowerDNS would take about 8.7 hours at 1.6 zones per second (estimate from the measured rate).
+- **The control host is CPU bound, not memory bound.** The API is slow because the 4 vCPU host is shared with ClickHouse, the scheduler, PostgreSQL and PowerDNS. Raising the PHP pool did not help.
+- **The scheduler is a fixed cost.** Each scheduled command starts a new PHP process. Caching configuration and routes did not change the cost, and CLI opcache saved about 20 %. A real fix is to run scheduled work inside one process.
+- **Telemetry grows with traffic.** At the 49 byte per event figure, 3,500 requests per second for a day is about 15 GB (estimate, assumes every request is logged).
+
+### Tuning tested
+
+| Change | Result | Kept |
+| --- | --- | --- |
+| ClickHouse system logs off, query log expires after 3 days | ClickHouse used 27 % of a core against 40 % for the original, over 60 seconds each, and stops the 3 GB growth | Yes, committed |
+| PHP-FPM pool 5 to 16 workers | no throughput change on a CPU-starved host | No |
+| Laravel config and route cache | no measurable change | No |
+| Live PHP-FPM reload with a signal | left the pool without workers; a container restart fixed it | Do not do this |
+
+The ClickHouse measurement is one 60-second window per side on a busy host, so treat the size of the gain as approximate.
+
+### Not measured in this run
+
+Edge memory per domain, since synthetic proxied domains would have needed certificates and a reachable origin. Grafana, Prometheus and Loki were only observed at idle. Queue throughput above one worker pool.
+
 ## Not tested
 
 Not run, with the reason:

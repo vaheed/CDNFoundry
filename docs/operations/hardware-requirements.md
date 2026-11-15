@@ -31,14 +31,35 @@ Rules of thumb:
 
 DNS shares the edge host. At 16,000 queries per second DNSdist used about 1.1 cores and PowerDNS about 0.8 cores, so budget 2 vCPU per 15,000 queries per second and 1 GB of RAM. Measured.
 
-## Control host
+## Control plane
 
-| Size    | CPU    | RAM   | Disk       | Status   |
-| ------- | ------ | ----- | ---------- | -------- |
-| Minimum | 8 vCPU | 16 GB | 100 GB SSD | Estimate |
+| Deployment | Control host | Database host | Telemetry host | Monitoring host | Status |
+| ---------- | ------------ | ------------- | -------------- | --------------- | ------ |
+| Up to 1,000 domains | 8 vCPU, 16 GB, 100 GB SSD | same host | same host | same host | Estimate |
+| 50,000 domains | 8 vCPU, 16 GB, 200 GB NVMe | 4 vCPU, 8 GB, 200 GB NVMe | 8 vCPU, 32 GB, 1 TB NVMe | 4 vCPU, 8 GB, 100 GB SSD | Estimate |
 
-The staging control host (4 vCPU, 4 GB) averaged 58 % CPU and used swap at idle, so it is too small. Put ClickHouse, Vector and Prometheus on a separate host for production. Control-plane and database load were not measured.
+What the staging measurements support:
+
+- **Domains barely cost anything in the database.** 50,005 domains and 150,000 records took 145 MB, and API speed was the same as with 1,000 domains.
+- **The control host is limited by CPU, not memory.** The 4 vCPU host averaged 58 % CPU at idle. The scheduler alone uses half a core to a full core.
+- **API capacity on that host was 7 to 10 requests per second.** Moving ClickHouse and the DNS database off the control host is what frees CPU for the API.
+- **Adding PHP workers did not help.** Add CPU, not workers.
+- **Telemetry storage:** about 49 bytes per request event and 24 bytes per DNS event, compressed. For 100 requests per second that is about 0.4 GB a day.
+
+## DNS at 50,000 domains
+
+- **Serving:** zone count did not change query speed. One edge host handled the same 16,000 queries per second with 1,003 zones as with 3.
+- **Memory:** about 8 KB per zone, so plan 0.5 GB extra on each DNS host for 50,000 zones (estimate).
+- **Onboarding is the slow part.** The primary's database wrote about 1.6 zones per second, so loading 50,000 zones takes about 9 hours. After that, normal changes are small.
+
+## Edge at 50,000 domains
+
+Domain count was not measured on the edge. Size the edge by requests per second from the tables above, not by domains. Spread domains over cells; one domain stays on one cell per edge.
+
+## Monitoring host
+
+Prometheus, Grafana and Loki together used under 0.5 GB of memory and a few percent of one core at idle. 4 vCPU and 8 GB is a safe estimate for 50,000 domains; it was not measured under load.
 
 ## Not measured
 
-Large objects and bandwidth, TLS handshake rate, domains per host, database and ClickHouse sizing, and anything above one edge host.
+Large objects and bandwidth, TLS handshake rate, edge memory per domain, monitoring under load, and anything above one edge host.

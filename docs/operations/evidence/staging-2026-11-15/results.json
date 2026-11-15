@@ -241,5 +241,55 @@
       "pdns_auth": 0.8
     },
     "restored": true
+  },
+  "scale_run": {
+    "db": {
+      "domains": 50005,
+      "records": 150000,
+      "database_mb": 145,
+      "growth_mb": 76
+    },
+    "zone_onboarding": {
+      "zones": 1000,
+      "minutes": 10,
+      "zones_per_second": 1.6,
+      "bottleneck": "pdns primary postgres at 80-100% of one core"
+    },
+    "pdns_auth_memory_mb": {
+      "3_zones": 67.6,
+      "1003_zones": 76
+    },
+    "dns_with_1003_zones": {
+      "completed_qps_at_20000_offered": 15996,
+      "loss_pct": 5.16,
+      "completed_qps_at_10000_offered": 9810,
+      "loss_pct_10k": 1.87
+    },
+    "api": {
+      "auth_read_seconds": 0.4,
+      "floor_up_seconds": 0.18,
+      "concurrent_rps": [
+        7,
+        10
+      ],
+      "pool_5_vs_16_rps": [
+        9.75,
+        9.58
+      ]
+    },
+    "scheduler_cpu_cores": [
+      0.5,
+      1.0
+    ],
+    "artisan_cpu_seconds_each": 1.0,
+    "clickhouse": {
+      "bytes_per_edge_event": 49,
+      "bytes_per_dns_event": 24,
+      "system_logs_gb": 3.1,
+      "telemetry_mb": 32,
+      "cpu_pct_one_core_original": 40,
+      "cpu_pct_system_logs_off": 27
+    },
+    "cleanup": "synthetic domains, zones and token removed; ClickHouse and PHP-FPM settings restored"
   }
 }
