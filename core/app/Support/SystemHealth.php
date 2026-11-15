@@ -196,7 +196,8 @@ final class SystemHealth
                 $depth = $ready + $reserved + $delayed;
                 $payload = $ready > 0 ? json_decode((string) $redis->lindex("queues:{$queue}", 0), true) : null;
                 $pushedAt = is_array($payload) ? ($payload['pushedAt'] ?? $payload['pushed_at'] ?? null) : null;
-                $oldestAge = is_numeric($pushedAt) ? max(0, (int) floor(microtime(true) - $pushedAt)) : null;
+                // Reserved and delayed jobs are not waiting for a worker, so a lane without a ready job has no waiting age.
+                $oldestAge = $ready === 0 ? 0 : (is_numeric($pushedAt) ? max(0, (int) floor(microtime(true) - $pushedAt)) : null);
 
                 return [$queue => [
                     'status' => $depth > 1000 || ($oldestAge !== null && $oldestAge > 900) ? 'degraded' : 'healthy',
