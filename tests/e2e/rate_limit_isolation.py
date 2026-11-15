@@ -114,6 +114,12 @@ def main() -> None:
                 raise AssertionError(run("docker", "logs", CELL, check=False).stderr)
             # "ready" used one count of its own key; the victim's keys below are different ones.
 
+            # The rule counts in fixed 600 s windows. A window ending during the test would reset the victim's counter for a reason
+            # that has nothing to do with eviction, so start the counted requests early in a window.
+            remaining = 600 - time.time() % 600
+            if remaining < 120:
+                time.sleep(remaining + 1)
+
             # The victim's client is mitigated (a marker with a 600 s duration), and another of its clients is mid-allowance.
             assert [get(ip, "victim.rate.test", "mitigated") for _ in range(3)] == [200, 200, 429]
             assert get(ip, "victim.rate.test", "mid-allowance") == 200
