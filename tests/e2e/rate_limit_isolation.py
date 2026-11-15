@@ -122,6 +122,10 @@ def main() -> None:
             served = flood(ip, "attacker.rate.test", FLOOD_REQUESTS)
             assert served > FLOOD_REQUESTS * 0.9, f"the flood only got {served} of {FLOOD_REQUESTS} requests through"
 
+            # Both domains share this one test client address, so let Nginx's per-address limiter (100 requests per second, burst 200)
+            # drain what the flood used up; that limiter is not what this test qualifies.
+            time.sleep(4)
+
             # Nothing of the victim was evicted: the marker still blocks, and the counter still holds its one request.
             assert get(ip, "victim.rate.test", "mitigated") == 429, "the victim's mitigation was evicted by another domain"
             assert get(ip, "victim.rate.test", "mid-allowance") == 200
