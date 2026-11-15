@@ -7,6 +7,25 @@ description: How much CPU and RAM a CDNFoundry edge, DNS and control host needs 
 
 Use this page to size hosts. The numbers come from the staging measurements in [Staging qualification, 2026-11-15](staging-qualification-2026-11-15.md), taken on 4 vCPU Intel Xeon E5-2697 v4 virtual machines with a 10 Gbit/s NIC. Rows marked **estimate** were not measured at that size.
 
+## Where to start
+
+Each row is one node. Start here, then use the calculator below to size the edge for your traffic.
+
+| Node | Minimum to start (lab or test) | Recommended start (small production) | How many | What sets the size |
+| --- | --- | --- | --- | --- |
+| Control node | 4 vCPU, 8 GB RAM, 80 GB SSD | 8 vCPU, 16 GB RAM, 100 GB SSD | 1 (2 for high availability) | CPU. The 4 vCPU, 4 GB staging host averaged 58 % CPU with swap in use, so it was too small |
+| Monitor node (Prometheus, Grafana, Loki, ClickHouse) | 4 vCPU, 8 GB RAM, 200 GB SSD | 8 vCPU, 16 GB RAM, 500 GB NVMe | 1 | Telemetry volume: about 49 bytes per request, so 100 requests per second on average is about 0.4 GB a day |
+| DNS node (DNSdist, PowerDNS) | 2 vCPU, 2 GB RAM, 20 GB SSD | 4 vCPU, 4 GB RAM, 40 GB SSD | 2 or more | Queries per second: about 5,000 clean per 4 vCPU host, 16,000 peak |
+| Edge node (cells, gateway, agent) | 4 vCPU, 8 GB RAM, 50 GB SSD | 8 vCPU, 16 GB RAM, 100 GB NVMe | 2 or more | Requests per second and the WAF: about 275 per vCPU with the WAF off, 80 with it on |
+
+What was measured and what was not:
+
+- **Measured:** the edge and DNS request and query rates, the monitoring and telemetry CPU and memory (under 0.5 GB and about 14 % of one core for Prometheus, Grafana and Loki together at 3,000 requests per second), memory per domain, and the control host being CPU bound.
+- **Estimate:** the control and monitor node sizes, the DNS node minimum, and anything above the 4 vCPU hosts the staging fleet used. The staging hosts had 3.9 GB of RAM, which worked for edge and DNS with no swap but left only about 1.4 GB free.
+- **Network:** 1 Gbit/s is enough to start. The staging path moved about 300 Mbit/s between hosts. Edge and DNS nodes need public IPv4, and IPv6 if you serve it. The control and monitor nodes can stay private.
+- **Combining nodes:** DNS and edge shared hosts in staging and that works. For a lab the control and monitor nodes can share one host of 8 vCPU and 16 GB.
+- **Smallest useful setup:** one control host, one monitor host (or shared with control), and two hosts that each run DNS and edge. DNS needs two hosts to have a second name server.
+
 ## Edge host
 
 One edge host runs the cells, the gateway, the edge agent, DNS and the log shipper. These numbers are for one host with 4 vCPU (Intel Xeon E5-2697 v4 class), 8 cells, 20 busy proxied domains spread over the cells, a 10 KB cached object, and traffic from many client addresses.
