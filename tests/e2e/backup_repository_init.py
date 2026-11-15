@@ -6,15 +6,18 @@ Runs core/docker/backup/create.sh in the control image against a throwaway local
 
 import os
 import pathlib
+import secrets
 import subprocess
 import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
+KEYS = {"repository": secrets.token_hex(16).encode(), "other": secrets.token_hex(16).encode()}
 IMAGE = os.environ.get("CDNF_CORE_IMAGE", "cdnfoundry-dev-core:latest")
 
 
-def run(script: str, directory: pathlib.Path, password: str = "good", repository: str = "/work/repo/main") -> subprocess.CompletedProcess[str]:
-    (directory / "password").write_text(password + "\n")
+def run(script: str, directory: pathlib.Path, key: str = "repository", repository: str = "/work/repo/main") -> subprocess.CompletedProcess[str]:
+    # Each throwaway repository key is generated for the run; nothing is a fixed credential.
+    (directory / "password").write_bytes(KEYS[key] + b"\n")
     return subprocess.run(
         ["docker", "run", "--rm", "--entrypoint", "sh", "-v", f"{directory}:/work", "-v", f"{ROOT / 'core/docker/backup/create.sh'}:/create.sh:ro",
          "-e", "PATH=/work/bin:/usr/bin:/bin", "-e", f"RESTIC_REPOSITORY={repository}", "-e", "RESTIC_PASSWORD_FILE=/work/password",
@@ -41,7 +44,7 @@ def main() -> None:
         assert second.returncode == 0 and "initialising" not in second.stderr and "2 snapshots" in second.stdout, second.stdout + second.stderr
 
         # A repository that exists but cannot be opened is never initialised over: the cause is reported and the backup stops.
-        wrong = run("sh /create.sh", directory, password="wrong")
+        wrong = run("sh /create.sh", directory, key="other")
         assert wrong.returncode != 0 and "initialising" not in wrong.stderr and '"snapshot_id"' not in wrong.stdout, wrong.stdout + wrong.stderr
         assert "wrong password" in wrong.stderr.lower() or "no key found" in wrong.stderr.lower(), wrong.stderr
         intact = run("sh /create.sh && restic snapshots --compact", directory)
