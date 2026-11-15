@@ -110,15 +110,15 @@ x-edge-cell: &edge-cell
   restart: unless-stopped
   stop_signal: SIGQUIT
   stop_grace_period: 30s
-  mem_limit: 512m
-  cpus: 0.5
+  mem_limit: ${EDGE_CELL_MEMORY:-512m}
+  cpus: ${EDGE_CELL_CPUS:-0.5}
   pids_limit: 128
   sysctls: { net.ipv4.tcp_syncookies: "1" }
   ulimits:
     nofile: { soft: 32768, hard: 32768 }
   deploy:
     resources:
-      limits: { memory: 512m, cpus: "0.5", pids: 128 }
+      limits: { memory: "${EDGE_CELL_MEMORY:-512m}", cpus: "${EDGE_CELL_CPUS:-0.5}", pids: 128 }
   healthcheck:
     test: [CMD, wget, -qO-, http://127.0.0.1:8080/healthz]
     interval: 10s

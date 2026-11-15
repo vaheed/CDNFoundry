@@ -392,6 +392,8 @@ this fixture at a staging or production cell. These are not deployment settings.
 | `LOG_PUSH_TEST_CA_FILE` | development only | A CA file that lets the log pusher trust a fake receiver's private certificate in qualification. It is ignored in production |
 | `EDGE_NETWORK_SUBNET` | edge | Subnet of the private edge network. Compose requires it |
 | `EDGE_PROXY_PROTOCOL_TRUSTED_CIDRS` | cells | Networks whose PROXY protocol headers a cell honors. Production Compose sets it from `EDGE_NETWORK_SUBNET` |
+| `EDGE_CELL_CPUS` | cells | CPU limit of each cell in production Compose. Default `0.5`. Each started CPU adds one nginx worker, up to eight. See [Hardware requirements](../operations/hardware-requirements.md) |
+| `EDGE_CELL_MEMORY` | cells | Memory limit of each cell in production Compose. Default `512m` |
 | `EDGE_IPV6_RATE_PREFIX` | cells | How many leading bits of an IPv6 client address a cell counts a client under, from 32 to 128. Default `64`, the same grouping the gateway uses for connection slots. A value outside the range is logged and the default applies |
 | `EDGE_IPV6_EXACT_CIDRS` | cells | Comma-separated IPv6 networks (at most 64) whose clients are counted per full address, for networks that put many unrelated users behind one prefix. Default empty |
 | `EDGE_CHALLENGE_BITS` | cells | Difficulty of the browser challenge's proof of work in leading zero bits, from 12 (a few thousand hashes) to 24 (millions, noticeable on a phone). Default `16`. A value outside the range is logged and the default applies |
