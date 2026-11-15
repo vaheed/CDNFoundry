@@ -328,5 +328,29 @@
       "grafana": 2.7
     },
     "restored": true
+  },
+  "multi_domain_run": {
+    "host": "edge-a, 4 vCPU, 8 cells, 20 busy of 100 proxied domains, 10 KB cached object",
+    "waf_off_rps": [
+      1121,
+      1156,
+      1103
+    ],
+    "waf_on_rps": [
+      317,
+      320,
+      438
+    ],
+    "connections": [
+      100,
+      500,
+      2000
+    ],
+    "per_vcpu_rps": {
+      "waf_off": 275,
+      "waf_on": 80
+    },
+    "cell_cpu_limit_effect": "none, host bound",
+    "restored": true
   }
 }

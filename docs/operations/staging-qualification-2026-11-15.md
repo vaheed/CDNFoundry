@@ -243,6 +243,48 @@ Both edges have cell-01 and cell-06 back to 0.5 CPU, 512 MB, 128 PIDs and their 
 
 Side effects: `log-pusher` and `notifier` on the control host restarted three times each around 14:01 while Horizon was recreated, and 1,481 rows remain in the failed jobs table from the test domains.
 
+## Multi-domain run: 100 proxied domains
+
+This run answers how much one edge host carries when many domains are busy at once. It used 100 synthetic proxied domains (HTTP only, WAF as stated, default security limits) with their origin on the load generator, 20 of them loaded at a time, a 10 KB cached object, and 20 `wrk` processes so that each connection stayed on one domain. Cells were recreated with a Compose override for each row and removed afterwards.
+
+### Multi-domain results
+
+| WAF | Cells | Busy connections | Requests per second | Median | Worst p99 | Errors |
+| --- | --- | --- | --- | --- | --- | --- |
+| Off | 8 × 0.5 CPU | 100 | 1,121 | 82 ms | 1.1 s | none |
+| Off | 8 × 0.5 CPU | 500 | 1,156 | 365 ms | 1.6 s | 167 socket |
+| Off | 8 × 0.5 CPU | 2,000 | 1,103 | 578 ms | 1.4 s | 326 socket |
+| Off | 8 × 2 CPU | 100 | 1,026 | 93 ms | 1.1 s | none |
+| Off | 8 × 2 CPU | 500 | 1,105 | 420 ms | 1.3 s | 150 socket |
+| Off | 8 × 2 CPU | 2,000 | 1,110 | 695 ms | 1.7 s | 550 socket |
+| Balanced | 8 × 0.5 CPU | 100 | 317 | 300 ms | 1.2 s | none |
+| Balanced | 8 × 0.5 CPU | 500 | 320 | 1.37 s | 2.0 s | 947 timeouts |
+| Balanced | 8 × 0.5 CPU | 2,000 | 438 | 1.23 s | 2.0 s | 7,427 timeouts |
+| Balanced | 8 × 2 CPU | 100 | 352 | 281 ms | 1.0 s | none |
+| Balanced | 8 × 2 CPU | 500 | 330 | 1.40 s | 2.0 s | 987 timeouts |
+| Balanced | 8 × 2 CPU | 2,000 | 427 | 1.56 s | 2.0 s | 7,191 timeouts |
+
+An earlier 1 CPU WAF-on run gave 307 requests per second at 100 connections, the same as the others.
+
+### What the multi-domain run shows
+
+- **The host is the limit.** At 100 connections the host was 96 % busy (about 70 % user and 25 % system) with every cell near 40 % of a core. Changing the cell limit from 0.5 to 2 CPU changed nothing.
+- **WAF off carries about 1,100 requests per second per 4 vCPU host and WAF on about 320 to 350.** That is about 275 and 80 per vCPU.
+- **Overload shows up as latency and timeouts, not errors.** Past the limit the requests queue; wrk gave up after 2 seconds.
+- **Two sets of limits sit in front of one client address.** The gateway allows 256 connections per source address (`GATEWAY_MAX_CONNECTIONS_PER_ADDRESS`), and each cell allows 100 requests per second and 64 connections per address. The test raised both to simulate many client addresses and put them back.
+
+### Mistakes in my first attempts
+
+Three harness faults produced all-error results before the numbers above, and none of those results are used:
+
+1. My Lua script used the `//` operator, which wrk's Lua 5.1 does not have. The script failed to load and wrk silently sent plain requests with the wrong Host. This also invalidates the earlier client-pool runs.
+2. The gateway routes a connection by the Host of its first request, so varying the Host on one connection sent requests to cells that did not serve that domain.
+3. The per-address limits above rejected a single load generator.
+
+### Restoration after the multi-domain run
+
+Edge-a's gateway and all eight cells are back to their original settings (0.5 CPU, 512 MB) with a deployment directory identical to its backup. The 100 domains were removed through the deprovision path, then their leftover rows and name tombstones were deleted by prefix. The test origin and its files were removed from the load generator.
+
 ## Not tested
 
 Not run, with the reason:
