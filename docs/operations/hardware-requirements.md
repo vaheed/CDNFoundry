@@ -13,18 +13,21 @@ One edge host runs the cells, the gateway, the edge agent, DNS and the log shipp
 
 | Traffic | CPU | RAM | Handles | Status |
 | --- | --- | --- | --- | --- |
-| Cached static objects, WAF off | 4 vCPU | 8 GB | about 3,500 requests per second | Measured |
+| Cached static objects, WAF off | 4 vCPU | 8 GB | about 900 requests per second (3,500 in a lighter test) | Measured |
 | Cached static objects, WAF on (balanced) | 4 vCPU | 8 GB | about 450 requests per second | Estimate from a 2 CPU cell at 240 |
 | Cache MISS to a 40 ms origin | 4 vCPU | 8 GB | about 190 requests per second at 8 connections | Measured, origin bound |
 | DNS answers | shares the same 4 vCPU | none extra | about 5,000 queries per second clean, 16,000 peak | Measured |
 
 Rules of thumb:
 
-- **WAF off:** about 900 requests per second per vCPU, all services included.
+- **WAF off:** about 225 requests per second per vCPU, all services included. Plan with this.
 - **WAF on:** about 110 requests per second per vCPU. The WAF is the dominant cost; plan CPU around it.
 - **Cell size:** give each cell at least 2 CPUs and 1 GB. A 0.5 CPU cell served 130 requests per second with the WAF off and 25 with it on. Set `EDGE_CELL_CPUS` and `EDGE_CELL_MEMORY`.
 - **Connections:** 128 concurrent connections were served cleanly. Higher counts were not measured.
-- **Domains:** one domain used one cell per edge. Domains per host were not measured beyond one.
+- **Domains:** one domain uses one cell per edge. 601 domains deployed at about 1.5 per second. The edge agent needs about 19 KB of memory per domain and a cell about 35 KB per domain per worker. Raise the agent's 256 MiB limit above 10,000 domains per host, and give cells 2 GB with 4 workers at that scale (estimate).
+- **Large objects:** 1 MB to 100 MB files cost about a tenth of a core at 34 MB/s. The staging network could not go faster, so the cell's own limit was not reached.
+- **New TLS connections:** about 50 per second per client address, set by the gateway.
+- **Two edge hosts:** requests per second added up almost exactly (850 plus 897).
 - **Swap:** none on edge hosts.
 
 ## DNS host
@@ -58,8 +61,8 @@ Domain count was not measured on the edge. Size the edge by requests per second 
 
 ## Monitoring host
 
-Prometheus, Grafana and Loki together used under 0.5 GB of memory and a few percent of one core at idle. 4 vCPU and 8 GB is a safe estimate for 50,000 domains; it was not measured under load.
+Under 3,000 requests per second at the edge, Prometheus, Grafana, Loki and the exporters together used about 14 % of one core and 0.5 GB. ClickHouse used 57 % of a core on average and is the real consumer. 4 vCPU and 8 GB is a safe estimate for 50,000 domains.
 
 ## Not measured
 
-Large objects and bandwidth, TLS handshake rate, edge memory per domain, monitoring under load, and anything above one edge host.
+Cell bandwidth above 34 MB/s, TLS handshake capacity of a cell (the gateway limits one client), edge memory above 601 domains, and more than two edge hosts.

@@ -182,6 +182,67 @@ The ClickHouse measurement is one 60-second window per side on a busy host, so t
 
 Edge memory per domain, since synthetic proxied domains would have needed certificates and a reachable origin. Grafana, Prometheus and Loki were only observed at idle. Queue throughput above one worker pool.
 
+## Second run: large objects, TLS, edge memory, two edges, monitoring
+
+The owner allowed changes to staging for this run. Tuned cells, a raised platform ceiling on the rendering container, a test origin and synthetic proxied domains were used and then removed. Every change was reverted and checked against a backup.
+
+### Second run results
+
+| Item | Result | Status |
+| --- | --- | --- |
+| Large objects (1 MB, 10 MB, 100 MB) through one cell | 34.5 MB/s at every size and concurrency | Network limited, see below |
+| Raw host-to-host transfer in the staging subnet | 31 to 46 MB/s aggregate, one stream or eight | Measured |
+| Cell CPU while serving 34 MB/s | 8 to 12 % of one core | Measured |
+| New TLS handshakes from one client | 53 per second, flat from 8 to 64 connections | Gateway limit |
+| Gateway CPU during a handshake flood | 90 to 100 % of its 1 CPU limit, rejecting about 2,400 connections per second | Measured |
+| HTTPS with connection reuse, one cell, 4 CPU, WAF off | about 900 requests per second | Measured |
+| Two edges at the same time, same test | 850 and 897 requests per second, 1,747 combined | Measured |
+| Edge runtime file | about 3.5 KB per domain | Measured at 201 and 601 domains |
+| Cell memory with 75 domains | +2.5 to 5 MB on a 1 worker cell, +9.5 MB on a 4 worker cell | Measured |
+| Edge agent memory | 8 MB with 1 domain, 11 MB with 201, 19 MB with 601: about 19 KB per domain | Measured |
+| Edge deployment of new domains | about 1.5 domains per second, with their DNS zones | Measured |
+| Telemetry loss at 1,750 requests per second | none: ClickHouse held more events than requests sent | Measured |
+
+### Notes on the second run results
+
+- **Bandwidth is capped by the staging network, not by the cell.** Every large-object run stopped at 34.5 MB/s, about 75 % of what the hosts can move to each other without any CDN. The cell used about a tenth of a core, so one core is worth roughly 300 MB/s or 2.4 Gbit/s (extrapolated, not measured). The cell reports a 10 MiB maximum cached object in this deployment, so objects above that are not cached.
+- **Per-client TLS handshakes are limited in the gateway at about 50 per second.** A single source cannot measure a cell's real handshake capacity. The 1 CPU gateway is the part that saturates under a connection flood.
+- **The per-edge request rate is lower than in the first run.** With every per-domain limit really lifted, an edge served about 900 requests per second at 98 % host CPU: the cell 1.7 to 1.8 cores, Vector 0.65 to 1.0, the gateway 0.2 to 0.3, plus Docker proxying and health checks. The earlier 3,400 to 4,000 figure was taken while the effective per-domain limit was still the default of 100, so most requests skipped part of the accounting. The cause of the difference is not proven. Domain count, request headers, host CPU speed and Vector backlog were each ruled out. Planning uses the lower figure.
+- **Restoring the default limit gave 2,950 requests per second, but 99 % of them were rejected.** Rejection is cheap, so a host can absorb about 3,000 rejected requests per second.
+- **Edge memory grows with domains and with workers.** About 35 KB per domain per worker in a cell (estimate from 75 domains), and about 19 KB per domain in the agent.
+- **Cell and gateway protections turn on under load from few addresses.** One client above about 20 rate events a minute is banned for 5 minutes, and after repeated bans the control plane moves the whole domain to `restricted`, which limits every client until it is reset. Large offices or proxies behind one address could trigger this. This stopped most of my synthetic runs and had to be reset by hand.
+
+### Monitoring under load (control host, during 3,000 requests per second at the edge)
+
+| Container | CPU average | CPU peak | Memory |
+| --- | --- | --- | --- |
+| ClickHouse | 57 % | 139 % | 590 MB |
+| Prometheus | 3.8 % | 14 % | 187 MB |
+| Loki | 3.0 % | 14 % | 132 MB |
+| Grafana | 2.7 % | 11 % | 165 MB |
+| Alertmanager, blackbox, node exporter | under 4 % each | 35 % | under 35 MB each |
+
+Prometheus, Grafana, Loki and the exporters together used about 14 % of one core and 0.5 GB. ClickHouse is the real consumer.
+
+### Can the cells be tuned?
+
+Yes, but the limits are mostly not in the cell's nginx. In order of measured effect:
+
+1. **WAF.** Costs 10 to 20 ms of CPU per request, so it dominates everything else. Use it where it is needed. Tuning rule sets was not tested.
+2. **Cell size.** Give each cell 2 to 4 CPUs. A 0.5 CPU cell starts one worker and managed 130 requests per second with the WAF off. Set `EDGE_CELL_CPUS` and `EDGE_CELL_MEMORY`. Memory also has to grow with the domains on the cell.
+3. **Telemetry.** Vector and its collector take about a third of an edge host. Removing the duplicate stdout access log gave 16 % more requests, and buffering it halves Docker's CPU. Sampling cache hits was not tested.
+4. **Gateway CPU limit.** It hits its 1 CPU limit under connection floods. Raising it on larger hosts is untested.
+5. **Agent memory limit.** 256 MiB covers about 12,000 domains per edge host at 19 KB each (estimate). Raise it before large deployments.
+6. **Health checks.** One sample showed `runc` starting health-check processes at about 20 % of a core across 17 containers. A longer interval is untested.
+
+Only the stdout log buffering and the cell size settings were committed, because only they were measured.
+
+### Restoration after the second run
+
+Both edges have cell-01 and cell-06 back to 0.5 CPU, 512 MB, 128 PIDs and their original mounts, with deployment directories identical to their backups. The control host's Horizon container is back on the original configuration (limit 100) and its directory is identical to its backup. The test domain's WAF is `balanced` and its security settings equal the originals. The synthetic domains, zones, name tombstones and the test origin were removed.
+
+Side effects: `log-pusher` and `notifier` on the control host restarted three times each around 14:01 while Horizon was recreated, and 1,481 rows remain in the failed jobs table from the test domains.
+
 ## Not tested
 
 Not run, with the reason:

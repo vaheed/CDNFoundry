@@ -291,5 +291,42 @@
       "cpu_pct_system_logs_off": 27
     },
     "cleanup": "synthetic domains, zones and token removed; ClickHouse and PHP-FPM settings restored"
+  },
+  "second_run": {
+    "large_objects_mb_per_s": 34.5,
+    "raw_host_to_host_mb_per_s": [
+      31,
+      46
+    ],
+    "cell_cpu_pct_at_34mbs": [
+      8,
+      12
+    ],
+    "tls_new_handshakes_per_s_per_client": 53,
+    "gateway_cpu_pct_during_flood": [
+      90,
+      100
+    ],
+    "https_reuse_rps_one_cell": 900,
+    "two_edges_rps": [
+      850,
+      897
+    ],
+    "runtime_json_kb_per_domain": 3.5,
+    "agent_mem_mb": {
+      "1": 8,
+      "201": 11,
+      "601": 19
+    },
+    "deploy_domains_per_s": 1.5,
+    "limits_default_rps_with_rejections": 2950,
+    "telemetry_loss": "none observed",
+    "monitoring_cpu_pct_avg": {
+      "clickhouse": 57,
+      "prometheus": 3.8,
+      "loki": 3.0,
+      "grafana": 2.7
+    },
+    "restored": true
   }
 }
