@@ -1,0 +1,245 @@
+{
+  "run": {
+    "date": "2026-11-15",
+    "window_utc": "11:10-11:30",
+    "repo_head": "01bfba69",
+    "status": "DNS functional and ramp, HTTP HIT probe, and a tuning run on one cell; see report"
+  },
+  "hosts": {
+    "control-1": {
+      "ip": "203.0.113.10",
+      "vcpu": 4,
+      "ram_mb": 3915,
+      "swap_mb": 4096,
+      "disk_gb": 73,
+      "containers": 25
+    },
+    "edge-a": {
+      "ip": "198.51.100.77",
+      "vcpu": 4,
+      "ram_mb": 3915,
+      "swap_mb": 0,
+      "disk_gb": 73,
+      "containers": 17,
+      "cells": 8
+    },
+    "edge-b": {
+      "ip": "198.51.100.78",
+      "vcpu": 4,
+      "ram_mb": 3915,
+      "swap_mb": 0,
+      "disk_gb": 73,
+      "containers": 17,
+      "cells": 8
+    },
+    "loadgen": {
+      "ip": "198.51.100.76",
+      "vcpu": 4,
+      "ram_mb": 3915,
+      "role": "idle spare used as load generator"
+    },
+    "common": {
+      "cpu": "Intel Xeon E5-2697 v4 @ 2.30GHz (VMware guest)",
+      "nic_mbps": 10000,
+      "mtu": 1500,
+      "os": "Ubuntu 24.04.5",
+      "kernel": "6.8.0-149-generic",
+      "disk": "virtual, rotational flag=1 (VMware thin LVM)"
+    }
+  },
+  "baseline_10min": {
+    "control-1": {
+      "cpu_busy_pct": {
+        "min": 19,
+        "mean": 58.4,
+        "max": 90
+      },
+      "load1_mean": 4.4,
+      "memavail_mb_min": 1048,
+      "swap_used_mb": 1034
+    },
+    "edge-a": {
+      "cpu_busy_pct": {
+        "min": 2,
+        "mean": 13.8,
+        "max": 25
+      },
+      "load1_mean": 0.9,
+      "memavail_mb_min": 1395,
+      "swap_used_mb": 0
+    },
+    "edge-b": {
+      "cpu_busy_pct": {
+        "min": 1,
+        "mean": 5.5,
+        "max": 13
+      },
+      "load1_mean": 0.8,
+      "memavail_mb_min": 1395,
+      "swap_used_mb": 0
+    }
+  },
+  "dns_udp_ramp": {
+    "tool": "dnsperf (50 clients, 4 threads, max 2000 outstanding, 15 s stages, 2 s timeout)",
+    "source": "loadgen",
+    "target": "edge-a DNSdist :53",
+    "positive": [
+      {
+        "offered_qps": 2000,
+        "completed_qps": 2000,
+        "loss_pct": 0.0,
+        "avg_ms": 1.47
+      },
+      {
+        "offered_qps": 5000,
+        "completed_qps": 4997,
+        "loss_pct": 0.0,
+        "avg_ms": 2.74
+      },
+      {
+        "offered_qps": 10000,
+        "completed_qps": 9508,
+        "loss_pct": 4.7,
+        "avg_ms": 9.64
+      },
+      {
+        "offered_qps": 20000,
+        "completed_qps": 15030,
+        "loss_pct": 5.83,
+        "avg_ms": 10.1
+      },
+      {
+        "offered_qps": 40000,
+        "completed_qps": 14579,
+        "loss_pct": 6.26,
+        "avg_ms": 12.37
+      }
+    ],
+    "mixed_70pos_30random": [
+      {
+        "offered_qps": 2000,
+        "completed_qps": 2000,
+        "loss_pct": 0.0,
+        "avg_ms": 1.38
+      },
+      {
+        "offered_qps": 5000,
+        "completed_qps": 4998,
+        "loss_pct": 0.03,
+        "avg_ms": 1.95
+      },
+      {
+        "offered_qps": 10000,
+        "completed_qps": 9408,
+        "loss_pct": 4.74,
+        "avg_ms": 10.73
+      },
+      {
+        "offered_qps": 20000,
+        "completed_qps": 16113,
+        "loss_pct": 5.27,
+        "avg_ms": 9.55
+      },
+      {
+        "offered_qps": 40000,
+        "completed_qps": 12529,
+        "loss_pct": 7.21,
+        "avg_ms": null
+      }
+    ],
+    "edge_a_cpu_busy_pct_peak_1s_samples": 81,
+    "control_1_cpu_busy_pct_peak_during_run": 91
+  },
+  "http_hit_probe": {
+    "tool": "wrk 4.1.0, HTTP/2 not used by wrk (HTTP/1.1 over TLS), 15 s",
+    "source": "loadgen",
+    "target": "edge-a, one 3 KB static object, cache HIT",
+    "runs": [
+      {
+        "connections": 1,
+        "rps": 37.8,
+        "p50_ms": 17.2,
+        "p99_ms": 82.3
+      },
+      {
+        "connections": 8,
+        "rps": 23.2,
+        "p50_ms": 326,
+        "p99_ms": 518
+      },
+      {
+        "connections": 32,
+        "rps": 25.3,
+        "p50_ms": 1210,
+        "p99_ms": 1690
+      },
+      {
+        "connections": 64,
+        "rps": 26.0,
+        "p50_ms": 1410,
+        "p99_ms": 2000,
+        "connect_errors": 1335,
+        "timeouts": 293
+      }
+    ],
+    "cell_observations": {
+      "cells_receiving_traffic": 1,
+      "logged_status_200_cache_HIT": "1224/1224",
+      "cell_cpu_pct_of_one_core": 51,
+      "cgroup_cpu_limit_cores": 0.5,
+      "throttled_periods": "757/3173",
+      "edge_host_cpu_busy_pct_peak": 41
+    }
+  },
+  "environment_findings": [
+    "DNS queries to the edge addresses from the engineer workstation network are answered by an interceptor with RA set and no AA (even over TCP), so DNS load tests must run from inside the staging subnet.",
+    "Mixed-profile NXDOMAIN count stayed ~2.3k per stage regardless of offered rate although ~30% of queries were random names: unexplained.",
+    "Domain rate limiter (100 rps, burst 200, 64 connections per client) is configured; it was not reached in the HTTP probe (about 25 rps measured)."
+  ],
+  "tuning_run": {
+    "cell": "one cell on edge-a, cached 3 KB object",
+    "rps": [
+      {
+        "case": "waf_balanced_0.5cpu_original",
+        "rps": 25
+      },
+      {
+        "case": "waf_off_0.5cpu_limits_lifted",
+        "rps": 130
+      },
+      {
+        "case": "waf_off_2cpu",
+        "rps": 3340
+      },
+      {
+        "case": "waf_off_4cpu",
+        "rps": 3450
+      },
+      {
+        "case": "waf_off_4cpu_stdout_buffered",
+        "rps": 3440
+      },
+      {
+        "case": "waf_off_4cpu_stdout_removed",
+        "rps": 4010
+      },
+      {
+        "case": "waf_balanced_2cpu",
+        "rps": 240
+      },
+      {
+        "case": "waf_balanced_4cpu_c8",
+        "rps": 217
+      },
+      {
+        "case": "cache_miss_unique_keys_c8",
+        "rps": 194
+      }
+    ],
+    "dns_16k_qps_cpu_cores": {
+      "dnsdist": 1.1,
+      "pdns_auth": 0.8
+    },
+    "restored": true
+  }
+}
