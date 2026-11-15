@@ -392,3 +392,7 @@ this fixture at a staging or production cell. These are not deployment settings.
 | `LOG_PUSH_TEST_CA_FILE` | development only | A CA file that lets the log pusher trust a fake receiver's private certificate in qualification. It is ignored in production |
 | `EDGE_NETWORK_SUBNET` | edge | Subnet of the private edge network. Compose requires it |
 | `EDGE_PROXY_PROTOCOL_TRUSTED_CIDRS` | cells | Networks whose PROXY protocol headers a cell honors. Production Compose sets it from `EDGE_NETWORK_SUBNET` |
+| `EDGE_IPV6_RATE_PREFIX` | cells | How many leading bits of an IPv6 client address a cell counts a client under, from 32 to 128. Default `64`, the same grouping the gateway uses for connection slots. A value outside the range is logged and the default applies |
+| `EDGE_IPV6_EXACT_CIDRS` | cells | Comma-separated IPv6 networks (at most 64) whose clients are counted per full address, for networks that put many unrelated users behind one prefix. Default empty |
+| `EDGE_CHALLENGE_BITS` | cells | Difficulty of the browser challenge's proof of work in leading zero bits, from 12 (a few thousand hashes) to 24 (millions, noticeable on a phone). Default `16`. A value outside the range is logged and the default applies |
+| `EDGE_CHALLENGE_BIND_USER_AGENT` | cells | `true` also binds a challenge token to the visitor's User-Agent, so a changed browser string asks for the challenge again. Default `false`: the token follows the client key |

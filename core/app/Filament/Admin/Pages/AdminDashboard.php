@@ -76,7 +76,7 @@ class AdminDashboard extends Dashboard
                         '7d' => 'Last 7 days',
                     ])->default('24h')->required()->native(false),
                     Select::make('domain_id')->label('Domain')->placeholder('All domains')->searchable()->native(false)
-                        ->getSearchResultsUsing(fn (string $search): array => Domain::query()->where('name', 'like', '%'.$search.'%')->orderBy('name')->limit(50)->pluck('name', 'id')->all())
+                        ->getSearchResultsUsing(fn (string $search): array => Domain::query()->verified()->where('name', 'like', '%'.$search.'%')->orderBy('name')->limit(50)->pluck('name', 'id')->all())
                         ->getOptionLabelUsing(fn (mixed $value): ?string => Domain::query()->find($value)?->name),
                     Select::make('edge_id')->label('Edge')->placeholder('All edges')->searchable()->native(false)
                         ->getSearchResultsUsing(fn (string $search): array => Edge::query()->where('name', 'like', '%'.$search.'%')->orderBy('name')->limit(50)->pluck('name', 'id')->all())

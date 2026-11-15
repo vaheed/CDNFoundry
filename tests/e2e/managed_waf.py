@@ -128,7 +128,10 @@ def main() -> None:
             with ThreadPoolExecutor(max_workers=24) as executor:
                 waf_results = list(executor.map(lambda _: request("balanced.waf.test", attack), range(48)))
                 healthy_results = list(executor.map(lambda _: request("off.waf.test", "/"), range(48)))
-            assert all("403 Forbidden" in result for result in waf_results)
+            # A client that keeps sending attacks is first blocked by the WAF and, after 20 blocked requests in a minute, contained by
+            # the cell (429). Either way no attack is served.
+            assert all("403 Forbidden" in result or "429 Too Many Requests" in result for result in waf_results)
+            assert sum("403 Forbidden" in result for result in waf_results) >= 10
             assert all("200 OK" in result for result in healthy_results)
 
             logs = run("docker", "logs", CELL).stdout + run("docker", "logs", CELL).stderr

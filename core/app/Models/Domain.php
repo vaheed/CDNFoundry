@@ -10,6 +10,7 @@ use App\Support\NameserverPairs;
 use App\Support\PlatformSettings;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -119,6 +120,17 @@ class Domain extends Model
     public function assignedNameservers(): array
     {
         return $this->delegation_nameservers ?? [];
+    }
+
+    /**
+     * Domains whose owner proved the delegation. Several users may hold a pending claim on one name, so a picker that lists
+     * pending claims shows the same name more than once and cannot say which is the real one: pickers list verified domains.
+     *
+     * @param  Builder<Domain>  $query
+     */
+    public function scopeVerified(Builder $query): void
+    {
+        $query->whereNotNull($query->qualifyColumn('nameservers_verified_at'));
     }
 
     /** Whether the owner proved the delegation. Until then only DNS records can be edited and nothing reaches an edge. */

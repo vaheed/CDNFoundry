@@ -214,6 +214,8 @@ class EdgeAgentController extends Controller
      * @param  array<string, array<int, mixed>>  $rules
      * @return array<int, array<string, mixed>>
      */
+    public const MAXIMUM_SECURITY_ENTRIES = 200;
+
     private function advisoryEntries(mixed $entries, array $rules, int &$dropped): array
     {
         $valid = [];
@@ -260,17 +262,25 @@ class EdgeAgentController extends Controller
             'gateway.candidate_rejections' => ['sometimes', 'integer', 'min:0'],
             'cells.*.name' => ['required', 'regex:/^cell-(0[1-9]|[12][0-9]|3[0-2])$/', 'distinct'], 'cells.*.status' => ['required', 'in:ready,degraded,drained,stopped'],
             'cells.*.capacity' => ['required', 'array', 'max:20'],
-            'noisy_domains' => ['sometimes', 'array', 'max:20'], 'passive_origins' => ['sometimes', 'array', 'max:100'],
+            'noisy_domains' => ['sometimes', 'array'], 'passive_origins' => ['sometimes', 'array', 'max:100'],
         ]);
         // Liveness comes from the authenticated request alone. The two event lists are advisory:
         // an entry that fails validation is dropped and counted, never allowed to fail the heartbeat.
         $advisoryDropped = 0;
-        $data['noisy_domains'] = $this->advisoryEntries($request->input('noisy_domains', []), [
+        // Security entries are bounded, never refused: the agent sends at most 100 of the domains that changed, so the limit is
+        // generous headroom. Entries beyond it are counted as dropped, and a heartbeat is never failed for carrying too many.
+        $noisy = is_array($request->input('noisy_domains')) ? array_values($request->input('noisy_domains')) : [];
+        if (count($noisy) > self::MAXIMUM_SECURITY_ENTRIES) {
+            $advisoryDropped += count($noisy) - self::MAXIMUM_SECURITY_ENTRIES;
+            $noisy = array_slice($noisy, 0, self::MAXIMUM_SECURITY_ENTRIES);
+        }
+        $data['noisy_domains'] = $this->advisoryEntries($noisy, [
             'domain_id' => ['required', 'integer'],
             'hostname' => ['nullable', 'string', 'max:253'],
             'reason_code' => ['required', 'string', Rule::in(SecurityConfig::reasonCodes())],
             'count' => ['required', 'integer', 'between:1,2147483647'],
             'occurred_at' => ['required', 'integer', 'min:0'],
+            'clients' => ['sometimes', 'integer', 'between:0,1000'],
         ], $advisoryDropped);
         $data['passive_origins'] = $this->advisoryEntries($request->input('passive_origins', []), [
             'domain' => ['required', 'string', 'max:253'],

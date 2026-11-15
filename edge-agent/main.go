@@ -36,7 +36,7 @@ import (
 	"time"
 )
 
-var version = "2.1.2"
+var version = "2.1.3"
 
 const (
 	generationMismatchGrace       = 15 * time.Second
@@ -73,6 +73,8 @@ type generationMismatchReport struct {
 	suppressed uint64
 }
 type client struct {
+	// reportedSecurity holds the security-event totals the control plane last accepted, so a heartbeat carries only what changed.
+	reportedSecurity                   map[securityKey]float64
 	base, dir, runtimeDir, statusToken string
 	backupKey                          []byte
 	gatewayBindings                    string
@@ -1680,6 +1682,8 @@ func (c *client) expectedCellIdentity(cell map[string]any, generation string) st
 
 func (c *client) heartbeat(sequence uint64) error {
 	cells, failures, security := c.runtimeStatus()
+	// Only entries whose total changed are sent, and every domain with a change gets a slot before any domain gets a second one.
+	security, _ = fairSecurityEvents(c.pendingSecurityEvents(security), maximumSecurityEntries)
 	listenerReady := false
 	expectedGeneration := ""
 	if manifest, err := readGenerationPointer(c.runtimeDir, "current"); err == nil {
@@ -1724,7 +1728,11 @@ func (c *client) heartbeat(sequence uint64) error {
 	if _, notAfter, err := c.identityValidity(); err == nil {
 		payload["identity_expires_at"] = notAfter.Unix()
 	}
-	return c.request("POST", "/edge/v1/heartbeat", payload, &map[string]any{}, true)
+	if err := c.request("POST", "/edge/v1/heartbeat", payload, &map[string]any{}, true); err != nil {
+		return err
+	}
+	c.markSecurityReported(security)
+	return nil
 }
 
 func (tracker *generationMismatchTracker) observe(now time.Time, expected string, counts map[string]int) *generationMismatchReport {
@@ -1872,18 +1880,14 @@ func (c *client) runtimeStatus() ([]map[string]any, []map[string]any, []map[stri
 		}
 		for _, failure := range decoded.Data {
 			if len(failures) >= 100 {
-				return cells, failures, security
+				return cells, failures, mergeSecurityEvents(security)
 			}
 			failures = append(failures, failure)
 		}
-		for _, event := range decoded.Security {
-			if len(security) >= 20 {
-				break
-			}
-			security = append(security, event)
-		}
+		// Every cell's events are kept here; heartbeat chooses fairly among those that changed.
+		security = append(security, decoded.Security...)
 	}
-	return cells, failures, security
+	return cells, failures, mergeSecurityEvents(security)
 }
 
 func (c *client) cellStatus(endpoint string) (map[string]any, bool) {

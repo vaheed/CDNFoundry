@@ -22,6 +22,7 @@ use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
 use Filament\Support\Enums\FontFamily;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -52,6 +53,9 @@ class DomainResource extends Resource
     {
         return $table->columns([
             TextColumn::make('name')->searchable()->sortable()->extraCellAttributes(['class' => 'cdn-link-cell']),
+            // Several users may hold a pending claim on one name; an administrator needs to tell them apart.
+            TextColumn::make('users.email')->label('Owner')->listWithLineBreaks()->placeholder('No owner')
+                ->visible(fn (): bool => Filament::getCurrentPanel()?->getId() === 'admin'),
             TextColumn::make('lifecycle_state')->label('Status')
                 ->formatStateUsing(fn ($state): string => ucfirst(str_replace('_', ' ', $state instanceof \BackedEnum ? $state->value : (string) $state)))
                 ->badge()
@@ -73,6 +77,9 @@ class DomainResource extends Resource
             TextColumn::make('revision')->sortable()->alignEnd()->fontFamily(FontFamily::Mono)->prefix('#'),
             TextColumn::make('updated_at')->label('Last change')->since()->sortable()->fontFamily(FontFamily::Mono)
                 ->tooltip(fn (Domain $record): string => $record->updated_at->toDateTimeString()),
+        ])->filters([
+            TernaryFilter::make('nameservers_verified_at')->label('Nameservers')->nullable()->placeholder('All domains')
+                ->trueLabel('Verified')->falseLabel('Pending verification'),
         ])->recordUrl(fn (Domain $record): string => static::getUrl('view', ['record' => $record]))
             ->defaultSort('id')
             ->searchPlaceholder('Search domains')

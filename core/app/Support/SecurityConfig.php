@@ -37,25 +37,25 @@ final class SecurityConfig
     ];
 
     /**
-     * Reasons that show a domain's own protections working or traffic that never reached the domain. They stay visible as
-     * security events but never push the domain toward a stricter automatic state.
+     * Escalation needs evidence from more than a few clients. A domain moves to a stricter automatic state only when the
+     * escalating events of the window came from at least this many distinct clients, as the cells report them; one noisy
+     * client is contained on the cell instead (see docs/guides/security.md#security-state).
      */
-    public const NON_ESCALATING_REASONS = [
-        'domain_quarantined', 'edge_emergency_mode', 'invalid_method',
-        'unknown_host', 'unknown_sni', 'sni_host_mismatch',
-        // The incident profile working: it never pushes the domain toward a stricter automatic state.
-        'incident_method', 'incident_body_size', 'challenge_required', 'challenge_invalid',
-        // A domain's own custom rules working: they never push the domain toward a stricter automatic state.
-        'custom_rule_block', 'custom_rule_challenge', 'custom_rule_log', 'custom_rule_rate_limited',
-        // A log-only managed rule matched: the domain chose to watch it, not to count it.
-        'waf_rule_logged',
-        // Platform rulesets working: set by the operator for the domain, they never push it toward a stricter state.
-        'platform_rule_block', 'platform_rule_challenge', 'platform_rule_log', 'platform_rule_rate_limited',
-        // Detections working: they only log what the response held, so they never push the domain toward a stricter state.
-        'sensitive_data_card', 'sensitive_data_iban', 'sensitive_data_private_key', 'sensitive_data_api_key',
-        // The API profile working: a request outside the uploaded schema is logged, and a rule decides what happens to it.
-        'schema_unknown_path', 'schema_wrong_method', 'schema_missing_parameter', 'schema_invalid_parameter', 'schema_body_too_large',
-    ];
+    public const DISTRIBUTED_CLIENTS_MINIMUM = 10;
+
+    /**
+     * Reasons that show a domain's own protections working or traffic that never reached the domain. They stay visible as
+     * security events but never push the domain toward a stricter automatic state. The list lives in the contract file the
+     * cell runtime is tested against, so the cell and the control plane cannot disagree about which reasons escalate.
+     *
+     * @return list<string>
+     */
+    public static function nonEscalatingReasons(): array
+    {
+        static $reasons = null;
+
+        return $reasons ??= json_decode((string) file_get_contents(resource_path('contracts/security-event-reasons.json')), true, 8, JSON_THROW_ON_ERROR)['non_escalating'];
+    }
 
     /** Automatic escalation looks at the rate over a short window, never at a lifetime counter. */
     public const RATE_WINDOW_MINUTES = 5;

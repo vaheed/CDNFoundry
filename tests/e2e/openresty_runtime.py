@@ -231,7 +231,12 @@ def qualify_incident_profile() -> None:
     # A wrong answer, a forged seed, and a seed for another client are refused.
     assert curl("overlay.example", "/.cdnf/challenge", method="POST", data=f"seed={seed}&counter=1")[0] == 403
     assert curl("overlay.example", "/.cdnf/challenge", method="POST", data="seed=7701.1.16.deadbeef&counter=1")[0] == 403
-    assert curl("overlay.example", "/.cdnf/challenge", ("User-Agent: Another/1",), "POST", f"seed={seed}&counter={solve_challenge(seed)}")[0] == 403, "a seed is bound to the browser that got it"
+    # The seed is bound to the client, not to its browser string (see tests/e2e/challenge_binding.py): another client, reaching the cell
+    # from outside its network namespace, cannot use it.
+    cell_address = run("docker", "inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}", NAME).stdout.strip()
+    foreign = run("curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", "-X", "POST", "-H", "Host: overlay.example", "-H", "Accept: text/html",
+                  "--data", f"seed={seed}&counter={solve_challenge(seed)}", f"http://{cell_address}:8080/.cdnf/challenge").stdout.strip()
+    assert foreign == "403", f"a seed is bound to the client that got it: {foreign}"
 
     # A correct answer gives a token; the seed cannot be replayed; the token passes until its expiry.
     answer = f"seed={seed}&counter={solve_challenge(seed)}"
@@ -242,10 +247,12 @@ def qualify_incident_profile() -> None:
     assert curl("overlay.example", "/", html + (f"Cookie: cdnf_chal={cookie}",))[0] == 200
     assert curl("overlay.example", "/", ("Accept: */*", f"Cookie: cdnf_chal={cookie}"))[0] == 200
     assert curl("overlay.example", attack, ("Accept: */*", f"Cookie: cdnf_chal={cookie}"))[0] == 403, "the profile turns the firewall on in blocking mode"
-    # A token is bound to the domain, the client, and the browser, and its signature is checked.
+    # A token is bound to the domain and the client, and its signature is checked.
     forged = cookie[:-1] + ("0" if cookie[-1] != "0" else "1")
     assert curl("overlay.example", "/", html + (f"Cookie: cdnf_chal={forged}",))[0] == 403
-    assert curl("overlay.example", "/", html + ("User-Agent: Another/1", f"Cookie: cdnf_chal={cookie}"))[0] == 403
+    # The token follows the client, not its browser string: another User-Agent from the same client is still accepted, unless the cell
+    # is set to bind it too (tests/e2e/challenge_binding.py).
+    assert curl("overlay.example", "/", html + ("User-Agent: Another/1", f"Cookie: cdnf_chal={cookie}"))[0] == 200
     other = cookie.split(".")
     other[0] = "7702"
     assert curl("overlay.example", "/", html + (f"Cookie: cdnf_chal={'.'.join(other)}",))[0] == 403, "a token for another domain means nothing"
@@ -260,10 +267,18 @@ def qualify_incident_profile() -> None:
     assert incident_overlay("incident-short", 8, 3).returncode == 0
     assert curl("overlay.example", "/", html)[0] in (403, 429), "still refused while the profile is on"
     time.sleep(5)
-    assert curl("overlay.example", "/", html)[0] == 200, "the profile expired on its own"
+    # The scripted flood above made this client cause many escalating events, so the cell contains it for a few minutes. Another
+    # client, reaching the cell from outside its network namespace, shows that the profile itself has ended.
+    address = run("docker", "inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}", NAME).stdout.strip()
+
+    def other_client() -> str:
+        return run("curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", "-H", "Host: overlay.example", "-H", "Accept: text/html", f"http://{address}:8080/").stdout.strip()
+
+    assert other_client() == "200", f"the profile expired on its own: {other_client()}"
+    assert curl("overlay.example", "/", html)[0] in (200, 429), "the flooding client is either served or contained, never challenged again"
     # Turning it on and then off with a normal overlay restores the snapshot.
     assert incident_overlay("incident-again", 9, 300).returncode == 0 and curl("overlay.example", "/", html)[0] in (403, 429)
-    assert security_overlay("incident-off", 10, "normal", None).returncode == 0 and curl("overlay.example", "/", html)[0] == 200
+    assert security_overlay("incident-off", 10, "normal", None).returncode == 0 and other_client() == "200"
     # An older sequence is ignored while a newer overlay is stored; once a normal overlay removes the entry the agent, not the cell, remembers the sequence.
     assert incident_overlay("incident-newer", 12, 300).returncode == 0 and incident_overlay("incident-older", 11, 5).returncode == 0
     assert curl("overlay.example", "/", html)[0] in (403, 429), "an older overlay never replaces a newer one"

@@ -7,6 +7,33 @@ single source of truth; `make version-check` enforces it.
 
 ## [Unreleased]
 
+## [2.1.3] - 2026-11-15
+
+Closes edge security gaps: managed-WAF body scoring, per-domain rate-limit budgets, IPv6 prefix counting, and distributed-evidence escalation. See the [release notes](docs/operations/releases/v2.1.3.md).
+
+### Added
+
+- The admin Customers list gains an Owner column and a nameserver verification filter.
+
+### Changed
+
+- Domain pickers in the admin panel list verified domains only, so a name that several users have claimed is no longer listed more than once.
+
+### Fixed
+
+- The browser challenge keeps a visitor's token when their address changes inside an IPv6 prefix or their browser updates. A token and a seed are bound to the client key (an IPv6 address counts under its prefix, as in rate limiting), not the exact address and User-Agent; `EDGE_CHALLENGE_BIND_USER_AGENT=true` restores the stricter binding. The proof-of-work difficulty is configurable per cell with `EDGE_CHALLENGE_BITS` (12 to 24, default 16). Tokens are still per cell.
+- The admin edge page shows how many client connections are open across the edge's cells and how many connections the gateway has served since it started, so a gateway active count of zero can be told apart from a gateway that has seen no traffic. A cell no longer counts the agent's own status request as an open connection, so an idle cell reports none.
+- Security events from busy cells are reported fairly. A cell reported only the first 20 domain and reason pairs it happened to see, the agent kept the first 20 across all cells, and the control plane refused more than 20, so a noisy domain could keep other domains' events, escalation evidence and alerts out for an hour. A cell now sends up to 100 entries with every recently active domain getting a slot before any domain gets a second, reports how many domains did not fit (`security_domains_dropped`), and the agent sends only entries whose total changed. The control plane accepts up to 200 entries and counts the excess instead of failing the heartbeat.
+- **Back up now** on a fresh S3 bucket no longer fails with `repository does not exist: unable to open config file`: the control backup initialises a missing restic repository before its first snapshot, and still refuses to touch one that exists but cannot be opened.
+- The Analytics focus filter on the admin Traffic and telemetry page no longer shows "Analytics unavailable" for the Traffic, Cache and DNS focuses. Their ClickHouse queries ordered by a name that is both a stored column and an aggregate alias, which ClickHouse rejects while `prefer_column_name_to_alias` is on.
+
+### Security
+
+- Fixed a managed-WAF bypass: a request body without a `Content-Length` header (an HTTP/1.1 chunked body or an HTTP/2 body) was never read for scoring, so the scoring step saw only the address and headers, returned a clean score, and switched off the inline inspection that would have caught it. The body now comes from Nginx whatever its framing, whether it sits in memory or a temporary file, and inline inspection is switched off only after a score exists for the complete request. A body over the limit is refused with `413` with or without `Content-Length`, and an unreadable or compressed body is refused (`400`, `415`) on a blocking level. If the scoring step fails, the request is inspected inline and recorded as `scoring_failed`. The `waf_body_limit` telemetry field now also reports `inspected`, `no_body`, `unreadable`, `unsupported_enc`, and `scoring_failed`, and the new security reasons are `waf_body_unreadable`, `waf_body_encoding`, and `waf_inspection_failed`. ModSecurity's non-file body limit now matches the 1 MiB inspection limit. See [Managed WAF](docs/guides/managed-waf.md#request-bodies).
+- Fixed cross-domain interference in a cell's rate limiting: the counters and mitigations of every domain shared one dictionary, so a flood of distinct client keys against one domain evicted another domain's counters and active blocks. Each domain now has its own entry budget inside `rate_rules` and `traffic_limits` (an equal part of half the dictionary, with a floor), mitigations keep a separate budget from counters, and a domain past its share stops counting extra keys and records the new `rate_limit_state_full` event. Both dictionaries grow from 16 MB to 32 MB per cell. `waf_inspection_failed` and `rate_limit_state_full` never escalate a domain's automatic security state. See [Security](docs/guides/security.md#rate-limit-rules).
+- Fixed IPv6 rate-limit evasion: the gateway grouped IPv6 clients by /64, but a cell counted each full /128, so a client could rotate addresses inside its prefix for a fresh allowance. Rate-limit rules, the baseline per-client request and connection limits, the challenge issue limit, and Nginx's own per-client limits now count an IPv6 client under its prefix (64 bits by default), and an address written two ways or as IPv4-mapped IPv6 is one client. `EDGE_IPV6_RATE_PREFIX` sets the prefix length and `EDGE_IPV6_EXACT_CIDRS` lists networks that keep per-address counting. See [Security](docs/guides/security.md#rate-limit-rules).
+- Fixed automatic security escalation tightening a domain for every visitor because of one client. Fifty escalating events in five minutes, even from a single address, moved a domain to `suspected` and applied the `protected` limits (half the request rate, a 4 MiB body ceiling, and more) to everyone, and `client_rate_exceeded` fed itself. A cell now contains a client that causes 20 escalating events in a minute with a five-minute local ban (`client_temporarily_blocked`, never itself escalating), and reports how many distinct clients caused the events. The control plane escalates a domain only when the rate threshold is met and at least 10 distinct clients took part. Cells that do not report clients (older agents) give no evidence and never escalate a domain, so upgrade cells with the control plane. The reasons that never escalate now live in `security-event-reasons.json` (`non_escalating`) for both the cell and the control plane. See [Security](docs/guides/security.md#security-state).
+
 ## [2.1.2] - 2026-11-14
 
 Limits an unverified domain to DNS records and keeps PostgreSQL small. See the [release notes](docs/operations/releases/v2.1.2.md).

@@ -47,6 +47,15 @@ derived, retention-bounded incident data and are not required to recover
 serving. When policy requires preservation, use a separately tested crash-safe
 volume snapshot or supported object storage; remember that the control backup does not contain Loki.
 
+## The repository is created on first use
+
+An empty bucket or a new repository path needs no manual `restic init`. The first backup
+checks whether the repository exists and, only when restic reports that it does not,
+initialises it and then takes the snapshot. A repository that exists but cannot be opened
+(a wrong password, rejected credentials, an unreachable endpoint) is never initialised: the
+backup stops with restic's own message, so a mistyped password cannot create a second,
+empty repository beside the real one.
+
 ## First backup before an install is ready
 
 `cdnfoundry-fleet deploy` does not report success for a control node until the

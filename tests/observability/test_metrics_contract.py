@@ -264,6 +264,8 @@ class SecurityClassContractTest(unittest.TestCase):
             "incident_method", "incident_body_size", "challenge_required", "challenge_invalid",
             # A domain's own custom rule blocking a request is a plain block.
             "custom_rule_block", "custom_rule_rate_limited", "platform_rule_block",
+            # A client the cell is temporarily containing is a plain block.
+            "client_temporarily_blocked",
         }
         self.assertEqual(set(), reasons - known, "a new security reason must be classified here and in Vector before it ships")
 

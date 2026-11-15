@@ -59,7 +59,7 @@ class Telemetry extends Page
     public function getFilterOptionsProperty(): array
     {
         return [
-            'domains' => Domain::query()->orderBy('name')->limit(500)->pluck('name', 'id')->all(),
+            'domains' => Domain::query()->verified()->orderBy('name')->limit(500)->pluck('name', 'id')->all(),
             'edges' => Edge::query()->orderBy('name')->limit(500)->pluck('name', 'id')->all(),
         ];
     }
@@ -73,7 +73,7 @@ class Telemetry extends Page
                 ->color('warning')
                 ->schema([
                     Select::make('domain_id')->label('Domain (optional)')
-                        ->options(fn (): array => Domain::query()->orderBy('name')->limit(500)->pluck('name', 'id')->all())
+                        ->options(fn (): array => Domain::query()->verified()->orderBy('name')->limit(500)->pluck('name', 'id')->all())
                         ->searchable(),
                     DateTimePicker::make('from')->label(fn (): string => 'From')->seconds(false)->required(),
                     DateTimePicker::make('to')->label(fn (): string => 'To')->seconds(false)->required()->after('from'),
