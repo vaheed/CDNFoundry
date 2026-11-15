@@ -45,7 +45,7 @@ def main() -> None:
             if "Vector DNS unavailable; serving with bounded stdout telemetry only" not in log:
                 raise RuntimeError("missing explicit telemetry fallback log")
             config = run("docker", "exec", name, "cat", "/var/lib/nginx/tmp/nginx-without-syslog.conf").stdout
-            if "access_log syslog:server=vector:9000" in config or "access_log /dev/stdout edge_json;" not in config:
+            if "access_log syslog:server=vector:9000" in config or "access_log /dev/stdout edge_json buffer=64k flush=1s;" not in config:
                 raise RuntimeError("fallback configuration did not preserve bounded stdout logging")
             run("docker", "exec", name, "openresty", "-t", "-c", "/var/lib/nginx/tmp/nginx-without-syslog.conf")
             run(
