@@ -7,6 +7,10 @@ single source of truth; `make version-check` enforces it.
 
 ## [Unreleased]
 
+## [2.1.3] - 2026-11-15
+
+Closes edge security gaps: managed-WAF body scoring, per-domain rate-limit budgets, IPv6 prefix counting, and distributed-evidence escalation. See the [release notes](docs/operations/releases/v2.1.3.md).
+
 ### Added
 
 - The admin Customers list gains an Owner column and a nameserver verification filter.
