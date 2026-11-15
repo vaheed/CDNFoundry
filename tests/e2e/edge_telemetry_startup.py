@@ -53,7 +53,12 @@ def main() -> None:
                 "Referer: https://referrer.test/article?secret=cdnf-query-canary",
                 "http://127.0.0.1:8080/telemetry-probe", check=False,
             )
-            log = run("docker", "logs", name).stdout
+            # The stdout access log is buffered and flushed about once a second.
+            for _ in range(10):
+                log = run("docker", "logs", name).stdout
+                if "https://referrer.test/article" in log:
+                    break
+                time.sleep(1)
             if "cdnf-query-canary" in log or "https://referrer.test/article" not in log:
                 raise RuntimeError("query string leaked to bounded stdout telemetry")
             print("edge_telemetry_startup=passed")
