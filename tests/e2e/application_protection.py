@@ -61,7 +61,7 @@ def qualify(directory: pathlib.Path) -> None:
         "  location /api/ { default_type application/json; return 200 '{\"ok\":true}'; } }\n")
     run("docker", "rm", "-f", ORIGIN, check=False)
     run("docker", "run", "-d", "--name", ORIGIN, "--network", rules.EDGE_NETWORK, "-v", f"{root}:/usr/share/nginx/html:ro",
-        "-v", f"{directory / 'origin.conf'}:/etc/nginx/conf.d/default.conf:ro", "nginx:1.31.3-alpine")
+        "-v", f"{directory / 'origin.conf'}:/etc/nginx/conf.d/default.conf:ro", "nginx:1.31.9-alpine")
     violation = lambda value, action="block": [rules.rule(1, [rules.condition("schema_violation", "equals", value)], action)]
     hosts = {
         "api.example": host(1, violation("any"), api_schema=SCHEMA),
