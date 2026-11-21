@@ -78,3 +78,35 @@ func TestRequestRuleBundleBoundsAndTypes(t *testing.T) {
 		t.Fatal("accepted oversized header")
 	}
 }
+
+func TestRequestRuleConditionFields(t *testing.T) {
+	for _, field := range []string{"hostname", "path", "query_present", "method", "country", "continent", "asn", "client_ip", "user_agent", "referer", "referer_host", "referer_present", "file_extension", "header", "cookie_present", "tls_version"} {
+		condition := map[string]any{"field": field, "operator": "equals", "value": "test"}
+		if field == "header" || field == "cookie_present" {
+			condition["name"] = "x-test"
+		}
+		if field == "query_present" || field == "cookie_present" || field == "referer_present" {
+			condition["value"] = true
+		}
+		if field == "asn" {
+			condition["value"] = float64(64500)
+		}
+		if !validRequestCondition(condition) {
+			t.Fatalf("rejected supported field %s", field)
+		}
+	}
+	if !validRequestCondition(map[string]any{"field": "country", "operator": "in_list", "value": []any{"US", "DE"}}) {
+		t.Fatal("rejected a typed list")
+	}
+	for _, condition := range []map[string]any{
+		{"field": "attack_score", "operator": "equals", "value": float64(10)},
+		{"field": "path", "operator": "regex", "value": ".*"},
+		{"field": "header", "operator": "equals", "value": "test"},
+		{"field": "path", "operator": "in_list", "value": []any{}},
+		{"field": "path", "operator": "equals", "value": map[string]any{}},
+	} {
+		if validRequestCondition(condition) {
+			t.Fatalf("accepted malformed condition: %v", condition)
+		}
+	}
+}
