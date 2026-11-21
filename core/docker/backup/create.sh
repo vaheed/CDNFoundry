@@ -38,4 +38,4 @@ if [ -n "$rollups" ] && [ -n "${CLICKHOUSE_PASSWORD:-}" ]; then
         echo '{"message_type":"warning","message":"ClickHouse did not answer; usage rollups were not backed up"}' >&2
     fi
 fi
-pg_dump --format=custom --no-owner --no-privileges | restic backup --stdin --stdin-filename control.pgdump --tag cdnfoundry-control --json
+restic backup --stdin-from-command --stdin-filename control.pgdump --tag cdnfoundry-control --json -- pg_dump --format=custom --no-owner --no-privileges

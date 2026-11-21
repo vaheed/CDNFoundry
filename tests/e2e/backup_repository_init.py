@@ -49,6 +49,12 @@ def main() -> None:
         assert "wrong password" in wrong.stderr.lower() or "no key found" in wrong.stderr.lower(), wrong.stderr
         intact = run("sh /create.sh && restic snapshots --compact", directory)
         assert intact.returncode == 0 and "3 snapshots" in intact.stdout, "the existing repository was damaged\n" + intact.stdout + intact.stderr
+        # A partial database export must not produce a successful, empty snapshot.
+        (directory / "bin/pg_dump").write_text('#!/bin/sh\nprintf "partial-database-dump"\necho "database export failed" >&2\nexit 7\n')
+        failed = run('sh /create.sh', directory)
+        assert failed.returncode != 0 and '"snapshot_id"' not in failed.stdout, failed.stdout + failed.stderr
+        unchanged = run('restic snapshots --compact', directory)
+        assert unchanged.returncode == 0 and '3 snapshots' in unchanged.stdout, unchanged.stdout + unchanged.stderr
     print("e2e backup repository initialisation passed")
 
 

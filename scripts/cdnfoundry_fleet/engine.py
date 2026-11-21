@@ -705,6 +705,18 @@ class ControlActions:
     def __init__(self, engine: FleetEngine) -> None:
         self.e = engine
 
+    def _read_control(self, state: dict[str, Any], node: str | None, expression: str) -> Any:
+        _, target = self._control(state, node)
+        php = ('require "vendor/autoload.php"; $app=require "bootstrap/app.php"; '
+               '$app->make(Illuminate\\Contracts\\Console\\Kernel::class)->bootstrap(); '
+               f'echo json_encode({expression}, JSON_THROW_ON_ERROR);')
+        command = f'cd {actions.REMOTE_ROOT} && docker compose --env-file .env.prod exec -T core php -r {shlex.quote(php)}'
+        result = self.e.transport.run(target, command, check=True)
+        try:
+            return json.loads(result.stdout)
+        except ValueError as exc:
+            raise ValidationError('Cannot read control backup state from the control node.') from exc
+
     def _control(self, state: dict[str, Any], name: str | None) -> tuple[str, Target]:
         if name is None:
             section = state.get("ha") or {}
@@ -722,16 +734,33 @@ class ControlActions:
             raise ValidationError("Backups are disabled; run configure-backups first")
         name, target = self._control(state, None)
         r = self.e.transport.run(target, f"cd {actions.REMOTE_ROOT} && docker compose --env-file .env.prod exec -T core php artisan cdnf:backups:create --wait", check=True)
-        return r.stdout.strip()[-300:]
+        try:
+            receipt = json.loads(r.stdout.strip().splitlines()[-1])
+        except (ValueError, IndexError) as exc:
+            raise ValidationError('The backup command returned no readable receipt. Refresh backup history before retrying.') from exc
+        if not isinstance(receipt, dict) or receipt.get('status') != 'succeeded' or not receipt.get('snapshot_id') or not receipt.get('verified_at'):
+            raise ValidationError('The backup did not return a verified snapshot. Refresh backup history and check the control node.')
+        return json.dumps(receipt)
+
+    def backups(self) -> list[dict[str, Any]]:
+        """Read the latest 25 durable receipts, including backups started outside Fleet."""
+        expression = ('Illuminate\\Support\\Facades\\DB::table("backups")'
+               '->orderByDesc("created_at")->orderByDesc("id")->limit(25)'
+               '->get(["id","status","snapshot_id","size_bytes","created_at","verified_at"])')
+        try:
+            rows = self._read_control(self.e.state(), None, expression)
+        except ValidationError as exc:
+            raise ValidationError('Cannot read backup history from the control node.') from exc
+        if not isinstance(rows, list) or len(rows) > 25 or any(not isinstance(row, dict) or 'status' not in row for row in rows):
+            raise ValidationError('The control node returned an invalid backup history.')
+        return rows
 
     def verified_backup_count(self) -> int:
         """How many backups the control database records as succeeded and verified against the repository."""
         state = self.e.state()
-        _, target = self._control(state, None)
-        r = self.e.transport.run(target, f"cd {actions.REMOTE_ROOT} && docker compose --env-file .env.prod exec -T core php artisan tinker --execute='echo DB::table(\"backups\")->where(\"status\", \"succeeded\")->whereNotNull(\"verified_at\")->count();'")
         try:
-            return int(r.stdout.strip().splitlines()[-1]) if r.ok and r.stdout.strip() else -1
-        except ValueError:
+            return int(self._read_control(state, None, 'Illuminate\\Support\\Facades\\DB::table("backups")->where("status", "succeeded")->whereNotNull("verified_at")->count()'))
+        except (ValueError, TypeError, ValidationError, SshError):
             return -1
 
     def ensure_recovery_point(self, log: Callable[[str], None] | None = None) -> bool:
@@ -754,8 +783,7 @@ class ControlActions:
     def restore_plan(self, node: str, snapshot: str, overwrite_live: bool) -> dict[str, Any]:
         state = self.e.state()
         name, target = self._control(state, node)
-        r = self.e.transport.run(target, f"cd {actions.REMOTE_ROOT} && docker compose --env-file .env.prod exec -T core php artisan tinker --execute='echo Schema::hasTable(\"users\") ? DB::table(\"users\")->count() : 0;'")
-        count = int(r.stdout.strip().splitlines()[-1]) if r.ok and r.stdout.strip() else -1
+        count = int(self._read_control(state, name, 'Illuminate\\Support\\Facades\\Schema::hasTable("users") ? Illuminate\\Support\\Facades\\DB::table("users")->count() : 0'))
         if count < 0:
             raise ValidationError(f"Could not read the state of {name}; is the control node running?")
         if count > 0 and not overwrite_live:
