@@ -19,6 +19,8 @@ use App\Models\SystemSetting;
 use App\Models\SecurityEvent;
 use App\Models\User;
 use App\Support\DnsRecordData;
+use App\Support\RequestRuleData;
+use App\Support\RequestRulePresets;
 use App\Support\SecurityRuleData;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -176,6 +178,19 @@ foreach ([
     [null, 'challenge', 30, [['field' => 'path', 'operator' => 'starts_with', 'value' => '/login'], ['field' => 'method', 'operator' => 'equals', 'value' => 'POST'], ['field' => 'header', 'name' => 'x-api-key', 'operator' => 'equals', 'value' => 'none'], ['field' => 'cookie_present', 'operator' => 'equals', 'name' => 'session', 'value' => false], ['field' => 'body_size', 'operator' => 'less_than', 'value' => 4096]]],
 ] as [$name, $action, $priority, $conditions]) {
     $rulesDomain->securityRules()->create(['name' => $name, 'action' => $action, 'priority' => $priority, 'conditions' => $conditions, 'fingerprint' => SecurityRuleData::fingerprint($conditions, $action)]);
+}
+
+// Redirects on the same domain: a preset, a long name, a prefix move, an IPv6 condition, and a disabled rule.
+foreach (RequestRulePresets::rules($rulesDomain, RequestRulePresets::WWW_TO_APEX, ['status_code' => 301]) as $rule) {
+    $rulesDomain->requestRules()->create([...$rule, 'preset' => RequestRulePresets::WWW_TO_APEX]);
+}
+foreach ([
+    ['Move the old documentation section to its new home under the guides prefix', 10, [], ['target' => 'prefix', 'from_prefix' => '/docs/v1', 'to_prefix' => '/guides', 'status_code' => 308, 'preserve_query' => true], true],
+    [null, 20, [['field' => 'path', 'operator' => 'equals', 'value' => '/promo'], ['field' => 'client_ip', 'operator' => 'in_list', 'value' => ['2001:db8:abcd::/48', '203.0.113.0/24']]],
+        ['target' => 'url', 'url' => 'https://xn--bcher-kva.example/sale?campaign=winter', 'status_code' => 302, 'preserve_query' => false], true],
+    ['Retired landing page', 30, [['field' => 'path', 'operator' => 'starts_with', 'value' => '/landing']], ['target' => 'url', 'url' => '/', 'status_code' => 301, 'preserve_query' => false], false],
+] as [$name, $priority, $conditions, $action, $enabled]) {
+    $rulesDomain->requestRules()->create(RequestRuleData::validate(['type' => 'redirect', 'name' => $name, 'priority' => $priority, 'conditions' => $conditions, 'action' => $action, 'enabled' => $enabled]));
 }
 
 // Client-side security on the same domain: awkward origins (IPv6, punycode, a long address) and one baseline entry among the new ones.

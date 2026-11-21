@@ -65,17 +65,8 @@ final class SecurityRuleForm
 
         return [
             Section::make('When')->description('Every condition must match. Up to five.')->compact()->schema([
-                Repeater::make('conditions')->hiddenLabel()
-                    ->minItems(fn (Get $get): int => $get('rate_limited') ? 0 : 1)->maxItems(SecurityRuleData::MAXIMUM_CONDITIONS)->defaultItems(1)
-                    ->addActionLabel('Add condition')->reorderable(false)->live()
-                    ->itemLabel(function (array $state): string {
-                        $stored = self::toStored([$state])[0];
-
-                        return filled($stored['field'] ?? null) && filled($stored['operator'] ?? null) && (is_bool($stored['value'] ?? null) || filled($stored['value'] ?? null))
-                            ? SecurityRuleData::describe([$stored]) : 'New condition';
-                    })
-                    ->schema(self::conditionFields($unavailable))->columns(['default' => 1, 'sm' => 2])->required(fn (Get $get): bool => ! $get('rate_limited'))
-                    ->formatStateUsing(fn (mixed $state): array => self::toForm($state))->dehydrateStateUsing(fn (mixed $state): array => self::toStored($state)),
+                self::conditionRepeater($unavailable)
+                    ->minItems(fn (Get $get): int => $get('rate_limited') ? 0 : 1)->required(fn (Get $get): bool => ! $get('rate_limited')),
             ]),
             Section::make('Then')->compact()->schema([
                 Select::make('action')->label(FilamentHelp::label('Action', 'Block answers 403 (429 for a rate limit). Challenge asks a browser for a short proof of work. Log records an event and continues. Allow stops all later rules and skips the challenge. Skip managed rules turns the managed WAF off for the request.'))
@@ -104,6 +95,27 @@ final class SecurityRuleForm
                 Toggle::make('enabled')->label('Enabled')->default(true),
             ]),
         ];
+    }
+
+    /**
+     * The condition list of a typed rule. Custom rules offer every field; request rules pass the smaller set they support.
+     *
+     * @param  array<string, string>  $unavailable  field => the detection it needs
+     * @param  array<string, string>|null  $labels  field => label of the fields to offer, or null for every field
+     */
+    public static function conditionRepeater(array $unavailable = [], ?array $labels = null): Repeater
+    {
+        return Repeater::make('conditions')->hiddenLabel()
+            ->maxItems(SecurityRuleData::MAXIMUM_CONDITIONS)->defaultItems(1)
+            ->addActionLabel('Add condition')->reorderable(false)->live()
+            ->itemLabel(function (array $state): string {
+                $stored = self::toStored([$state])[0];
+
+                return filled($stored['field'] ?? null) && filled($stored['operator'] ?? null) && (is_bool($stored['value'] ?? null) || filled($stored['value'] ?? null))
+                    ? SecurityRuleData::describe([$stored]) : 'New condition';
+            })
+            ->schema(self::conditionFields($unavailable, $labels ?? SecurityRuleData::FIELD_LABELS))->columns(['default' => 1, 'sm' => 2])
+            ->formatStateUsing(fn (mixed $state): array => self::toForm($state))->dehydrateStateUsing(fn (mixed $state): array => self::toStored($state));
     }
 
     private static function rateLimitFields(): array
@@ -171,8 +183,11 @@ final class SecurityRuleForm
         })->values()->all();
     }
 
-    /** @param  array<string, string>  $unavailable  field => the detection it needs */
-    private static function conditionFields(array $unavailable): array
+    /**
+     * @param  array<string, string>  $unavailable  field => the detection it needs
+     * @param  array<string, string>  $labels  field => label of the fields to offer
+     */
+    private static function conditionFields(array $unavailable, array $labels): array
     {
         $kind = fn (Get $get): ?string => SecurityRuleData::FIELDS[$get('field')]['kind'] ?? null;
         $list = fn (Get $get): bool => in_array($get('operator'), ['in_list', 'not_in_list'], true);
@@ -180,7 +195,7 @@ final class SecurityRuleForm
 
         return [
             Select::make('field')->label('Field')->required()->live()->placeholder('Choose a field')
-                ->options(collect(SecurityRuleData::FIELD_LABELS)->map(fn (string $label, string $field): string => isset($unavailable[$field]) ? "$label (needs {$unavailable[$field]})" : $label)->all())
+                ->options(collect($labels)->map(fn (string $label, string $field): string => isset($unavailable[$field]) ? "$label (needs {$unavailable[$field]})" : $label)->all())
                 ->disableOptionWhen(fn (string $value): bool => isset($unavailable[$value]))
                 ->afterStateUpdated(fn (callable $set) => $set('operator', 'equals')),
             Select::make('operator')->label('Operator')->required()->live()->placeholder('Choose how to compare')
