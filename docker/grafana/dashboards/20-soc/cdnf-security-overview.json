@@ -914,7 +914,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Why the edge acted on a request: rate limits, custom rules, the WAF, and cache abuse protection.",
+      "description": "Why the edge acted on a request: rate limits, firewall rules, the WAF, and cache abuse protection.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1148,7 +1148,7 @@
           "refId": "A"
         }
       ],
-      "title": "Custom rules that matched",
+      "title": "Firewall rules that matched",
       "type": "bargauge"
     },
     {

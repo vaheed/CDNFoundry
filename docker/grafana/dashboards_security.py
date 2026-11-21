@@ -28,11 +28,11 @@ def security_overview() -> dict:
         row("Application protection"),
         [timeseries("Attack score bands", "Requests scored as an attack per interval, by band, over the last 7 days at most. Band 1 is a weak signal (score under 20), band 5 a near-certain attack (80 and over). Requests scored zero are not drawn.",
                     [ch("SELECT $__timeInterval(occurred_at) AS time, concat('band ', toString(multiIf(attack_score < 20, 1, attack_score < 40, 2, attack_score < 60, 3, attack_score < 80, 4, 5))) AS band, count() AS requests FROM cdnf.edge_events WHERE $__timeFilter(occurred_at) AND occurred_at > now() - INTERVAL 7 DAY AND event_type = 'request' AND attack_score > 0 AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time, band ORDER BY time")], "short", stack=True, w=12),
-         bargauge("Blocks and logs by reason", "Why the edge acted on a request: rate limits, custom rules, the WAF, and cache abuse protection.",
+         bargauge("Blocks and logs by reason", "Why the edge acted on a request: rate limits, firewall rules, the WAF, and cache abuse protection.",
                   [ch("SELECT security_reason AS reason_name, count() AS requests FROM cdnf.edge_events WHERE $__timeFilter(occurred_at) AND occurred_at > now() - INTERVAL 7 DAY AND event_type = 'request' AND security_reason != '' AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY reason_name ORDER BY requests DESC LIMIT 10", table=True)], "short", "zero_warn", w=12)],
         [timeseries("Client-side reports", "Browser reports of blocked scripts and connections that reached the edge, per hour.",
                     [ch("SELECT $__timeInterval(occurred_at) AS time, count() AS reports FROM cdnf.edge_events WHERE $__timeFilter(occurred_at) AND occurred_at > now() - INTERVAL 7 DAY AND client_report != '' AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY time ORDER BY time")], "short", threshold="zero_warn", w=12),
-         bargauge("Custom rules that matched", "Domain rules that matched most, by rule name, over the last 7 days.",
+         bargauge("Firewall rules that matched", "Domain rules that matched most, by rule name, over the last 7 days.",
                   [ch("SELECT security_rule AS rule_name, count() AS matches FROM cdnf.edge_events WHERE occurred_at > now() - INTERVAL 7 DAY AND security_rule != '' AND $__conditionalAll(domain_id IN (${domain:csv}), $domain) GROUP BY rule_name ORDER BY matches DESC LIMIT 10", table=True)], "short", w=12)],
         [firing_alerts(24, 8, "Security alerts")],
     ]
