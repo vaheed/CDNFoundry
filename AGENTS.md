@@ -68,6 +68,16 @@ Before completion run relevant tests (the browser suite for any UI change), form
 
 Commit history is part of the contract. Work is committed in several small, logical commits, never one commit for a whole phase or increment. Each commit holds one concern (for example: contract or documentation, database or model change, backend behavior, UI, runtime or Compose, tests, generated artifacts), builds on its own, and carries the tests that belong to it. Use Conventional Commit messages (`feat:`, `fix:`, `test:`, `docs:`, `refactor:`, `chore:`) that say what changed and why, in the repository's existing style. Commit under the repository owner's configured identity and add no tool or agent attribution lines or mentions. Commit and push only when the owner asks, and never rewrite shared history.
 
+Before every push, run and pass:
+
+- Multiple commits: the pushed work is split into several small logical commits as described above. Never push a single commit that bundles a whole phase, increment, or unrelated concerns.
+- Static analysis: `docker compose -f compose.dev.yml -f compose.test.yml run --rm --no-deps core vendor/bin/phpstan analyse --memory-limit=2G --no-progress` passes against the committed baseline. Do not grow `core/phpstan-baseline.neon` to hide new errors; fix them.
+- Documentation checks: `make docs-check` passes.
+
+Report the result of each check. A failing check blocks the push; report it rather than pushing around it.
+
+Before opening a pull request into `main`, update the root `README.md` so every section (the introduction, What you get, Pick your setup, Install with Fleet web, Read the docs, Report a bug or contribute, License, and any section added later) matches the behavior being merged. Rewrite outdated sections, add sections for new user-facing capability, and remove statements that are no longer true. The README update is its own `docs:` commit on the branch before the pull request is opened.
+
 The archived staged roadmap is closed. Owner-admitted work proceeds as bounded increments in order. An increment is complete only after its implementation is present, its operator/user documentation is current, agent-owned automated and real-runtime tests pass, and its browser tests pass. End every documented phase with a completion gate that separately records implementation, documentation, automated/runtime qualification, and browser suite status. Any unavailable UI is a failed current-phase checkpoint, not a future-phase placeholder.
 
 Development PostgreSQL and named Compose volumes persist across every roadmap phase. Never remove volumes, run destructive database refreshes, or run `RefreshDatabase` tests against PostgreSQL. Laravel tests must fail closed unless `APP_ENV=testing`, `DB_CONNECTION=sqlite`, and `DB_DATABASE=:memory:` are effective. Use the supported isolated test command and verify its effective database before any test capable of migrations or truncation. The browser suite uses its own disposable database, never the persistent development database.
