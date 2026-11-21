@@ -340,6 +340,11 @@ class Domain extends Model
         return $this->hasMany(SecurityRule::class);
     }
 
+    public function requestRules(): HasMany
+    {
+        return $this->hasMany(RequestRule::class);
+    }
+
     public function auditLogs(): MorphMany
     {
         return $this->morphMany(AuditLog::class, 'subject');
