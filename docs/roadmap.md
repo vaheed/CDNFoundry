@@ -722,13 +722,13 @@ run in the order below, and each closes its own gate.
 behavior per request, with the same typed conditions as custom rules, decided
 in the cell from the signed snapshot.
 
-**Current state.** A domain has typed custom rules (block, challenge, log,
+**Starting point.** A domain had typed custom rules (block, challenge, log,
 allow, skip managed rules) and up to 16 cache path rules that match a path
-prefix or suffix and either bypass the cache or set an edge TTL. The only
-redirect is the HTTPS redirect. Nothing rewrites the URL sent to the origin.
-Request and response headers cannot be set or removed per domain.
+prefix or suffix and either bypassed the cache or set an edge TTL. The only
+redirect was the HTTPS redirect. Nothing rewrote the URL sent to the origin.
+Request and response headers could not be set or removed per domain.
 
-**Scope.** One **Rules** tab on the domain page, next to Custom rules, with one
+**Scope.** One **Rules** tab on the domain page, next to Firewall rules, with one
 section per rule type. Every rule has a name, an on/off switch, a priority, and
 up to five conditions from the custom-rule condition builder. Only fields that
 are known before any detection runs are offered: hostname, path, query string,
