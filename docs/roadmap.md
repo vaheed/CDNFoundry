@@ -1,6 +1,6 @@
 ---
 title: WAF roadmap
-description: The plan for a stronger CDNFoundry WAF, starting from a code-verified audit of what the edge runs today. Eleven ordered phases, each with measurable acceptance criteria and verification.
+description: The plan for a stronger CDNFoundry WAF, starting from a code-verified audit of what the edge runs today. Eleven ordered WAF phases and an owner-admitted phase for request and response rules, each with measurable acceptance criteria and verification.
 ---
 
 # WAF roadmap
@@ -712,11 +712,137 @@ test is reported as passed.
 
 ---
 
+## Phase 12: Request and response rules
+
+**Admission.** The owner admitted this phase on 2026-11-21. It depends on no
+other phase, so it may run before the remaining WAF phases. Its four increments
+run in the order below, and each closes its own gate.
+
+**Objective.** Let a domain redirect, rewrite, change headers, and set cache
+behavior per request, with the same typed conditions as custom rules, decided
+in the cell from the signed snapshot.
+
+**Current state.** A domain has typed custom rules (block, challenge, log,
+allow, skip managed rules) and up to 16 cache path rules that match a path
+prefix or suffix and either bypass the cache or set an edge TTL. The only
+redirect is the HTTPS redirect. Nothing rewrites the URL sent to the origin.
+Request and response headers cannot be set or removed per domain.
+
+**Scope.** One **Rules** tab on the domain page, next to Custom rules, with one
+section per rule type. Every rule has a name, an on/off switch, a priority, and
+up to five conditions from the custom-rule condition builder. Only fields that
+are known before any detection runs are offered: hostname, path, query string,
+method, country, continent, ASN, client IP, user agent, referer, header, cookie,
+file extension, and TLS version. Score and detection fields are not offered, so
+a rule never makes a request pay for scoring.
+
+1. **Redirect rules.** The cell answers with a redirect and the request never
+   reaches the origin. The target is a fixed URL, the same path on another
+   host the rule names, or the path with one prefix replaced by another, with
+   the query string kept or dropped. The status is 301, 302, 307, or 308. The
+   first matching rule wins.
+2. **URL rewrite rules.** The path and query string sent to the origin change.
+   The visitor's URL does not. The path is set to a fixed value or has a prefix
+   replaced. The query string is kept, dropped, or set to a fixed value. The
+   first matching rule wins.
+3. **Header rules.** Set or remove request headers sent to the origin, and set
+   or remove response headers sent to the visitor. Every matching rule applies,
+   in priority order. Response headers are applied on cache hits too.
+4. **Cache rules.** Bypass the cache, or set the edge TTL, the browser TTL, and
+   whether origin cache headers are respected. The first matching rule wins.
+   Cache rules replace the cache path rules: each stored path rule becomes a
+   cache rule with a `starts with` or `ends with` path condition, through an
+   expand and contract migration.
+
+**Presets.** Each type offers presets for common needs. A preset asks for a few
+values, writes ordinary rules marked with the preset's name, and replaces its
+earlier rules when it is saved again. A preset rule edited by hand becomes an
+ordinary rule, as custom-rule presets do today.
+
+- Redirects: www to the apex domain, the apex domain to www, and moving a path
+  prefix to a new prefix.
+- URL rewrites: removing a path prefix before the origin, and adding one.
+- Headers: security response headers (`Strict-Transport-Security`,
+  `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`,
+  `Permissions-Policy`), removing origin identity headers (`Server`,
+  `X-Powered-By`), and allowing cross-origin use of static files.
+- Cache: caching static files by extension for a chosen time, bypassing the
+  cache for admin and sign-in paths, and bypassing it when a session cookie is
+  present.
+
+**Bounds.** At most 50 rules of each type per domain, five conditions per rule,
+ten header operations per rule, and 50 header operations applied per request.
+Redirect targets and rewritten paths are at most 2,048 bytes. Header names are
+tokens of at most 64 bytes and values are at most 1,024 bytes, with no control
+characters. Values are fixed text only: there is no regex, no capture groups,
+and no expression language.
+
+**Protected behavior.**
+
+- Rules run after the security stages (custom rules, rate limits, the managed
+  WAF, challenges, and the built-in limits), so a redirect or rewrite never lets
+  a request skip them. Custom rules and the WAF match the visitor's URL.
+- The cache key and URL purge stay on the visitor's URL. Two URLs that rewrite
+  to the same origin path are cached separately, and purging the visitor's URL
+  removes what the visitor sees. A cache rule's outcome is part of the cache
+  policy hash, as a path rule's outcome is today.
+- A header rule cannot set or remove `Host`, `Content-Length`,
+  `Transfer-Encoding`, `Connection` and the other hop-by-hop headers,
+  `Forwarded`, `X-Forwarded-*`, `X-CDN-*`, `X-CDNF-*`, or the headers that
+  carry the challenge, security, and diagnostic decisions. A request header
+  rule does not change the cache key, and the documentation says so.
+- A rewritten path is normalized and must start with `/`. A path that leaves
+  the root after normalization (`..`) is refused when the rule is saved and
+  again in the cell. The origin's address and Host header never change.
+- A redirect target is `http` or `https` with a valid hostname, or a path. A
+  rule whose fixed target is the URL it matches is refused when it is saved.
+  Response body rewriting stays out of scope.
+
+**Technical direction.** One `request_rules` table holds every type: the domain,
+the type, the name, the priority, the switch, the typed conditions, the typed
+action, the preset, and a fingerprint. Database constraints check the type, the
+priority, and the unique fingerprint. Controllers, form requests, and policies follow the
+custom-rule endpoints, with cursor pagination, `Idempotency-Key`, and a `202`
+operation for every change. Each change raises the domain revision and is
+compiled into the signed snapshot as ordered lists per type. The cell evaluates
+them in its access phase with the custom-rule condition matcher, after the
+security stages and before the cache key. Response header operations run in the
+header filter. Cells ship the evaluator before the control plane sends the new
+snapshot field, and a snapshot without the field means no rules. The access log
+records the matched rule of each type, so Analytics and Logs can show which
+rule acted.
+
+**Dependencies.** None.
+
+**Acceptance criteria.**
+
+- Each type behaves as described on a real cell over IPv4 and IPv6, including
+  a cache hit for response headers and a purge of a rewritten URL.
+- A blocked or challenged request is never redirected or rewritten.
+- A refused rule (a protected header, a looping target, a path outside the
+  root, a value over its bound) is refused by the API and the panel with a
+  stable error code, and an invalid snapshot never replaces the active one.
+- Every stored cache path rule is served the same way after the migration, as
+  shown by the cache headers of the same requests before and after.
+- The edge cell benchmark in `tests/e2e/edge_cell_benchmark.py`, with 50 rules
+  of each type and none matching, costs at most 5% more CPU per cached request
+  than with no rules. The measured numbers are recorded in this phase.
+
+**Verification.** Feature tests for each type: the happy path, permissions
+(administrator, assigned user, other user), validation of every bound,
+idempotency, reorder, and rollback to the previous revision. Contract tests for
+the snapshot shape. `tests/e2e/request_rules.py` on real cells. Browser tests
+for the Rules tab with visual snapshots and accessibility checks, run with the
+antislop and `cdnf-ui-design` delivery gates. The domain-panel guide and the
+API reference describe every type and its bounds.
+
+---
+
 ## 4. Completion
 
 The roadmap is complete when:
 
-- Phases 1 to 11 have passed their gates on the same release.
+- Phases 1 to 12 have passed their gates on the same release.
 - Every row in the capability table reads Verified, or states in the
   documentation why it stays limited.
 - The harness runs in qualification for every release. A release that worsens
@@ -731,5 +857,5 @@ Volumetric scrubbing and BGP control (the edge cannot absorb a saturated
 uplink), machine-learned attack or bot scoring, third-party CAPTCHA or any
 outside verification on the request path, synchronous calls between cells or
 PoPs, custom regex or an expression language in rules, full CRS response
-inspection and response rewriting, customer-uploaded `SecRule` content,
+inspection and response body rewriting, customer-uploaded `SecRule` content,
 Kubernetes, microservices, Kafka, and a second dashboard or backend.
