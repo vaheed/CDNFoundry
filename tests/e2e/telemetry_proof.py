@@ -46,7 +46,9 @@ def main() -> None:
         }
         command = ['docker', 'run', '-d', '--name', name, '--add-host', 'vector:127.0.0.1', '--memory', '512m', '--pids-limit', '128',
                    '--tmpfs', '/tmp:rw,nosuid,size=32m,mode=1777', '--tmpfs', '/var/cache/nginx:rw,nosuid,size=32m',
-                   '-e', 'EDGE_RUNTIME_FILE=/fixtures/runtime.json', '-e', 'EDGE_STATUS_TOKEN=' + TOKEN]
+                   '-e', 'EDGE_RUNTIME_FILE=/fixtures/runtime.json', '-e', 'EDGE_STATUS_TOKEN=' + TOKEN,
+                   # The assertions read access-log rows from the container log.
+                   '-e', 'EDGE_ACCESS_LOG_STDOUT=true']
         for source, destination in mounts.items():
             command.extend(['--mount', f'type=bind,source={source},target={destination},readonly'])
         try:

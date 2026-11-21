@@ -88,6 +88,7 @@ A degraded aggregate is not a request to restart the platform. Follow the named 
 ### Telemetry buffers and edge logging
 
 - Vector's security and DNS disk buffers are capped at 268435488 bytes each. This is the smallest size the production Vector version accepts. Startup qualification checks the live process, because configuration validation does not build the disk buffers.
+- An edge cell sends its access log to Vector only. It does not copy it to the container log unless `EDGE_ACCESS_LOG_STDOUT=true`, because that copy cost dockerd CPU on every request and the operational log collector dropped every line of it.
 - If Vector is absent when an edge cell starts, the cell still serves. It logs to bounded Docker stdout and writes this fallback to its container log. Restart the cell after Vector recovers to restore direct syslog delivery.
 - Edge paths and referrers lose their query strings before either log output.
 

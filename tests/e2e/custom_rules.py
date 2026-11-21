@@ -240,6 +240,8 @@ def qualify(directory: pathlib.Path) -> None:
         "--tmpfs", "/var/cache/nginx:rw,size=64m", "--tmpfs", "/var/lib/nginx/tmp:rw,size=32m",
         "--memory", "512m", "--cpus", "0.5", "--pids-limit", "96", "--ulimit", "nofile=65536:65536",
         "-e", "EDGE_RUNTIME_FILE=/var/lib/cdnfoundry/runtime/active.json", "-e", "EDGE_STATUS_TOKEN=runtime-test-token",
+        # The assertions read access-log rows from the container log.
+        "-e", "EDGE_ACCESS_LOG_STDOUT=true",
         "-e", "GEOIP_DATABASE=/mmdb/GeoLite2-City.mmdb", "-e", "GEOIP_ASN_DATABASE=/var/lib/cdnfoundry/runtime/asn.mmdb",
         "-v", f"{directory}:/var/lib/cdnfoundry/runtime:ro",
         "-v", f"{directory / 'tls.crt'}:/run/edge/tls.crt:ro", "-v", f"{directory / 'tls.key'}:/run/edge/tls.key:ro",

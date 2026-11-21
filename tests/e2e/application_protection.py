@@ -78,6 +78,8 @@ def qualify(directory: pathlib.Path) -> None:
     run("docker", "run", "-d", "--name", NAME, "--network", rules.EDGE_NETWORK,
         "--tmpfs", "/var/cache/nginx:rw,size=64m", "--tmpfs", "/var/lib/nginx/tmp:rw,size=32m", "--memory", "512m", "--cpus", "0.5", "--pids-limit", "96",
         "-e", "EDGE_RUNTIME_FILE=/var/lib/cdnfoundry/runtime/active.json", "-e", "EDGE_STATUS_TOKEN=runtime-test-token",
+        # The assertions read access-log rows from the container log.
+        "-e", "EDGE_ACCESS_LOG_STDOUT=true",
         "-v", f"{directory / 'active.json'}:/var/lib/cdnfoundry/runtime/active.json:ro",
         "-v", f"{directory / 'tls.crt'}:/run/edge/tls.crt:ro", "-v", f"{directory / 'tls.key'}:/run/edge/tls.key:ro", "cdnfoundry/edge-runtime:e2e")
     for _ in range(60):
