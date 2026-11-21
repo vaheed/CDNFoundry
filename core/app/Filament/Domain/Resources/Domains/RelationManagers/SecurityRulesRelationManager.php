@@ -42,7 +42,7 @@ class SecurityRulesRelationManager extends RelationManager
         return number_format($ownerRecord->securityRules()->count());
     }
 
-    protected static ?string $title = 'Custom rules';
+    protected static ?string $title = 'Firewall rules';
 
     public function form(Schema $schema): Schema
     {
@@ -72,7 +72,7 @@ class SecurityRulesRelationManager extends RelationManager
             CreateAction::make()->label('Add rule')->modalHeading('Add rule')->modalSubmitActionLabel('Add rule')->slideOver()->modalWidth(Width::TwoExtraLarge)->createAnother(false)->using(fn (array $data): SecurityRule => $this->createRule($data)),
             ActionGroup::make([
                 Action::make('userAgentPreset')->label('Block user agents')->icon('phosphor-robot')->modalHeading('Block or challenge user agents')
-                    ->modalDescription('Each word becomes one custom rule. They are saved together, and saving again replaces them.')
+                    ->modalDescription('Each word becomes one firewall rule. They are saved together, and saving again replaces them.')
                     ->schema([
                         TagsInput::make('values')->label(FilamentHelp::label('User agents', 'A request is handled when its user agent contains one of these words. Case does not matter. Up to '.SecurityPresets::MAXIMUM_USER_AGENTS.'.'))
                             ->required()->placeholder('sqlmap')->helperText('Type a word and press Enter.'),
@@ -84,7 +84,7 @@ class SecurityRulesRelationManager extends RelationManager
                     ->visible(fn (): bool => $this->getOwnerRecord()->securityRules()->where('preset', SecurityPresets::USER_AGENT)->exists())
                     ->action(fn () => $this->savePreset(SecurityPresets::USER_AGENT, null, 'User agent rules removed')),
                 Action::make('hotlinkPreset')->label('Hotlink protection')->icon('phosphor-image')->modalHeading('Protect files from hotlinking')
-                    ->modalDescription('Pages on other sites cannot embed these files. One custom rule blocks them with a 403.')
+                    ->modalDescription('Pages on other sites cannot embed these files. One firewall rule blocks them with a 403.')
                     ->schema([
                         TagsInput::make('extensions')->label(FilamentHelp::label('File extensions', 'Requests for files that end with these extensions are protected. Type the extension without a dot.'))
                             ->required()->placeholder('jpg')->helperText('Type an extension and press Enter.'),
@@ -101,7 +101,7 @@ class SecurityRulesRelationManager extends RelationManager
             Action::make('moveDown')->label('Move down')->icon('phosphor-arrow-down')->action(fn (SecurityRule $record) => $this->move($record, 1)),
             EditAction::make()->modalHeading('Edit rule')->modalSubmitActionLabel('Save rule')->slideOver()->modalWidth(Width::TwoExtraLarge)->using(fn (SecurityRule $record, array $data): SecurityRule => $this->updateRule($record, $data)),
             DeleteAction::make()->using(fn (SecurityRule $record): bool => $this->deleteRule($record)),
-        ])->defaultSort('priority')->emptyStateHeading('No custom rules')
+        ])->defaultSort('priority')->emptyStateHeading('No firewall rules')
             ->emptyStateDescription('Add a rule to block, challenge, log, or allow requests that match up to five conditions.');
     }
 

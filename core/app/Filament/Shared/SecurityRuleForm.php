@@ -16,7 +16,7 @@ use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Text;
 use Filament\Schemas\Components\Utilities\Get;
 
-/** The fields of one typed security rule, shared by a domain's custom rules and the rules of a platform ruleset. */
+/** The fields of one typed security rule, shared by a domain's firewall rules and the rules of a platform ruleset. */
 final class SecurityRuleForm
 {
     private const EXAMPLES = [
@@ -98,7 +98,7 @@ final class SecurityRuleForm
     }
 
     /**
-     * The condition list of a typed rule. Custom rules offer every field; request rules pass the smaller set they support.
+     * The condition list of a typed rule. Firewall rules offer every field; request rules pass the smaller set they support.
      *
      * @param  array<string, string>  $unavailable  field => the detection it needs
      * @param  array<string, string>|null  $labels  field => label of the fields to offer, or null for every field

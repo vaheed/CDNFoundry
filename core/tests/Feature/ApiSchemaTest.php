@@ -122,7 +122,7 @@ class ApiSchemaTest extends TestCase
         $post($rule('unknown_path', 2))->assertCreated();
         $post($rule('teapot', 3))->assertUnprocessable();
 
-        $this->actingAs($user)->deleteJson($url)->assertConflict()->assertJsonPath('message', 'API schema is used by 2 custom rules. Delete or change them first.');
+        $this->actingAs($user)->deleteJson($url)->assertConflict()->assertJsonPath('message', 'API schema is used by 2 firewall rules. Delete or change them first.');
         $this->assertNotNull($domain->refresh()->api_schema);
         $domain->securityRules()->delete();
         $this->actingAs($user)->deleteJson($url)->assertAccepted();

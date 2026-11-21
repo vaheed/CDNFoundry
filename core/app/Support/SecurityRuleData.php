@@ -257,7 +257,7 @@ final class SecurityRuleData
         $count = $domain->securityRules()->pluck('conditions')
             ->filter(fn (mixed $conditions): bool => collect(is_string($conditions) ? json_decode($conditions, true) : $conditions)
                 ->contains(fn (mixed $condition): bool => is_array($condition) && in_array($condition['field'] ?? null, $fields, true)))->count();
-        abort_if($count > 0, 409, self::REQUIREMENT_LABELS[$column]." is used by $count custom ".str('rule')->plural($count).'. Delete or change '.($count === 1 ? 'it' : 'them').' first.');
+        abort_if($count > 0, 409, self::REQUIREMENT_LABELS[$column]." is used by $count firewall ".str('rule')->plural($count).'. Delete or change '.($count === 1 ? 'it' : 'them').' first.');
     }
 
     /** Refuses a change that would leave the domain with more rate-limit rules than the platform allows. */
