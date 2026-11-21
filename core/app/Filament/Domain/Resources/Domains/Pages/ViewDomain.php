@@ -325,7 +325,7 @@ class ViewDomain extends ViewRecord
                     Select::make('maximum_object_bytes')->label(FilamentHelp::label('Maximum object size', 'Larger responses are streamed and never stored.'))->options([
                         1048576 => '1 MiB', 10485760 => '10 MiB', 104857600 => '100 MiB', 536870912 => '512 MiB', 1073741824 => '1 GiB',
                     ])->placeholder('100 MiB')->required(),
-                    Toggle::make('respect_origin_headers')->label(FilamentHelp::label('Respect origin cache headers', 'When on, the origin\'s Cache-Control or Expires sets the edge lifetime. A path rule with a TTL still wins.'))->required(),
+                    Toggle::make('respect_origin_headers')->label(FilamentHelp::label('Respect origin cache headers', 'When on, the origin\'s Cache-Control or Expires sets the edge lifetime. A cache rule with an edge TTL still wins.'))->required(),
                 ]),
                 Section::make('Request matching')->schema([
                     Select::make('query_policy')->label(FilamentHelp::label('Query policy', 'Which query parameters make two URLs different cache entries.'))->options([
@@ -345,19 +345,6 @@ class ViewDomain extends ViewRecord
                             $set('cookie_presets', null);
                         }),
                     TagsInput::make('ignore_cookie_names')->label(FilamentHelp::label('Ignored cookie names', 'A request with any other cookie bypasses the cache. A name ending in * matches every cookie that starts with it.'))->placeholder('_ga_*')->rules(['array', 'max:32'])->nestedRecursiveRules(['regex:/^[A-Za-z0-9_.-]{1,63}\*?$/']),
-                    Repeater::make('path_rules')->label(FilamentHelp::label('Path rules', 'The first rule that matches the path wins. Bypass skips the cache. TTL sets the edge lifetime for that path and replaces the origin\'s own lifetime.'))
-                        ->maxItems(CachePolicy::MAX_PATH_RULES)->addActionLabel('Add path rule')->defaultItems(0)->columns(['default' => 1, 'md' => 4])->schema([
-                            Select::make('match')->label('Match')->options(['prefix' => 'Starts with', 'suffix' => 'Ends with'])->default('prefix')->native()->required(),
-                            TextInput::make('value')->label('Path')->placeholder('/static/')->maxLength(128)->regex('/^[A-Za-z0-9\/_.~%-]{1,128}$/')
-                                ->rule(fn (Get $get): \Closure => function (string $attribute, mixed $value, \Closure $fail) use ($get): void {
-                                    if ($get('match') === 'prefix' && is_string($value) && ! str_starts_with($value, '/')) {
-                                        $fail('A path prefix must start with /.');
-                                    }
-                                })->required(),
-                            Select::make('action')->label('Action')->options(['bypass' => 'Bypass cache', 'ttl' => 'Set edge TTL'])->default('ttl')->native()->required(),
-                            TextInput::make('ttl_seconds')->label(FilamentHelp::label('TTL (seconds)', 'Used only when the action is Set edge TTL. Ignored for Bypass cache.'))->numeric()->minValue(1)->maxValue(31536000)->placeholder('86400')
-                                ->requiredIf('action', 'ttl'),
-                        ]),
                 ]),
                 Section::make('Advanced')->collapsed()->schema([
                     KeyValue::make('status_ttl_seconds')->label(FilamentHelp::label('Status TTLs', 'Edge lifetime per response status. 0 means that status is never stored.'))->keyLabel('Approved status')->valueLabel('TTL seconds')->keyPlaceholder('404')->valuePlaceholder('60')->reorderable(false),
@@ -375,10 +362,6 @@ class ViewDomain extends ViewRecord
                         'respect_origin_headers' => (bool) $data['respect_origin_headers'], 'query_policy' => $data['query_policy'],
                         'query_parameters' => array_values($data['query_parameters'] ?? []),
                         'ignore_cookie_names' => array_values($data['ignore_cookie_names'] ?? []),
-                        'path_rules' => collect($data['path_rules'] ?? [])->map(fn (array $rule): array => [
-                            'match' => $rule['match'], 'value' => $rule['value'], 'action' => $rule['action'],
-                            'ttl_seconds' => $rule['action'] === 'ttl' ? (int) $rule['ttl_seconds'] : null,
-                        ])->values()->all(),
                         'status_ttl_seconds' => $data['status_ttl_seconds'], 'admission_requests' => (int) $data['admission_requests'],
                         'stale_if_error_seconds' => (int) $data['stale_if_error_seconds'],
                         'stale_while_revalidate_seconds' => (int) $data['stale_while_revalidate_seconds'],
