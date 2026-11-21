@@ -1665,6 +1665,13 @@ local function prepare_compression(config, emergency)
     end
 end
 
+-- The mode the inline ModSecurity pass receives in X-CDNF-Internal-WAF-Mode. It is kept in ngx.ctx as well, so the request's
+-- location can be chosen from it without parsing every request header again.
+local function set_waf_mode(mode)
+    ngx.ctx.waf_mode = mode
+    ngx.req.set_header("X-CDNF-Internal-WAF-Mode", mode)
+end
+
 function M.prepare_waf()
     local host = (ngx.var.host or ""):lower():gsub("%.$", "")
     local config = state.hosts[host]
@@ -1685,7 +1692,7 @@ function M.prepare_waf()
     ngx.var.cdn_waf_action = mode == "monitor" and "monitor" or (mode == "block" and "inspect" or "off")
     -- These headers are overwritten before ModSecurity runs and removed again
     -- before proxying. A client therefore cannot select another tenant's mode.
-    ngx.req.set_header("X-CDNF-Internal-WAF-Mode", mode)
+    set_waf_mode(mode)
     ngx.req.set_header("X-CDNF-Internal-WAF-Threshold", tostring(threshold))
     ngx.req.set_header("X-CDNF-Internal-WAF-Paranoia", tostring(paranoia))
     -- Exclusions are not honored: switching a whole request to monitor mode let
@@ -1836,7 +1843,7 @@ function M.access()
     -- The managed WAF scores the request for its own profile; a custom rule on the attack score asks for a score even when
     -- the profile is off, and then the request is scored at paranoia level 1 and never blocked by the managed rules.
     local waf_settings = config.waf or {}
-    local waf_mode = ngx.req.get_headers()["x-cdnf-internal-waf-mode"]
+    local waf_mode = ngx.ctx.waf_mode
     local scoring = waf_mode == "block" or waf_mode == "monitor"
     if scoring or has_score_rule(rules) then
         if not scoring then ngx.req.set_header("X-CDNF-Internal-WAF-Paranoia", "1") end
@@ -1863,7 +1870,7 @@ function M.access()
             if scoring then
                 ngx.var.cdn_waf_body_limit = (waf_body.get(limit) == "complete") and "inspected" or "no_body"
             end
-            ngx.req.set_header("X-CDNF-Internal-WAF-Mode", "off")
+            set_waf_mode("off")
         elseif scoring then
             -- No score means the request was not scored. A body that was too large, unreadable or encoded cannot be inspected
             -- by any engine, so a blocking WAF refuses it. When only the scoring listener failed, the whole request is still
@@ -1902,7 +1909,7 @@ function M.access()
         end
     end
     if skip_managed then
-        ngx.req.set_header("X-CDNF-Internal-WAF-Mode", "off")
+        set_waf_mode("off")
         ngx.var.cdn_waf_action = "off"
     elseif waf_mode == "block" and request.scores then
         local threshold = math.max(1, math.min(100, tonumber(waf_settings.inbound_threshold) or 5))
@@ -2034,10 +2041,13 @@ function M.access()
     ngx.var.cdn_cache_mode = cache.mode or "normal"
     ngx.var.cdn_cache_respect_origin = cache.respect_origin_headers == false and "0" or "1"
     local maximum = tonumber(cache.maximum_object_bytes) or 104857600
-    if maximum <= 1048576 then return ngx.exec("@cache_1m") end
-    if maximum <= 10485760 then return ngx.exec("@cache_10m") end
-    if maximum <= 104857600 then return ngx.exec("@cache_100m") end
-    return ngx.exec("@cache_1g")
+    -- Only a request still in block or monitor mode needs ModSecurity inline: its score could not be computed. With the mode off,
+    -- the inline engine switches itself off in phase 1 and can never act on the request, so it is not run at all.
+    local inline = ngx.ctx.waf_mode ~= "off" and "" or "_no_inline_waf"
+    if maximum <= 1048576 then return ngx.exec("@cache_1m" .. inline) end
+    if maximum <= 10485760 then return ngx.exec("@cache_10m" .. inline) end
+    if maximum <= 104857600 then return ngx.exec("@cache_100m" .. inline) end
+    return ngx.exec("@cache_1g" .. inline)
 end
 
 function M.invalid_method()
