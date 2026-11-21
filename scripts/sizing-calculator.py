@@ -18,8 +18,16 @@ EDGE_RPS_PER_VCPU_WAF_ON = 80
 # Busy connections (sending requests back to back) one edge vCPU holds with a median latency under about 150 ms.
 CONNECTIONS_PER_VCPU_WAF_OFF = 125
 CONNECTIONS_PER_VCPU_WAF_ON = 25
-# DNS: queries per second one vCPU answers (DNSdist plus PowerDNS measured at 16,600 qps on 2 cores).
-DNS_QPS_PER_VCPU = 8000
+# DNS: queries per second one vCPU answers with no loss, DNSdist, PowerDNS and the Vector that takes its dnstap stream together
+# (12,000 loss-free on about 3.9 cores). Set from
+# docs/operations/performance-audit-2026-11-21.md; the earlier 8,000 counted truncated replies as answers.
+DNS_QPS_PER_VCPU = 3000
+# One domain is served by one cell per edge host, so a busy domain can need more than its cell's CPU while the
+# host is idle. Requests per second one CPU of a cell serves on its own (cached 10 KB object, many connections),
+# from tests/e2e/edge_cell_benchmark.py in docs/operations/performance-audit-2026-11-21.md.
+CELL_RPS_PER_CPU_WAF_OFF = 2500
+CELL_RPS_PER_CPU_WAF_ON = 340
+DEFAULT_CELL_CPUS = 0.5
 # Plan to use at most this share of the measured limit, so a spike does not push the host into queueing.
 DEFAULT_UTILIZATION = 0.6
 DEFAULT_HOST_VCPU = 8
@@ -40,13 +48,23 @@ def control_host(domains: int) -> str:
             "telemetry 8 vCPU / 32 GB / 1 TB NVMe, monitoring 4 vCPU / 8 GB (estimate)")
 
 
+def busiest_domain_cell_cpus(rps: float, waf: bool, utilization: float = DEFAULT_UTILIZATION) -> float:
+    """CPUs one cell needs to carry one domain's peak on one edge host, at the planned utilization."""
+    return rps / (CELL_RPS_PER_CPU_WAF_ON if waf else CELL_RPS_PER_CPU_WAF_OFF) / utilization
+
+
 def calculate(peak_rps: float, waf_share: float, domains: int, average_kb: float, dns_qps: float,
               connections: int = 0, utilization: float = DEFAULT_UTILIZATION, high_availability: bool = True,
-              host_vcpu: int = DEFAULT_HOST_VCPU) -> dict:
+              host_vcpu: int = DEFAULT_HOST_VCPU, busiest_domain_rps: float = 0, busiest_domain_waf: bool = True,
+              cell_cpus: float = DEFAULT_CELL_CPUS) -> dict:
     if not 0 <= waf_share <= 1:
         raise ValueError("waf_share must be between 0 and 1")
     if not 0 < utilization <= 1:
         raise ValueError("utilization must be above 0 and at most 1")
+    if busiest_domain_rps < 0 or busiest_domain_rps > peak_rps:
+        raise ValueError("busiest_domain_rps must be between 0 and peak_rps")
+    if cell_cpus <= 0:
+        raise ValueError("cell_cpus must be above 0")
     waf_rps = peak_rps * waf_share
     plain_rps = peak_rps - waf_rps
     dns_vcpu = dns_qps / DNS_QPS_PER_VCPU
@@ -59,6 +77,9 @@ def calculate(peak_rps: float, waf_share: float, domains: int, average_kb: float
     if high_availability:
         # Lose one host and still carry the load; DNS needs at least two hosts anyway.
         hosts = max(2, hosts + 1)
+    # Every edge host carries its share of the busiest domain on one cell. With the spare host out, the others share it.
+    serving_hosts = max(1, hosts - 1) if high_availability else hosts
+    busiest_cpus = busiest_domain_cell_cpus(busiest_domain_rps / serving_hosts, busiest_domain_waf, utilization)
     memory_gb = EDGE_BASE_GB + domains * (AGENT_KB_PER_DOMAIN + CELL_KB_PER_DOMAIN_PER_WORKER * CELL_WORKERS) / 1024 / 1024
     return {
         "edge_vcpu_needed": round(edge_vcpu, 1),
@@ -69,6 +90,8 @@ def calculate(peak_rps: float, waf_share: float, domains: int, average_kb: float
         "dns_vcpu": round(dns_vcpu, 2),
         "telemetry_gb_per_day": round(peak_rps * AVERAGE_TO_PEAK * 86400 * TELEMETRY_BYTES_PER_EVENT / 1e9, 1),
         "control": control_host(domains),
+        "busiest_domain_cell_cpus": round(busiest_cpus, 2),
+        "busiest_domain_fits_cell": busiest_cpus <= cell_cpus,
     }
 
 
@@ -83,16 +106,24 @@ def main() -> None:
     parser.add_argument("--utilization", type=float, default=DEFAULT_UTILIZATION, help="planned share of the measured limit")
     parser.add_argument("--host-vcpu", type=int, default=DEFAULT_HOST_VCPU, help="vCPU of each edge host")
     parser.add_argument("--no-ha", action="store_true", help="do not add a spare host")
+    parser.add_argument("--busiest-domain-rps", type=float, default=0, help="peak requests per second of the single busiest domain")
+    parser.add_argument("--busiest-domain-waf-off", action="store_true", help="the busiest domain has the WAF off")
+    parser.add_argument("--cell-cpus", type=float, default=DEFAULT_CELL_CPUS, help="EDGE_CELL_CPUS of the cells, default 0.5")
     arguments = parser.parse_args()
     result = calculate(arguments.peak_rps, arguments.waf_share, arguments.domains, arguments.average_kb,
                        arguments.dns_qps, arguments.connections, arguments.utilization, not arguments.no_ha,
-                       arguments.host_vcpu)
+                       arguments.host_vcpu, arguments.busiest_domain_rps, not arguments.busiest_domain_waf_off,
+                       arguments.cell_cpus)
     print(f"Edge CPU needed:   {result['edge_vcpu_needed']} vCPU at {arguments.utilization:.0%} utilization, DNS included")
     print(f"Edge hosts:        {result['edge_hosts']} x {result['edge_host_vcpu']} vCPU, {result['edge_host_ram_gb']} GB RAM each")
     print(f"Edge bandwidth:    {result['edge_bandwidth_mbit']} Mbit/s at peak, per fleet")
     print(f"DNS share of CPU:  {result['dns_vcpu']} vCPU")
     print(f"Telemetry growth:  about {result['telemetry_gb_per_day']} GB a day")
     print(f"Control plane:     {result['control']}")
+    if arguments.busiest_domain_rps:
+        verdict = "fits" if result["busiest_domain_fits_cell"] else f"does not fit: set EDGE_CELL_CPUS to at least {result['busiest_domain_cell_cpus']}"
+        print(f"Busiest domain:    needs {result['busiest_domain_cell_cpus']} CPU on its cell per edge host; "
+              f"{arguments.cell_cpus} CPU {verdict}")
 
 
 if __name__ == "__main__":

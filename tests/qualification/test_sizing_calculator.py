@@ -33,6 +33,32 @@ class SizingCalculatorTests(unittest.TestCase):
     def test_bandwidth_follows_request_rate_and_size(self):
         self.assertEqual(calculator.calculate(1000, 0, 10, 100, 0)['edge_bandwidth_mbit'], 800.0)
 
+    def test_a_busy_domain_can_outgrow_its_cell_while_the_fleet_has_room(self):
+        # 600 requests per second on a WAF domain, shared by the serving hosts, needs more than a default 0.5 CPU cell.
+        result = calculator.calculate(2000, 1, 100, 50, 0, busiest_domain_rps=1200)
+        self.assertFalse(result['busiest_domain_fits_cell'])
+        self.assertGreater(result['busiest_domain_cell_cpus'], 0.5)
+        roomy = calculator.calculate(2000, 1, 100, 50, 0, busiest_domain_rps=1200, cell_cpus=4)
+        self.assertTrue(roomy['busiest_domain_fits_cell'])
+        self.assertEqual(roomy['edge_hosts'], result['edge_hosts'], 'the cell size does not change the host count')
+
+    def test_the_waf_costs_the_busy_domain_more_cell_cpu(self):
+        protected = calculator.busiest_domain_cell_cpus(300, waf=True)
+        plain = calculator.busiest_domain_cell_cpus(300, waf=False)
+        self.assertGreater(protected, plain * 5)
+
+    def test_the_spare_host_does_not_count_for_the_busy_domain(self):
+        # Two hosts with high availability: one may be down, so the other carries the whole domain.
+        result = calculator.calculate(100, 1, 10, 10, 0, busiest_domain_rps=100)
+        self.assertEqual(result['edge_hosts'], 2)
+        self.assertAlmostEqual(result['busiest_domain_cell_cpus'], calculator.busiest_domain_cell_cpus(100, waf=True), places=2)
+
+    def test_invalid_busiest_domain_inputs_are_rejected(self):
+        with self.assertRaises(ValueError):
+            calculator.calculate(100, 1, 10, 10, 0, busiest_domain_rps=200)
+        with self.assertRaises(ValueError):
+            calculator.calculate(100, 1, 10, 10, 0, cell_cpus=0)
+
     def test_invalid_shares_are_rejected(self):
         with self.assertRaises(ValueError):
             calculator.calculate(100, 1.5, 10, 10, 0)
