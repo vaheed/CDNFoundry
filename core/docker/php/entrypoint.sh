@@ -50,6 +50,22 @@ CONF
     fi
 fi
 
+# A production container builds Laravel's configuration, route and event caches and Filament's component and icon caches
+# from its own environment when it starts. Without them every FPM request read all configuration files, registered every
+# route and scanned the icon sets again: about 90 ms of CPU for a trivial request instead of about 30. The caches live in
+# this container's bootstrap/cache, so a new environment takes effect on the next start, as before. If they cannot be built
+# the container serves without them.
+if [ "${APP_ENV:-}" = "production" ] && [ -f artisan ]; then
+    as_worker=""
+    if [ "$(id -u)" = "0" ]; then as_worker="su-exec www-data"; fi
+    if ! $as_worker php artisan optimize --no-interaction >/dev/null 2>&1 \
+        || ! $as_worker php artisan filament:optimize --no-interaction >/dev/null 2>&1; then
+        echo "Laravel caches could not be built; serving without them." >&2
+        $as_worker php artisan optimize:clear --no-interaction >/dev/null 2>&1 || true
+        $as_worker php artisan filament:optimize-clear --no-interaction >/dev/null 2>&1 || true
+    fi
+fi
+
 # Root is used only above, to prepare storage. No process of this image keeps it, including the FPM master.
 if [ "$(id -u)" = "0" ]; then
     exec su-exec www-data "$@"
