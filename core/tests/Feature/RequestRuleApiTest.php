@@ -456,6 +456,39 @@ class RequestRuleApiTest extends TestCase
         return ['type' => $type, 'priority' => 100, 'action' => $action, 'conditions' => $conditions ?? [['field' => 'path', 'operator' => 'starts_with', 'value' => '/match']]];
     }
 
+    public function test_rollback_restores_every_request_rule_type_and_refuses_an_invalid_revision_atomically(): void
+    {
+        Queue::fake();
+        [$user, $domain] = $this->ownedDomain(proxied: true);
+        $url = "/api/domains/{$domain->id}/request-rules";
+        foreach ([
+            $this->redirect(),
+            $this->rule('rewrite', ['path' => 'set', 'path_value' => '/index.php', 'query' => 'keep']),
+            $this->rule('header', ['request' => [], 'response' => [['op' => 'remove', 'name' => 'server']]]),
+            $this->rule('cache', ['mode' => 'bypass']),
+        ] as $input) {
+            $this->actingAs($user)->postJson($url, $input)->assertAccepted();
+        }
+        (new ReconcileEdgeDomain($domain->id))->handle();
+        $prior = EdgeRevision::query()->where('domain_id', $domain->id)->latest('revision')->firstOrFail();
+        $expected = $domain->requestRules()->orderBy('type')->get()->map(fn ($rule): array => [$rule->type, $rule->conditions, $rule->action])->all();
+        foreach ($domain->requestRules()->get() as $rule) {
+            $this->actingAs($user)->deleteJson("$url/{$rule->id}")->assertAccepted();
+        }
+        $before = $domain->refresh()->revision;
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/rollback", ['revision' => $prior->revision])->assertAccepted();
+        $this->assertSame($before + 1, $domain->refresh()->revision);
+        $this->assertSame($expected, $domain->requestRules()->orderBy('type')->get()->map(fn ($rule): array => [$rule->type, $rule->conditions, $rule->action])->all());
+
+        $snapshot = $prior->snapshot;
+        $snapshot['rules']['headers'][0]['action']['response'][0] = ['op' => 'set', 'name' => 'host', 'value' => 'evil.example'];
+        $prior->update(['snapshot' => $snapshot]);
+        $before = $domain->revision;
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/rollback", ['revision' => $prior->revision])->assertUnprocessable();
+        $this->assertSame($before, $domain->refresh()->revision);
+        $this->assertSame($expected, $domain->requestRules()->orderBy('type')->get()->map(fn ($rule): array => [$rule->type, $rule->conditions, $rule->action])->all());
+    }
+
     private function redirect(?array $action = null, ?array $conditions = null): array
     {
         return [
