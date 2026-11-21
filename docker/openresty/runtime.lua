@@ -1619,7 +1619,11 @@ end
 local function note_request_rule(kind, id)
     local current = ngx.var.cdn_request_rule or ""
     local _, count = current:gsub(",", "")
-    if current ~= "" and count >= 7 then return end
+    if current ~= "" and count >= 7 then
+        if kind ~= "cache" then return end
+        -- A busy header list must not hide the later cache decision from the bounded trace.
+        current = current:match("^(.*),[^,]+$") or current
+    end
     ngx.var.cdn_request_rule = (current == "" and "" or current .. ",") .. kind .. ":" .. tostring(id)
 end
 

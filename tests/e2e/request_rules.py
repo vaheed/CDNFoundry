@@ -184,6 +184,10 @@ def qualify(directory: pathlib.Path) -> None:
                  response=[{"op": "set", "name": "x-cookie-match", "value": "yes"}]),
             rule(93, [condition("referer_present", "equals", True)], request=[], response=[{"op": "set", "name": "x-referer-match", "value": "yes"}]),
         ]),
+        "traces.example": host(11, [], cached=True,
+            rewrites=[rule(111, [], path="prefix", from_prefix="/", to_prefix="/echo-request/", query="keep")],
+            headers=[rule(112 + index, [], request=[], response=[{"op": "set", "name": f"x-trace-{index}", "value": "yes"}]) for index in range(8)],
+            caches=[rule(121, [condition("path", "starts_with", "/")], mode="bypass")]),
     }
     (directory / "active.json").write_text(json.dumps({"schema_version": 1, "sequence": 1, "generation_id": "e2e-request-rules-1", "certificates": {}, "hosts": hosts}, separators=(",", ":")))
     run("openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1", "-subj", "/CN=e2e-request-rules", "-keyout", str(directory / "tls.key"), "-out", str(directory / "tls.crt"))
@@ -285,6 +289,7 @@ def qualify(directory: pathlib.Path) -> None:
         _, head, _ = fetch("cache.example", "/plain")
     assert header(head, "X-CDNF-Cache") == "HIT" and "s-maxage=60," in (header(head, "Cache-Control") or ""), head
     assert header(fetch("cache.example", "/nocache/v6", address="::1")[1], "X-CDNF-Cache") == "BYPASS"
+    assert fetch("traces.example")[0] == 200
 
     # The access log names the rule that acted, and nothing for requests no rule changed.
     time.sleep(1.5)  # the stdout copy of the access log is buffered for up to a second
@@ -300,6 +305,8 @@ def qualify(directory: pathlib.Path) -> None:
     assert header_rows and header_rows[0]["request_rule"].startswith("rewrite:51,header:41,header:42,header:43"), header_rows
     cache_rows = {row["path"]: row for row in access_entries("cache.example")}
     assert cache_rows["/long/a"]["request_rule"] == "cache:62" and cache_rows["/plain"]["request_rule"] == "", cache_rows
+    trace = access_entries("traces.example")[-1]["request_rule"]
+    assert trace.startswith("rewrite:111,header:112,") and trace.endswith(",cache:121") and len(trace.split(",")) == 8, trace
     # Corrupt state cannot replace the loaded generation; the previous redirect keeps serving after a refresh tick.
     (directory / "active.json").write_text('{"schema_version":99,"hosts":{}}')
     time.sleep(2)
