@@ -402,6 +402,29 @@ func TestRuntimePreservesWAFAndCompressionForAssignedCell(t *testing.T) {
 	}
 }
 
+func TestRuntimeCarriesRequestRulesToTheAssignedCell(t *testing.T) {
+	domain := json.RawMessage(`{"schema_version":1,"domain":"example.test","domain_id":1,"revision":3,"cells":["cell-01"],"settings":{"enabled":true},"rules":{"redirects":[{"id":4,"conditions":[],"action":{"target":"prefix","from_prefix":"/old","to_prefix":"/new","status_code":301,"preserve_query":true}}]},"tls":{"mode":"disabled"},"hostnames":[{"hostname":"example.test","origin":{"host":"origin.example"}},{"hostname":"www.example.test","origin":{"host":"origin.example"}}]}`)
+	_, cells, err := compileRuntime(state{Sequence: 3, Domains: map[string]json.RawMessage{"1": domain}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"example.test", "www.example.test"} {
+		redirects := cells["cell-01"]["hosts"].(map[string]any)[name].(map[string]any)["rules"].(map[string]any)["redirects"].([]any)
+		if len(redirects) != 1 || redirects[0].(map[string]any)["action"].(map[string]any)["to_prefix"] != "/new" {
+			t.Fatalf("%s lost its request rules: %v", name, redirects)
+		}
+	}
+	// A snapshot from before request rules carries none.
+	legacy := json.RawMessage(`{"schema_version":1,"domain":"plain.test","domain_id":2,"revision":1,"cells":["cell-01"],"settings":{"enabled":true},"tls":{"mode":"disabled"},"hostnames":[{"hostname":"plain.test","origin":{"host":"origin.example"}}]}`)
+	_, cells, err = compileRuntime(state{Sequence: 4, Domains: map[string]json.RawMessage{"2": legacy}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rules := cells["cell-01"]["hosts"].(map[string]any)["plain.test"].(map[string]any)["rules"].(map[string]any); len(rules) != 0 {
+		t.Fatalf("a snapshot without rules gained rules: %v", rules)
+	}
+}
+
 func TestRuntimeTargetsOnlySelectedCellsWithinOnePool(t *testing.T) {
 	domain := json.RawMessage(`{"schema_version":1,"domain":"example.test","domain_id":7,"revision":2,"pools":["shared-default"],"cells":["cell-02"],"settings":{"enabled":true},"cache":{},"tls":{"mode":"disabled"},"hostnames":[{"hostname":"www.example.test","origin":{"host":"origin.example"}}]}`)
 	_, runtimes, err := compileRuntime(state{Sequence: 9, Domains: map[string]json.RawMessage{"7": domain}}, nil)
