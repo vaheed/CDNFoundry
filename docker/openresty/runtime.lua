@@ -1250,30 +1250,31 @@ end
 local RULE_MAX_CONDITIONS = 5
 local RULE_MAX_LIST = 100
 
+local function text_compare(operator, actual, value, fold)
+    value = tostring(value)
+    if fold then value = value:lower() end
+    if operator == "equals" or operator == "not_equals" or operator == "in_list" or operator == "not_in_list" then return actual == value end
+    if operator == "starts_with" then return actual:sub(1, #value) == value end
+    if operator == "ends_with" then return #actual >= #value and actual:sub(-#value) == value end
+    if operator == "contains" then return actual:find(value, 1, true) ~= nil end
+    return false
+end
+
 local function text_matches(operator, actual, expected, fold)
     if actual == nil then return operator == "not_equals" or operator == "not_in_list" end
     actual = tostring(actual)
     if fold then actual = actual:lower() end
-    local function compare(value)
-        value = tostring(value)
-        if fold then value = value:lower() end
-        if operator == "equals" or operator == "not_equals" or operator == "in_list" or operator == "not_in_list" then return actual == value end
-        if operator == "starts_with" then return actual:sub(1, #value) == value end
-        if operator == "ends_with" then return #actual >= #value and actual:sub(-#value) == value end
-        if operator == "contains" then return actual:find(value, 1, true) ~= nil end
-        return false
-    end
     if operator == "in_list" or operator == "not_in_list" then
         if type(expected) ~= "table" then return false end
         local listed = false
         for index, value in ipairs(expected) do
             if index > RULE_MAX_LIST then break end
-            if compare(value) then listed = true; break end
+            if text_compare(operator, actual, value, fold) then listed = true; break end
         end
         if operator == "not_in_list" then return not listed end
         return listed
     end
-    local matched = compare(expected)
+    local matched = text_compare(operator, actual, expected, fold)
     if operator == "not_equals" then return not matched end
     return matched
 end
@@ -1496,10 +1497,70 @@ local function rule_matches(rule, request)
     return true
 end
 
--- Request rules decide redirects (and, later, rewrites, headers, and cache behavior) from typed conditions in the signed
+-- Request rules decide redirects, rewrites, headers, and cache behavior from typed conditions in the signed
 -- snapshot. They run after every security stage, so no rule lets a request skip one. A malformed rule never acts.
 local REQUEST_RULES_PER_TYPE = 50
 local REDIRECT_STATUSES = {[301] = true, [302] = true, [307] = true, [308] = true}
+local request_rule_cache = setmetatable({}, {__mode = "k"})
+
+-- Cache only the last match set per bundle, keyed by every input its conditions read. Length framing prevents ambiguity;
+-- one entry per bundle bounds memory regardless of client cardinality. Actions still run on every request.
+local function matched_request_rules(rules, request)
+    if type(rules) ~= "table" then return {} end
+    local cached = request_rule_cache[rules]
+    if not cached then
+        cached = {fields = {}, headers = {}}
+        local seen = {}
+        local fields = {hostname = "host", client_ip = "client", cookie_present = "cookie_header", referer_present = "referer_host"}
+        for _, kind in ipairs({"redirects", "rewrites", "headers", "caches"}) do
+            for index, rule in ipairs(type(rules[kind]) == "table" and rules[kind] or {}) do
+                if index > REQUEST_RULES_PER_TYPE then break end
+                for _, condition in ipairs(type(rule) == "table" and type(rule.conditions) == "table" and rule.conditions or {}) do
+                    local field = type(condition) == "table" and condition.field
+                    if field == "header" then
+                        local name = tostring(condition.name or ""):lower()
+                        if not seen["header:" .. name] then cached.headers[#cached.headers + 1] = name; seen["header:" .. name] = true end
+                    elseif type(field) == "string" and not seen[field] then
+                        cached.fields[#cached.fields + 1] = fields[field] or field
+                        seen[field] = true
+                    end
+                end
+            end
+        end
+        request_rule_cache[rules] = cached
+    end
+    local parts = {}
+    for _, field in ipairs(cached.fields) do
+        local raw = request[field]
+        local value = tostring(raw)
+        parts[#parts + 1] = raw == nil and "-:" or (#value .. ":" .. value)
+    end
+    for _, name in ipairs(cached.headers) do
+        local raw = header_value(request, name)
+        local value = tostring(raw)
+        parts[#parts + 1] = raw == nil and "-:" or (#value .. ":" .. value)
+    end
+    local key = table.concat(parts)
+    if cached.key == key then return cached.matches end
+    local matches = {}
+    for _, kind in ipairs({"redirects", "rewrites", "headers", "caches"}) do
+        local list = {}
+        for index, rule in ipairs(type(rules[kind]) == "table" and rules[kind] or {}) do
+            if index > REQUEST_RULES_PER_TYPE then break end
+            local conditions = type(rule) == "table" and rule.conditions
+            local matched = type(conditions) == "table" and #conditions <= RULE_MAX_CONDITIONS
+            if matched then
+                for _, condition in ipairs(conditions) do
+                    if type(condition) ~= "table" or not condition_matches(condition, request) then matched = false; break end
+                end
+            end
+            if matched then list[#list + 1] = rule end
+        end
+        if #list > 0 then matches[kind] = list end
+    end
+    cached.key, cached.matches = key, matches
+    return matches
+end
 
 local function request_rule_matches(rule, request, allow_empty)
     local conditions = rule.conditions
@@ -1635,7 +1696,7 @@ local function apply_header_changes(changes, apply, budget)
         if type(change) == "table" and header_change_allowed(change.name) then
             if change.op == "remove" then
                 apply(change.name, nil); budget = budget - 1
-            elseif change.op == "set" and type(change.value) == "string" and #change.value <= 1024 and not change.value:find("[\r\n%z]") then
+            elseif change.op == "set" and type(change.value) == "string" and #change.value <= 1024 and not change.value:find("%c") then
                 apply(change.name, change.value); budget = budget - 1
             end
         end
@@ -1660,19 +1721,23 @@ local function request_header_rules(rules, request)
         end
     end
     -- ngx.exec may replace ngx.ctx; a request variable carries the rules to the response phase.
-    ngx.var.cdn_header_rules = table.concat(responding, ",")
+    ngx.var.cdn_header_rules = tostring(budget) .. ":" .. table.concat(responding, ",")
 end
 
 function M.response_header_rules()
     local ids = ngx.var.cdn_header_rules
     if not ids or ids == "" then return end
+    local remaining, selected = ids:match("^(%d+):(.*)$")
+    if not remaining then return end
+    ids = selected
+    if ids == "" then return end
     local host = (ngx.var.host or ""):lower():gsub("%.$", "")
     local config = state.hosts[host]
     local list = config and type(config.rules) == "table" and config.rules.headers
     if type(list) ~= "table" then return end
     local wanted = {}
     for id in ids:gmatch("[^,]+") do wanted[id] = true end
-    local budget = HEADER_CHANGES_PER_REQUEST
+    local budget = tonumber(remaining)
     for index, rule in ipairs(list) do
         if index > REQUEST_RULES_PER_TYPE or budget <= 0 then break end
         if type(rule) == "table" and wanted[tostring(rule.id)] and type(rule.action) == "table" then
@@ -2186,21 +2251,22 @@ function M.access()
     if config.settings and type(config.settings.maintenance) == "table" then
         ngx.status = 503; ngx.header["Content-Type"] = "text/plain"; ngx.say(config.settings.maintenance.body or "Service unavailable"); return ngx.exit(503)
     end
-    local redirect_rule, location, redirect_status = request_redirect(config.rules, request, host)
+    local request_rules = matched_request_rules(config.rules, request)
+    local redirect_rule, location, redirect_status = request_redirect(request_rules, request, host)
     if redirect_rule then
         note_request_rule("redirect", redirect_rule.id)
         return ngx.redirect(location, redirect_status)
     end
-    local rewrite_rule, rewrite_path, rewrite_query = request_rewrite(config.rules, request)
+    local rewrite_rule, rewrite_path, rewrite_query = request_rewrite(request_rules, request)
     if rewrite_rule then
         ngx.req.set_uri(rewrite_path, false)
         if rewrite_query ~= false then ngx.req.set_uri_args(rewrite_query) end
         note_request_rule("rewrite", rewrite_rule.id)
     end
-    request_header_rules(config.rules, request)
+    request_header_rules(request_rules, request)
     local cache = config.cache or {}
     prepare_compression(config, emergency)
-    local cache_rule = matching_cache_rule(config.rules, request)
+    local cache_rule = matching_cache_rule(request_rules, request)
     if cache_rule then note_request_rule("cache", cache_rule.id) end
     local cache_key, cache_ttl, cache_resource, key_reason = request_cache_key(config.domain, host, cache, cache_rule)
     if key_reason == "too_many_query_arguments" then ngx.var.cdn_security_reason = "cache_abuse_detected" end

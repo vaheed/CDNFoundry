@@ -64,6 +64,7 @@ dev-e2e: dev-waf-image
 	python3 tests/e2e/edge_control_mtls.py
 	python3 tests/e2e/managed_tls.py
 	python3 tests/e2e/edge_security.py
+	python3 tests/e2e/request_rules.py
 	python3 tests/e2e/telemetry_analytics.py
 	python3 tests/e2e/backup_restore.py
 	python3 tests/e2e/managed_waf.py

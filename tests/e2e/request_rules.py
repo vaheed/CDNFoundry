@@ -3,6 +3,7 @@
 from the snapshot, over IPv4 and IPv6."""
 
 import json
+import argparse
 import os
 import pathlib
 import re
@@ -13,6 +14,7 @@ import edge_security as base
 import openresty_runtime as runtime
 
 NAME = "cdnf-e2e-request-rules-e2e"
+IMAGE = "cdnfoundry/edge-runtime:e2e"
 CURL = "curlimages/curl:8.16.0"
 run = base.run
 
@@ -123,6 +125,20 @@ def qualify(directory: pathlib.Path) -> None:
             rule(62, [condition("path", "starts_with", "/long")], mode="override", edge_ttl_seconds=600, browser_ttl_seconds=30),
             rule(63, [condition("path", "starts_with", "/long")], mode="bypass"),
         ]),
+        "challenge.example": host(7, [redirect(71, [condition("path", "equals", "/protected")], target="url", url="/moved")],
+            security_rules=[{"id": 7, "conditions": [condition("path", "equals", "/protected")], "action": "challenge", "priority": 1}],
+            rewrites=[rule(72, [condition("path", "equals", "/protected")], path="set", path_value="/echo-request/bypassed", query="keep")]),
+        "budget.example": host(8, [], headers=[
+            rule(80 + index, [], request=[{"op": "set", "name": f"x-budget-{index}-{n}", "value": "1"} for n in range(5)],
+                 response=[{"op": "set", "name": f"x-budget-{index}-{n}", "value": "1"} for n in range(5)]) for index in range(6)
+        ]),
+        "vary.example": host(9, [], headers=[
+            rule(91, [{"field": "header", "name": "x-selector", "operator": "equals", "value": "nil"}], request=[],
+                 response=[{"op": "set", "name": "x-header-match", "value": "yes"}]),
+            rule(92, [{"field": "cookie_present", "name": "session", "operator": "equals", "value": True}], request=[],
+                 response=[{"op": "set", "name": "x-cookie-match", "value": "yes"}]),
+            rule(93, [condition("referer_present", "equals", True)], request=[], response=[{"op": "set", "name": "x-referer-match", "value": "yes"}]),
+        ]),
     }
     (directory / "active.json").write_text(json.dumps({"schema_version": 1, "sequence": 1, "generation_id": "e2e-request-rules-1", "certificates": {}, "hosts": hosts}, separators=(",", ":")))
     run("openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1", "-subj", "/CN=e2e-request-rules", "-keyout", str(directory / "tls.key"), "-out", str(directory / "tls.crt"))
@@ -137,7 +153,7 @@ def qualify(directory: pathlib.Path) -> None:
         "-e", "EDGE_ACCESS_LOG_STDOUT=true",
         "-v", f"{directory}:/var/lib/cdnfoundry/runtime:ro",
         "-v", f"{directory / 'tls.crt'}:/run/edge/tls.crt:ro", "-v", f"{directory / 'tls.key'}:/run/edge/tls.key:ro",
-        "cdnfoundry/edge-runtime:e2e")
+        IMAGE)
     for _ in range(60):  # the cell loads its state a few seconds after it starts
         if run("docker", "run", "--rm", "--network", f"container:{NAME}", CURL, "-s", "-o", "/dev/null", "-w", "%{http_code}",
                "-H", "Host: plain.example", "http://127.0.0.1:8080/", check=False).stdout == "200":
@@ -161,6 +177,8 @@ def qualify(directory: pathlib.Path) -> None:
     # Security runs first: a blocked request is never redirected.
     code, head = get("redirect.example", "/admin")
     assert code == 403 and not re.search(r"^location:", head, re.I | re.M), head
+    code, head, body = fetch("challenge.example", "/protected", "Accept: text/html")
+    assert code == 403 and header(head, "Location") is None and "uri=/echo-request/bypassed" not in body, (code, head, body)
     # IPv6: the client address condition matches an IPv6 network, and the cell answers on its IPv6 listener.
     expect_redirect(get("redirect.example", "/v6", "X-Forwarded-For: 2001:db8:7::9"), 307, "/v6-landing")
     assert get("redirect.example", "/v6", "X-Forwarded-For: 2001:db8:8::9")[0] == 200
@@ -182,6 +200,14 @@ def qualify(directory: pathlib.Path) -> None:
         code, head, body = fetch("rewrite.example", "/api/item")
     assert header(head, "X-CDNF-Cache") == "HIT" and "uri=/echo-request/item" in body, head
     assert header(fetch("rewrite.example", "/alias/item")[1], "X-CDNF-Cache") != "HIT"
+    payload = {"task_id": "rewrite-url-purge", "action": "cache_purge", "type": "urls", "domain": "rewrite.example", "cache_epoch": 1,
+               "purge_id": 1, "cache_keys": ["http|rewrite.example|/api/item"]}
+    result = run("docker", "exec", NAME, "wget", "-q", "-O-", "--header=X-Edge-Status-Token: runtime-test-token",
+                 "--header=Content-Type: application/json", f"--post-data={json.dumps(payload)}", "http://127.0.0.1:9080/control")
+    assert json.loads(result.stdout)["data"]["applied_keys"] == 1, result.stdout
+    assert header(fetch("rewrite.example", "/api/item")[1], "X-CDNF-Cache") == "MISS"
+    assert header(fetch("rewrite.example", "/alias/item")[1], "X-CDNF-Cache") == "HIT"
+    assert "uri=/echo-request/six?x=6" in fetch("rewrite.example", "/api/six?x=6", address="::1")[2]
 
     # Header rules: request headers reach the origin changed, response headers reach the visitor changed, on a hit too.
     for attempt in range(2):
@@ -194,6 +220,14 @@ def qualify(directory: pathlib.Path) -> None:
     assert header(fetch("headers.example", "/page")[1], "Access-Control-Allow-Origin") is None
     # The protected Host header was not changed: the origin answered for the configured origin host.
     assert "set=yes" in fetch("headers.example", "/plain", address="::1")[2]
+    # Thirty request operations leave room for only twenty response operations in the shared budget of fifty.
+    _, budget_head, _ = fetch("budget.example")
+    assert len(re.findall(r"^x-budget-", budget_head, re.I | re.M)) == 20, budget_head
+    for _ in range(2):
+        _, plain_head, _ = fetch("vary.example")
+        assert header(plain_head, "X-Header-Match") is None and header(plain_head, "X-Cookie-Match") is None and header(plain_head, "X-Referer-Match") is None
+        _, selected_head, _ = fetch("vary.example", "/", "X-Selector: nil", "Cookie: session=present", "Referer: https://site.example/")
+        assert header(selected_head, "X-Header-Match") == "yes" and header(selected_head, "X-Cookie-Match") == "yes" and header(selected_head, "X-Referer-Match") == "yes"
 
     # Cache rules: a bypass is never stored; an override sets the edge and browser lifetimes; the first match wins.
     for _ in range(2):
@@ -205,6 +239,7 @@ def qualify(directory: pathlib.Path) -> None:
     for _ in range(2):
         _, head, _ = fetch("cache.example", "/plain")
     assert header(head, "X-CDNF-Cache") == "HIT" and "s-maxage=60," in (header(head, "Cache-Control") or ""), head
+    assert header(fetch("cache.example", "/nocache/v6", address="::1")[1], "X-CDNF-Cache") == "BYPASS"
 
     # The access log names the rule that acted, and nothing for requests no rule changed.
     time.sleep(1.5)  # the stdout copy of the access log is buffered for up to a second
@@ -220,11 +255,22 @@ def qualify(directory: pathlib.Path) -> None:
     assert header_rows and header_rows[0]["request_rule"].startswith("rewrite:51,header:41,header:42,header:43"), header_rows
     cache_rows = {row["path"]: row for row in access_entries("cache.example")}
     assert cache_rows["/long/a"]["request_rule"] == "cache:62" and cache_rows["/plain"]["request_rule"] == "", cache_rows
+    # Corrupt state cannot replace the loaded generation; the previous redirect keeps serving after a refresh tick.
+    (directory / "active.json").write_text('{"schema_version":99,"hosts":{}}')
+    time.sleep(2)
+    expect_redirect(get("redirect.example", "/old/still-valid"), 301, "/new/still-valid")
 
 
 def main() -> None:
+    global IMAGE
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--image", help="qualify this already-built runtime image")
+    args = parser.parse_args()
     run("docker", "compose", "-f", "compose.dev.yml", "up", "-d", "--force-recreate", "origin-http")
-    run("docker", "build", "-f", "docker/openresty/Dockerfile", "-t", "cdnfoundry/edge-runtime:e2e", ".")
+    if args.image:
+        IMAGE = args.image
+    else:
+        run("docker", "build", "-f", "docker/openresty/Dockerfile", "-t", IMAGE, ".")
     with tempfile.TemporaryDirectory(prefix="cdnf-request-rules-") as directory:
         os.chmod(directory, 0o755)
         try:

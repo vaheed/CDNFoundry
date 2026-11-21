@@ -269,6 +269,8 @@ jobs:
           cat /tmp/cdnfoundry-vector-startup.log
       - name: Qualify origin destination safety and IPv6 HTTP/TLS
         run: python3 tests/e2e/origin_destinations.py --image ghcr.io/vaheed/cdnfoundry-edge-runtime:ci
+      - name: Qualify request rules, security ordering, rewritten URL purge, and IPv6
+        run: python3 tests/e2e/request_rules.py --image ghcr.io/vaheed/cdnfoundry-edge-runtime:ci
       - name: Qualify edge serving without Vector DNS
         run: python3 tests/e2e/edge_telemetry_startup.py --image ghcr.io/vaheed/cdnfoundry-edge-runtime:ci
       - name: Qualify compiled DNS services and telemetry outage serving
