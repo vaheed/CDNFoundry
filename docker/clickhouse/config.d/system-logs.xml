@@ -9,10 +9,23 @@
   <metric_log remove="1"/>
   <part_log remove="1"/>
   <query_views_log remove="1"/>
+  <!-- Added by newer ClickHouse releases and on by default: one row per background task, with no expiry. -->
+  <background_schedule_pool_log remove="1"/>
   <query_log>
     <database>system</database>
     <table>query_log</table>
     <ttl>event_date + INTERVAL 3 DAY DELETE</ttl>
     <flush_interval_milliseconds>15000</flush_interval_milliseconds>
   </query_log>
+  <!-- On by default with no expiry. Kept for diagnosis, but only for as long as the query log. -->
+  <error_log>
+    <database>system</database>
+    <table>error_log</table>
+    <ttl>event_date + INTERVAL 3 DAY DELETE</ttl>
+  </error_log>
+  <query_metric_log>
+    <database>system</database>
+    <table>query_metric_log</table>
+    <ttl>event_date + INTERVAL 3 DAY DELETE</ttl>
+  </query_metric_log>
 </clickhouse>
