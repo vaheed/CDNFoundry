@@ -220,7 +220,7 @@ const reference = [
       { text: 'Platform settings', link: '/reference/platform-settings' },
       { text: 'Services and ports', link: '/reference/services-and-ports' },
       { text: 'DNS records', link: '/reference/dns-records' },
-      { text: 'Custom rules', link: '/reference/security-rules' },
+      { text: 'Firewall rules', link: '/reference/security-rules' },
       { text: 'Request rules', link: '/reference/request-rules' },
       { text: 'Managed WAF', link: '/reference/waf' },
       { text: 'Limits', link: '/reference/limits' },

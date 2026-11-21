@@ -11,7 +11,7 @@ cell image and shown in the WAF sheet and in `GET /api/domains/{domain}/waf`. Ce
 
 How a request is judged: each CRS rule that matches adds anomaly points (2 for a notice, 3 for a warning, 4 for an error,
 5 for a critical match). When the total reaches the **anomaly threshold**, a blocking level refuses the request with 403. The
-same total becomes the [attack score](security-rules.md#detection-fields) that custom rules can use.
+same total becomes the [attack score](security-rules.md#detection-fields) that firewall rules can use.
 
 ## Protection level
 
@@ -24,7 +24,7 @@ same total becomes the [attack score](security-rules.md#detection-fields) that c
 
 When to use each:
 
-- **Off**: static sites behind the cache with no forms or API. Custom rules and rate limits still run.
+- **Off**: static sites behind the cache with no forms or API. Firewall rules and rate limits still run.
 - **Observe**: always the first step for a new domain. Read the security events for a few days.
 - **Recommended**: the normal level once Observe showed no false positives on real traffic.
 - **High sensitivity**: login, payment, or admin hosts after the application was tested at this level.
@@ -105,7 +105,7 @@ The second raises the strictness of the checks and asks for more evidence before
 {"tuning": {"disabled_categories": ["php", "java"]}}
 ```
 
-Prefer the narrowest fix: a category turned off stops protecting every path. A custom rule with `skip_managed` on one path,
+Prefer the narrowest fix: a category turned off stops protecting every path. A firewall rule with `skip_managed` on one path,
 or one rule turned off, keeps the rest.
 
 ## Single rules
@@ -159,16 +159,16 @@ that posts `application/x-ndjson`.
 The `tuning` object replaces the saved one as a whole. Leave it out to keep what is saved; send `"tuning": null` to clear
 every adjustment. Tuning never turns an Off domain on.
 
-## Choosing between the WAF and a custom rule
+## Choosing between the WAF and a firewall rule
 
 | You want to | Use |
 | --- | --- |
-| Stop a false positive on one path | A custom rule with `skip_managed` on that path |
+| Stop a false positive on one path | A firewall rule with `skip_managed` on that path |
 | Stop one rule everywhere | `disabled_rules` |
 | Keep a rule visible but harmless | `log_only_rules` |
-| Block only near-certain attacks while staying in Observe | Observe plus a custom rule `attack_score < 20` with `block` |
-| Block one kind of attack harder | A custom rule on `attack_score_sqli` or `attack_score_xss` |
-| Trust a scanner or a partner network | A custom rule with `allow` on its address; it does not skip the WAF, so add `skip_managed` too |
+| Block only near-certain attacks while staying in Observe | Observe plus a firewall rule `attack_score < 20` with `block` |
+| Block one kind of attack harder | A firewall rule on `attack_score_sqli` or `attack_score_xss` |
+| Trust a scanner or a partner network | A firewall rule with `allow` on its address; it does not skip the WAF, so add `skip_managed` too |
 
 ## What is never shown
 

@@ -322,9 +322,9 @@ Refreshes every 30s.
 | Top attacked domains | Hostnames with the most blocked requests. |
 | Blocks over time | Blocked requests per second. |
 | Attack score bands | Requests scored as an attack per interval, by band, over the last 7 days at most. Band 1 is a weak signal (score under 20), band 5 a near-certain attack (80 and over). Requests scored zero are not drawn. |
-| Blocks and logs by reason | Why the edge acted on a request: rate limits, custom rules, the WAF, and cache abuse protection. |
+| Blocks and logs by reason | Why the edge acted on a request: rate limits, firewall rules, the WAF, and cache abuse protection. |
 | Client-side reports | Browser reports of blocked scripts and connections that reached the edge, per hour. |
-| Custom rules that matched | Domain rules that matched most, by rule name, over the last 7 days. |
+| Firewall rules that matched | Domain rules that matched most, by rule name, over the last 7 days. |
 | Firing alerts | Every firing alert with its team, severity, and start time. Open the dashboard column to see the cause at the time it started. |
 
 ### Telemetry integrity
