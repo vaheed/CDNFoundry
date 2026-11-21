@@ -22,7 +22,7 @@ class EdgeRevision extends Model
     /** Sections of the snapshot a person can recognise, in the order they are listed. */
     private const SECTIONS = [
         'hostnames' => 'hostnames and origins', 'settings' => 'proxy settings', 'cache' => 'cache', 'compression' => 'compression',
-        'security' => 'security', 'waf' => 'WAF', 'tls' => 'TLS', 'pools' => 'pool placement',
+        'security' => 'security', 'waf' => 'WAF', 'rules' => 'request rules', 'tls' => 'TLS', 'pools' => 'pool placement',
     ];
 
     /** One line naming which parts of the configuration differ from the previous revision. */
