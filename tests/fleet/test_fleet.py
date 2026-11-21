@@ -414,6 +414,22 @@ def test_file_permissions_and_no_checksum_manifests(store: FleetState, source_re
     assert not (bundle / "SHA256SUMS").exists()
 
 
+def test_backup_permissions_and_dns_preparation_are_in_the_release(store: FleetState, source_repo: Path, tmp_path: Path) -> None:
+    add(store, node('control-1', 'control', '192.0.2.91'))
+    add(store, node('dns-1', 'dns', '192.0.2.92'))
+    store.configure_feature(store.load(), 'backups', {'mode':'control','repository':'s3:https://objects.example.test/backups'})
+    store.write_secret('backup-password', 'disposable-fixture-password')
+    output = tmp_path / 'bundles'
+    Renderer(source_repo, store, output).render(store.load())
+    control_start = (output / 'control-1/start.sh').read_text()
+    assert 'chown 0:82 secrets/restic-password' in control_start
+    assert 'chmod 0640 secrets/restic-password' in control_start
+    assert './prepare-dns.sh' not in control_start
+    dns_start = (output / 'dns-1/start.sh').read_text()
+    assert dns_start.index('./validate.sh') < dns_start.index('./prepare-dns.sh') < dns_start.index('./firewall.sh')
+    assert (output / 'dns-1/prepare-dns.sh').is_file()
+
+
 def test_monitoring_files_are_readable_by_non_root_consumers(
     store: FleetState, source_repo: Path, tmp_path: Path
 ) -> None:

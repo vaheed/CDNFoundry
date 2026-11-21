@@ -847,7 +847,7 @@ class StandbySetup:
         save_target(e.work, target)
         e.transport.pin_host_key(target)
         e.say(f"{name}: installing prerequisites")
-        self._run(target, actions.PREREQUISITES)
+        e.transport.run(target, 'sh -s', stdin=actions.PREREQUISITES, check=True, timeout=actions.LONG_STEP_SECONDS)
         e.say("reading the private replication addresses and the control certificate from the nodes")
         standby_address = replication_address or self.private_address(target)
         active_address = active_replication_address or self.private_address(targets[active_name])

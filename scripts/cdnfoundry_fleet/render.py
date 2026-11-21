@@ -4,6 +4,7 @@ import copy
 import json
 import os
 import shutil
+import shlex
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -123,6 +124,7 @@ class Renderer:
             atomic_write(tmp / "validate.sh", self._validate_script(node, filtered), 0o700)
             atomic_write(tmp / "firewall.sh", render_firewall_script(state, node), 0o700)
             atomic_write(tmp / "start.sh", self._start_script(state, node), 0o700)
+            atomic_write(tmp / 'prepare-dns.sh', Path(__file__).with_name('host-dns.sh').read_text(), 0o700)
             atomic_write(tmp / "stop.sh", self._stop_script(), 0o700)
             previous = destination.with_name(destination.name + ".previous")
             if previous.exists():
@@ -1180,6 +1182,11 @@ chmod 0640 secrets/valkey.conf
 chown 0:82 secrets/edge-proxy-secret.conf
 chmod 0640 secrets/edge-proxy-secret.conf
 """
+            if state['features']['backups']['mode'] != 'disabled':
+                key_permissions += """chown 0:82 secrets/restic-password
+chmod 0640 secrets/restic-password
+"""
+        dns_preparation = shlex.join(['./prepare-dns.sh', node['role'], node.get('bind_ipv4') or '0.0.0.0', node.get('bind_ipv6') or '']) if node['role'] in {'dns', 'dns-edge'} else ''
         return f"""#!/usr/bin/env sh
 set -eu
 {key_permissions}
@@ -1193,6 +1200,7 @@ for runtime_path in docker generated; do
     fi
 done
 ./validate.sh
+{dns_preparation}
 ./firewall.sh
 {enrollment_validation}{migration}
 {activation}
