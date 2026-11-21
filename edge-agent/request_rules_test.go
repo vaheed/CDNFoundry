@@ -28,8 +28,15 @@ func TestRequestRuleValidationPreservesPublishedGeneration(t *testing.T) {
 		t.Run(fixture, func(t *testing.T) {
 			domain := json.RawMessage(`{"schema_version":1,"domain":"example.test","domain_id":1,"revision":2,"rules":` + fixture + `,"hostnames":[]}`)
 			_, err := publishGeneration(root, 2, func(dir, id string) error {
-				_, _, err := compileRuntime(state{Sequence: 2, Domains: map[string]json.RawMessage{"1": domain}}, nil)
-				return err
+				active, _, err := compileRuntime(state{Sequence: 2, Domains: map[string]json.RawMessage{"1": domain}}, nil)
+				if err != nil {
+					return err
+				}
+				body, err := json.Marshal(active)
+				if err != nil {
+					return err
+				}
+				return os.WriteFile(filepath.Join(dir, "state.json"), body, 0600)
 			})
 			if err == nil {
 				t.Fatal("invalid rules were published")
