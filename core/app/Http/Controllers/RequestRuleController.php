@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Resources\RequestRuleResource;
 use App\Models\Domain;
 use App\Models\Operation;
 use App\Models\RequestRule;
@@ -13,7 +14,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 
-/** A domain's request rules: redirects decided in the cell from the signed snapshot, never by the control plane. */
+/** A domain's typed request rules, compiled asynchronously into signed edge snapshots. */
 class RequestRuleController extends Controller
 {
     public function index(Request $request, Domain $domain): JsonResponse
@@ -21,8 +22,8 @@ class RequestRuleController extends Controller
         Gate::authorize('view', $domain);
         $data = $request->validate(['type' => ['sometimes', Rule::in(RequestRuleData::TYPES)]]);
 
-        return response()->json(['data' => $domain->requestRules()->when($data['type'] ?? null, fn ($query, string $type) => $query->where('type', $type))
-            ->orderBy('type')->orderBy('priority')->orderBy('id')->cursorPaginate(100)]);
+        return RequestRuleResource::collection($domain->requestRules()->when($data['type'] ?? null, fn ($query, string $type) => $query->where('type', $type))
+            ->orderBy('type')->orderBy('priority')->orderBy('id')->cursorPaginate(100))->response();
     }
 
     public function store(Request $request, Domain $domain): JsonResponse
@@ -30,7 +31,7 @@ class RequestRuleController extends Controller
         Gate::authorize('update', $domain);
         [$rule, $operation] = DomainRequestRules::create($domain, $request->all(), $request->user(), $request->ip());
 
-        return response()->json(['data' => [...$rule->toArray(), 'operation_id' => $operation->id, 'status' => $operation->status]], 201);
+        return response()->json(['data' => [...(new RequestRuleResource($rule))->resolve($request), 'operation_id' => $operation->id, 'status' => $operation->status]], 202);
     }
 
     public function update(Request $request, Domain $domain, RequestRule $rule): JsonResponse

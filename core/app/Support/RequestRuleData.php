@@ -114,6 +114,7 @@ final class RequestRuleData
             'rewrite' => self::rewrite($data['action']),
             'header' => self::header($data['action']),
             'cache' => self::cache($data['action']),
+            default => throw ValidationException::withMessages(['type' => 'Choose a supported rule type.']),
         };
         // A prefix matches on its own prefix and a header rule may apply to every request; every other rule needs a condition.
         $matchesOnItsOwn = ($data['type'] === 'redirect' && $action['target'] === 'prefix') || ($data['type'] === 'rewrite' && $action['path'] === 'prefix')

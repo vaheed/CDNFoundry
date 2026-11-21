@@ -21,7 +21,8 @@ final class DomainRequestRules
     public static function create(Domain $domain, array $input, ?User $actor, ?string $ipAddress): array
     {
         $data = RequestRuleData::validate($input);
-        $rule = DB::transaction(function () use ($data, $domain, $actor, $ipAddress): RequestRule {
+
+        return DB::transaction(function () use ($data, $domain, $actor, $ipAddress): array {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
             abort_if($locked->requestRules()->where('type', $data['type'])->count() >= RequestRuleData::maximumRulesPerType(), 409,
                 'The domain already has '.RequestRuleData::maximumRulesPerType().' rules of this type.');
@@ -29,42 +30,41 @@ final class DomainRequestRules
             $rule = $locked->requestRules()->create($data);
             self::changed($locked, $actor, 'request_rule.created', $rule, $ipAddress);
 
-            return $rule;
+            return [$rule, self::queue($locked, $actor)];
         });
-
-        return [$rule, self::queue($domain, $actor)];
     }
 
     public static function update(Domain $domain, RequestRule $rule, array $input, ?User $actor, ?string $ipAddress): Operation
     {
         $data = RequestRuleData::validate([...$input, 'type' => $rule->type]);
-        DB::transaction(function () use ($data, $domain, $rule, $actor, $ipAddress): void {
+
+        return DB::transaction(function () use ($data, $domain, $rule, $actor, $ipAddress): Operation {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
             self::refuseDuplicate($locked, $data, $rule);
             // A preset rule edited by hand is an ordinary rule from then on, so the preset never describes a rule it did not write.
             $rule->update([...$data, 'preset' => null]);
             self::changed($locked, $actor, 'request_rule.updated', $rule, $ipAddress);
-        });
 
-        return self::queue($domain, $actor);
+            return self::queue($locked, $actor);
+        });
     }
 
     public static function delete(Domain $domain, RequestRule $rule, ?User $actor, ?string $ipAddress): Operation
     {
-        DB::transaction(function () use ($domain, $rule, $actor, $ipAddress): void {
+        return DB::transaction(function () use ($domain, $rule, $actor, $ipAddress): Operation {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
             $id = $rule->id;
             $rule->delete();
             self::changed($locked, $actor, 'request_rule.deleted', $locked, $ipAddress, ['rule_id' => $id]);
-        });
 
-        return self::queue($domain, $actor);
+            return self::queue($locked, $actor);
+        });
     }
 
     /** Sets the evaluation order of one type: the listed ids, first to last, must be exactly the domain's rules of that type. */
     public static function reorder(Domain $domain, string $type, array $order, ?User $actor, ?string $ipAddress): Operation
     {
-        DB::transaction(function () use ($domain, $type, $order, $actor, $ipAddress): void {
+        return DB::transaction(function () use ($domain, $type, $order, $actor, $ipAddress): Operation {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
             $existing = $locked->requestRules()->where('type', $type)->pluck('id')->all();
             if (count($order) !== count($existing) || array_diff($existing, $order) !== [] || array_diff($order, $existing) !== []) {
@@ -74,9 +74,9 @@ final class DomainRequestRules
                 $locked->requestRules()->whereKey($id)->update(['priority' => ($index + 1) * 10]);
             }
             self::changed($locked, $actor, 'request_rule.reordered', $locked, $ipAddress, ['type' => $type, 'count' => count($order)]);
-        });
 
-        return self::queue($domain, $actor);
+            return self::queue($locked, $actor);
+        });
     }
 
     /** Moves one rule a place up (-1) or down (1) within its type. */
@@ -95,7 +95,7 @@ final class DomainRequestRules
     /** Replaces a preset's rules in one revision. Null removes the preset. */
     public static function replacePreset(Domain $domain, string $preset, ?array $rules, ?User $actor, ?string $ipAddress): Operation
     {
-        DB::transaction(function () use ($domain, $preset, $rules, $actor, $ipAddress): void {
+        return DB::transaction(function () use ($domain, $preset, $rules, $actor, $ipAddress): Operation {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
             $locked->requestRules()->where('preset', $preset)->delete();
             $now = now();
@@ -110,9 +110,9 @@ final class DomainRequestRules
                 $locked->requestRules()->insert($rows);
             }
             self::changed($locked, $actor, $rules === null ? 'request_rule.preset_removed' : 'request_rule.preset_saved', $locked, $ipAddress, ['preset' => $preset, 'rules' => count($rows)]);
-        });
 
-        return self::queue($domain, $actor);
+            return self::queue($locked, $actor);
+        });
     }
 
     public static function queue(Domain $domain, ?User $actor): Operation

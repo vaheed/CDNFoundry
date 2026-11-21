@@ -278,7 +278,10 @@ final class RequestRulePresets
         $data = Validator::make($input, [$key => ['required', 'array', 'min:1', 'max:'.self::MAXIMUM_ITEMS], "$key.*" => ['required', 'string', 'max:128']])->validate();
         $rules = [];
         foreach (array_values(array_unique(array_map('trim', $data[$key]))) as $index => $value) {
-            $rules[] = self::rethrow("$key.$index", fn () => RequestRuleData::validate(['type' => 'cache', 'name' => mb_substr($name.$value, 0, 100), 'priority' => self::PRIORITY + $index,
+            if ($key === 'paths' && ! str_starts_with($value, '/')) {
+                throw ValidationException::withMessages([$key => "$value does not start with /. A path prefix looks like /admin."]);
+            }
+            $rules[] = self::rethrow($key, fn () => RequestRuleData::validate(['type' => 'cache', 'name' => mb_substr($name.$value, 0, 100), 'priority' => self::PRIORITY + $index,
                 'conditions' => [$condition($value)], 'action' => ['mode' => 'bypass']]));
         }
 

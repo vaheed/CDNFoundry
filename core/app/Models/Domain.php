@@ -340,6 +340,7 @@ class Domain extends Model
         return $this->hasMany(SecurityRule::class);
     }
 
+    /** @return HasMany<RequestRule, $this> */
     public function requestRules(): HasMany
     {
         return $this->hasMany(RequestRule::class);
