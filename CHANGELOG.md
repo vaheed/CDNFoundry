@@ -7,6 +7,18 @@ single source of truth; `make version-check` enforces it.
 
 ## [Unreleased]
 
+### Changed
+
+- An edge cell no longer runs ModSecurity inline on requests whose WAF mode is off: domains with the WAF off, requests the scoring step already decided, and requests a `skip_managed` rule exempts. ModSecurity switched its own engine off in phase 1 for them, but libmodsecurity applies that switch only from the next phase, so every remaining phase-1 CRS rule still ran. A cached request with the WAF off now costs about a quarter of the CPU it did. Requests whose score could not be computed are still inspected inline, unchanged.
+- An edge cell parses the inline CRS rule set once instead of once per cache location. A cell starts in about 2.6 seconds instead of 7.4, and an idle cell uses about 105 MiB instead of 211 MiB.
+- The WAF scoring step skips the CRS response rules: it answers with its own redirect, so no client response ever passed through them. The logging phase still runs, so a detection keeps its sanitized audit summary.
+- The edge runtime uses jemalloc instead of musl's allocator. ModSecurity's string handling made allocation about a third of a WAF request's CPU; a WAF request now costs about 30 % less CPU and a cell about 30 MiB less memory.
+- The edge access log goes to Vector only. The copy on the container log cost dockerd about half a core at 4,600 requests per second on one cell, and the operational log collector parsed every line only to drop it. `EDGE_ACCESS_LOG_STDOUT=true` restores the copy; a cell that cannot resolve Vector at startup still falls back to it.
+- ClickHouse no longer keeps `system.background_schedule_pool_log`, and `system.error_log` and `system.query_metric_log` expire after three days like the query log.
+- A production control-plane container builds Laravel's configuration, route and event caches and Filament's component and icon caches when it starts. Every FPM request had started the framework from scratch and scanned the icon sets: a trivial request took about 90 ms of CPU and now takes about 30. A container that cannot build them says so and serves without them.
+- The sizing calculator checks whether one cell can carry the busiest domain (`--busiest-domain-rps`, `--cell-cpus`) and uses about 3,000 DNS queries per second per vCPU instead of 8,000: the earlier figure counted DNSdist's empty truncated replies as answers. See the [performance audit](docs/operations/performance-audit-2026-11-21.md).
+- The production ClickHouse health check runs the same authenticated `SELECT 1` over the local HTTP interface instead of starting `clickhouse-client` every 10 seconds.
+
 ## [2.1.3] - 2026-11-15
 
 Closes edge security gaps: managed-WAF body scoring, per-domain rate-limit budgets, IPv6 prefix counting, and distributed-evidence escalation. See the [release notes](docs/operations/releases/v2.1.3.md).
