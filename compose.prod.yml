@@ -575,7 +575,9 @@ services:
     networks: [telemetry]
     restart: unless-stopped
     healthcheck:
-      test: [CMD-SHELL, 'clickhouse-client --user cdnf --password "$${CLICKHOUSE_PASSWORD}" --query "SELECT 1" >/dev/null']
+      # The same authenticated SELECT 1 over the local HTTP interface. Starting clickhouse-client for it cost about 0.3 s of CPU
+      # every 10 s.
+      test: [CMD-SHELL, 'wget -qO- --header "X-ClickHouse-User: cdnf" --header "X-ClickHouse-Key: $${CLICKHOUSE_PASSWORD}" "http://127.0.0.1:8123/?query=SELECT%201" | grep -qx 1']
       interval: 10s
       timeout: 5s
       retries: 12
