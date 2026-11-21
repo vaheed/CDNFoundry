@@ -180,6 +180,7 @@ const operate = [
       { text: 'Software supply chain', link: '/operations/software-supply-chain' },
       { text: 'Production qualification', link: '/operations/production-qualification' },
       { text: 'Staging qualification 2026-11-15', link: '/operations/staging-qualification-2026-11-15' },
+      { text: 'Performance audit 2026-11-21', link: '/operations/performance-audit-2026-11-21' },
       { text: 'Hardware requirements', link: '/operations/hardware-requirements' },
       { text: 'Release notes v2.1.3', link: '/operations/releases/v2.1.3' },
       { text: 'Release notes v2.1.2', link: '/operations/releases/v2.1.2' },
