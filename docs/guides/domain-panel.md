@@ -39,6 +39,7 @@ Open a domain to see its page. It has an **Overview** and tabs for the work:
 | **Overview** | Cards for Delegation, DNS, Delivery, TLS, Cache, and Security | This page |
 | **DNS records** | Your records, with proxy, origin, health-check, backup-origin, and Geo-DNS settings | [DNS](dns.md), [Proxy and origins](proxy-and-origins.md), [Geo-DNS](geo-dns.md) |
 | **Custom rules** | Typed rules: up to five conditions and one action, with rate limits and presets | [Security](security.md#custom-rules) |
+| **Rules** | Redirects decided at the edge, with presets for www, the apex domain, and moved paths | [Request rules](../reference/request-rules.md) |
 | **WAF exclusions** | Shown only when the domain still has exclusions saved before they were disabled. They have no effect; delete them | [Managed WAF](managed-waf.md) |
 
 The **Overview** tab is a set of sections. Each shows its facts and, on its title row, the buttons that change them, so an

@@ -7,6 +7,10 @@ single source of truth; `make version-check` enforces it.
 
 ## [Unreleased]
 
+### Added
+
+- Redirect rules on a domain, in the new **Rules** tab and at `/api/domains/{domain}/request-rules`. A rule has up to five conditions from the custom-rule builder and redirects to a fixed URL, the same path on another host, or the path with a prefix replaced, with 301, 302, 307, or 308. The edge decides them from the signed snapshot after every security stage, and never sends a redirect to the address a request already has. Presets write the www to apex, apex to www, and moved-path redirects. The access log names the rule that acted (`request_rule`). See the [request rules reference](docs/reference/request-rules.md).
+
 ### Changed
 
 - An edge cell no longer runs ModSecurity inline on requests whose WAF mode is off: domains with the WAF off, requests the scoring step already decided, and requests a `skip_managed` rule exempts. ModSecurity switched its own engine off in phase 1 for them, but libmodsecurity applies that switch only from the next phase, so every remaining phase-1 CRS rule still ran. A cached request with the WAF off now costs about a quarter of the CPU it did. Requests whose score could not be computed are still inspected inline, unchanged.
