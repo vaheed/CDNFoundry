@@ -83,6 +83,51 @@ def access_entries(hostname: str) -> list[dict]:
     return [json.loads(line) for line in (logs.stdout + logs.stderr).splitlines() if line.startswith("{") and f'"hostname":"{hostname}"' in line]
 
 
+def qualify_cache_migration(directory: pathlib.Path, legacy_image: str) -> None:
+    observations = []
+    for label, image in (("before", legacy_image), ("after", IMAGE)):
+        fixture = directory / label
+        fixture.mkdir(mode=0o755)
+        config = host(10, [], cached=True)
+        if label == "before":
+            config.pop("rules")
+            config["cache"]["path_rules"] = [
+                {"match": "prefix", "value": "/static/", "action": "ttl", "ttl_seconds": 3600},
+                {"match": "suffix", "value": ".json", "action": "bypass"},
+            ]
+        else:
+            config["rules"]["caches"] = [
+                rule(101, [condition("path", "starts_with", "/static/")], mode="override", edge_ttl_seconds=3600),
+                rule(102, [condition("path", "ends_with", ".json")], mode="bypass"),
+            ]
+        (fixture / "active.json").write_text(json.dumps({"schema_version": 1, "generation_id": "migration-parity", "sequence": 1,
+                                                       "hosts": {"migration.example": config}, "certificates": {}}))
+        name = NAME + "-" + label
+        try:
+            run("docker", "run", "-d", "--name", name, "--network", base.EDGE_NETWORK, "--memory", "512m", "--cpus", "0.5", "--pids-limit", "96",
+                "--tmpfs", "/var/cache/nginx:rw,size=256m", "--tmpfs", "/var/lib/nginx/tmp:rw,size=32m",
+                "-e", "EDGE_RUNTIME_FILE=/fixture/active.json", "-e", "EDGE_STATUS_TOKEN=runtime-test-token",
+                "-v", f"{fixture}:/fixture:ro", "-v", f"{directory / 'tls.crt'}:/run/edge/tls.crt:ro", "-v", f"{directory / 'tls.key'}:/run/edge/tls.key:ro", image)
+            for _ in range(60):
+                try:
+                    if runtime.curl("migration.example", container=name)[0] == 200:
+                        break
+                except (ValueError, IndexError):
+                    pass
+                time.sleep(1)
+            results = []
+            for path in ("/static/a.png", "/api/x.json", "/static/priority.json", "/plain"):
+                for _ in range(3):
+                    code, head, _ = runtime.curl("migration.example", path, container=name)
+                results.append((code, header(head, "X-CDNF-Cache"), header(head, "Cache-Control")))
+            observations.append(results)
+        finally:
+            run("docker", "rm", "-f", name, check=False)
+    assert observations[0] == observations[1], observations
+    assert [item[1] for item in observations[1]] == ["HIT", "BYPASS", "HIT", "HIT"], observations
+    print("cache path rule migration preserves real-cell cache headers before and after")
+
+
 def qualify(directory: pathlib.Path) -> None:
     hosts = {
         "plain.example": host(1, []),
@@ -265,6 +310,7 @@ def main() -> None:
     global IMAGE
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--image", help="qualify this already-built runtime image")
+    parser.add_argument("--legacy-image", help="also compare cache headers against a runtime from before the cache path migration")
     args = parser.parse_args()
     run("docker", "compose", "-f", "compose.dev.yml", "up", "-d", "--force-recreate", "origin-http")
     if args.image:
@@ -275,6 +321,8 @@ def main() -> None:
         os.chmod(directory, 0o755)
         try:
             qualify(pathlib.Path(directory))
+            if args.legacy_image:
+                qualify_cache_migration(pathlib.Path(directory), args.legacy_image)
             print("request rule runtime qualification passed")
         finally:
             if os.environ.get("CDNF_KEEP_FAILED_RUNTIME") != "1":
