@@ -18,11 +18,13 @@ Usage (each run prints one JSON line; use --repeat for repeatability):
 
     python3 tests/e2e/edge_cell_benchmark.py --image cdnfoundry/edge-runtime:bench --waf off --cpus 1
     python3 tests/e2e/edge_cell_benchmark.py --image cdnfoundry/edge-runtime:bench --waf balanced --cpus 1 --connections 32
+    python3 tests/e2e/edge_cell_benchmark.py --image cdnfoundry/edge-runtime:bench --waf off --cpus 1 --request-rules 50
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import pathlib
@@ -39,6 +41,7 @@ ORIGIN = "cdnf-bench-origin"
 SINK = "vector"  # the cell's syslog target name
 SINK_CONTAINER = "cdnf-bench-vector"
 LOADGEN_IMAGE = "cdnf-bench-load:local"
+LOADGEN_DOCKERFILE = "FROM alpine:3.22\nRUN apk add --no-cache wrk curl\n"
 ORIGIN_IMAGE = "nginx:1.31.9-alpine@sha256:fb4658584bd9a916ffb6f6e365f97c25cfdb2923801f551ea08356e695f14ff7"
 ORIGIN_CONF = """server {
     listen 80;
@@ -126,7 +129,30 @@ def cleanup() -> None:
     run("docker", "network", "rm", NETWORK, check=False)
 
 
-def runtime_document(hostnames: list[str], waf: str, certificate: str, private_key: str, cache_enabled: bool) -> dict:
+def never_matching_rules(count: int) -> dict:
+    """``count`` request rules of each type whose conditions never match the benchmark request, cycling through the
+    condition kinds a domain really uses: exact and prefix paths, a header, the user agent, the method, and a country."""
+    kinds = [
+        lambda i: [{"field": "path", "operator": "equals", "value": f"/never-{i}"}],
+        lambda i: [{"field": "path", "operator": "starts_with", "value": f"/never-{i}/"}],
+        lambda i: [{"field": "header", "operator": "equals", "name": "x-bench-never", "value": str(i)}],
+        lambda i: [{"field": "user_agent", "operator": "contains", "value": f"never-agent-{i}"}],
+        lambda i: [{"field": "method", "operator": "equals", "value": "DELETE"}, {"field": "path", "operator": "equals", "value": f"/never-{i}"}],
+        lambda i: [{"field": "path", "operator": "ends_with", "value": f".never{i}"}, {"field": "country", "operator": "equals", "value": "AQ"}],
+    ]
+
+    def rules(action) -> list[dict]:
+        return [{"id": index + 1, "conditions": kinds[index % len(kinds)](index), "action": action(index)} for index in range(count)]
+
+    return {
+        "redirects": rules(lambda i: {"target": "url", "url": f"/moved-{i}", "status_code": 301, "preserve_query": False}),
+        "rewrites": rules(lambda i: {"path": "set", "path_value": f"/rewritten-{i}", "query": "keep"}),
+        "headers": rules(lambda i: {"request": [{"op": "set", "name": "x-bench-rule", "value": str(i)}], "response": [{"op": "remove", "name": "x-bench-never"}]}),
+        "caches": rules(lambda i: {"mode": "bypass"} if i % 2 else {"mode": "override", "edge_ttl_seconds": 60}),
+    }
+
+
+def runtime_document(hostnames: list[str], waf: str, certificate: str, private_key: str, cache_enabled: bool, request_rules: int = 0) -> dict:
     limits = {
         "requests_per_second": 1000000, "request_burst": 1000000, "connections_per_client": 100000,
         "connections_per_domain": 100000, "cache_admissions_per_second": 1000000,
@@ -149,6 +175,7 @@ def runtime_document(hostnames: list[str], waf: str, certificate: str, private_k
                 "security": {"limits": limits, "rules": []},
                 "waf": WAF_PROFILES[waf],
                 "tls": {"mode": "custom", "certificate_id": "bench"},
+                **({"rules": never_matching_rules(request_rules)} if request_rules else {}),
             } for index, hostname in enumerate(hostnames)
         },
     }
@@ -183,9 +210,13 @@ def start(args: argparse.Namespace, directory: pathlib.Path, hostnames: list[str
         "-addext", "subjectAltName=" + ",".join(f"DNS:{host}" for host in hostnames),
         "-keyout", str(directory / "edge.key"), "-out", str(directory / "edge.crt"))
     runtime = runtime_document(hostnames, args.waf, (directory / "edge.crt").read_text(), (directory / "edge.key").read_text(),
-                               not args.no_cache)
+                               not args.no_cache, args.request_rules)
     runtime_file = directory / "active.json"
     runtime_file.write_text(json.dumps(runtime, separators=(",", ":")))
+    stamp_file = directory / "active.stamp"
+    stamp_file.write_text(hashlib.sha256(runtime_file.read_bytes()).hexdigest())
+    os.chown(stamp_file, 10101, 10101)
+    stamp_file.chmod(0o600)
     os.chown(runtime_file, 10101, 10101)
     runtime_file.chmod(0o600)
     pki = directory / "pki"
@@ -205,7 +236,7 @@ def start(args: argparse.Namespace, directory: pathlib.Path, hostnames: list[str
         "--log-driver", "json-file", "--log-opt", "max-size=10m", "--log-opt", "max-file=3",
         "-e", "EDGE_CELL_NAME=bench", "-e", "EDGE_RUNTIME_FILE=/runtime/active.json",
         "-e", "EDGE_STATUS_TOKEN=bench-only", "-e", "EDGE_PROXY_PROTOCOL_TRUSTED_CIDRS=192.168.250.0/24",
-        "-v", f"{runtime_file}:/runtime/active.json:ro", "-v", f"{pki}:/run/edge:ro",
+        "-v", f"{runtime_file}:/runtime/active.json:ro", "-v", f"{stamp_file}:/runtime/active.stamp:ro", "-v", f"{pki}:/run/edge:ro",
         "-v", f"{server_conf}:/etc/nginx/conf.d/default.conf:ro",
         "--tmpfs", "/var/cache/nginx:rw,noexec,nosuid,size=512m",
         "--tmpfs", "/var/lib/nginx/tmp:rw,noexec,nosuid,size=64m",
@@ -269,7 +300,7 @@ def measure(args: argparse.Namespace, hostnames: list[str], label: str) -> dict:
     rps = data["requests"] / seconds
     errors = sum(data[key] for key in ("errors_connect", "errors_read", "errors_write", "errors_timeout", "errors_status"))
     return {
-        "label": label, "waf": args.waf, "scheme": args.scheme, "path": args.path, "method": args.method,
+        "label": label, "waf": args.waf, "request_rules_per_type": args.request_rules, "scheme": args.scheme, "path": args.path, "method": args.method,
         "body_bytes": args.body_bytes, "cache": not args.no_cache, "cell_cpus": args.cpus, "connections": args.connections,
         "hostnames": len(hostnames), "duration_s": round(seconds, 2),
         "requests": data["requests"], "rps": round(rps, 1), "errors": errors, "status_errors": data["errors_status"],
@@ -312,10 +343,13 @@ def main() -> None:
     parser.add_argument("--cell-env", action="append", default=[], help="extra NAME=value for the cell")
     parser.add_argument("--nginx-conf", default="", help="mount this file as the cell's nginx.conf (for A/B experiments)")
     parser.add_argument("--keep", action="store_true", help="leave the containers running after the benchmark")
+    parser.add_argument("--request-rules", type=int, default=0, help="add this many never-matching request rules of each type to every host")
     args = parser.parse_args()
     hostnames = [f"bench-{index}.bench.test" for index in range(args.hostnames)]
     cleanup()
     image_id = run("docker", "image", "inspect", "--format={{.Id}}", args.image).stdout.strip()
+    if run("docker", "image", "inspect", LOADGEN_IMAGE, check=False).returncode != 0:
+        subprocess.run(["docker", "build", "-t", LOADGEN_IMAGE, "-"], input=LOADGEN_DOCKERFILE, text=True, check=True, capture_output=True)
     try:
         with tempfile.TemporaryDirectory(prefix="cdnf-bench-") as directory:
             start(args, pathlib.Path(directory), hostnames)
