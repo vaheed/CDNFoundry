@@ -159,7 +159,7 @@ def qualify(directory: pathlib.Path) -> None:
         ]),
         "headers.example": host(5, [], cached=True, rewrites=[rule(51, [], path="prefix", from_prefix="/", to_prefix="/echo-request/", query="keep")], headers=[
             rule(41, [], request=[{"op": "set", "name": "x-rule-set", "value": "yes"}, {"op": "remove", "name": "x-rule-removed"}],
-                 response=[{"op": "set", "name": "x-frame-options", "value": "DENY"}, {"op": "remove", "name": "x-powered-by"}]),
+                 response=[{"op": "set", "name": "x-frame-options", "value": "DENY"}, {"op": "remove", "name": "x-powered-by"}, {"op": "remove", "name": "server"}]),
             rule(42, [condition("path", "starts_with", "/fonts/")], request=[], response=[{"op": "set", "name": "access-control-allow-origin", "value": "*"}]),
             # Protected headers are never changed, whatever the snapshot says.
             rule(43, [], request=[{"op": "set", "name": "host", "value": "evil.example"}, {"op": "set", "name": "x-cdn-client-address", "value": "192.0.2.1"}],
@@ -262,7 +262,7 @@ def qualify(directory: pathlib.Path) -> None:
     for attempt in range(2):
         code, head, body = fetch("headers.example", "/fonts/a.woff2", "X-Rule-Removed: client", "X-Rule-Kept: client")
         assert "set=yes\n" in body and "removed=\n" in body and "kept=client\n" in body, body
-        assert header(head, "X-Frame-Options") == "DENY" and header(head, "X-Powered-By") is None, head
+        assert header(head, "X-Frame-Options") == "DENY" and header(head, "X-Powered-By") is None and header(head, "Server") is None, head
         assert header(head, "Access-Control-Allow-Origin") == "*", head
         assert header(head, "X-CDNF-Cache") in ("MISS", "HIT") and header(head, "X-CDNF-Cache") != "FAKE", head
     assert header(head, "X-CDNF-Cache") == "HIT", head

@@ -1503,13 +1503,13 @@ local REQUEST_RULES_PER_TYPE = 50
 local REDIRECT_STATUSES = {[301] = true, [302] = true, [307] = true, [308] = true}
 local request_rule_cache = setmetatable({}, {__mode = "k"})
 
--- Cache only the last match set per bundle, keyed by every input its conditions read. Length framing prevents ambiguity;
--- one entry per bundle bounds memory regardless of client cardinality. Actions still run on every request.
+-- Cache only the last match set per bundle, comparing every input its conditions read with its original type.
+-- One entry per bundle bounds memory regardless of client cardinality. Actions still run on every request.
 local function matched_request_rules(rules, request)
     if type(rules) ~= "table" then return {} end
     local cached = request_rule_cache[rules]
     if not cached then
-        cached = {fields = {}, headers = {}}
+        cached = {fields = {}, headers = {}, values = {}, header_values = {}}
         local seen = {}
         local fields = {hostname = "host", client_ip = "client", cookie_present = "cookie_header", referer_present = "referer_host"}
         for _, kind in ipairs({"redirects", "rewrites", "headers", "caches"}) do
@@ -1529,19 +1529,16 @@ local function matched_request_rules(rules, request)
         end
         request_rule_cache[rules] = cached
     end
-    local parts = {}
-    for _, field in ipairs(cached.fields) do
-        local raw = request[field]
-        local value = tostring(raw)
-        parts[#parts + 1] = raw == nil and "-:" or (#value .. ":" .. value)
+    local unchanged = cached.matches ~= nil
+    for index, field in ipairs(cached.fields) do
+        local value = request[field]
+        if value ~= cached.values[index] then unchanged = false; cached.values[index] = value end
     end
-    for _, name in ipairs(cached.headers) do
-        local raw = header_value(request, name)
-        local value = tostring(raw)
-        parts[#parts + 1] = raw == nil and "-:" or (#value .. ":" .. value)
+    for index, name in ipairs(cached.headers) do
+        local value = header_value(request, name)
+        if value ~= cached.header_values[index] then unchanged = false; cached.header_values[index] = value end
     end
-    local key = table.concat(parts)
-    if cached.key == key then return cached.matches end
+    if unchanged then return cached.matches end
     local matches = {}
     for _, kind in ipairs({"redirects", "rewrites", "headers", "caches"}) do
         local list = {}
@@ -1558,7 +1555,7 @@ local function matched_request_rules(rules, request)
         end
         if #list > 0 then matches[kind] = list end
     end
-    cached.key, cached.matches = key, matches
+    cached.matches = matches
     return matches
 end
 
