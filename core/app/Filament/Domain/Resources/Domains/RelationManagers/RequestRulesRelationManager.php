@@ -33,6 +33,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Validation\ValidationException;
 
 /** A domain's request rules, one tab per type. The cell decides them from the signed snapshot, after every security stage. */
 class RequestRulesRelationManager extends RelationManager
@@ -69,19 +70,27 @@ class RequestRulesRelationManager extends RelationManager
 
     public static function getBadge(Model $ownerRecord, string $pageClass): ?string
     {
+        assert($ownerRecord instanceof Domain);
+
         return number_format($ownerRecord->requestRules()->count());
     }
 
     public function getTabs(): array
     {
         return collect(RequestRuleData::TYPE_LABELS)->map(fn (string $label, string $type): Tab => Tab::make($label)
-            ->badge(fn (): string => number_format($this->getOwnerRecord()->requestRules()->where('type', $type)->count()))
+            ->badge(fn (): string => number_format($this->domain()->requestRules()->where('type', $type)->count()))
             ->modifyQueryUsing(fn (Builder $query): Builder => $query->where('type', $type)))->all();
     }
 
     public function getDefaultActiveTab(): string|int|null
     {
         return 'redirect';
+    }
+
+    public function updatedActiveTab(): void
+    {
+        parent::updatedActiveTab();
+        $this->resetTable();
     }
 
     public function form(Schema $schema): Schema
@@ -122,20 +131,27 @@ class RequestRulesRelationManager extends RelationManager
         $noun = RequestRuleData::TYPE_NOUNS[$type];
 
         return $table->columns([
-            TextColumn::make('priority')->label(FilamentHelp::label('Order', self::ORDER_HELP[$type]))->numeric()->sortable(),
+            TextColumn::make('priority')->label(FilamentHelp::label('Order', self::ORDER_HELP[$type]))->numeric()->sortable()->visibleFrom('md'),
+            TextColumn::make('mobile_rule')->label('Rule')->hiddenFrom('md')->listWithLineBreaks()->limit(24)
+                ->state(fn (RequestRule $record): array => [
+                    $record->name ?? RequestRuleData::describeConditions($record->type, $record->conditions, $record->action),
+                    RequestRuleData::describeAction($record->type, $record->action),
+                ])
+                ->tooltip(fn (TextColumn $column): ?string => collect($column->getState())->contains(fn (string $value): bool => mb_strlen($value) > 24)
+                    ? implode("\n", $column->getState()) : null),
             TextColumn::make('name')->label('Rule')
                 ->state(fn (RequestRule $record): string => $record->name ?? RequestRuleData::describeConditions($record->type, $record->conditions, $record->action))
                 ->description(fn (RequestRule $record): ?string => $record->name === null ? null : RequestRuleData::describeConditions($record->type, $record->conditions, $record->action))
-                ->wrap(),
+                ->wrap()->visibleFrom('md'),
             TextColumn::make('action')->label('Action')
-                ->state(fn (RequestRule $record): string => RequestRuleData::describeAction($record->type, $record->action))->wrap(),
+                ->state(fn (RequestRule $record): string => RequestRuleData::describeAction($record->type, $record->action))->wrap()->visibleFrom('md'),
             TextColumn::make('enabled')->label('State')->badge()
                 ->formatStateUsing(fn (bool $state): string => $state ? 'Enabled' : 'Disabled')
                 ->color(fn (bool $state): string => $state ? 'success' : 'gray'),
         ])->headerActions([
             CreateAction::make()->label('Add '.$noun)->modalHeading('Add '.$noun)->modalSubmitActionLabel('Add '.$noun)
                 ->slideOver()->modalWidth(Width::TwoExtraLarge)->createAnother(false)
-                ->using(fn (array $data): RequestRule => DomainRequestRules::create($this->domain(), [...$data, 'type' => $type], auth()->user(), request()->ip())[0]),
+                ->using(fn (array $data): RequestRule => $this->onForm(fn (): RequestRule => DomainRequestRules::create($this->domain(), [...$data, 'type' => $type], auth()->user(), request()->ip())[0])),
             ActionGroup::make([
                 ...array_map(fn (string $preset): Action => $this->presetAction($preset), RequestRulePresets::forType($type)),
                 ...array_map(fn (string $preset): Action => Action::make('remove_'.$preset)
@@ -144,22 +160,26 @@ class RequestRulesRelationManager extends RelationManager
                     ->action(fn () => $this->savePreset($preset, null)), RequestRulePresets::forType($type)),
             ])->label('Presets')->icon('phosphor-sliders-horizontal')->button(),
         ])->recordActions([
-            Action::make('moveUp')->label('Move up')->icon('phosphor-arrow-up')
-                ->action(fn (RequestRule $record) => DomainRequestRules::move($this->domain(), $record, -1, auth()->user(), request()->ip())),
-            Action::make('moveDown')->label('Move down')->icon('phosphor-arrow-down')
-                ->action(fn (RequestRule $record) => DomainRequestRules::move($this->domain(), $record, 1, auth()->user(), request()->ip())),
-            EditAction::make()->modalHeading('Edit '.$noun)->modalSubmitActionLabel('Save '.$noun)->slideOver()->modalWidth(Width::TwoExtraLarge)
-                ->using(function (RequestRule $record, array $data): RequestRule {
-                    DomainRequestRules::update($this->domain(), $record, $data, auth()->user(), request()->ip());
+            ActionGroup::make([
+                Action::make('moveUp')->label('Move up')->icon('phosphor-arrow-up')
+                    ->action(fn (RequestRule $record) => DomainRequestRules::move($this->domain(), $record, -1, auth()->user(), request()->ip())),
+                Action::make('moveDown')->label('Move down')->icon('phosphor-arrow-down')
+                    ->action(fn (RequestRule $record) => DomainRequestRules::move($this->domain(), $record, 1, auth()->user(), request()->ip())),
+                EditAction::make()->modalHeading('Edit '.$noun)->modalSubmitActionLabel('Save '.$noun)->slideOver()->modalWidth(Width::TwoExtraLarge)
+                    ->using(function (RequestRule $record, array $data): RequestRule {
+                        $this->onForm(fn () => DomainRequestRules::update($this->domain(), $record, $data, auth()->user(), request()->ip()));
 
-                    return $record->refresh();
+                        return $record->refresh();
+                    }),
+                DeleteAction::make()->using(function (RequestRule $record): bool {
+                    DomainRequestRules::delete($this->domain(), $record, auth()->user(), request()->ip());
+
+                    return true;
                 }),
-            DeleteAction::make()->using(function (RequestRule $record): bool {
-                DomainRequestRules::delete($this->domain(), $record, auth()->user(), request()->ip());
-
-                return true;
-            }),
-        ])->defaultSort('priority')->emptyStateHeading('No '.strtolower(RequestRuleData::TYPE_LABELS[$type]))
+            ])->label('Rule actions')->icon('phosphor-dots-three')->extraAttributes(['data-testid' => 'request-rule-row-actions']),
+        ])->defaultSort('priority')->emptyStateHeading(match ($type) {
+            'redirect' => 'No redirects', 'rewrite' => 'No URL rewrites', 'header' => 'No header rules', default => 'No cache rules',
+        })
             ->emptyStateDescription(self::EMPTY[$type]);
     }
 
@@ -354,8 +374,32 @@ class RequestRulesRelationManager extends RelationManager
     private function savePreset(string $preset, ?array $data): void
     {
         $domain = $this->domain();
-        DomainRequestRules::replacePreset($domain, $preset, $data === null ? null : RequestRulePresets::rules($domain, $preset, $data), auth()->user(), request()->ip());
+        $this->onForm(fn () => DomainRequestRules::replacePreset($domain, $preset, $data === null ? null : RequestRulePresets::rules($domain, $preset, $data), auth()->user(), request()->ip()));
         Notification::make()->success()->title($data === null ? 'Preset removed' : 'Preset saved')->body('The change is queued in the next signed edge revision.')->send();
+    }
+
+    /** Runs a write and shows its validation errors on the fields of the open sheet or dialog. */
+    private function onForm(callable $write): mixed
+    {
+        try {
+            return $write();
+        } catch (ValidationException $exception) {
+            $index = array_key_last($this->mountedActions) ?? 0;
+            $raw = $this->mountedActions[$index]['data'] ?? [];
+            throw ValidationException::withMessages(collect($exception->errors())->mapWithKeys(function (array $messages, string $key) use ($index, $raw): array {
+                $parts = explode('.', $key);
+                $state = $raw;
+                foreach ($parts as &$part) {
+                    // Repeaters use UUIDs in the open form and numeric indexes in their validated payload.
+                    if (is_array($state) && ctype_digit($part) && ! array_key_exists($part, $state)) {
+                        $part = (string) (array_keys($state)[(int) $part] ?? $part);
+                    }
+                    $state = is_array($state) ? ($state[$part] ?? null) : null;
+                }
+
+                return ["mountedActions.$index.data.".implode('.', $parts) => $messages];
+            })->all());
+        }
     }
 
     private function domain(): Domain

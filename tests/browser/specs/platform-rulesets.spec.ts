@@ -67,7 +67,7 @@ test('a domain owner sees which platform rulesets apply but not their rules', as
     await settle(page);
     await page.locator('table tbody tr a').first().click();
     await settle(page);
-    await page.getByRole('tab', { name: /Custom rules/ }).click();
+    await page.getByRole('tab', { name: /Firewall rules/ }).click();
     await settle(page);
     await expect(page.getByText('Applied first by your provider:')).toBeVisible();
     await expect(page.getByText('Known scanner paths and credential-stuffing endpoints')).toBeVisible();

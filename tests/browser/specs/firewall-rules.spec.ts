@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { expectAccessible, settle, signIn, userPassword } from './helpers';
 
-// The Custom rules tab on a domain page: the list in plain words, the rule sheet, its example placeholders, and its tooltips.
+// The Firewall rules tab on a domain page: the list in plain words, the rule sheet, its example placeholders, and its tooltips.
 
 async function openRules(page: Page): Promise<void> {
     await signIn(page, 'app', 'user@browser.test', userPassword);
@@ -9,7 +9,7 @@ async function openRules(page: Page): Promise<void> {
     await settle(page);
     await page.locator('table tbody tr a').first().click();
     await settle(page);
-    await page.getByRole('tab', { name: /Custom rules/ }).click();
+    await page.getByRole('tab', { name: /Firewall rules/ }).click();
     await settle(page);
 }
 

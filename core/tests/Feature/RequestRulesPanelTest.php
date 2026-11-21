@@ -75,6 +75,84 @@ class RequestRulesPanelTest extends TestCase
         $this->assertSame(0, $domain->requestRules()->count());
     }
 
+    public function test_switching_tabs_rebuilds_the_create_action_and_preset_menu(): void
+    {
+        Queue::fake();
+        [, $domain] = $this->signedIn();
+        $this->manager($domain)->assertSee('Add redirect')
+            ->set('activeTab', 'rewrite')->assertSee('Add rewrite')->assertDontSee('Add redirect')
+            ->callTableAction('create', data: ['name' => 'Switched tab', 'priority' => 10, 'enabled' => true,
+                'conditions' => [], 'action' => ['path' => 'prefix', 'from_prefix' => '/api', 'to_prefix' => '', 'query' => 'keep']])
+            ->assertHasNoTableActionErrors();
+        $this->assertSame('rewrite', $domain->requestRules()->sole()->type);
+    }
+
+    public function test_rewrite_header_and_cache_tabs_add_rules_with_the_api_validation(): void
+    {
+        Queue::fake();
+        [, $domain] = $this->signedIn();
+
+        $this->manager($domain, 'rewrite')->assertSee('No URL rewrites')->callTableAction('create', data: [
+            'priority' => 10, 'enabled' => true, 'conditions' => [],
+            'action' => ['path' => 'prefix', 'from_prefix' => '/api', 'to_prefix' => '', 'query' => 'drop'],
+        ])->assertHasNoTableActionErrors()->assertSee('Path starts with /api')->assertSee('Prefix /api to nothing, remove the query string');
+        $this->manager($domain, 'rewrite')->callTableAction('create', data: [
+            'priority' => 20, 'conditions' => [['field' => 'path', 'operator' => 'equals', 'value' => '/x']],
+            'action' => ['path' => 'set', 'path_value' => '/../etc', 'query' => 'keep'],
+        ])->assertHasTableActionErrors();
+
+        $this->manager($domain, 'header')->callTableAction('create', data: [
+            'priority' => 10, 'enabled' => true, 'conditions' => [],
+            'action' => ['response' => [['op' => 'set', 'name' => 'X-Frame-Options', 'value' => 'DENY'], ['op' => 'remove', 'name' => 'Server']], 'request' => []],
+        ])->assertHasNoTableActionErrors()->assertSee('All requests')->assertSee('Response: set x-frame-options, remove server');
+        $this->manager($domain, 'header')->callTableAction('create', data: [
+            'priority' => 20, 'conditions' => [], 'action' => ['response' => [['op' => 'set', 'name' => 'X-Forwarded-For', 'value' => '1.1.1.1']], 'request' => []],
+        ])->assertHasTableActionErrors();
+
+        $this->manager($domain, 'cache')->callTableAction('create', data: [
+            'priority' => 10, 'enabled' => true, 'conditions' => [['field' => 'file_extension', 'operator' => 'in_list', 'value_list' => ['png']]],
+            'action' => ['mode' => 'override', 'edge_ttl_seconds' => '86400', 'browser_ttl_seconds' => '', 'respect_origin' => '0'],
+        ])->assertHasNoTableActionErrors()->assertSee('Edge TTL 1 d, ignore origin cache headers');
+        $this->manager($domain, 'cache')->callTableAction('create', data: [
+            'priority' => 20, 'conditions' => [['field' => 'path', 'operator' => 'starts_with', 'value' => '/y']],
+            'action' => ['mode' => 'override', 'edge_ttl_seconds' => '', 'browser_ttl_seconds' => '', 'respect_origin' => null],
+        ])->assertHasTableActionErrors();
+
+        $this->assertSame(['cache' => 1, 'header' => 1, 'rewrite' => 1], $domain->requestRules()->get()->countBy('type')->sortKeys()->all());
+        // Each tab lists only its own type.
+        $this->manager($domain, 'cache')->assertSee('Edge TTL 1 d')->assertDontSee('Response: set x-frame-options');
+    }
+
+    public function test_presets_of_every_type_save_from_their_tab(): void
+    {
+        Queue::fake();
+        [, $domain] = $this->signedIn();
+
+        $this->manager($domain, 'redirect')->callTableAction('preset_'.RequestRulePresets::HTTP_TO_HTTPS, data: ['status_code' => '301'])->assertHasNoTableActionErrors()
+            ->assertSee('301 to the same address over HTTPS, keeping the query string');
+        $this->manager($domain, 'rewrite')->callTableAction('preset_'.RequestRulePresets::STRIP_PREFIX, data: ['prefix' => '/api'])->assertHasNoTableActionErrors();
+        $this->manager($domain, 'rewrite')->callTableAction('preset_'.RequestRulePresets::ADD_PREFIX, data: ['prefix' => 'app'])->assertHasTableActionErrors(['prefix']);
+        $this->manager($domain, 'header')->callTableAction('preset_'.RequestRulePresets::SECURITY_HEADERS, data: [
+            'hsts_max_age' => '300', 'hsts_subdomains' => false, 'frame_options' => 'SAMEORIGIN', 'referrer_policy' => 'strict-origin-when-cross-origin',
+        ])->assertHasNoTableActionErrors()->assertSee('Security headers');
+        $this->manager($domain, 'cache')->callTableAction('preset_'.RequestRulePresets::CACHE_STATIC, data: ['extensions' => ['png', 'css'], 'edge_ttl_days' => '30', 'browser_ttl_days' => '7'])
+            ->assertHasNoTableActionErrors()->assertSee('Edge TTL 30 d, browser TTL 7 d');
+        $this->manager($domain, 'cache')->callTableAction('preset_'.RequestRulePresets::BYPASS_COOKIES, data: ['cookies' => ['session', 'cart']])->assertHasNoTableActionErrors();
+
+        $this->assertSame([
+            RequestRulePresets::BYPASS_COOKIES => 2, RequestRulePresets::CACHE_STATIC => 1, RequestRulePresets::HTTP_TO_HTTPS => 1,
+            RequestRulePresets::SECURITY_HEADERS => 1, RequestRulePresets::STRIP_PREFIX => 1,
+        ], $domain->requestRules()->get()->countBy('preset')->sortKeys()->all());
+        $this->manager($domain, 'cache')->callTableAction('remove_'.RequestRulePresets::BYPASS_COOKIES);
+        $this->assertSame(0, $domain->requestRules()->where('preset', RequestRulePresets::BYPASS_COOKIES)->count());
+    }
+
+    public function test_the_domain_page_names_the_security_tab_firewall_rules(): void
+    {
+        [, $domain] = $this->signedIn();
+        $this->get("/app/domains/{$domain->id}")->assertOk()->assertSee('Firewall rules')->assertDontSee('Custom rules');
+    }
+
     public function test_the_tab_is_scoped_to_the_assigned_domain_and_hidden_until_verification(): void
     {
         [$user, $domain] = $this->signedIn();
@@ -86,9 +164,9 @@ class RequestRulesPanelTest extends TestCase
         $this->assertNotContains(RequestRulesRelationManager::class, array_values(Livewire::test(ViewDomain::class, ['record' => $unverified->getRouteKey()])->instance()->getRelationManagers()));
     }
 
-    private function manager(Domain $domain)
+    private function manager(Domain $domain, string $type = 'redirect')
     {
-        return Livewire::test(RequestRulesRelationManager::class, ['ownerRecord' => $domain, 'pageClass' => ViewDomain::class]);
+        return Livewire::test(RequestRulesRelationManager::class, ['ownerRecord' => $domain, 'pageClass' => ViewDomain::class, 'activeTab' => $type]);
     }
 
     private function signedIn(): array
