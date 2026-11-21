@@ -55,6 +55,12 @@ mkdir -p \
     /var/cache/nginx/content/streaming
 chown -R cdnf:cdnf /var/cache/nginx
 
+if [ "${1:-}" = /usr/local/openresty/bin/openresty ] && [ -f /usr/lib/libjemalloc.so.2 ]; then
+    # ModSecurity allocates and copies strings for every rule it evaluates. With musl's allocator that was about a third of
+    # a WAF request's CPU; jemalloc served the same requests with about 30 % less CPU and about 30 MiB less memory per cell.
+    export LD_PRELOAD=/usr/lib/libjemalloc.so.2
+fi
+
 if [ "${1:-}" = /usr/local/openresty/bin/openresty ] && ! getent hosts vector >/dev/null 2>&1; then
     # OpenResty resolves syslog destinations while loading its configuration.
     # Keep serving from the bounded Docker stdout log if Vector is unavailable
