@@ -1496,6 +1496,205 @@ local function rule_matches(rule, request)
     return true
 end
 
+-- Request rules decide redirects (and, later, rewrites, headers, and cache behavior) from typed conditions in the signed
+-- snapshot. They run after every security stage, so no rule lets a request skip one. A malformed rule never acts.
+local REQUEST_RULES_PER_TYPE = 50
+local REDIRECT_STATUSES = {[301] = true, [302] = true, [307] = true, [308] = true}
+
+local function request_rule_matches(rule, request, allow_empty)
+    local conditions = rule.conditions
+    if type(conditions) ~= "table" or #conditions > RULE_MAX_CONDITIONS then return false end
+    if #conditions == 0 then return allow_empty end
+    for _, condition in ipairs(conditions) do
+        if type(condition) ~= "table" or not condition_matches(condition, request) then return false end
+    end
+    return true
+end
+
+-- The first matching redirect rule wins. Its target is a fixed URL, the same path on another host, or the path with one
+-- prefix replaced. A redirect to the address the request already has is never sent, so a rule can never loop on itself.
+local function request_redirect(rules, request, host)
+    local list = type(rules) == "table" and rules.redirects
+    if type(list) ~= "table" then return nil end
+    local raw = ngx.var.request_uri or "/"
+    local raw_path, raw_query = raw:match("^([^?]*)%??(.*)$")
+    local scheme = ngx.var.scheme or "http"
+    local current = scheme .. "://" .. host .. raw
+    for index, rule in ipairs(list) do
+        if index > REQUEST_RULES_PER_TYPE then break end
+        local action = type(rule) == "table" and rule.action
+        local status = type(action) == "table" and tonumber(action.status_code)
+        if status and REDIRECT_STATUSES[status] then
+            local location
+            local target = action.target
+            if target == "prefix" then
+                local from, to = action.from_prefix, action.to_prefix
+                if type(from) == "string" and type(to) == "string" and from ~= "" and raw_path:sub(1, #from) == from
+                    and request_rule_matches(rule, request, true) then
+                    location = to .. raw_path:sub(#from + 1)
+                end
+            elseif (target == "url" or target == "host" or target == "https") and request_rule_matches(rule, request, false) then
+                if target == "url" and type(action.url) == "string" then
+                    location = action.url
+                elseif target == "host" and type(action.host) == "string" then
+                    location = (action.scheme == "https" and "https" or scheme) .. "://" .. action.host .. raw_path
+                elseif target == "https" then
+                    location = "https://" .. host .. raw_path
+                end
+            end
+            if location and #location <= 4096 and not location:find("[%c ]") then
+                if action.preserve_query == true and raw_query ~= "" then
+                    location = location .. (location:find("?", 1, true) and "&" or "?") .. raw_query
+                end
+                local absolute = location:sub(1, 1) == "/" and (scheme .. "://" .. host .. location) or location
+                if absolute ~= current then return rule, location, status end
+            end
+        end
+    end
+    return nil
+end
+
+-- The access log names every request rule that acted, as "type:id" joined by commas, up to eight.
+local function note_request_rule(kind, id)
+    local current = ngx.var.cdn_request_rule or ""
+    local _, count = current:gsub(",", "")
+    if current ~= "" and count >= 7 then return end
+    ngx.var.cdn_request_rule = (current == "" and "" or current .. ",") .. kind .. ":" .. tostring(id)
+end
+
+-- A path the origin receives stays under the root: no control character, no "." or ".." segment, and a bounded length.
+local function rooted_path(path)
+    if type(path) ~= "string" or path:sub(1, 1) ~= "/" or #path > 2048 or path:find("%c") then return false end
+    for segment in path:gmatch("[^/]+") do
+        if segment == "." or segment == ".." then return false end
+    end
+    return true
+end
+
+-- Joins a new prefix and the rest of the path with one slash between them; an empty result is the root.
+local function join_prefix(to, rest)
+    if to:sub(-1) == "/" and rest:sub(1, 1) == "/" then rest = rest:sub(2) end
+    local result = to .. rest
+    if result:sub(1, 1) ~= "/" then result = "/" .. result end
+    return result
+end
+
+-- The first matching rewrite rule changes the path and query string sent to the origin. The visitor's URL, the cache key,
+-- and URL purge stay on the address the visitor asked for. A result that would leave the root is never applied.
+local function request_rewrite(rules, request)
+    local list = type(rules) == "table" and rules.rewrites
+    if type(list) ~= "table" then return nil end
+    local uri = ngx.var.uri or "/"
+    for index, rule in ipairs(list) do
+        if index > REQUEST_RULES_PER_TYPE then break end
+        local action = type(rule) == "table" and rule.action
+        if type(action) == "table" then
+            local path
+            if action.path == "prefix" then
+                local from, to = action.from_prefix, action.to_prefix
+                if type(from) == "string" and type(to) == "string" and from ~= "" and uri:sub(1, #from) == from
+                    and request_rule_matches(rule, request, true) then
+                    path = join_prefix(ngx.unescape_uri(to), uri:sub(#from + 1))
+                end
+            elseif (action.path == "set" or action.path == "keep") and request_rule_matches(rule, request, false) then
+                path = action.path == "set" and type(action.path_value) == "string" and ngx.unescape_uri(action.path_value) or (action.path == "keep" and uri or nil)
+            end
+            local query = false
+            if action.query == "drop" then query = "" end
+            if action.query == "set" then
+                query = type(action.query_value) == "string" and #action.query_value <= 1024 and not action.query_value:find("[%c #]") and action.query_value or nil
+            end
+            if path and query ~= nil and rooted_path(path) then return rule, path, query end
+        end
+    end
+    return nil
+end
+
+-- Header rules set or remove request headers sent to the origin and response headers sent to the visitor. Every matching
+-- rule applies, in order, with at most 50 changes per request. Framing, hop-by-hop, forwarding, and platform headers are
+-- never touched, whatever the snapshot says.
+local HEADER_CHANGES_PER_REQUEST = 50
+local PROTECTED_HEADERS = {
+    host = true, ["content-length"] = true, ["transfer-encoding"] = true, connection = true, ["keep-alive"] = true,
+    ["proxy-connection"] = true, te = true, trailer = true, upgrade = true, ["proxy-authenticate"] = true,
+    ["proxy-authorization"] = true, forwarded = true, ["x-real-ip"] = true, ["accept-encoding"] = true,
+    ["content-encoding"] = true, ["content-range"] = true,
+}
+
+local function header_change_allowed(name)
+    if type(name) ~= "string" or #name == 0 or #name > 64 or not name:match("^[%w!#$%%&'*+.^_`|~-]+$") then return false end
+    name = name:lower()
+    if PROTECTED_HEADERS[name] then return false end
+    return not (name:sub(1, 12) == "x-forwarded-" or name:sub(1, 6) == "x-cdn-" or name:sub(1, 7) == "x-cdnf-")
+end
+
+local function apply_header_changes(changes, apply, budget)
+    if type(changes) ~= "table" then return budget end
+    for index, change in ipairs(changes) do
+        if budget <= 0 or index > 10 then break end
+        if type(change) == "table" and header_change_allowed(change.name) then
+            if change.op == "remove" then
+                apply(change.name, nil); budget = budget - 1
+            elseif change.op == "set" and type(change.value) == "string" and #change.value <= 1024 and not change.value:find("[\r\n%z]") then
+                apply(change.name, change.value); budget = budget - 1
+            end
+        end
+    end
+    return budget
+end
+
+local function request_header_rules(rules, request)
+    local list = type(rules) == "table" and rules.headers
+    if type(list) ~= "table" then return end
+    local budget = HEADER_CHANGES_PER_REQUEST
+    local responding = {}
+    for index, rule in ipairs(list) do
+        if index > REQUEST_RULES_PER_TYPE or budget <= 0 then break end
+        local action = type(rule) == "table" and rule.action
+        if type(action) == "table" and request_rule_matches(rule, request, true) then
+            budget = apply_header_changes(action.request, function(name, value)
+                if value then ngx.req.set_header(name, value) else ngx.req.clear_header(name) end
+            end, budget)
+            if type(action.response) == "table" and #action.response > 0 then responding[#responding + 1] = tostring(rule.id) end
+            note_request_rule("header", rule.id)
+        end
+    end
+    -- ngx.exec may replace ngx.ctx; a request variable carries the rules to the response phase.
+    ngx.var.cdn_header_rules = table.concat(responding, ",")
+end
+
+function M.response_header_rules()
+    local ids = ngx.var.cdn_header_rules
+    if not ids or ids == "" then return end
+    local host = (ngx.var.host or ""):lower():gsub("%.$", "")
+    local config = state.hosts[host]
+    local list = config and type(config.rules) == "table" and config.rules.headers
+    if type(list) ~= "table" then return end
+    local wanted = {}
+    for id in ids:gmatch("[^,]+") do wanted[id] = true end
+    local budget = HEADER_CHANGES_PER_REQUEST
+    for index, rule in ipairs(list) do
+        if index > REQUEST_RULES_PER_TYPE or budget <= 0 then break end
+        if type(rule) == "table" and wanted[tostring(rule.id)] and type(rule.action) == "table" then
+            budget = apply_header_changes(rule.action.response, function(name, value) ngx.header[name] = value end, budget)
+        end
+    end
+end
+
+-- The first matching cache rule bypasses the cache or overrides its edge TTL, browser TTL, and origin header handling.
+local function matching_cache_rule(rules, request)
+    local list = type(rules) == "table" and rules.caches
+    if type(list) ~= "table" then return nil end
+    for index, rule in ipairs(list) do
+        if index > REQUEST_RULES_PER_TYPE then break end
+        local action = type(rule) == "table" and rule.action
+        if type(action) == "table" and (action.mode == "bypass" or action.mode == "override") and request_rule_matches(rule, request, false) then
+            return rule
+        end
+    end
+    return nil
+end
+
 local function emergency_actions(dictionary)
     local raw = dictionary:get("emergency:active")
     local expires = tonumber(dictionary:get("emergency:expires_at")) or 0
@@ -1544,27 +1743,10 @@ end
 
 local PURGE_TTL_SECONDS = 31536000
 
--- The first path rule whose prefix or suffix matches the raw request path wins.
--- The list is bounded to 16 rules by the control plane; a longer list is cut here.
-local function matching_path_rule(cache)
-    local rules = cache.path_rules
-    if type(rules) ~= "table" then return nil end
-    local path = (ngx.var.request_uri or ""):match("^[^?]*") or ""
-    for index, rule in ipairs(rules) do
-        if index > 16 then break end
-        local value = type(rule) == "table" and rule.value
-        if type(value) == "string" and value ~= "" then
-            if rule.match == "prefix" and path:sub(1, #value) == value then return rule end
-            if rule.match == "suffix" and #path >= #value and path:sub(-#value) == value then return rule end
-        end
-    end
-    return nil
-end
-
 -- Returns the cache key, its edge TTL, and the resource base. A request whose
 -- target has no canonical form returns an unusable key with a zero TTL and a
 -- reason, so it is never cached.
-local function request_cache_key(domain, host, cache)
+local function request_cache_key(domain, host, cache, cache_rule)
     local query_policy = cache.query_policy or (cache.include_query_string == false and "ignore_all" or "include_all")
     local target, reason = cache_target.target(ngx.var.request_uri or "", query_policy, cache.query_parameters)
     if not target then return "uncacheable|" .. tostring(reason), 0, "uncacheable", reason end
@@ -1575,9 +1757,11 @@ local function request_cache_key(domain, host, cache)
     local epoch = math.max(configured_epoch, runtime_epoch)
     local generation = ngx.shared.cache_purges:get("u:" .. ngx.md5(base)) or 0
     local ttl = math.max(0, math.min(31536000, tonumber(cache.edge_ttl_seconds) or 0))
-    local path_rule = matching_path_rule(cache)
-    if path_rule and path_rule.action == "bypass" then ttl = 0 end
-    if path_rule and path_rule.action == "ttl" then ttl = math.max(0, math.min(31536000, tonumber(path_rule.ttl_seconds) or 0)) end
+    local rule_action = cache_rule and cache_rule.action
+    if rule_action and rule_action.mode == "bypass" then ttl = 0 end
+    if rule_action and rule_action.mode == "override" and tonumber(rule_action.edge_ttl_seconds) then
+        ttl = math.max(0, math.min(31536000, tonumber(rule_action.edge_ttl_seconds)))
+    end
     local policy_query_parameters = {}
     for _, name in ipairs(cache.query_parameters or {}) do policy_query_parameters[#policy_query_parameters + 1] = name end
     table.sort(policy_query_parameters)
@@ -1595,7 +1779,8 @@ local function request_cache_key(domain, host, cache)
         cache.mode or "normal", tostring(tonumber(cache.admission_requests) or 1),
         tostring(tonumber(cache.maximum_variants_per_resource) or 32),
         table.concat(policy_status_ttls, ","),
-        path_rule and (path_rule.action .. "=" .. tostring(path_rule.ttl_seconds or 0)) or "-",
+        rule_action and table.concat({tostring(rule_action.mode), tostring(rule_action.edge_ttl_seconds), tostring(rule_action.browser_ttl_seconds),
+            tostring(rule_action.respect_origin)}, "=") or "-",
     }, ":")
     return base .. "|e" .. epoch .. "|g" .. generation .. "|p" .. ngx.md5(policy), ttl, base
 end
@@ -1756,6 +1941,7 @@ end
 function M.access()
     ngx.req.clear_header("X-CDN-Client-Address")
     ngx.req.clear_header("X-CDN-Cache-Bypass")
+    ngx.req.clear_header("X-CDN-Cache-Rule")
     ngx.var.cdn_telemetry_proof = telemetry_proof_value()
     local dictionary = ngx.shared.runtime_limits
     dictionary:incr("capacity:requests:" .. ngx.time(), 1, 0, 2)
@@ -2000,9 +2186,23 @@ function M.access()
     if config.settings and type(config.settings.maintenance) == "table" then
         ngx.status = 503; ngx.header["Content-Type"] = "text/plain"; ngx.say(config.settings.maintenance.body or "Service unavailable"); return ngx.exit(503)
     end
+    local redirect_rule, location, redirect_status = request_redirect(config.rules, request, host)
+    if redirect_rule then
+        note_request_rule("redirect", redirect_rule.id)
+        return ngx.redirect(location, redirect_status)
+    end
+    local rewrite_rule, rewrite_path, rewrite_query = request_rewrite(config.rules, request)
+    if rewrite_rule then
+        ngx.req.set_uri(rewrite_path, false)
+        if rewrite_query ~= false then ngx.req.set_uri_args(rewrite_query) end
+        note_request_rule("rewrite", rewrite_rule.id)
+    end
+    request_header_rules(config.rules, request)
     local cache = config.cache or {}
     prepare_compression(config, emergency)
-    local cache_key, cache_ttl, cache_resource, key_reason = request_cache_key(config.domain, host, cache)
+    local cache_rule = matching_cache_rule(config.rules, request)
+    if cache_rule then note_request_rule("cache", cache_rule.id) end
+    local cache_key, cache_ttl, cache_resource, key_reason = request_cache_key(config.domain, host, cache, cache_rule)
     if key_reason == "too_many_query_arguments" then ngx.var.cdn_security_reason = "cache_abuse_detected" end
     local development_until = tonumber(cache.development_mode_until) or 0
     local cacheable = cache.enabled == true and cache_ttl > 0
@@ -2034,12 +2234,20 @@ function M.access()
     ngx.var.cdn_cache_bypass = cacheable and "0" or "1"
     ngx.var.cdn_cache_no_store = cacheable and admission_allowed and "0" or "1"
     ngx.var.cdn_cache_edge_ttl = tostring(cache_ttl)
-    ngx.var.cdn_cache_browser_ttl = tostring(math.max(0, math.min(31536000, tonumber(cache.browser_ttl_seconds) or 0)))
+    local cache_override = cache_rule and cache_rule.action.mode == "override" and cache_rule.action or {}
+    ngx.var.cdn_cache_browser_ttl = tostring(math.max(0, math.min(31536000, tonumber(cache_override.browser_ttl_seconds) or tonumber(cache.browser_ttl_seconds) or 0)))
     ngx.var.cdn_cache_max_object = tostring(math.max(1024, math.min(1073741824, tonumber(cache.maximum_object_bytes) or 104857600)))
     ngx.var.cdn_cache_stale = tostring(math.max(0, math.min(86400, tonumber(cache.stale_if_error_seconds) or 0)))
     ngx.var.cdn_cache_swr = tostring(math.max(0, math.min(86400, tonumber(cache.stale_while_revalidate_seconds) or 0)))
     ngx.var.cdn_cache_mode = cache.mode or "normal"
-    ngx.var.cdn_cache_respect_origin = cache.respect_origin_headers == false and "0" or "1"
+    local respect_origin = cache.respect_origin_headers ~= false
+    if type(cache_override.respect_origin) == "boolean" then respect_origin = cache_override.respect_origin end
+    ngx.var.cdn_cache_respect_origin = respect_origin and "1" or "0"
+    if cache_rule and cache_rule.action.mode == "override" then
+        local function part(value) return tonumber(value) and tostring(math.max(0, math.min(31536000, math.floor(tonumber(value))))) or "" end
+        local respect = type(cache_override.respect_origin) == "boolean" and (cache_override.respect_origin and "1" or "0") or ""
+        ngx.req.set_header("X-CDN-Cache-Rule", part(cache_override.edge_ttl_seconds) .. "|" .. part(cache_override.browser_ttl_seconds) .. "|" .. respect)
+    end
     local maximum = tonumber(cache.maximum_object_bytes) or 104857600
     -- Only a request still in block or monitor mode needs ModSecurity inline: its score could not be computed. With the mode off,
     -- the inline engine switches itself off in phase 1 and can never act on the request, so it is not run at all.
@@ -2180,12 +2388,15 @@ function M.prepare_cache_response()
         return
     end
     local edge_ttl = math.max(0, math.min(31536000, status_ttl or tonumber(cache.edge_ttl_seconds) or 0))
-    local path_rule = matching_path_rule(cache)
-    if path_rule and path_rule.action == "ttl" then
-        -- An explicit path TTL replaces the origin's lifetime for the statuses the domain already allows.
-        edge_ttl = math.max(0, math.min(31536000, tonumber(path_rule.ttl_seconds) or 0))
+    -- The public listener sends the matching cache rule's overrides as "edge|browser|respect"; an empty part keeps the domain's.
+    local rule_edge, rule_browser, rule_respect = tostring(ngx.var.http_x_cdn_cache_rule or ""):match("^(%d*)|(%d*)|([01]?)$")
+    local respect_origin = cache.respect_origin_headers ~= false
+    if rule_respect and rule_respect ~= "" then respect_origin = rule_respect == "1" end
+    if rule_edge and rule_edge ~= "" then
+        -- An explicit rule TTL replaces the origin's lifetime for the statuses the domain already allows.
+        edge_ttl = math.max(0, math.min(31536000, tonumber(rule_edge)))
         headers["Expires"] = nil
-    elseif cache.respect_origin_headers ~= false then
+    elseif respect_origin then
         local origin_ttl = tonumber(cache_control["s-maxage"] or cache_control["max-age"])
         if not origin_ttl and headers["Expires"] then
             local expires = ngx.parse_http_time(tostring(headers["Expires"]))
@@ -2199,7 +2410,7 @@ function M.prepare_cache_response()
         headers["X-CDNF-No-Store"] = "1"
         return
     end
-    local browser = math.max(0, math.min(31536000, tonumber(cache.browser_ttl_seconds) or 0))
+    local browser = math.max(0, math.min(31536000, tonumber(rule_browser ~= "" and rule_browser or nil) or tonumber(cache.browser_ttl_seconds) or 0))
     local stale = math.max(0, math.min(86400, tonumber(cache.stale_if_error_seconds) or 0))
     local swr = math.max(0, math.min(86400, tonumber(cache.stale_while_revalidate_seconds) or 0))
     headers["Cache-Control"] = "public, s-maxage=" .. edge_ttl .. ", max-age=" .. browser
