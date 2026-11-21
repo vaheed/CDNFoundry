@@ -744,6 +744,7 @@ def test_cli_parser_exposes_all_commands_and_help() -> None:
         "rollback",
         "security",
         "backup-now",
+        "backup-list",
         "restore",
         "vault-backup",
         "vault-restore",

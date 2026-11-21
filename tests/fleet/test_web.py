@@ -115,6 +115,45 @@ def add_node(web, port, name="control-1", role="control", ip="203.0.113.5"):
     return post(port, "/nodes/add", {"csrf": web.csrf, "name": name, "role": role, "public_ipv4": ip, "ssh_port": "2222", "ssh_user": "root"})
 
 
+def test_backup_page_refreshes_durable_receipts_and_full_snapshot_ids(served, monkeypatch):
+    from cdnfoundry_fleet.engine import ControlActions
+    web, port = served
+    snapshot = 'a' * 64
+    monkeypatch.setattr(ControlActions, 'backups', lambda _: [{'status':'succeeded','snapshot_id':snapshot,'size_bytes':1253702,'created_at':'2026-11-21 16:41:38'}])
+    assert 'Refresh backups' in get(port, '/backups')[1]
+    status, _, response = post(port, '/backups/refresh', {'csrf':web.csrf})
+    assert status == 303
+    wait_job(port, response.getheader('Location'))
+    body = get(port, '/backups')[1]
+    assert snapshot in body and '1253702' in body and 'Succeeded' in body
+
+
+def test_failed_backup_history_refresh_retains_previous_receipts_and_shows_error(served, monkeypatch):
+    from cdnfoundry_fleet.engine import ControlActions
+    web, port = served
+    web.backup_history = [{'status':'succeeded','snapshot_id':'b'*64}]
+    def fail(_):
+        raise SshError('unreachable')
+    monkeypatch.setattr(ControlActions, 'backups', fail)
+    _, _, response = post(port, '/backups/refresh', {'csrf':web.csrf})
+    wait_job(port, response.getheader('Location'))
+    body = get(port, '/backups')[1]
+    assert 'Cannot refresh backup history' in body and 'b'*64 in body
+
+
+def test_a_verified_backup_receipt_survives_a_failed_history_refresh(served, monkeypatch):
+    from cdnfoundry_fleet.engine import ControlActions
+    web, _ = served
+    receipt = json.dumps({'status':'succeeded','snapshot_id':'c'*64,'verified_at':'2026-11-21T12:00:00Z'})
+    monkeypatch.setattr(ControlActions, 'backup_now', lambda _: receipt)
+    def fail(_):
+        raise SshError('connection lost after backup completed')
+    monkeypatch.setattr(ControlActions, 'backups', fail)
+    result = web._backup_now(None)
+    assert receipt in result and 'Backup saved.' in result
+    assert web.backup_history_error
+
+
 def test_refuses_any_bind_address_but_loopback() -> None:
     assert require_loopback("127.0.0.1") == "127.0.0.1"
     for host in ("0.0.0.0", "::", "192.168.1.5", "localhost", ""):

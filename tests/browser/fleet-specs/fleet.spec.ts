@@ -39,6 +39,22 @@ for (const [name, path] of pages) {
     });
 }
 
+test('backup history refresh shows full snapshot IDs and remains usable on a phone', async ({ page }) => {
+    await page.goto('/backups');
+    await page.getByRole('button', { name: 'Refresh backups' }).click();
+    await expect(page).toHaveURL(/\/jobs\//);
+    await expect(page.getByText('Finished')).toBeVisible({ timeout: 30_000 });
+    await page.goto('/backups');
+    const history = page.getByRole('region', { name: 'Recent backups' });
+    await expect(history.getByText('a'.repeat(64), { exact: true })).toBeVisible();
+    await expect(history.getByText('Succeeded', { exact: true })).toBeVisible();
+    await expect(history.getByText('Failed', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Back up now', exact: true })).toBeVisible();
+    await noHorizontalOverflow(page);
+    await expectAccessible(page);
+    await expect(page).toHaveScreenshot('backups-history.png', { fullPage: true });
+});
+
 test('navigation reaches every page and marks the current one', async ({ page }) => {
     await page.goto('/');
     for (const [label, path] of [['Nodes', '/nodes'], ['Inventory', '/inventory'], ['Security', '/security'], ['Upgrade', '/upgrade'], ['Config', '/config'], ['Rollback', '/rollback'],

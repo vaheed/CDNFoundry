@@ -100,6 +100,7 @@ ol.roadmap li { display: flex; flex-wrap: wrap; gap: 0.25rem 0.75rem; align-item
 ol.roadmap li:first-child { border-top: 0; }
 h3 { margin: 1.25rem 0 0.5rem; }
 code { overflow-wrap: anywhere; }
+.snapshot-id { display: block; min-width: 12rem; max-width: 18rem; white-space: normal; overflow-wrap: anywhere; }
 
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 form.inline { display: inline; margin: 0; padding: 0; background: none; box-shadow: none; max-width: none; }

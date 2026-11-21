@@ -27,7 +27,7 @@ DEFAULT_VAULT = Path.home() / ".config" / "cdnfoundry-fleet" / "fleet.db"
 PASSPHRASE_ENV = "CDNF_FLEET_PASSPHRASE"
 PASSPHRASE_FILE_ENV = "CDNF_FLEET_PASSPHRASE_FILE"
 
-ENGINE_COMMANDS = {"test-connection", "ssh-defaults", "dns-names", "management-tls", "deploy", "set-release", "public-key", "node-ssh", "trust-release-key", "bootstrap", "upgrade", "apply-config", "rollback", "security", "backup-now", "restore", "vault-backup", "inventory", "watch", "management-networks"}
+ENGINE_COMMANDS = {"test-connection", "ssh-defaults", "dns-names", "management-tls", "deploy", "set-release", "public-key", "node-ssh", "trust-release-key", "bootstrap", "upgrade", "apply-config", "rollback", "security", "backup-now", "backup-list", "restore", "vault-backup", "inventory", "watch", "management-networks"}
 EXIT_OK = 0
 EXIT_USAGE = 2
 EXIT_VALIDATION = 3
@@ -270,6 +270,7 @@ def parser() -> argparse.ArgumentParser:
     sec.add_argument("--available-manifest", help="a newer signed manifest to check for fixes")
     sec.add_argument("--json", action="store_true", help="Print the result as JSON")
     bk = sub.add_parser("backup-now", parents=[command_common], help="start a control backup on the active control node and wait")
+    sub.add_parser('backup-list', parents=[command_common], help='list the latest 25 control backup receipts and snapshot IDs')
     rs = sub.add_parser("restore", parents=[command_common], help="restore a control backup into a control node")
     rs.add_argument("--node", required=True, help="Node name")
     rs.add_argument("--snapshot", required=True, help="Backup snapshot to restore")
@@ -1302,6 +1303,8 @@ def _engine_command_body(args: argparse.Namespace, store: FleetState, output_dir
             print(f"{len(rows)} finding(s)")
     elif args.command == "backup-now":
         print(ControlActions(engine).backup_now())
+    elif args.command == 'backup-list':
+        print(json.dumps(ControlActions(engine).backups(), indent=2))
     elif args.command == "restore":
         control = ControlActions(engine)
         plan = control.restore_plan(args.node, args.snapshot, args.overwrite_live)
