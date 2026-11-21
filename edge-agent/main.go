@@ -1432,9 +1432,12 @@ func compileRuntime(s state, keys map[string]string) (map[string]any, map[string
 		if domain.WAF == nil {
 			domain.WAF = map[string]any{}
 		}
-		// Request rules (redirects) are evaluated by the cell; a snapshot without them carries no rules.
+		// A snapshot without request rules carries no rules.
 		if domain.Rules == nil {
 			domain.Rules = map[string]any{}
+		}
+		if err := validateRequestRules(domain.Rules); err != nil {
+			return nil, nil, err
 		}
 		if domain.TLS == nil {
 			domain.TLS = map[string]any{}
