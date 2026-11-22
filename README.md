@@ -112,6 +112,13 @@ Run the script from the repository root, or by its full path. Do not run files i
 Next: [Production quick start](https://vaheed.github.io/CDNFoundry/deployment/production-quick-start)
 and the [Fleet web guide](https://vaheed.github.io/CDNFoundry/operations/fleet-web).
 
+## Release 2.1.4
+
+This release adds request and response rules, Fleet Linux host preparation, and backup verification history.
+It includes database migrations that move existing cache path rules into the Rules tab. Review the
+[2.1.4 release notes](docs/operations/releases/v2.1.4.md) for deployment order, rollback limits, and open
+qualification gates before upgrading.
+
 ## Read the docs
 
 The [documentation](https://vaheed.github.io/CDNFoundry/) is organized by what you want to do.
@@ -139,4 +146,4 @@ security problems as described in [SECURITY.md](SECURITY.md). Follow the
 
 ## License
 
-[Apache-2.0](LICENSE)
+CDNFoundry is licensed under [Apache-2.0](LICENSE).
