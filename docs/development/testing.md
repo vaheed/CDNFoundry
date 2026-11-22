@@ -102,6 +102,8 @@ tests/browser/run-fleet.sh docs-screenshots.spec.ts
 
 Phone capture cases skip intentionally because documentation images are desktop
 captures. The separate site suite checks how those images fit on phones.
+The full Fleet runner starts a separate disposable fixture for documentation
+captures, so refreshing backup history cannot change the page snapshot tests.
 These focused runs do not replace the full panel or Fleet suites when changing
 application UI behavior. See [Documentation contributions](../contributing/documentation.md).
 
