@@ -57,6 +57,12 @@ final class ProxyRevisionRollback
             SecurityRule::query()->insert(array_map(fn (array $rule): array => [
                 ...$rule, 'domain_id' => $locked->id, 'enabled' => true, 'note' => null, 'created_at' => $now, 'updated_at' => $now,
             ], $plan['rules']));
+            $locked->requestRules()->delete();
+            if ($plan['request_rules'] !== []) {
+                $locked->requestRules()->insert(array_map(fn (array $rule): array => [
+                    ...RequestRuleData::row($rule), 'domain_id' => $locked->id, 'preset' => null, 'created_at' => $now, 'updated_at' => $now,
+                ], $plan['request_rules']));
+            }
             $locked->update([
                 'proxy_settings' => $plan['proxy_settings'], 'cache_settings' => $plan['cache_settings'],
                 'security_settings' => $plan['security_settings'], 'waf_profile' => $plan['waf_profile'], 'waf_tuning' => $plan['waf_tuning'],
@@ -119,6 +125,17 @@ final class ProxyRevisionRollback
             return SecurityRuleData::row(['preset' => in_array($rule['preset'] ?? null, [SecurityPresets::USER_AGENT, SecurityPresets::HOTLINK], true) ? $rule['preset'] : null, 'name' => $valid['name'], 'conditions' => $valid['conditions'], 'rate_limit' => $valid['rate_limit'], 'fingerprint' => $valid['fingerprint'], 'action' => $valid['action'], 'priority' => $valid['priority']]);
         }, $security['rules'] ?? []);
 
+        $requestRules = [];
+        foreach (RequestRuleData::SNAPSHOT_KEYS as $type => $key) {
+            $stored = $snapshot['rules'][$key] ?? [];
+            abort_unless(is_array($stored) && count($stored) <= RequestRuleData::maximumRulesPerType(), 422, 'The retained request rules exceed the current limit.');
+            foreach (array_values($stored) as $index => $rule) {
+                $requestRules[] = RequestRuleData::validate([
+                    'type' => $type, 'name' => null, 'priority' => ($index + 1) * 10, 'enabled' => true,
+                    'conditions' => $rule['conditions'] ?? null, 'action' => $rule['action'] ?? null,
+                ]);
+            }
+        }
         $wafTuning = is_array($snapshot['waf']['tuning'] ?? null) ? ManagedWafTuning::validate($snapshot['waf']['tuning']) : null;
         $waf = $snapshot['waf']['name'] ?? 'off';
         abort_unless(array_key_exists($waf, ManagedWaf::PROFILES), 422, 'The revision uses an unknown WAF profile.');
@@ -127,7 +144,7 @@ final class ProxyRevisionRollback
 
         return [
             'records' => $records, 'proxy_settings' => $proxy, 'cache_settings' => $cacheSettings, 'security_settings' => $securitySettings,
-            'rules' => $rules, 'waf_profile' => $waf, 'waf_tuning' => $wafTuning, 'tls_mode' => $tlsMode, 'development_until' => $developmentUntil,
+            'rules' => $rules, 'request_rules' => $requestRules, 'waf_profile' => $waf, 'waf_tuning' => $wafTuning, 'tls_mode' => $tlsMode, 'development_until' => $developmentUntil,
         ];
     }
 

@@ -80,8 +80,10 @@ Use the documentation components instead of plain Markdown where they fit. The a
   `<template #tab-1>` per label.
 - Callouts: `::: info`, `::: tip`, `::: warning`, `::: danger`.
 - Screenshots: `<Screenshot name="admin-edges" alt="..." />`. The browser suite
-  (`tests/browser/specs/docs-screenshots.spec.ts`) generates the files for both
-  themes from the seeded demo stack at every release. Never add or edit one by
+  (`tests/browser/specs/docs-screenshots.spec.ts` and
+  `docs-domain-features.spec.ts`) generates the panel files for both themes
+  from the seeded demo stack. Fleet and Grafana have their own capture specs.
+  Refresh relevant captures when their documented screens change. Never add or edit one by
   hand; `scripts/ci/check_no_screenshots.py` fails the build on any other image.
 - Diagrams: a `mermaid` fence.
 - Executable blocks: open a shell block with ```` ```sh test ```` and CI runs it

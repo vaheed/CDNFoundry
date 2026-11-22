@@ -61,7 +61,7 @@ def qualify(directory: pathlib.Path) -> None:
         "  location /api/ { default_type application/json; return 200 '{\"ok\":true}'; } }\n")
     run("docker", "rm", "-f", ORIGIN, check=False)
     run("docker", "run", "-d", "--name", ORIGIN, "--network", rules.EDGE_NETWORK, "-v", f"{root}:/usr/share/nginx/html:ro",
-        "-v", f"{directory / 'origin.conf'}:/etc/nginx/conf.d/default.conf:ro", "nginx:1.31.3-alpine")
+        "-v", f"{directory / 'origin.conf'}:/etc/nginx/conf.d/default.conf:ro", "nginx:1.31.9-alpine")
     violation = lambda value, action="block": [rules.rule(1, [rules.condition("schema_violation", "equals", value)], action)]
     hosts = {
         "api.example": host(1, violation("any"), api_schema=SCHEMA),
@@ -78,6 +78,8 @@ def qualify(directory: pathlib.Path) -> None:
     run("docker", "run", "-d", "--name", NAME, "--network", rules.EDGE_NETWORK,
         "--tmpfs", "/var/cache/nginx:rw,size=64m", "--tmpfs", "/var/lib/nginx/tmp:rw,size=32m", "--memory", "512m", "--cpus", "0.5", "--pids-limit", "96",
         "-e", "EDGE_RUNTIME_FILE=/var/lib/cdnfoundry/runtime/active.json", "-e", "EDGE_STATUS_TOKEN=runtime-test-token",
+        # The assertions read access-log rows from the container log.
+        "-e", "EDGE_ACCESS_LOG_STDOUT=true",
         "-v", f"{directory / 'active.json'}:/var/lib/cdnfoundry/runtime/active.json:ro",
         "-v", f"{directory / 'tls.crt'}:/run/edge/tls.crt:ro", "-v", f"{directory / 'tls.key'}:/run/edge/tls.key:ro", "cdnfoundry/edge-runtime:e2e")
     for _ in range(60):

@@ -92,13 +92,28 @@ cdnfoundry-fleet bootstrap --node pop-1 --country DE --continent EU
 Bootstrap shows a plan and asks for confirmation. Then it does these steps in order:
 
 1. Pins the host key.
-2. Installs the prerequisites: Docker with Compose v2, `tar`, `python3`, and `openssl`. On apt systems Fleet installs
-   them. Bootstrap refuses a wildcard DNS bind when the host resolver already uses port 53.
+2. Detects the host distribution from `/etc/os-release` and installs Docker Engine, the Compose plugin,
+   Python 3, OpenSSL, CA certificates, tar, curl, bash, socket inspection, locking, and firewall commands.
+   Recipes cover Debian/Ubuntu, Fedora/RHEL-family hosts, Alpine, Arch, and openSUSE/SLES, using apt,
+   dnf/yum, apk, pacman, or zypper. The host must use systemd or OpenRC. Unknown distributions or service
+   managers stop with an explicit error when automatic preparation is needed; hosts whose dependencies
+   and Docker daemon already work are left ready without reconfiguration. There is no universal Linux
+   compatibility guarantee. Arch hosts
+   need current package databases; Fleet does not perform a whole-system upgrade.
+   Docker's signed package repository supplies the Compose plugin on Debian/Ubuntu and RPM hosts when needed.
+   Docker and Compose must pass their own runtime checks before Fleet transfers a release.
+   For a wildcard DNS bind, Fleet disables only systemd-resolved's local stub listener, retaining its
+   upstream resolver through `/run/systemd/resolve/resolv.conf`. It checks name resolution and restores
+   the old settings on failure. It does not stop an unrelated DNS server or overwrite a resolver managed
+   by another tool: those conflicts stop bootstrap with the occupied addresses.
 3. Pre-pulls the release images and checks their digests.
 4. Enrolls a PoP (a point of presence, one edge site) and issues its in-memory key material.
 5. Uploads the bundle and validates it on the node.
 6. Starts the bundle with its own `start.sh`.
 7. Runs the health gate.
+
+See [host preparation qualification](fleet-bootstrap-qualification.md) for executed package checks and
+the distribution and service-activation coverage that remains unqualified.
 
 When Fleet enrolls a PoP, it runs `cdnf:edges:enroll` on the control node. That command creates the edge, joins
 every cell slot to the default `shared` pool, and creates the PoP's service endpoint from its public addresses. It

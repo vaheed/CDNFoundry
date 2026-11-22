@@ -19,6 +19,8 @@ use App\Models\SystemSetting;
 use App\Models\SecurityEvent;
 use App\Models\User;
 use App\Support\DnsRecordData;
+use App\Support\RequestRuleData;
+use App\Support\RequestRulePresets;
 use App\Support\SecurityRuleData;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -168,7 +170,7 @@ foreach ([
     $channel->save();
 }
 
-// Custom rules on the first assigned domain: a long name, IPv6, a list, and a five-condition rule, each with a different action.
+// Firewall rules on the first assigned domain: a long name, IPv6, a list, and a five-condition rule, each with a different action.
 $rulesDomain = Domain::query()->whereHas('users', fn ($users) => $users->whereKey($user->id))->orderBy('id')->firstOrFail();
 foreach ([
     ['Block the admin area for visitors from outside the European Union with a deliberately long name', 'block', 10, [['field' => 'path', 'operator' => 'starts_with', 'value' => '/admin'], ['field' => 'continent', 'operator' => 'not_equals', 'value' => 'EU']]],
@@ -176,6 +178,43 @@ foreach ([
     [null, 'challenge', 30, [['field' => 'path', 'operator' => 'starts_with', 'value' => '/login'], ['field' => 'method', 'operator' => 'equals', 'value' => 'POST'], ['field' => 'header', 'name' => 'x-api-key', 'operator' => 'equals', 'value' => 'none'], ['field' => 'cookie_present', 'operator' => 'equals', 'name' => 'session', 'value' => false], ['field' => 'body_size', 'operator' => 'less_than', 'value' => 4096]]],
 ] as [$name, $action, $priority, $conditions]) {
     $rulesDomain->securityRules()->create(['name' => $name, 'action' => $action, 'priority' => $priority, 'conditions' => $conditions, 'fingerprint' => SecurityRuleData::fingerprint($conditions, $action)]);
+}
+
+// Redirects on the same domain: a preset, a long name, a prefix move, an IPv6 condition, and a disabled rule.
+foreach (RequestRulePresets::rules($rulesDomain, RequestRulePresets::WWW_TO_APEX, ['status_code' => 301]) as $rule) {
+    $rulesDomain->requestRules()->create([...$rule, 'preset' => RequestRulePresets::WWW_TO_APEX]);
+}
+foreach ([
+    ['Move the old documentation section to its new home under the guides prefix', 10, [], ['target' => 'prefix', 'from_prefix' => '/docs/v1', 'to_prefix' => '/guides', 'status_code' => 308, 'preserve_query' => true], true],
+    [null, 20, [['field' => 'path', 'operator' => 'equals', 'value' => '/promo'], ['field' => 'client_ip', 'operator' => 'in_list', 'value' => ['2001:db8:abcd::/48', '203.0.113.0/24']]],
+        ['target' => 'url', 'url' => 'https://xn--bcher-kva.example/sale?campaign=winter', 'status_code' => 302, 'preserve_query' => false], true],
+    ['Retired landing page', 30, [['field' => 'path', 'operator' => 'starts_with', 'value' => '/landing']], ['target' => 'url', 'url' => '/', 'status_code' => 301, 'preserve_query' => false], false],
+] as [$name, $priority, $conditions, $action, $enabled]) {
+    $rulesDomain->requestRules()->create(RequestRuleData::validate(['type' => 'redirect', 'name' => $name, 'priority' => $priority, 'conditions' => $conditions, 'action' => $action, 'enabled' => $enabled]));
+}
+
+// Rewrites, header rules, and cache rules: presets next to hand-written rules with long names, IPv6, punycode, and a disabled rule.
+foreach ([
+    RequestRulePresets::STRIP_PREFIX => ['prefix' => '/api'],
+    RequestRulePresets::SECURITY_HEADERS => ['hsts_max_age' => 31536000, 'hsts_subdomains' => false, 'frame_options' => 'SAMEORIGIN', 'referrer_policy' => 'strict-origin-when-cross-origin'],
+    RequestRulePresets::HIDE_ORIGIN_HEADERS => [],
+    RequestRulePresets::BYPASS_COOKIES => ['cookies' => ['wordpress_logged_in', 'session']],
+    RequestRulePresets::CACHE_STATIC => ['extensions' => RequestRulePresets::STATIC_EXTENSIONS, 'edge_ttl_days' => 30, 'browser_ttl_days' => 7],
+] as $preset => $input) {
+    foreach (RequestRulePresets::rules($rulesDomain, $preset, $input) as $rule) {
+        $rulesDomain->requestRules()->create([...$rule, 'preset' => $preset]);
+    }
+}
+foreach ([
+    ['rewrite', 'Send the legacy storefront hostname to the single front controller of the old application', 10,
+        [['field' => 'hostname', 'operator' => 'equals', 'value' => 'xn--bcher-kva.example']], ['path' => 'set', 'path_value' => '/index.php', 'query' => 'set', 'query_value' => 'store=legacy&lang=de'], true],
+    ['rewrite', null, 20, [['field' => 'path', 'operator' => 'starts_with', 'value' => '/search']], ['path' => 'keep', 'query' => 'drop'], false],
+    ['header', null, 10, [['field' => 'client_ip', 'operator' => 'in_list', 'value' => ['2001:db8:abcd::/48', '198.51.100.0/24']]],
+        ['request' => [['op' => 'set', 'name' => 'X-Client-Type', 'value' => 'office']], 'response' => [['op' => 'set', 'name' => 'Cache-Control', 'value' => 'private, no-store']]], true],
+    ['cache', 'Never cache the JSON endpoints that render the account dashboard for signed-in customers', 10, [['field' => 'file_extension', 'operator' => 'equals', 'value' => 'json']], ['mode' => 'bypass'], true],
+    ['cache', null, 20, [['field' => 'path', 'operator' => 'starts_with', 'value' => '/downloads/']], ['mode' => 'override', 'edge_ttl_seconds' => 604800, 'respect_origin' => false], false],
+] as [$type, $name, $priority, $conditions, $action, $enabled]) {
+    $rulesDomain->requestRules()->create(RequestRuleData::validate(['type' => $type, 'name' => $name, 'priority' => $priority, 'conditions' => $conditions, 'action' => $action, 'enabled' => $enabled]));
 }
 
 // Client-side security on the same domain: awkward origins (IPv6, punycode, a long address) and one baseline entry among the new ones.

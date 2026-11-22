@@ -156,9 +156,11 @@ class WafAccessHandlerPolicy(unittest.TestCase):
 
     def test_inline_inspection_is_switched_off_only_where_a_score_exists(self):
         scored = self.LUA.index("request.scores = scores")
-        first_off = self.LUA.index('ngx.req.set_header("X-CDNF-Internal-WAF-Mode", "off")', self.LUA.index("local scores, failure_outcome"))
+        first_off = self.LUA.index('set_waf_mode("off")', self.LUA.index("local scores, failure_outcome"))
         self.assertLess(scored, first_off)
-        self.assertEqual(self.LUA.count('ngx.req.set_header("X-CDNF-Internal-WAF-Mode", "off")'), 2, "the score and an explicit skip rule only")
+        self.assertEqual(self.LUA.count('set_waf_mode("off")'), 2, "the score and an explicit skip rule only")
+        # The mode is written in one place only, so no other path can switch inline inspection off.
+        self.assertEqual(self.LUA.count('ngx.req.set_header("X-CDNF-Internal-WAF-Mode"'), 1)
 
     def test_a_body_that_cannot_be_inspected_is_refused_in_blocking_mode(self):
         self.assertIn('elseif waf_mode == "block" then\n                return security_reject(failure.status, failure.reason)', self.LUA)

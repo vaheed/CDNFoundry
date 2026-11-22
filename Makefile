@@ -9,7 +9,7 @@ backend-test: dev-test
 
 contract-check: config-check openapi-check
 	python3 scripts/ci/generate_phpstan_schema.py --check
-	python3 -m unittest tests/contract/test_edge_rejection_reasons.py tests/contract/test_cache_key_vectors.py tests/contract/test_waf_body_acquisition.py tests/contract/test_domain_budget.py tests/contract/test_client_key.py tests/contract/test_security_event_reasons.py tests/observability/test_grafana_contract.py tests/observability/test_metrics_contract.py tests/observability/test_grafana_bootstrap.py tests/observability/test_operational_logging_contract.py
+	python3 -m unittest tests/contract/test_edge_rejection_reasons.py tests/contract/test_cache_key_vectors.py tests/contract/test_waf_body_acquisition.py tests/contract/test_domain_budget.py tests/contract/test_client_key.py tests/contract/test_security_event_reasons.py tests/contract/test_edge_waf_hot_path.py tests/observability/test_grafana_contract.py tests/observability/test_metrics_contract.py tests/observability/test_grafana_bootstrap.py tests/observability/test_operational_logging_contract.py
 
 fleet-test:
 	python3 -m pytest -q tests/fleet
@@ -64,6 +64,7 @@ dev-e2e: dev-waf-image
 	python3 tests/e2e/edge_control_mtls.py
 	python3 tests/e2e/managed_tls.py
 	python3 tests/e2e/edge_security.py
+	python3 tests/e2e/request_rules.py
 	python3 tests/e2e/telemetry_analytics.py
 	python3 tests/e2e/backup_restore.py
 	python3 tests/e2e/managed_waf.py
@@ -200,6 +201,7 @@ docs-build:
 
 docs-check:
 	python3 tests/docs/check_tokens.py
+	python3 tests/docs/check_screenshots.py
 	python3 scripts/ci/generate_fleet_cli_reference.py --check
 	python3 scripts/ci/generate_grafana_reference.py --check
 	python3 scripts/ci/generate_alert_reference.py --check

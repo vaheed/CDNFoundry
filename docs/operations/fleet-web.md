@@ -305,14 +305,22 @@ described in [Backup and recovery](backup-and-recovery.md).
 
 ## Backups
 
+<Screenshot name="fleet-backups" alt="Fleet backup history after a refresh, showing snapshot receipts and restore controls from the disposable test fleet." />
+
+- **Refresh backups** reads the latest 25 backup receipts from the active control node, including backups
+  started outside Fleet. The table shows creation time, status, the full snapshot ID, and added bytes.
+  A connection failure keeps the previous table visible with an error; it is not reported as an empty history.
 - **Back up now** runs a backup of the control node.
 - **Back up the Fleet vault to the restic repository** saves your Fleet state.
 - **Restore** puts a snapshot onto a control node. Pick the control node, enter the
   snapshot ID, and type `RESTORE` followed by that ID.
 
+A completed backup refreshes the table automatically. After restarting Fleet, use **Refresh backups**
+to reload it. The CLI reads the same receipts with `cdnfoundry-fleet backup-list`.
+
 By default, restore only works on an empty control node. To overwrite a live one,
 tick **Allow overwriting a live control node** and enter the preflight operation
-UUID from the admin panel.
+UUID from the [restore preflight API](backup-and-recovery.md#restore-preflight).
 
 The Overview counter shows "disabled" until you configure backups. See
 [Backup and recovery](backup-and-recovery.md).

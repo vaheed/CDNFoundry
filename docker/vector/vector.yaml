@@ -136,6 +136,9 @@ transforms:
       .waf_body_limit = slice!(to_string(.waf_body_limit) ?? "none", 0, 16)
       .waf_exclusion_id = to_int(.waf_exclusion_id) ?? 0
       .security_rule = slice!(to_string(.security_rule) ?? "", 0, 24)
+      # The request rules that acted, as "type:id" joined by commas (rewrite:3,cache:7), at most eight; anything else is dropped.
+      .request_rule = slice!(to_string(.request_rule) ?? "", 0, 256)
+      if !match(.request_rule, r'^(redirect|rewrite|header|cache):[0-9]{1,20}(,(redirect|rewrite|header|cache):[0-9]{1,20}){0,7}$') { .request_rule = "" }
       # A client-side report is "kind|page|resource", already reduced on the cell; anything else is dropped.
       .client_report = slice!(replace(to_string(.client_report) ?? "", r'[\x00-\x1f\x7f]', ""), 0, 420)
       if !match(.client_report, r'^(script|connection)\|[^|]+\|[^|]+$') { .client_report = "" }
@@ -440,6 +443,29 @@ tests:
               assert_eq!(.path, "/item")
               assert_eq!(length(string!(.query_hash)), 16)
               assert_eq!(.referrer, "https://example.test/cart")
+  - name: keep_the_request_rule_reference_and_drop_anything_else
+    inputs:
+      - insert_at: safe_edge_events
+        type: log
+        log_fields:
+          domain_id: 1
+          path: /old/page
+          request_rule: rewrite:3,header:12,cache:7
+          security_action: allow
+      - insert_at: safe_edge_events
+        type: log
+        log_fields:
+          domain_id: 1
+          path: /forged
+          request_rule: "redirect:12;<script>"
+          security_action: allow
+    outputs:
+      - extract_from: safe_edge_events
+        conditions:
+          - type: vrl
+            source: |-
+              assert!(.request_rule == "rewrite:3,header:12,cache:7" || .request_rule == "")
+              if .path == "/forged" { assert_eq!(.request_rule, "") } else { assert_eq!(.request_rule, "rewrite:3,header:12,cache:7") }
   - name: keep_customer_dns_events_and_drop_the_synthetic_probe
     inputs:
       - insert_at: safe_dns_events

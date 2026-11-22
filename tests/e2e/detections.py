@@ -87,7 +87,7 @@ def qualify(directory: pathlib.Path) -> None:
     origin_files(directory)
     run("docker", "rm", "-f", ORIGIN, check=False)
     run("docker", "run", "-d", "--name", ORIGIN, "--network", rules.EDGE_NETWORK, "-v", f"{directory / 'html'}:/usr/share/nginx/html:ro",
-        "-v", f"{directory / 'origin.conf'}:/etc/nginx/conf.d/default.conf:ro", "nginx:1.31.3-alpine")
+        "-v", f"{directory / 'origin.conf'}:/etc/nginx/conf.d/default.conf:ro", "nginx:1.31.9-alpine")
     block = [rules.rule(1, [rules.condition("leaked_password", "equals", True)])]
     credential = {"login_paths": [{"path": "/api/login", "format": "json", "username_field": "email", "password_field": "user.password"},
                                   {"path": "/login", "format": "form", "username_field": "username", "password_field": "password"}], "body_bytes": 8192}

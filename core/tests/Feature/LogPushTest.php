@@ -175,6 +175,7 @@ class LogPushTest extends TestCase
 
     public function test_a_failing_destination_keeps_its_cursor_backs_off_and_notifies_once(): void
     {
+        $this->travelTo(CarbonImmutable::parse('2026-11-12 12:00:00', 'UTC'));
         $this->setting(['domain_user_log_push' => true, 'failure_notify_after' => 2]);
         Queue::fake();
         Http::fake(['*' => Http::response('no', 500)]);

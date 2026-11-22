@@ -1,9 +1,16 @@
 ---
 name: cdnf-codebase-map
 description: Map of the CDNFoundry repository: where each concern lives, the entry points, and the matching tests. Use it before searching the tree, to open the right file first.
+argument-hint: <what you are looking for>
+context: fork
+agent: Explore
+model: haiku
 ---
 
 # cdnf-codebase-map
+
+Answer $ARGUMENTS from this map only. Return at most 8 paths with one line
+each; open a file only to confirm a path exists.
 
 Read this instead of listing or grepping the whole tree. Paths are relative
 to the repository root. When CodeGraph is enabled (`.mcp.json`), prefer its

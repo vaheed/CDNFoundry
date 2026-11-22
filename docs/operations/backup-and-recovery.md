@@ -138,6 +138,12 @@ Fleet starts a control backup on the active control node and waits. `cdnfoundry-
 </DocTabs>
 
 To check it worked, `GET /api/admin/backups/{backup}` shows a succeeded backup with a snapshot ID.
+Fleet's **Backups** page loads the latest 25 receipts with **Refresh backups**; the CLI equivalent is
+`cdnfoundry-fleet backup-list`. **Back up now** requires a verified receipt and reloads the table.
+Restic stores encrypted, compressed objects rather than files named after the original inputs.
+Small S3 objects are normal; verify a snapshot and practice a restore instead of judging it by object size.
+The control snapshot contains the database. Compose files, host configuration, and the separately held
+keys in the recovery set are not part of that database snapshot; keep the Fleet vault backup as well.
 
 The job streams `pg_dump --format=custom --no-owner --no-privileges` directly
 into Restic as `control.pgdump`. It records the immutable snapshot ID, byte

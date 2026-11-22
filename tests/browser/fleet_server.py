@@ -6,6 +6,7 @@ Nothing here touches a real fleet. Every node points at a closed local port, so 
 from __future__ import annotations
 
 import os
+import json
 import secrets
 import sys
 import tempfile
@@ -15,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from cdnfoundry_fleet.cli import main  # noqa: E402
-from cdnfoundry_fleet.ssh import Target, save_target  # noqa: E402
+from cdnfoundry_fleet.ssh import Target, save_target, SshTransport, Result  # noqa: E402
 from cdnfoundry_fleet.state import FleetState  # noqa: E402
 from cdnfoundry_fleet.vault import Vault  # noqa: E402
 from cdnfoundry_fleet.web import FleetWeb, make_server  # noqa: E402
@@ -29,6 +30,16 @@ NODES = [
     ("pop-frankfurt-with-a-very-long-point-of-presence-name", "edge", "203.0.113.31", "2001:db8::31"),
     ("monitoring-1", "monitoring", "203.0.113.40", None),
 ]
+
+BACKUPS = [{'status':'succeeded','snapshot_id':'a'*64,'size_bytes':1253702,'created_at':'2026-11-21 16:41:38'},
+           {'status':'failed','snapshot_id':None,'size_bytes':None,'created_at':'2026-11-20 16:41:38'}]
+
+
+class FixtureTransport(SshTransport):
+    def run(self, target, command, **kwargs):
+        if '->limit(25)' in command and 'table("backups")' in command:
+            return Result(0, json.dumps(BACKUPS), '')
+        return super().run(target, command, **kwargs)
 
 
 def main_() -> None:
@@ -46,7 +57,7 @@ def main_() -> None:
             state = store.add_node(state, {"name": name, "role": role, "public_ipv4": ipv4, "public_ipv6": ipv6})
             save_target(session, Target(name, "127.0.0.1", 1, "root"))
     vault.record("setup", '{"operator": "fixture", "title": "Seed the browser fixture"}')
-    server = make_server(FleetWeb(vault, ROOT, work / "bundles"), "127.0.0.1", PORT)
+    server = make_server(FleetWeb(vault, ROOT, work / "bundles", transport_factory=FixtureTransport), "127.0.0.1", PORT)
     print(f"fleet web fixture on http://127.0.0.1:{PORT}/", flush=True)
     server.serve_forever()
 

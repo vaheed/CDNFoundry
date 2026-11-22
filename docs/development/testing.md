@@ -22,7 +22,7 @@ Laravel tests must run with `APP_ENV=testing`, `DB_CONNECTION=sqlite`, and `DB_D
 | `edge-agent` or `edge-gateway` | The Go commands in [Go modules](#go-modules) |
 | OpenResty, DNS, TLS, or other runtime behavior | `make dev-e2e` and the matching standalone fixture in [Real-runtime tests](#non-browser-real-runtime-tests) |
 | Compose files or configuration | `make config-check` |
-| Documentation | `make docs-check` (see [Documentation contributions](../contributing/documentation.md)) |
+| Documentation | `make docs-check`; for navigation, components, or screenshots, also run the [documentation browser checks](#documentation-browser-checks) |
 | Fleet tool | `make fleet-test` |
 
 ## Laravel tests
@@ -71,6 +71,41 @@ The Go CI job propagates a failure from either module through its logging pipeli
 Run `tests/browser/run.sh` for any UI change. It starts a disposable SQLite stack from `compose.browser.yml` with generated credentials and a deliberately awkward seed. Then it runs Playwright in light and dark mode at desktop and phone width, with visual snapshots and an axe accessibility check on every page. It never uses PostgreSQL, a named volume, or a non-local URL.
 
 See [Frontend development](frontend.md#browser-suite) for the details and for what to do after an intended design change. Rendered UI is tested only here, not in `tests/e2e`.
+
+## Documentation browser checks
+
+First run `make docs-check`. It validates sources, generated references,
+screenshot pairs, lint, the production build, and built-site links. Then run
+the built site's browser checks from `tests/browser`:
+
+```sh
+cd tests/browser
+npm ci --no-audit --no-fund
+npx playwright install chromium
+npx playwright test -c playwright.docs.config.ts
+```
+
+The documentation suite serves only the built VitePress site on
+`127.0.0.1:18473`. It checks light and dark themes at desktop and phone widths,
+local search, keyboard tabs, diagram rendering and enlargement, screenshot
+loading, horizontal overflow, axe accessibility, and visual snapshots. It does
+not connect to an application database. Update its visual baselines only after
+reviewing an intentional documentation change.
+
+To regenerate panel captures on the disposable SQLite browser stack, run from
+the repository root:
+
+```sh
+tests/browser/run.sh docs-screenshots.spec.ts docs-domain-features.spec.ts
+tests/browser/run-fleet.sh docs-screenshots.spec.ts
+```
+
+Phone capture cases skip intentionally because documentation images are desktop
+captures. The separate site suite checks how those images fit on phones.
+The full Fleet runner starts a separate disposable fixture for documentation
+captures, so refreshing backup history cannot change the page snapshot tests.
+These focused runs do not replace the full panel or Fleet suites when changing
+application UI behavior. See [Documentation contributions](../contributing/documentation.md).
 
 ## Non-browser real-runtime tests
 

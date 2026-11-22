@@ -90,6 +90,13 @@ Details: [Edge and origin](edge-and-origin.md#origin-test-fails).
 
 ## A change does not show up
 
+For a redirect, rewrite, header, or cache-rule change, also check the domain's
+**Rules** tab. Narrow exceptions must precede broader matches. Security checks,
+the domain HTTPS redirect, and maintenance can end a request before those rules
+run. A permanent redirect can remain in the browser after the edge rule is
+removed; check with `curl` without following redirects. See
+[Request rule verification](../guides/request-rules.md#check-the-deployed-result).
+
 1. Open the operation returned when you saved. A `202` only means the work was
    queued.
 2. Compare the desired revision with the revision each target reports.

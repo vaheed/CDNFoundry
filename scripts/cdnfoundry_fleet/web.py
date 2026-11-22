@@ -181,6 +181,8 @@ class FleetWeb:
         self.dns_results: dict[str, tuple[bool, str]] = {}
         self.ha_plan: dict[str, str] = {}
         self.ha_results: dict[str, tuple[bool, str]] = {}
+        self.backup_history: list[dict[str, Any]] | None = None
+        self.backup_history_error = ''
 
     # -- engine access -----------------------------------------------------------------------------------
     def _engine(self, work: Path, log: Callable[[str], None] = lambda _m: None, progress: Tracker | None = None) -> FleetEngine:
@@ -538,7 +540,7 @@ class FleetWeb:
                 f'<label>Repository<input name="repository" value="{esc(backups.get("repository") or "")}" autocomplete="off" placeholder="s3:https://storage.example/bucket/cdnfoundry"><span class="hint">The restic repository location, for example an S3 bucket URL.</span></label>'
                 f'<label>Region<input name="region" value="{esc(backups.get("region") or "us-east-1")}" autocomplete="off" placeholder="us-east-1"></label>'
                 '<label>Access key ID<input name="access_key" type="password" autocomplete="off" spellcheck="false" placeholder="Leave empty to keep the saved key"><span class="hint">The S3 access key for the repository. It is stored in the Fleet vault and never shown again.</span></label>'
-                '<label>Secret access key<input name="secret_key" type="password" autocomplete="off" spellcheck="false" placeholder="Leave empty to keep the saved key"></label>'))
+                '<label>Secret access key<input name="secret_key" type="password" autocomplete="off" spellcheck="false" placeholder="Leave empty to keep the saved key"><span class="hint">The S3 secret paired with the access key ID. Leave empty to retain the saved secret.</span></label>'))
         return ('<p class="hint">Saving changes the plan only. Use Deploy changes below to send it to the hosts.</p>' + monitoring + central + backup)
 
     def _tls_section(self, state: dict[str, Any]) -> str:
@@ -851,7 +853,20 @@ class FleetWeb:
                       '<label>Preflight operation UUID<input name="operation" autocomplete="off" placeholder="0b1c2d3e-4f50-4a6b-8c7d-9e0f1a2b3c4d"><span class="hint">Only for overwriting a live control node.</span></label>'
                       '<label><span><input type="checkbox" name="overwrite" value="1"> Allow overwriting a live control node</span></label>'
                       '<label>Type RESTORE followed by the snapshot ID<input name="confirm" required autocomplete="off" pattern="RESTORE [0-9a-f]{8,64}" placeholder="RESTORE 1a2b3c4d"></label>')
-            body = (self.action_form("/backups/now", "Back up now", primary=True)
+            history = self.action_form('/backups/refresh', 'Refresh backups')
+            if self.backup_history_error:
+                history += f'<p role="alert">{esc(self.backup_history_error)}</p>'
+            if self.backup_history is None:
+                history += '<p class="empty">Refresh to read the latest backups from the active control node.</p>'
+            elif not self.backup_history:
+                history += '<p class="empty">The active control node has no recorded backups.</p>'
+            else:
+                history += table(['Snapshot ID', 'State', 'Created', 'Bytes'], [
+                    [f'<code class="snapshot-id">{esc(row.get("snapshot_id") or "Unavailable")}</code>',
+                     esc(str(row['status']).capitalize()), esc(row.get('created_at') or ''),
+                     esc(str(row.get('size_bytes') or 0))] for row in self.backup_history
+                ], numeric={3}, label='Recent backups')
+            body = (history + self.action_form("/backups/now", "Back up now", primary=True)
                     + self.action_form("/backups/vault", "Back up the Fleet vault to the restic repository")
                     + "<h2>Restore</h2><p>Restores into an empty control node by default. The exact confirmation is <b>RESTORE</b> followed by the snapshot ID.</p>"
                     + self.action_form("/backups/restore", "Restore", fields=fields)
@@ -1081,7 +1096,9 @@ class FleetWeb:
             need("ROLLBACK")
             return job("Roll back the fleet", lambda e: f"returned {e.rollback()}", "rollback")
         if path == "/backups/now":
-            return job("Back up now", lambda e: ControlActions(e).backup_now(), "backup")
+            return job("Back up now", self._backup_now, "backup")
+        if path == '/backups/refresh':
+            return job('Refresh backups', self._refresh_backups, 'backup-history')
         if path == "/backups/vault":
             return job("Back up the vault", lambda e: self._vault_backup(e), "vault-backup")
         if path == "/backups/restore":
@@ -1170,6 +1187,24 @@ class FleetWeb:
             self.write_lock.release()
         self.vault.record(kind, json.dumps({"operator": self.operator, "title": flash}))
         return target, flash
+
+    def _refresh_backups(self, e: FleetEngine) -> str:
+        try:
+            rows = ControlActions(e).backups()
+        except Exception:
+            self.backup_history_error = 'Cannot refresh backup history. Check the control connection and retry.'
+            raise
+        self.backup_history = rows
+        self.backup_history_error = ''
+        return f'Loaded {len(rows)} recent backups.'
+
+    def _backup_now(self, e: FleetEngine) -> str:
+        receipt = ControlActions(e).backup_now()
+        try:
+            self._refresh_backups(e)
+        except FleetError:
+            return receipt + '\nBackup saved. History refresh failed; use Refresh backups to retry.'
+        return receipt
 
     def _vault_backup(self, e: FleetEngine) -> str:
         from .vault_backup import backup_vault, restic_env

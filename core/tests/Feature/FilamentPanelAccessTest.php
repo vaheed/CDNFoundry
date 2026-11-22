@@ -91,6 +91,24 @@ class FilamentPanelAccessTest extends TestCase
         ], collect($interactive)->only(['depth', 'ready', 'reserved', 'delayed', 'oldest', 'tone'])->all());
     }
 
+    public function test_a_lane_holding_only_delayed_or_reserved_jobs_reports_no_waiting_age(): void
+    {
+        $redis = Mockery::mock();
+        $lanes = count(SystemHealth::QUEUES);
+        $redis->shouldReceive('llen')->times($lanes)->andReturn(0);
+        $redis->shouldReceive('zcard')->times($lanes * 2)->andReturnUsing(
+            fn (string $key): int => $key === 'queues:dns:delayed' ? 3 : 0,
+        );
+        $redis->shouldNotReceive('lindex');
+        Redis::shouldReceive('connection')->times($lanes)->andReturn($redis);
+
+        $dns = app(SystemHealth::class)->queues()['dns'];
+
+        $this->assertSame(3, $dns['depth']);
+        $this->assertSame(0, $dns['oldest_job_age_seconds']);
+        $this->assertSame('healthy', $dns['status']);
+    }
+
     public function test_both_panels_register_the_compiled_shared_theme(): void
     {
         $theme = 'resources/css/filament/shared/theme.css';

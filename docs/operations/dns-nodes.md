@@ -5,7 +5,7 @@ description: How zones reach the DNS nodes, how convergence is reported, and how
 
 # DNS nodes and the hidden primary
 
-<Screenshot name="admin-dns-clusters" alt="The DNS clusters list in the admin panel." />
+<Screenshot name="admin-dns-clusters" alt="The DNS primary list in the admin panel, including health and enablement state from the test stack." />
 
 CDNFoundry answers DNS queries on DNS nodes. Laravel never talks to them. It writes each zone (the records of one domain) to one private PowerDNS primary on the control host. Each DNS node is a PowerDNS secondary that pulls the zones it serves. This page explains the flow, how to register the primary and a node, how to check that nodes are current, and what happens when one is lost.
 

@@ -69,7 +69,7 @@ Each is about one small PR.
 1. C1, C2, C3, C4, A1, A2, A3, A4, A7, A8, and A10 are fixed, each with a regression test that failed before the fix.
 2. The agent-owned `tests/e2e` suite passes on a real Compose stack over IPv4 and IPv6.
 3. The owner has run the [production qualification](../operations/production-qualification.md) on real hardware.
-4. The owner has completed the [manual browser checklist](https://github.com/vaheed/CDNFoundry/blob/dev/docs/manual-browser-qualification.md). It is owner-run and was not run in this audit.
+4. The owner has completed the [manual browser checklist](https://github.com/vaheed/CDNFoundry/blob/4df3da5dd971c7cad90717bb87259bfc04109437/docs/manual-browser-qualification.md). It is owner-run and was not run in this audit.
 
 Until then, the v1.2.1 documentation should not present the release as production-oriented without stating these limits (section 4).
 
@@ -609,7 +609,7 @@ Each item is one PR. Items map onto the existing roadmap phases. "Pull forward" 
 | Whether PowerDNS picks up a replaced mmap'd GeoIP file without a restart (A27) | Not reproduced. | Agent-owned follow-up in `mmdb_provider_outage.py`. |
 | Whether TLS session resumption skips the Lua certificate and expiry checks | Not reproduced. | Agent-owned E2E follow-up. |
 | Off-host Restic restore to a clean host (A28) | `offhost_recovery.py` not run. | Owner-run recovery drill with real S3. |
-| Filament UI behavior for any UI-affecting fix | Browser automation is forbidden for agents by AGENTS.md. | [Manual browser checklist](https://github.com/vaheed/CDNFoundry/blob/dev/docs/manual-browser-qualification.md): **not run**, owner-run. |
+| Filament UI behavior for any UI-affecting fix | Browser automation is forbidden for agents by AGENTS.md. | [Manual browser checklist](https://github.com/vaheed/CDNFoundry/blob/4df3da5dd971c7cad90717bb87259bfc04109437/docs/manual-browser-qualification.md): **not run**, owner-run. |
 | Production traffic patterns, tenant behavior, registrar delegation at scale | No production. | Production qualification. |
 | The agent-owned real-runtime suite (`make dev-e2e` and the related targets) | Not run in this audit, because it needs the full dev stack and changes dev database state. | Agent-owned. Run it in the PR for each fix. |
 

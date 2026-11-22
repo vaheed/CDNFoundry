@@ -37,6 +37,7 @@ from the collector's own settings and never reads them from the event.
 | `origin_transition` | stable reason, 32 characters |
 | `security_action` | low-cardinality string, 24 characters |
 | `security_reason` | low-cardinality string, 64 characters |
+| `request_rule` | Up to eight comma-separated `redirect:id`, `rewrite:id`, `header:id`, or `cache:id` entries; at most 256 characters. Empty when no rule acted or the value failed validation |
 | `edge_id` | the edge host: the collector sets it, so a cell name is never an edge identity. 64 characters |
 | `cell` | the serving cell, as the runtime named it (letters, digits, `.`, `_`, `-`; 64 characters). Empty on rows written before the column existed |
 | `client_ip` | string, 45 characters |
@@ -50,7 +51,7 @@ from the collector's own settings and never reads them from the event.
 | `compression_fallback` | stable reason, 32 characters |
 | `waf_profile` | `off`, `monitor`, `balanced`, or `strict` |
 | `waf_rule_id` | numeric managed-rule ID; `949110` (the CRS inbound blocking evaluation) on a block, zero otherwise. The engine does not hand the individual matching rules back to the cell; the audit log on the cell lists them |
-| `waf_score` | on a block, the configured inbound threshold the request reached or exceeded; zero otherwise |
+| `waf_score` | On a scored block, the total anomaly points capped at 100. On an inline fallback block, the configured threshold that was reached or exceeded. Zero otherwise; this is not a probability |
 | `waf_action` | `off` (profile off), `monitor` (detection only), `pass` (inspected and allowed), or `block`. A block also sets `security_action=block` and `security_reason=waf_block` |
 | `waf_processing_us` | bounded processing time in microseconds |
 | `waf_body_limit` | the body-inspection result: `inspected` (the whole body was scored), `no_body` (the request had no body or an empty one), `exceeded` (over the limit), `unreadable`, `unsupported_enc` (a compressed body), `scoring_failed` (the scoring step failed and the request was inspected inline), or `none` when the profile is off |

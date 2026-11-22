@@ -56,7 +56,6 @@ Open the domain and choose **Cache settings**, or use `GET` and `PATCH` on `/api
 | query policy | include all, ignore all, include selected, or ignore selected |
 | selected query names | up to 32 distinct safe names |
 | ignored cookie names | up to 32 distinct names, each 1–64 safe characters; a name ending in `*` matches every cookie that starts with it (`_ga_*`); a request whose cookies are all on this list can still be cached |
-| path rules | up to 16 rules; each has a match (starts with or ends with), a path of up to 128 safe characters (a prefix starts with `/`), and an action: bypass the cache, or set the edge TTL (1–31,536,000 seconds) |
 | status TTLs | approved 200, 203, 204, 206, 301, 302, and 404 map; 0 disables admission |
 | admission requests | 1–10 requests before a new object is admitted |
 | stale if error | 0–86,400 seconds |
@@ -78,20 +77,17 @@ Analytics, Meta Pixel, Hotjar, Matomo, or consent banners). Review the list befo
 saving: only name cookies that do not change the response. A cookie the preset
 does not cover still bypasses the cache.
 
-### Path rules
+### Per-path and per-file caching
 
-A path rule changes cache behavior for one part of the site. The first rule, in
-list order, whose path matches the raw request path (query string excluded,
-case-sensitive) applies:
+Cache settings apply to the whole domain. To bypass the cache or set other lifetimes for some requests, add a
+**cache rule** on the domain's **Rules** tab, under **Cache**. A cache rule matches typed conditions (path, file
+extension, hostname, cookie, and more), and the first matching rule applies. Its presets cache static files longer
+and bypass the cache for admin paths or signed-in visitors. The [request rule reference](../reference/request-rules.md#cache-rules)
+lists every setting.
 
-- **Bypass cache** never stores or serves the path from the cache.
-- **Set edge TTL** keeps responses for the given seconds. It replaces the origin's
-  own lifetime for that path, but only for statuses the status TTL map already
-  allows. A status set to 0 is still never stored.
-
-Rules are part of the domain's cache policy, so changing one starts a new policy
-generation and earlier copies are not reused. There are no wildcards and no regular
-expressions.
+Cache rules replace the path rules of earlier releases: each stored path rule became a cache rule in the same order,
+and the cache settings no longer accept `path_rules`. A cache rule's outcome is part of the domain's cache policy, so
+changing one starts a new policy generation and earlier copies are not reused.
 
 The edge serves an expired object inside the stale-while-revalidate window while
 one background refresh runs. Nginx also uses a per-key lock so that many cold

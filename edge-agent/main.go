@@ -36,7 +36,7 @@ import (
 	"time"
 )
 
-var version = "2.1.3"
+var version = "2.1.4"
 
 const (
 	generationMismatchGrace       = 15 * time.Second
@@ -1401,6 +1401,7 @@ func compileRuntime(s state, keys map[string]string) (map[string]any, map[string
 			Compression   map[string]any `json:"compression"`
 			Security      map[string]any `json:"security"`
 			WAF           map[string]any `json:"waf"`
+			Rules         map[string]any `json:"rules"`
 			TLS           map[string]any `json:"tls"`
 			Pools         []string       `json:"pools"`
 			Cells         []string       `json:"cells"`
@@ -1430,6 +1431,13 @@ func compileRuntime(s state, keys map[string]string) (map[string]any, map[string
 		}
 		if domain.WAF == nil {
 			domain.WAF = map[string]any{}
+		}
+		// A snapshot without request rules carries no rules.
+		if domain.Rules == nil {
+			domain.Rules = map[string]any{}
+		}
+		if err := validateRequestRules(domain.Rules); err != nil {
+			return nil, nil, err
 		}
 		if domain.TLS == nil {
 			domain.TLS = map[string]any{}
@@ -1491,7 +1499,7 @@ func compileRuntime(s state, keys map[string]string) (map[string]any, map[string
 				}
 				hostTLS["certificate_id"] = hostCertificateID
 			}
-			compiled := map[string]any{"domain": domain.Domain, "domain_id": domain.DomainID, "revision": domain.Revision, "settings": domain.Settings, "cache": domain.Cache, "compression": domain.Compression, "security": domain.Security, "waf": domain.WAF, "tls": hostTLS, "origin": host.Origin}
+			compiled := map[string]any{"domain": domain.Domain, "domain_id": domain.DomainID, "revision": domain.Revision, "settings": domain.Settings, "cache": domain.Cache, "compression": domain.Compression, "security": domain.Security, "waf": domain.WAF, "rules": domain.Rules, "tls": hostTLS, "origin": host.Origin}
 			hosts[name] = compiled
 			for _, cell := range domain.Cells {
 				if !validCellName(cell) {

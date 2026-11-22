@@ -45,33 +45,22 @@ class CacheApiTest extends TestCase
         $this->assertDatabaseHas('audit_logs', ['action' => 'cache.settings_updated', 'subject_id' => (string) $domain->id]);
     }
 
-    public function test_path_rules_and_cookie_prefixes_are_typed_bounded_and_delivered(): void
+    public function test_cache_settings_refuse_path_rules_and_bound_cookie_prefixes(): void
     {
         [$user, $domain] = $this->ownedDomain();
         $url = "/api/domains/{$domain->id}/cache";
-        $rule = ['match' => 'prefix', 'value' => '/static/', 'action' => 'ttl', 'ttl_seconds' => 86400];
 
-        $this->assertSame([], CachePolicy::defaults()['path_rules']);
-        foreach ([
-            [['match' => 'prefix', 'value' => 'static', 'action' => 'bypass']],
-            [['match' => 'prefix', 'value' => '/a', 'action' => 'ttl']],
-            [['match' => 'prefix', 'value' => '/a', 'action' => 'bypass', 'ttl_seconds' => 60]],
-            [['match' => 'regex', 'value' => '/a', 'action' => 'bypass']],
-            [['match' => 'suffix', 'value' => '.js', 'action' => 'purge']],
-            [['match' => 'suffix', 'value' => '.js?x', 'action' => 'bypass']],
-            [[...$rule, 'extra' => 'x']],
-            array_fill(0, 17, ['match' => 'suffix', 'value' => '.css', 'action' => 'bypass']),
-        ] as $invalid) {
-            $this->actingAs($user)->patchJson($url, [...$this->settings(), 'path_rules' => $invalid])->assertUnprocessable();
-        }
+        // Per-path caching is set by cache rules; the old field is refused so a client never thinks it applied.
+        $this->assertArrayNotHasKey('path_rules', CachePolicy::defaults());
+        $this->actingAs($user)->patchJson($url, [...$this->settings(), 'path_rules' => [['match' => 'prefix', 'value' => '/static/', 'action' => 'bypass']]])
+            ->assertUnprocessable()->assertJsonValidationErrors('path_rules');
         $this->assertSame(1, $domain->refresh()->revision);
 
-        $accepted = [$rule, ['match' => 'suffix', 'value' => '.php', 'action' => 'bypass']];
-        $this->actingAs($user)->patchJson($url, [...$this->settings(), 'path_rules' => $accepted, 'ignore_cookie_names' => ['_ga', '_ga_*']])->assertAccepted();
-        $this->assertSame($accepted, $domain->refresh()->cache_settings['path_rules']);
-        $this->assertSame(['_ga', '_ga_*'], $domain->cache_settings['ignore_cookie_names']);
+        $this->actingAs($user)->patchJson($url, [...$this->settings(), 'ignore_cookie_names' => ['_ga', '_ga_*']])->assertAccepted();
+        $this->assertSame(['_ga', '_ga_*'], $domain->refresh()->cache_settings['ignore_cookie_names']);
+        $this->assertArrayNotHasKey('path_rules', $domain->cache_settings);
         $this->actingAs($user)->patchJson($url, [...$this->settings(), 'ignore_cookie_names' => ['*']])->assertUnprocessable();
-        $this->actingAs(User::factory()->create())->patchJson($url, [...$this->settings(), 'path_rules' => $accepted])->assertNotFound();
+        $this->actingAs(User::factory()->create())->patchJson($url, $this->settings())->assertNotFound();
     }
 
     public function test_every_cookie_preset_name_passes_the_cookie_rule(): void

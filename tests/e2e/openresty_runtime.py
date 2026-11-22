@@ -342,12 +342,13 @@ def main() -> None:
         initial["hosts"]["overlay.example"]["domain_id"] = 7701
         initial["hosts"]["rules.example"]["cache"].update({
             "ignore_cookie_names": ["_ga", "_ga_*"],
-            "path_rules": [
-                {"match": "prefix", "value": "/live/", "action": "bypass"},
-                {"match": "suffix", "value": ".php", "action": "bypass"},
-                {"match": "prefix", "value": "/origin-ttl", "action": "ttl", "ttl_seconds": 600},
-            ],
         })
+        # Per-path caching comes from cache rules, decided with the same conditions as every request rule.
+        initial["hosts"]["rules.example"]["rules"] = {"caches": [
+            {"id": 1, "conditions": [{"field": "path", "operator": "starts_with", "value": "/live/"}], "action": {"mode": "bypass"}},
+            {"id": 2, "conditions": [{"field": "path", "operator": "ends_with", "value": ".php"}], "action": {"mode": "bypass"}},
+            {"id": 3, "conditions": [{"field": "path", "operator": "starts_with", "value": "/origin-ttl"}], "action": {"mode": "override", "edge_ttl_seconds": 600}},
+        ]}
         initial["hosts"]["admission-limit.example"]["security"] = {
             "limits": {"cache_admissions_per_second": 1},
         }
@@ -532,7 +533,7 @@ def main() -> None:
             assert "X-CDNF-Cache: HIT" in analytics.stderr, analytics.stderr
             prefix_miss = request_with("rules.example", "/analytics", headers=("Cookie: _ga=1; _gax=2",))
             assert "X-CDNF-Cache: BYPASS" in prefix_miss.stderr, prefix_miss.stderr
-            # Path rules: a bypass prefix and suffix are never stored; an unmatched path caches normally.
+            # Cache rules: a bypass prefix and suffix are never stored; an unmatched path caches normally.
             for path in ("/live/feed", "/index.php"):
                 for _ in range(2):
                     bypassed = request_with("rules.example", path)
@@ -540,7 +541,7 @@ def main() -> None:
             for _ in range(2):
                 unmatched = request_with("rules.example", "/plain")
             assert "X-CDNF-Cache: HIT" in unmatched.stderr, unmatched.stderr
-            # A TTL rule replaces the origin's one-second lifetime for its path.
+            # A cache rule's edge TTL replaces the origin's one-second lifetime for its path.
             request_with("rules.example", "/origin-ttl")
             time.sleep(2.5)
             ttl_rule = request_with("rules.example", "/origin-ttl")

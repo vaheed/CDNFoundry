@@ -110,15 +110,15 @@ x-edge-cell: &edge-cell
   restart: unless-stopped
   stop_signal: SIGQUIT
   stop_grace_period: 30s
-  mem_limit: 512m
-  cpus: 0.5
+  mem_limit: ${EDGE_CELL_MEMORY:-512m}
+  cpus: ${EDGE_CELL_CPUS:-0.5}
   pids_limit: 128
   sysctls: { net.ipv4.tcp_syncookies: "1" }
   ulimits:
     nofile: { soft: 32768, hard: 32768 }
   deploy:
     resources:
-      limits: { memory: 512m, cpus: "0.5", pids: 128 }
+      limits: { memory: "${EDGE_CELL_MEMORY:-512m}", cpus: "${EDGE_CELL_CPUS:-0.5}", pids: 128 }
   healthcheck:
     test: [CMD, wget, -qO-, http://127.0.0.1:8080/healthz]
     interval: 10s
@@ -569,12 +569,15 @@ services:
       - clickhouse:/var/lib/clickhouse
       - ./docker/clickhouse/init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
       - ./docker/clickhouse/config.d/prometheus.xml:/etc/clickhouse-server/config.d/prometheus.xml:ro
+      - ./docker/clickhouse/config.d/system-logs.xml:/etc/clickhouse-server/config.d/system-logs.xml:ro
       - ./docker/clickhouse/users.d/grafana.xml:/etc/clickhouse-server/users.d/grafana.xml:ro
       - ./docker/clickhouse/users.d/telemetry.xml:/etc/clickhouse-server/users.d/telemetry.xml:ro
     networks: [telemetry]
     restart: unless-stopped
     healthcheck:
-      test: [CMD-SHELL, 'clickhouse-client --user cdnf --password "$${CLICKHOUSE_PASSWORD}" --query "SELECT 1" >/dev/null']
+      # The same authenticated SELECT 1 over the local HTTP interface. Starting clickhouse-client for it cost about 0.3 s of CPU
+      # every 10 s.
+      test: [CMD-SHELL, 'wget -qO- --header "X-ClickHouse-User: cdnf" --header "X-ClickHouse-Key: $${CLICKHOUSE_PASSWORD}" "http://127.0.0.1:8123/?query=SELECT%201" | grep -qx 1']
       interval: 10s
       timeout: 5s
       retries: 12

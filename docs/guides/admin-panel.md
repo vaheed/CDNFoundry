@@ -20,7 +20,7 @@ domain, user, edge, or page.
 | Group | Screens |
 | --- | --- |
 | [Observe](#observe) | Overview, Traffic and telemetry, Live Logs |
-| [Operate](#operate) | Operations |
+| [Operate](#operate) | Operations, Platform rulesets |
 | [Infrastructure](#infrastructure) | Service pools, Edges, System DNS identity, DNS primary |
 | [Customers](#customers) | Users, Domains |
 | [Governance](#governance) | API tokens, Notifications, Platform settings, Audit logs |
@@ -54,10 +54,20 @@ administrator sets the Grafana address in **Platform settings**.
 
 ### Operations
 
+<Screenshot name="admin-operations" alt="The Operations list with queued, running, failed, and succeeded operation states in the seeded test stack." />
+
 Every background job the platform has run. Each row shows the operation ID, who
 requested it, its state, and any error. When you save a change and the panel says
 it was queued, this is where you watch it finish. See
 [Revisions and operations](../concepts/revisions-and-operations.md).
+
+### Platform rulesets
+
+Create administrator-owned firewall and rate-limit rules that apply to all
+domains or a selected list. These rules run before domain firewall rules.
+Domain owners see the applied ruleset names and descriptions, not their rules.
+See [Platform rulesets](security.md#platform-rulesets) for configuration,
+permissions, limits, and rollout verification.
 
 ## Infrastructure
 
@@ -106,6 +116,8 @@ name, email, and password, and use **Disable access** or **Enable access** on a
 user. A disabled user cannot sign in. See [Users and access](users-and-access.md).
 
 ### Domains
+
+<Screenshot name="admin-domains" alt="The administrator Domains list across accounts, captured with generated test domains." />
 
 All domains on the platform. Open one to see the same domain page that its owner
 sees, plus the users assigned to it. See [Domains](domains.md) and

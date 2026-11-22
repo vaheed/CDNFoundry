@@ -5,9 +5,12 @@ description: Plan host counts and sizes for a small, medium, or large private CD
 
 # Sizing guide
 
-CDNFoundry does not publish throughput numbers. Capacity depends on your
-hardware, network cards, storage, request mix, TLS rate, and origins, so any
-number from another site would be a guess. This page gives you three things: a
+CDNFoundry publishes scoped measurements in the
+[performance audit](../operations/performance-audit-2026-11-21.md) and
+[request-rule qualification](../operations/request-rules-qualification-2026-11-21.md).
+They describe specific hosts, quotas, workloads, and revisions, not a capacity
+guarantee for your fleet. Capacity depends on your hardware, network cards,
+storage, request mix, TLS rate, and origins. This page gives you three things: a
 starting layout for each size, the hard limits the software sets for itself,
 and a method to measure your own capacity.
 
@@ -32,6 +35,13 @@ service. They are safety limits, not performance promises.
 | --- | --- | --- | --- |
 | OpenResty cell | 512 MiB | 0.5 | Eight cells per edge host; the count is fixed |
 | Edge agent | 256 MiB | 0.25 | Never carries customer traffic |
+
+These are the shipped per-container ceilings. Consult
+[Hardware requirements](../operations/hardware-requirements.md) for measured
+component costs, estimates, and host budgets, and the
+[configuration reference](../reference/configuration.md) before changing quotas.
+Benchmark cell throughput does not include a complete edge host's gateway,
+agent, telemetry, or co-located DNS load.
 
 Other limits, such as request body size, connections per client, and cache
 admission, are listed in [Limits](../reference/limits.md).
@@ -58,7 +68,7 @@ system and the page cache.
 
 ## Add capacity
 
-- More edge traffic: add an edge host, or more cells on a host.
+- More edge traffic: add an edge host with the shipped bounded cell layout.
   See [Scaling](../operations/scaling.md#add-an-edge-only-host).
 - More DNS load: add a DNS host.
 - More telemetry: move ClickHouse to its own host.

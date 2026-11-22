@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { adminPassword, expectAccessible, settle, signIn } from './helpers';
 
-// Cache settings on the domain page: analytics cookie presets, path rules, the example placeholders, and the tooltips.
+// Cache settings on the domain page: analytics cookie presets, the pointer to cache rules, the example placeholders, and the tooltips.
 
 async function openCacheSettings(page: Page) {
     await signIn(page, 'admin', 'admin@browser.test', adminPassword);
@@ -31,30 +31,14 @@ test('the cache form shows example placeholders and plain-words tooltips', async
     await expect(modal).toHaveScreenshot('cache-settings-form.png');
 });
 
-// Saving and reading back the rules is proven server-side (FilamentWorkflowTest, CacheApiTest); these browser tests never submit a valid form, so the seeded domain stays unchanged.
-test('a preset adds its cookie names and a path rule row defaults to a prefix', async ({ page }) => {
+// Saving and reading back the settings is proven server-side (FilamentWorkflowTest, CacheApiTest); these browser tests never submit a valid form, so the seeded domain stays unchanged.
+test('a preset adds its cookie names, and per-path caching points to the cache rules', async ({ page }) => {
     const modal = await openCacheSettings(page);
     await modal.getByTestId('cache-cookie-presets').locator('select').selectOption({ label: 'Google Analytics' });
     await expect(modal.getByText('_ga_*', { exact: true })).toBeVisible();
     await expect(modal.getByText('_gcl_au', { exact: true })).toBeVisible();
-    await modal.getByRole('button', { name: 'Add path rule' }).click();
-    await expect(modal.getByRole('combobox', { name: 'Match*' })).toHaveValue('prefix');
-    await modal.getByRole('textbox', { name: 'Path*' }).fill('/static/');
-    await modal.getByRole('combobox', { name: 'Action*' }).selectOption('ttl');
-    await expect(modal.getByRole('spinbutton', { name: 'TTL (seconds)', exact: true })).toBeVisible();
+    // Path rules moved to Rules > Cache: the settings sheet names the place and has no path rule list of its own.
+    await expect(modal).toContainText('cache rules on the Rules tab');
+    await expect(modal.getByRole('button', { name: 'Add path rule' })).toHaveCount(0);
     await expectAccessible(page);
-});
-
-test('a path prefix without a leading slash is refused on the field', async ({ page }) => {
-    const modal = await openCacheSettings(page);
-    await modal.getByRole('button', { name: 'Add path rule' }).click();
-    await modal.getByRole('textbox', { name: 'Path*' }).fill('static');
-    // Blurring the field sends its value and re-renders the form; clicking Save during that re-render is lost.
-    await modal.getByRole('textbox', { name: 'Path*' }).press('Tab');
-    await page.waitForLoadState('networkidle');
-    await modal.getByRole('combobox', { name: 'Action*' }).selectOption('bypass');
-    // The Action select is live: let its Livewire round trip finish before submitting.
-    await page.waitForLoadState('networkidle');
-    await modal.getByRole('button', { name: 'Save', exact: true }).click();
-    await expect(modal.getByText('A path prefix must start with /.')).toBeVisible();
 });

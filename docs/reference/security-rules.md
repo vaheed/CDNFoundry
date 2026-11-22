@@ -1,13 +1,13 @@
 ---
-title: Custom rule reference
+title: Firewall rule reference
 description: Every field, operator, action, and rate-limit setting of a custom security rule, each with examples for the panel and the API, and complete recipes.
 ---
 
-# Custom rule reference
+# Firewall rule reference
 
-A custom rule has up to **five conditions** that must all match, and **one action**. Every condition is a field from the
+A firewall rule has up to **five conditions** that must all match, and **one action**. Every condition is a field from the
 list below, an operator from a fixed list, and a value. There are no regular expressions and no expression language. The
-[Security guide](../guides/security.md#custom-rules) explains where rules fit; this page lists every item with examples.
+[Security guide](../guides/security.md#firewall-rules) explains where rules fit; this page lists every item with examples.
 
 Each example shows the condition as the panel reads it back (the **Reads as** line in the rule sheet) and as JSON for the
 API (`POST /api/domains/{domain}/security/rules`). A complete rule in the API looks like this:
@@ -308,7 +308,7 @@ no value and never match. Operators: `equals`, `not_equals`, `in_list`, `not_in_
 | `block` | 403 (429 for a rate limit) | yes | Refuse a request outright |
 | `challenge` | A short browser proof of work; scripts without a token get 403 | no | Slow down bots while letting people through |
 | `log` | Nothing changes; a security event is recorded | no | Try a rule before it blocks |
-| `allow` | The request continues | yes, for custom rules; it also skips the challenge | Trust an office network or a monitoring service |
+| `allow` | The request continues | yes, for firewall rules; it also skips the challenge | Trust an office network or a monitoring service |
 | `skip_managed` | The managed WAF does not inspect the request | no | Stop false positives on one path, such as an editor that posts HTML |
 
 `allow` does not skip the managed WAF; add `skip_managed` for that. A solved challenge lasts one hour.
@@ -316,11 +316,11 @@ no value and never match. Operators: `equals`, `not_equals`, `in_list`, `not_in_
 ## Order
 
 1. Platform rulesets set by the administrator.
-2. The domain's custom rules, lowest `priority` first; the rule ID breaks ties. Disabled rules are skipped.
+2. The domain's firewall rules, lowest `priority` first; the rule ID breaks ties. Disabled rules are skipped.
 3. The domain's rate-limit rules.
 4. The managed WAF.
 
-Only `block` and `allow` stop the custom rules. In the panel, **Move up** and **Move down** change the order; in the API,
+Only `block` and `allow` stop the firewall rules. In the panel, **Move up** and **Move down** change the order; in the API,
 `PUT .../security/rules/order` takes the full list of rule IDs.
 
 ## Rate limits

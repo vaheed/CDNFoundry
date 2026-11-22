@@ -45,7 +45,7 @@ def main() -> None:
             if "Vector DNS unavailable; serving with bounded stdout telemetry only" not in log:
                 raise RuntimeError("missing explicit telemetry fallback log")
             config = run("docker", "exec", name, "cat", "/var/lib/nginx/tmp/nginx-without-syslog.conf").stdout
-            if "access_log syslog:server=vector:9000" in config or "access_log /dev/stdout edge_json;" not in config:
+            if "access_log syslog:server=vector:9000" in config or "access_log /dev/stdout edge_json buffer=64k flush=1s;" not in config:
                 raise RuntimeError("fallback configuration did not preserve bounded stdout logging")
             run("docker", "exec", name, "openresty", "-t", "-c", "/var/lib/nginx/tmp/nginx-without-syslog.conf")
             run(
@@ -53,7 +53,12 @@ def main() -> None:
                 "Referer: https://referrer.test/article?secret=cdnf-query-canary",
                 "http://127.0.0.1:8080/telemetry-probe", check=False,
             )
-            log = run("docker", "logs", name).stdout
+            # The stdout access log is buffered and flushed about once a second.
+            for _ in range(10):
+                log = run("docker", "logs", name).stdout
+                if "https://referrer.test/article" in log:
+                    break
+                time.sleep(1)
             if "cdnf-query-canary" in log or "https://referrer.test/article" not in log:
                 raise RuntimeError("query string leaked to bounded stdout telemetry")
             print("edge_telemetry_startup=passed")

@@ -28,12 +28,7 @@ ROLE_ORDER = ["dns", "dns-edge", "edge", "control", "monitoring"]
 REMOTE_ROOT = "/opt/cdnfoundry"
 # First starts pull images and run migrations, so activation and pre-pull get long, explicit bounds.
 LONG_STEP_SECONDS = 1800
-PREREQUISITES = (
-    "set -e; need=0; for c in docker tar python3 openssl; do command -v $c >/dev/null || need=1; done; "
-    "docker compose version >/dev/null 2>&1 || need=1; "
-    "if [ $need = 1 ]; then command -v apt-get >/dev/null || { echo 'install Docker with Compose v2, tar, python3 and openssl' >&2; exit 1; }; "
-    "DEBIAN_FRONTEND=noninteractive apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker.io docker-compose-v2 python3 openssl ca-certificates tar; fi"
-)
+PREREQUISITES = Path(__file__).with_name('host-bootstrap.sh').read_bytes()
 
 
 PARALLEL_KINDS = ("pin", "prereq", "prepull")  # per-host work that touches nothing a host serves, so all hosts do it at once
@@ -408,10 +403,10 @@ class Engine:
         if step.kind == "provision":
             return self.provision(step.node) if self.provision else (False, "no provisioning available")
         if step.kind == "prereq":
-            r = self.t.run(target, PREREQUISITES)
+            r = self.t.run(target, 'sh -s', stdin=PREREQUISITES, timeout=LONG_STEP_SECONDS)
             if not r.ok:
                 return False, (r.stderr or r.stdout).strip()[-300:]
-            return dns_port_conflicts(self.t, target, {**self.nodes[step.node], "name": step.node})
+            return dns_port_conflicts(self.t, target, {**self.nodes[step.node], "name": step.node}, allow_resolved=True)
         if step.kind == "validate":
             leftovers = self.t.run(target, f"cd {remote} 2>/dev/null && (ls -d compose.*.yml hotfix hotfix.* 2>/dev/null || true)")
             if leftovers.ok and leftovers.stdout.strip():

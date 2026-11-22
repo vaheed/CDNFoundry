@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+import json
 
 import pytest
 
@@ -31,7 +32,7 @@ class T:
 
     def run(self, target, command, **_):
         self.ran.append(command)
-        if "tinker" in command:
+        if '->count()' in command:
             return R(0, f"{self.users}\n")
         return R(0, "ok")
 
@@ -46,6 +47,7 @@ def engine(tmp_path: Path, transport: T, backups: str = "control") -> FleetEngin
 
 
 SNAP = "a" * 64
+RECEIPT = json.dumps({'status':'succeeded','snapshot_id':SNAP,'verified_at':'2026-11-21T12:00:00Z'})
 
 
 def test_restore_needs_the_typed_confirmation_and_runs_nothing_without_it(tmp_path: Path) -> None:
@@ -82,9 +84,34 @@ def test_a_live_control_node_is_refused_by_default_and_needs_the_operation(tmp_p
 def test_backup_now_requires_configured_backups(tmp_path: Path) -> None:
     with pytest.raises(ValidationError, match="disabled"):
         ControlActions(engine(tmp_path, T(), backups="disabled")).backup_now()
-    t = T()
+    class Backup(T):
+        def run(self, target, command, **kwargs):
+            self.ran.append(command)
+            return R(0, RECEIPT)
+    t = Backup()
     ControlActions(engine(tmp_path / "b", t)).backup_now()
     assert any("cdnf:backups:create --wait" in x for x in t.ran)
+
+
+def test_backup_history_reads_bounded_durable_receipts_without_tinker(tmp_path: Path) -> None:
+    class History(T):
+        def run(self, target, command, **kwargs):
+            self.ran.append(command)
+            assert kwargs['check'] is True
+            return R(0, json.dumps([{'status':'succeeded','snapshot_id':SNAP}]))
+    transport = History()
+    assert ControlActions(engine(tmp_path, transport)).backups()[0]['snapshot_id'] == SNAP
+    assert 'limit(25)' in transport.ran[0] and 'tinker' not in transport.ran[0]
+
+
+def test_backup_now_rejects_a_success_exit_without_a_verified_receipt(tmp_path: Path) -> None:
+    with pytest.raises(ValidationError, match='receipt'):
+        ControlActions(engine(tmp_path, T())).backup_now()
+
+
+def test_backup_history_does_not_treat_invalid_output_as_no_backups(tmp_path: Path) -> None:
+    with pytest.raises(ValidationError, match='history'):
+        ControlActions(engine(tmp_path, T())).backups()
 
 
 def test_restore_rejects_a_non_control_node(tmp_path: Path) -> None:
@@ -134,8 +161,8 @@ def test_first_backup_is_taken_and_verified_before_an_install_is_ready(tmp_path:
             self.ran.append(command)
             if "backups:create" in command:
                 self.verified = 1
-                return R(0, "backup done")
-            if "tinker" in command and "backups" in command:
+                return R(0, RECEIPT)
+            if '->count()' in command and "backups" in command:
                 return R(0, f"{self.verified}\n")
             return R(0, "ok")
 
@@ -151,7 +178,9 @@ def test_an_install_is_not_ready_when_the_first_backup_does_not_verify(tmp_path:
     class Unverified(T):
         def run(self, target, command, **_):
             self.ran.append(command)
-            if "tinker" in command and "backups" in command:
+            if 'backups:create' in command:
+                return R(0, RECEIPT)
+            if '->count()' in command and "backups" in command:
                 return R(0, "0\n")
             return R(0, "ok")
 

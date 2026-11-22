@@ -1,116 +1,115 @@
 ---
-title: WAF roadmap
-description: The plan for a stronger CDNFoundry WAF, starting from a code-verified audit of what the edge runs today. Eleven ordered phases, each with measurable acceptance criteria and verification.
+title: CDNFoundry roadmap
+description: Evidence-based priorities for CDNFoundry security, reliability, measured performance and bounded product improvements, preserving the existing WAF and request-rule commitments.
 ---
 
-# WAF roadmap
+# CDNFoundry roadmap
 
-**Status: active.** Written 2026-11-14. It replaces the earlier roadmap in full.
-It starts with an audit of the code on `dev` (the OpenResty runtime, the
-ModSecurity and CRS integration, the gateway, the agent, the control plane, and
-the tests) and then lists ordered phases. Work happens on `dev`, one phase at a
-time, in order. A phase starts only when the phases it depends on have passed
-their gates.
+**Status: active.** Originally written 14 November 2026; reviewed on
+**21 November 2026**, starting at `dev` commit `2f99af78` plus the working tree.
+This revision preserves the existing twelve phases, their useful acceptance
+criteria and implemented work. It adds a platform foundation checkpoint,
+corrects stale starting points, and separates mandatory reliability work from
+conditional feature proposals. It is planning only; it changes no runtime,
+production code, infrastructure or dependencies.
 
-This roadmap is part of the product contract in `AGENTS.md`. Where a phase
-conflicts with that contract, the contract wins, and the phase is changed first.
+This roadmap is part of the product contract in `AGENTS.md`. Security comes
+first, measured performance second, and simplicity third. A conflicting idea
+stops here until the contract and documented evidence are reconciled. Work
+happens on `dev`, in bounded increments. Commit and push only on owner request.
 
 ## 1. Starting point
 
-### How a request is judged today
+### Evidence and status vocabulary
 
-Every request reaches one data-driven OpenResty runtime
-(`docker/openresty/runtime.lua`). Behind the edge gateway, the cell trusts
-PROXY protocol only from the gateway's networks. The access phase runs in this
-order:
+- **Verified:** implemented and supported by appropriate passing checks, with
+  the scope, release and evidence stated. Contract checks verify their contract
+  only, not production serving.
+- **Partial:** meaningful implementation exists with a demonstrated limitation.
+- **Unverified:** code or historical evidence exists, but adequate current
+  qualification has not been established. It does not mean missing or broken.
+- **Missing:** no meaningful implementation was found in the inspected paths.
+- **Not needed:** insufficient value or a conflict with the product contract.
 
-1. Host and SNI checks, the drain and emergency switches, and the domain's
-   enabled flag.
-2. Request safety: the WAF body limit, malformed JSON, the allowed methods, the
-   header and body size limits, and the incident profile's methods and body size.
-3. Client address (a per-domain trusted proxy list for `X-Forwarded-For`), then
-   country, continent, and ASN from local MaxMind files.
-4. Detections, run only when a rule uses their field: the leaked password check,
-   the prompt checks, and the API schema check (the schema check always runs
-   when a schema exists).
-5. Attack score. When the managed WAF is on, or a rule uses a score field, the
-   cell opens a new loopback TCP connection to a second ModSecurity listener and
-   copies the request to it. CRS scores the request there without blocking and
-   returns its anomaly points in a redirect address. When the domain has
-   log-only rules, the request is scored twice. After scoring, inspection in the
-   cache location is switched off for that request.
-6. Typed custom rules: platform rulesets first, then the domain's rules.
-   Actions are `block`, `allow`, `log`, `challenge`, and `skip_managed`.
-7. Rate-limit rules: fixed windows per cell, keyed by client address,
-   address and path, or a named header.
-8. The managed WAF decision: block when the score reaches the threshold.
-9. Challenge, from a rule or from the incident profile.
-10. Built-in per-client and per-domain request and connection limits, in
-    fixed one-second windows per cell.
-11. Cache key, admission, and the internal redirect to a cache location.
+Source findings below are high confidence where a named branch or fixture
+states the behavior. Absence findings are medium confidence and scoped to the
+inspected model, compiler and runtime paths. No subsystem is declared Verified
+merely because its code, menu, feature flag or test script exists.
 
-Rejections are counted per reason in shared memory. The agent sends them to the
-control plane in its heartbeat. There they drive the domain's automatic security
-state and the security alert. Every request is also logged through Vector to
-ClickHouse.
+### Configuration, serving and recovery boundaries
 
-### Capability status
-
-Status terms: **Verified** means implemented and covered by a real-cell or
-real-service test. **Tested in parts** means implemented, with important paths
-untested. **Basic** means it works but is a limited form of the capability.
-**Partial** means part of the capability is missing. **Inert** means it is in
-the data model or documentation but the edge does not enforce it. **Missing**
-means no implementation was found.
-
-| Capability | Status | What the code shows |
+| Boundary | Source evidence inspected | Existing mechanism and remaining proof |
 | --- | --- | --- |
-| Managed rules (ModSecurity 3.0.17, CRS 4.30.0, pinned in the image) | Verified, with a gap | `managed_waf.py` and `custom_rules.py` pass on real cells. A request body is sent for scoring only when it has a `Content-Length`, so chunked bodies are scored on headers and URI only, and inspection is then switched off. This was found by reading the code; no test sends a chunked attack body. |
-| Profiles and tuning (paranoia, threshold, categories, single rules, log only) | Verified | A header-driven control file is generated at image build from the rule catalog. Log only costs a second full CRS pass. |
-| Matched rule visibility | Partial | A block always records rule `949110` and the threshold. The rules that matched are not returned to the cell. |
-| WAF exclusions | Inert | The API answers `409 waf_exclusions_unavailable` and the snapshot carries `[]`. The only per-path way out is a `skip_managed` rule, which turns off all managed rules for that path. |
-| Attack score | Basic | 99 minus 5 for each CRS point. It is not calibrated, and its false positive rate on real traffic is not measured. |
-| Typed custom rules and platform rulesets | Verified | Up to 5 conditions, fixed fields and operators, no regex, 1,000 rules per domain. There are no fields for query argument values or cookie values, no rule expiry, and no shadow mode. "Preview" only validates the rule and reports its position. |
-| Built-in limits and rate-limit rules | Verified, basic | Fixed windows, counted per cell. IPv6 clients are keyed by the full /128 address, though the gateway already groups by /64. The counters for all domains share one dictionary each, and a full dictionary evicts entries, so high-cardinality traffic to one domain can evict another domain's counters. Requests are counted, never responses. |
-| Gateway connection and handshake limits | Verified (Go tests) | Per source (IPv4 address or IPv6 /64) and per hostname. |
-| Automatic security state | Tested in parts | It covers the whole domain: 50 escalating events in 5 minutes tighten limits for every client, even when one client caused them. Cells report at most 20 noisy entries per heartbeat across all domains, so domains past the first 20 can miss escalation and alerts. |
-| Under attack mode (incident profile) | Verified on a cell | WAF blocking at high sensitivity, protected limits, method and body limits, and the challenge, with expiry by the cell's own clock. The challenge bypass prefixes are fixed to `/api/` and `/.well-known/`. The staging gate is still open. |
-| Proof-of-work challenge | Partial | Fixed 16-bit difficulty. The HMAC key is derived from the node token and the cell name, so a token works on one cell only and the key never rotates. The token is bound to the exact client address and user agent, so it breaks when a mobile client changes address. A non-HTML request without a token gets a plain 403. Without JavaScript there is only an explanation, with no other way through. |
-| Bot management and verified crawlers | Missing | There is only the user agent word-list preset. Nothing identifies real search engine crawlers, fingerprints TLS, or scores automation. |
-| IP reputation and threat intelligence | Missing | There are only hand-written lists inside rules (100 values each). No cell shares anything with another. |
-| Leaked passwords | Basic | About 100 common passwords, built into the image, not a signed dataset. |
-| Sensitive data in responses | Basic | Log only, the first 16 KiB, uncompressed text only. |
-| AI prompt checks | Basic | Phrase matching. Measured against 20 hand-written clean prompts. |
-| API schema | Partial | OpenAPI 3 JSON only. Paths, methods, and path, query, and header parameters are checked. The body is checked for size only. No false positive or latency measurement. |
-| Client-side script monitoring | Basic | Report-only CSP. Reports can be forged, so the list is only a hint. |
-| Security events and analytics | Verified | Raw request events are kept for 7 days and an hourly security rollup for 400 days. The events tab shows the newest 500 of 24 hours. The alert counts heartbeat reports. |
-| Ruleset version per cell | Missing | Cells do not report the CRS version they run (WAF upkeep check, 2026-11-12). |
-| WAF performance | Not measured | `cell_throughput.py` measures cache hits only. The latency cost of the WAF, scoring, and rules has never been measured on a sized host. |
+| Configuration → authorization | `core/routes/api.php`, `core/app/Policies/DomainPolicy.php`, `core/app/Models/Domain.php`, `core/app/Http/Middleware/IdempotentRequest.php` | Disabled-user, assigned-domain and token scope checks, policy-aware binding and idempotency exist. Recheck nested resources, bulk operations, cursor scope, token revocation and concurrent idempotency through the API. |
+| Validation → durable state | `core/app/Support/DomainRequestRules.php`, `OriginData.php`, `DnsZoneValidator.php`, `SecurityRuleData.php` | Typed bounds, transactional revisions, audit records and dispatch after commit exist. Qualify constraints, concurrent writes, obsolete jobs and operation rollback. |
+| Desired state → DNS | `core/app/Jobs/ReconcileDnsZone.php`, `core/app/Support/PowerDnsClient.php`, `PowerDnsZone.php` | Deterministic render/checksum, per-zone job exclusion, RRset replacement, read-back and restoration exist. Qualify timeout after mutation, SOA monotonicity, secondary convergence and negative answers. |
+| Desired state → edge | `core/app/Jobs/ReconcileEdgeDomain.php`, `core/app/Support/ArtifactSigner.php`, `edge-agent/main.go`, `generation.go`, `state_store.go`, `signing_keys.go` | Signed artifacts, bounded candidates, atomic generation pointers, encrypted recovery and rollback exist. Qualify tampering, wrong assignment, interrupted publication, replay and signing-key retirement. |
+| Internet → gateway → cell | `edge-gateway`, `docker/nginx/edge.conf`, `docker/openresty/runtime.lua`, `client_key.lua` | Host/SNI admission, trusted PROXY identity, connection ceilings, forwarding policy and IPv6 prefix keys exist. Qualify hostile forwarding headers, framing ambiguity, HTTP/2 and direct-cell access together. |
+| Cell → origin | `core/app/Support/OriginData.php`, `OriginPolicy.php`, `edge-agent/origin_policy.go`, `probes.go`, `docker/nginx/origin-proxy.conf` | Destination exclusions, connection-time checks, verified and explicitly unverified HTTPS paths exist; plaintext HTTP is also allowed. Revalidate every A/AAAA answer and backup destination. Do not claim all origin connections are authenticated. |
+| Cell → telemetry → operator | `docker/vector`, `docker/clickhouse`, `core/app/Support/AnalyticsStore.php`, `core/app/Jobs/PushDomainLogs.php`, `core/app/Actions/RecordSecurityReport.php` | Direct runtime collection, bounded queries, per-domain reporting, cursor-based export and retries exist. Qualify redaction, cross-tenant filters, loss accounting, full buffers and outage recovery without slowing serving. |
+| Release → failure → recovery | `scripts/cdnfoundry_fleet`, `compose.prod.yml`, `tests/qualification/test_evidence.py` | Signed releases, resource limits, health checks, encrypted edge recovery and a documented recovery secret set exist. Qualify fencing, restore and reboot during control outage on the same release. |
 
-### The most important weaknesses
+Each source path establishes a mechanism, not a successful production run.
+The lifecycle must be exercised across these boundaries, not just function by
+function. Laravel, analytics and external providers stay off the serving path.
+PostgreSQL remains the owner of desired state; derived state stays rebuildable.
 
-1. **Inspection can be bypassed and is costly.** Chunked request bodies are not
-   inspected. Each scored request opens a new loopback connection and, with
-   log-only rules, runs CRS twice. Nobody knows the latency cost.
-2. **Nothing is measured.** No clean-traffic corpus, attack corpus, false
-   positive rate, false negative rate, or latency budget exists for any
-   detection.
-3. **Mitigation is domain-wide or per address, nothing in between.** One noisy
-   client can tighten limits for every visitor of a domain. IPv6 address
-   rotation escapes per-client limits. One domain's attack can evict another
-   domain's counters.
-4. **Every cell is on its own.** Challenge tokens, rate counts, and offender
-   knowledge stay on one cell. A client that moves between cells or PoPs starts
-   over.
-5. **There are no client signals beyond address, geography, and user agent.**
-   No verified crawlers, TLS fingerprints, reputation, or bot score.
-6. **Tuning is coarse and risky.** There are no scoped exclusions and no shadow
-   mode. Rules cannot expire. Nobody can see which CRS rule matched or how often
-   a rule matches.
+### Current capability status
+
+| Capability | Status at review | Evidence and actual remaining work |
+| --- | --- | --- |
+| Managed WAF and body integrity | Partial | `waf_body.lua`, runtime `admit_waf_body` and `score_request` read decoded bodies independently of Content-Length, bound size/encoding and handle scoring failure. `tests/e2e/waf_body_inspection.py` exists and has a historical passing record. The old chunked-body bypass description is obsolete; requalify it rather than implement the reader again. |
+| Profiles, scores and tuning | Partial | ModSecurity/CRS profiles and rule controls exist. Scoring opens a loopback connection; log-only controls can require two passes. Matched CRS IDs and scoped exclusions remain incomplete; a converted anomaly score is not a calibrated probability. |
+| Custom and platform rules | Partial | Typed conditions/actions and validation previews exist (`SecurityRuleData`). Shadow, expiry, measured impact and staged rollout remain Phase 4 work. Query/cookie presence is not full value matching. |
+| Client identity and fairness | Partial | `client_key.lua`, `domain_budget.lua`, containment, breadth-aware reports and challenge binding exist. `rate_limit_isolation.py`, `ipv6_rate_limit_keys.py`, `client_containment.py`, `security_report_fairness.py` and `challenge_binding.py` have historical passing records. Budget overflow still skips new rule-key counting. |
+| Challenge and incident protection | Partial | Local PoW, incident profiles, per-domain/client limits and prefix binding exist. UA binding is optional; tokens remain cell-scoped and keys do not have the planned pool-wide rotation lifecycle. Broad bot classification and verified crawler datasets are missing in inspected runtime paths. |
+| API/account protection | Partial | Paths, methods, parameters, body-size checks and small local password/prompt heuristics exist. Full bounded JSON schema validation and qualified JWT enforcement remain incomplete. Response scanning is limited, not general response DLP. |
+| DNS and traffic routing | Partial | Zone validation/import/export, Geo-DNS, hidden primary and TSIG/catalog secondaries, pool placement and primary/backup origin failover exist. DNSSEC desired-state/key/DS lifecycle was not found; the secondary SQLite backend has `gsqlite3-dnssec=no`. Internal secondary DNS is not missing. |
+| TLS and origin trust | Partial | DNS-01 managed and uploaded edge certificates, encrypted keys and renewal exist. `verify_tls=false` is accepted and an unverified origin location exists. Origin client-certificate delivery was not found; agent-control mTLS protects a different hop. |
+| Cache and compression | Partial | Canonical PHP/Lua keys, epoch/full and URL purge, locking/revalidation, status TTLs, auth/cookie bypass and Gzip/Brotli exist. Runtime response admission rejects private/no-store/no-cache, Set-Cookie and unsupported Vary; native Vary is ignored only with this conservative admission path. Combined variant/pressure/fleet proof and useful reason diagnostics remain. |
+| Request/response rules | Partial qualification | Phase 12 code, forward migrations, rollback, real-cell IPv4/IPv6 and benchmark evidence exist. The qualification record still shows the complete browser/snapshot/accessibility gate in progress at inspection. Do not rebuild these rule types. |
+| Analytics, DNS logs and export | Partial | ClickHouse queries/rollups, DNS dnstap and scoped logs exist. `PushDomainLogs` exports gzip NDJSON through HTTPS/S3, advances cursors after acceptance and records retention gaps. A separate qualified live stream and complete decision trace are absent. |
+| Deployment and recovery | Unverified as a full current release | Fleet, signed release manifests, Compose limits, encrypted edge state, HA/recovery and evidence tooling exist. Their presence and old runs do not establish current integrated fleet qualification. |
+
+### Existing records and unresolved evidence
+
+- The [performance audit](operations/performance-audit-2026-11-21.md) includes
+  cgroup CPU measurements, raw edge/DNS JSONL and before/after experiments.
+  Short isolated runs do not establish integrated host capacity or a soak
+  envelope. The recorded failures were `custom_rules` (missing monitored access
+  row), `application_protection` (missing `schema_body_too_large` count), and
+  `cell_generation_reload` (loading state not observed).
+- The later [request rules record](operations/request-rules-qualification-2026-11-21.md)
+  reports `custom_rules` passing after bounded access-log polling. Reconcile it
+  for that recorded image/run, not for every release. The other two failures
+  still need disposition. Phase 12 browser qualification remains pending until
+  its record and actual suite results close it.
+- The [15 November staging record](operations/staging-qualification-2026-11-15.md)
+  explicitly leaves IPv6, failure injection, cache variants and sustained load
+  untested. Later local performance fixes do not close fleet gates; the old
+  cell cost is also not the current baseline.
+- `tests/e2e/production_qualification.py` and its evidence validator already
+  exist. Extend that runner and its release records; do not add a second system.
+
+### Findings and priorities
+
+| ID / priority | Evidence, impact and uncertainty | Action and smallest useful result |
+| --- | --- | --- |
+| F1 / P0 for deployments relying on rule limits as an abuse boundary | Runtime `rate_limit_exceeded` returns false for new keys refused by `domain_budget.admit` or on counter allocation failure. `rate_limit_isolation.py` explicitly expects the attacked domain to lose counting. Other tenants and built-in domain/Nginx protections remain; this is not proof of a WAF bypass or data leak. Source confidence high; trigger cost and exploit impact unmeasured. | Finish the remaining Phase 3 overflow work first. Define a bounded, conservative domain-scoped fallback using reserved capacity; new keys must not silently evade the rule's protection. Test repeated requests on keys first seen after exhaustion, allocator pressure and a healthy comparison domain. |
+| F2 / P1 | Unresolved historical telemetry/loading observations and pending browser qualification can conceal incomplete behavior. They are not proven serving defects. | Reproduce on stamped images, distinguish fixture timing from runtime failure, and close four separate completion fields. Escalate to P0 only if reproduction shows isolation, serving or last-valid-state failure. |
+| F3 / P1 | Origin TLS verification can be disabled and HTTP is accepted. Public unverified traffic is exposed to interception/impersonation; source does not show one tenant changing another's settings. | Qualify and document current modes; review secure defaults and bounded custom trust before changing compatibility. Optional origin mTLS follows ordinary server verification, never substitutes for it. |
+| F4 / P1 | Cache safety depends on response filters, internal header trust, normalization and purge agreeing after rewrites. Unknown-length responses require bounded spool/admission proof. No leak was demonstrated. | Qualify auth/cookies, repeated Vary, HEAD/Range, compression, rewrite/purge, full temporary storage and restart. Keep unsupported variants uncacheable; hit ratio never outranks isolation. |
+| F5 / P1 | Combined gateway/cells/agent/Vector/DNS, sustained load, bursts and recovery were not measured after local improvements. Per-container limits do not ensure whole-host headroom. | Establish integrated saturation/recovery baselines before tuning quotas, buffers, connection reuse or log volume. Preserve source/global protections; do not improve benchmarks by weakening admission. |
+| F6 / P1 feasibility, P2 implementation | DNSSEC and origin client authentication offer useful authenticity, but require signing/key/DS or per-tenant certificate lifecycle and recovery not currently present. | Complete bounded feasibility/security decisions first. Reuse PowerDNS, artifact delivery and encrypted TLS storage. Defer implementation if restoration or rotation cannot be proved without new infrastructure. |
+
+P0 is conditional on the exposure stated above, not an invented global severity
+rating. No external exploit, cross-tenant disclosure or cryptographic break was
+demonstrated in this audit. Performance opportunities require a new comparison,
+not inference from source appearance.
 
 ## 2. Direction
 
-- **Measure first.** Every detection, limit, and challenge change is judged
+- **Secure first, then measure.** Every detection, limit, and challenge change is judged
   against the same corpora and benchmark, built in Phase 1. A phase that cannot
   show its false positive rate, its false negative rate, and its latency cost
   is not complete.
@@ -122,7 +121,7 @@ means no implementation was found.
   key (an address, an IPv6 prefix, a session, or a token). Domain-wide
   tightening is kept for attacks that come from many sources.
 - **Bring intelligence in as data.** Crawler ranges, reputation, IP lists, and
-  password corpora reach cells as signed, versioned, bounded datasets. Each
+  password corpora, when admitted, reach cells as signed, versioned, bounded datasets. Each
   dataset has a fixed memory size and a last valid version that stays active.
 - **Share between cells asynchronously.** Cells report bounded summaries, the
   control plane aggregates them, and cells receive the result within minutes.
@@ -162,20 +161,184 @@ real secret.
 
 ### Measurement rules
 
-Numbers come from the Phase 1 harness on the reference cell, a host of the size
-the sizing guide recommends, unless a phase says otherwise. A development-host
-number may be recorded, but it is labeled as one and never passes a gate.
+Reuse `tests/e2e/edge_cell_benchmark.py`, `dns_benchmark.py` and the existing
+qualification runner. The November audit's one-CPU cached-object medians were
+402 microseconds CPU/request with WAF off and 2,839 with balanced WAF. These are
+historical workload-specific observations, not an SLO or evidence that disabling
+protection is an optimization. Do not repeat its already-implemented fixes.
+
+Record commit/dirty diff, image digest, kernel, CPU quota, memory limit, network,
+object/body size, domain/rule cardinality, generator capacity, concurrency,
+errors, warm/cold state, p50/p95/p99, CPU/request, peak RSS, disk/temp bytes,
+drops and recovery. Repeated control runs establish noise. Publish sustainable
+capacity with stated headroom, not the highest burst or summed cell results.
+
+Existing numerical targets below are retained as proposed experiment criteria
+unless an attributed qualification record already supports them. Before an
+implementation stage, ratify or revise each target from its reference baseline,
+noise, security and user/operational need, and record the reason. Corpus sizes
+are coverage inputs, not proof of accuracy; test data must represent distinct
+traffic classes. No claimed 1% false-positive rate without denominators and
+uncertainty. Security invariants, bounds and last-valid-state requirements are
+mandatory regardless of performance. A development-host number is labeled as
+such and cannot alone close fleet qualification.
+
+### Stage contract and execution order
+
+Every stage produces a reviewable result and closes the implementation,
+documentation, automated/runtime and browser fields separately. The phase's
+objective/current state identify its problem and starting evidence; its scope,
+execution plan, security/resource boundary and tests all apply to every stage.
+Before coding, record durable state, permissions, external effects, retry,
+rollback and exact bounds. Every new major subsystem starts with feasibility
+and security evaluation; failure to justify it means deferral, not scaffolding.
+
+Run Phase 0 first, including the remaining Phase 3 overflow stage. Extend the
+Phase 1 baseline and finish Phases 2 and 3 before adding detection capabilities.
+Then follow documented dependencies. Phase 12 is already independently admitted
+and implemented; close its current gates without restarting it. Phase 11
+integrates the same release, including Phase 12. Phases 7 bot signals, 8 shared
+reputation, and 9 JWT/discovery are conditional; an explicit deferral removes
+their optional fields from dependent scopes, never waives a core security gate.
+This avoids the Phase 7/8 reputation dependency cycle.
+
+Each change uses existing queues, revisioned snapshots, signing, stores and
+qualification machinery. No synchronous runtime effects, new service, general
+expression language or second evaluator. Invalid candidates retain previous
+valid state. Time-limited trust/mitigations also honor expiry/revocation; last
+valid state must not mean trusting a revoked key or keeping a stale block forever.
+
+---
+
+## Phase 0: Platform foundations and evidence reconciliation
+
+**Objective.** Close exposed protection gaps and establish a truthful release
+baseline across the control, DNS, serving, telemetry and recovery planes.
+
+**Priority and starting point.** F1 is P0 for deployments relying on rule limits;
+F2 to F5 are P1 qualification/hardening work. The source and historical records
+in section 1 are the starting evidence, not a current production pass.
+
+**Scope and exclusions.** Finish existing safeguards and qualification. No new
+customer feature, rewrite, dependency, public traffic test or infrastructure
+component. Preserve PostgreSQL and named development volumes. No destructive
+refreshes, production secrets or customer-data captures.
+
+**Dependencies.** None. Baseline collection starts before any fix or tuning;
+Phase 1 expands it rather than creating another harness.
+
+### Stage A: Protection and trust boundaries
+
+- Reproduce F1 with a disposable real cell: saturate the rule domain's budget,
+  then repeat the same previously unseen key beyond its threshold. Exercise
+  physical allocation failure, maximum domain assignment and a healthy tenant.
+  Keep builtin domain/Nginx fallbacks enabled and record which layer acts.
+- Complete the remaining Phase 3 overflow design with reserved, bounded state.
+  The result must preserve a specified abuse boundary and cross-tenant
+  isolation at saturation. Do not merely suppress the state-full event or
+  loosen limits. Reuse the existing counters, not a remote quota service.
+- Requalify API/session/token equivalence, revoked/disabled users, bulk and
+  nested-resource isolation, idempotency conflicts, revision races and rollback.
+- Exercise Host/SNI/PROXY/forwarding trust, ambiguous framing, duplicate headers,
+  mixed A/AAAA, rebinding and backup-origin policy. Qualify current HTTP and
+  verified/unverified HTTPS behavior, including invalid cert/chain/name/expiry.
+  Review a secure origin-mode policy and transition before proposing changes;
+  origin client authentication is a later conditional stage.
+
+**Acceptance and tests.** A new key after exhaustion cannot silently remove the
+configured protection, and another tenant's threshold/state is preserved.
+Unauthorized mutations never reach desired state or origin. Record actual
+fallback errors and resource bounds. Use isolated PHP tests through
+`make dev-test`, relevant PostgreSQL concurrency fixtures, existing Go origin
+and gateway tests, and real `origin_destinations.py`, `sni_host_binding.py`,
+`waf_body_inspection.py`, `rate_limit_isolation.py` and new overflow cases.
+Mocks/contract checks supplement these runs, never replace them.
+
+### Stage B: Serving correctness and durable recovery
+
+- Qualify cache isolation and canonical keys through lookup, rewrite and purge:
+  Authorization/cookies/Set-Cookie, repeated Vary, private/no-store/no-cache,
+  HEAD/Range, validators, compression and unknown-length/large responses.
+  Full cache/temp filesystems and concurrent fills must remain bounded and
+  must not expose private bytes or return an unrelated tenant's response.
+- Qualify DNS render/read-back/rollback, monotonic serials, NXDOMAIN versus
+  NODATA, UDP truncation/TCP fallback, Geo-DNS parity and TSIG/catalog secondary
+  convergence/expiry. Do not mistake internal replication for a missing feature.
+- Qualify managed/uploaded TLS renewal failure, DNS-only exclusion, invalid
+  replacement, rotation and recovery with the previous valid certificate.
+  Exercise signed artifact refusal, assignment, replay, interrupted activation,
+  restart with control down, HA fencing and off-host reconstruction using the
+  complete documented encryption/signing/PKI recovery set.
+- Run telemetry and export outages with bounded full buffers. Confirm redaction,
+  tenant-scoped filters, export retries/duplicates/late inserts and retention-gap
+  accounting; dependency failure cannot delay serving.
+
+**Acceptance and tests.** No cross-tenant/private cache response, unsafe origin
+connection, invalid active bundle, serial regression or false successful
+operation. Record any unavailable dual-stack path as nonpassing. Reuse
+`openresty_runtime.py`, `request_rules.py`, `edge_purge_protocol.py`,
+`dns_authoritative.py`, `dns_node_convergence.py`, `managed_tls.py`,
+`uploaded_tls.py`, `telemetry_analytics.py`, `log_push.py`,
+`offhost_recovery.py` and the existing HA/failure fixtures as applicable. Record
+measured RPO/RTO and restore limitations, not just successful snapshot listing.
+
+### Stage C: Integrated budgets and honest release evidence
+
+- Reconcile the historical `custom_rules` rerun and reproduce the remaining
+  `application_protection` and `cell_generation_reload` failures. Classify
+  serving defects separately from observation races; retain the failing result
+  until a release-matched fix/rerun supports closure.
+- Measure the integrated gateway, cells, agent, Vector and DNS with the control
+  and telemetry topology recorded, including cold start, steady load, burst,
+  soak, saturated resources and recovery. Source/global rate protections stay
+  enabled. Compare active/quarantine placement and full-host memory/disk/network
+  headroom rather than multiplying isolated-cell throughput.
+- Reconcile Phase 12 browser/snapshot/accessibility evidence and all existing
+  implementation records. Record feasibility/admission decisions for optional
+  datasets, DNSSEC and origin mTLS using the candidate register; do not start
+  their implementation during this foundation phase.
+
+**Acceptance and tests.** Each record has a source/image identity, environment,
+executed command, original exit status, measurement and limitation. Unavailable,
+failed, skipped and stale evidence cannot become a release pass. Reuse
+`production_qualification.py` and its validator, the existing benchmarks and
+`tests/browser/run.sh` for any UI implementation being qualified. Visual and
+accessibility results are mandatory for the existing current-phase UI gate.
+
+**Security, performance and simplicity requirements.** Do not weaken TLS,
+inspection, source limits, log redaction or tenant isolation for a measurement.
+Ratify CPU, RSS, descriptors, shared memory, connections, temp/cache bytes,
+telemetry buffers and queue/query budgets from measured sustainable capacity
+with recovery headroom. No unbounded retries or fan-out; bulk work cannot starve
+interactive/runtime lanes. Use existing components and fixtures. Failure
+preserves prior valid state and reports degradation explicitly.
+
+**Completion checkpoint, 21 November 2026.**
+
+| Implementation | Documentation | Automated/runtime | Browser |
+| --- | --- | --- | --- |
+| Open: F1 and reproduced defects require implementation work | This plan is current; behavior/runbooks follow actual changes | Open: release-matched foundation matrix not executed by this planning audit | Open for existing Phase 12 gate and any subsequent UI change; no waiver |
 
 ---
 
 ## Phase 1: Verification baseline
 
+**Execution plan.** Priority: P1, before behavior changes.
+
+**Ordered stages.** 1. Inventory existing tests, image identity and version fields. 2. Extend the existing runner with versioned clean/evasion corpora and counted expectations. 3. Record repeated profile and full-host baselines with failure/recovery controls.
+
+**Security, resources and failure boundary.** No new test platform or runtime hooks. Synthetic data only; corpus framing must reach a real cell. Budget corpus/runtime duration and generator capacity separately from the target. A harness error fails qualification rather than changing serving.
+
+Each stage closes the shared phase gate with the phase-specific tests and
+acceptance criteria. Scope not named in this phase is excluded.
+
 **Objective.** Make false positives, false negatives, and latency measurable,
 and record today's numbers, before any detection changes.
 
-**Current state.** The E2E tests prove single behaviors with a few hand-written
-payloads. There is no clean-traffic corpus, no use of the CRS regression tests,
-no WAF latency benchmark, and no report of the ruleset version per cell.
+**Current state.** Real-cell fixtures and a measured edge/WAF benchmark exist.
+The November performance record is reusable evidence, not a complete detection
+corpus, false-positive study or integrated fleet budget. Inventory the current
+version fields before adding any; extend the existing harness and runner.
 
 **Scope.**
 
@@ -216,27 +379,46 @@ compares against.
 run on the reference cell is stored with the release record. The version
 mismatch is tested by starting a cell from an image with a changed version label.
 
+**Completion checkpoint, 21 November 2026.**
+
+| Implementation | Documentation | Automated/runtime | Browser |
+| --- | --- | --- | --- |
+| Benchmark exists; corpus/integrated baseline open | Existing benchmark docs; corpus/budget records open | Historical measurements only; phase matrix open | Version/alert UI gate open |
+
 ---
 
 ## Phase 2: Inspection integrity and cost
 
+**Execution plan.** Priority: P1; any reproduced inspection bypass becomes P0.
+
+**Ordered stages.** 1. Requalify existing body admission and fallback. 2. Add bounded matched-rule detail and scoped exclusions. 3. Evaluate a security-equivalent one-pass optimization and retain it only with measured benefit.
+
+**Security, resources and failure boundary.** No engine replacement, partial-body bypass, raw payload logging or unsafe connection reuse. Include headers/body/listener deadlines and temporary bytes in the Phase 1 budget. A rejected candidate keeps the prior valid engine/configuration.
+
+Each stage closes the shared phase gate with the phase-specific tests and
+acceptance criteria. Scope not named in this phase is excluded.
+
 **Objective.** Inspect every request that should be inspected, once, at a known
 cost, and record why each request was blocked.
 
-**Current state.** Scoring copies the request over a new loopback connection
-every time. A body without a `Content-Length` is not sent to scoring. Log-only
-rules need a second CRS pass. Only `949110` is recorded. Exclusions are inert.
-When scoring fails, the cell falls back to inspecting the request with the
-level's unadjusted defaults.
+**Current state.** Decoded body acquisition, bounded admission and explicit
+failure handling are implemented. Scoring still uses a new loopback connection,
+and log-only rules can need two passes. Matched CRS detail and scoped exclusions
+remain incomplete. A scoring-listener failure leaves inline inspection active;
+its unadjusted defaults and tuning differences need explicit qualification.
 
 **Scope.**
 
-- **Body coverage.** Bodies without a `Content-Length` (chunked, and HTTP/2) are
-  read up to the inspection limit and inspected. For a body over the limit, the
-  domain chooses one explicit policy: refuse with 413, or inspect the first N
-  bytes and mark the request `body_truncated` (a new rule field).
-- **One pass.** Each request goes through CRS at most once, log-only rules
-  included. Connections to the scoring listener are reused.
+- **Body coverage.** Preserve and requalify the decoded-body reader for chunked
+  and HTTP/2 requests. Blocking mode refuses oversized, unreadable and
+  unsupported-encoded bodies with explicit outcomes. Monitoring may record
+  incomplete inspection, but must never label it inspected. A prefix-only
+  inspection is not a substitute for complete blocking-mode coverage.
+- **One pass.** Prove feasibility of one CRS evaluation with equivalent
+  log-only/tuning behavior. Profile copying and loopback setup; reuse
+  connections only if request isolation, framing and timeout recovery are
+  proved on the pinned connector. Retain the safe existing path if the
+  optimization cannot preserve inspection and last-valid behavior.
 - **Matched rules.** Up to 8 matched rule IDs and their categories reach the
   cell and the request event for every blocked or logged request. Matched data
   is never included.
@@ -259,9 +441,11 @@ differs from the reference.
 
 - Every attack in the corpus that is blocked with a `Content-Length` is also
   blocked when sent chunked, and over HTTP/2 with no length.
-- No request is inspected twice. The benchmark shows added p50 and p99 latency
-  at Recommended at least 30% below the Phase 1 baseline, and log-only rules add
-  under 10% on top of that.
+- A one-pass candidate preserves every detection/failure outcome and records
+  p50/p95/p99, CPU/request and peak memory against repeated Phase 1 controls.
+  Admit it only for a benefit exceeding measured noise within the predeclared
+  resource budget. If infeasible, record the measured duplicate-pass cost and
+  the explicit optimization deferral; never remove inspection for a target.
 - 100% of WAF blocks in the harness carry at least one matched rule ID besides
   `949110`.
 - A path-scoped exclusion stops its rule only on that path. Sending the excluded
@@ -274,26 +458,44 @@ exclusion scope and the bypass attempts. A failure injection that stops the
 scoring listener and checks the fallback, the counter, and the alert. The
 benchmark compared with Phase 1.
 
+**Completion checkpoint, 21 November 2026.**
+
+| Implementation | Documentation | Automated/runtime | Browser |
+| --- | --- | --- | --- |
+| Body reader present; detail/exclusions/optimization open | Current body behavior recorded; remaining scope open | Historical body passes; complete phase open | Exclusion/detail UI gate open |
+
 ---
 
 ## Phase 3: Client identity, fairness, and signal fidelity
 
+**Execution plan.** Priority: P0 for F1 exposure; P1 for remaining fairness proof.
+
+**Ordered stages.** 1. Carry forward existing prefix/containment/reporting evidence. 2. Finish and qualify conservative overflow under per-domain and physical memory exhaustion. 3. Requalify tenant isolation, escalation and full-domain reporting.
+
+**Security, resources and failure boundary.** Pull stage 2 forward into Phase 0; do not implement it twice. No synchronous counters or new store. Budget all counter/marker/evidence keys at maximum assigned domains, including the minimum-share floor. Overflow must preserve a stated protection boundary and other tenants, not silently allow new rule keys.
+
+Each stage closes the shared phase gate with the phase-specific tests and
+acceptance criteria. Scope not named in this phase is excluded.
+
 **Objective.** Mitigate the client that misbehaves without harming other
 visitors or other tenants, and report every domain's events accurately.
 
-**Current state.** Cell limits, rate-limit rules, and challenge binding use the
-full client address. Shared dictionaries are shared by all domains and evict
-entries when full. Domain escalation reacts to any 50 events. Heartbeats carry
-at most 20 noisy entries in total.
+**Current state.** Prefix keys, domain budgets, containment and fair reporting
+are implemented with historical runtime evidence. Counter-budget overflow still
+returns no rule decision for new keys; physical dictionary saturation and the
+minimum-share floor also need qualification at maximum assigned-domain count.
+Complete and requalify the scope below; do not rebuild existing mechanisms.
 
 **Scope.**
 
 - **One client key** for the cell and the gateway: IPv4 address, or an IPv6
   prefix (default /64, configurable per domain from /48 to /128). It is used by
   built-in limits, rate-limit rules, and challenge binding.
-- **Fair memory.** Each domain gets a bounded share of counter memory. When the
-  share is full, new keys fold into a coarser key (prefix, then ASN), never into
-  "no decision", and other domains' counters are never evicted.
+- **Fair memory.** Each domain gets a bounded share of counter memory. At its
+  limit, use an explicit conservative domain-scoped fallback with reserved
+  capacity, never a silent loss of protection. Measure collateral impact and
+  tenant isolation; do not mandate ASN grouping without evidence that it is
+  safer than the existing domain fallback.
 - **Client penalty box per cell.** A client key that trips repeated escalating
   events on a domain is challenged or blocked for a bounded time on that domain.
   The thresholds and actions are typed settings.
@@ -326,9 +528,24 @@ by domain within fixed dictionaries.
 cardinality flood test across two domains. A heartbeat test with 200 noisy
 domains. Shared memory usage recorded under the flood.
 
+**Completion checkpoint, 21 November 2026.**
+
+| Implementation | Documentation | Automated/runtime | Browser |
+| --- | --- | --- | --- |
+| Prefix/budget/containment/reporting present; overflow open | Remaining overflow semantics open | Historical fairness passes; saturation matrix open | Changed limit/containment UI requires suite |
+
 ---
 
 ## Phase 4: Policy lifecycle
+
+**Execution plan.** Priority: P1.
+
+**Ordered stages.** 1. Deliver shadow/expiry through model, API and signed runtime. 2. Add bounded match counts and qualified partial impact estimates. 3. Qualify staged rollout, propagation and revision rollback.
+
+**Security, resources and failure boundary.** No second matcher or capture of unstored secrets. Missing historical fields are unknown, not a zero-match prediction. Bound event bytes, retention, query time and rollout fan-out. Expiry works locally; outage leaves last valid policy, with no stale temporary block beyond expiry.
+
+Each stage closes the shared phase gate with the phase-specific tests and
+acceptance criteria. Scope not named in this phase is excluded.
 
 **Objective.** Make every security change testable before it blocks, visible
 while it runs, and quick to undo.
@@ -376,9 +593,24 @@ idempotency. E2E for shadow, expiry, and rollback. A ClickHouse query test
 against a counted sample. Browser tests for the shadow badge, the counts, and
 the estimate.
 
+**Completion checkpoint, 21 November 2026.**
+
+| Implementation | Documentation | Automated/runtime | Browser |
+| --- | --- | --- | --- |
+| Lifecycle scope open | Behavior and operator guide open | Shadow/expiry/rollback matrix open | Rule lifecycle gate open |
+
 ---
 
 ## Phase 5: Signed security datasets
+
+**Execution plan.** Priority: P1 for safe delivery when required; P2 for expanded datasets.
+
+**Ordered stages.** 1. Prove feasibility and admission limits using the existing artifact channel. 2. Deliver one justified typed dataset with provenance, expiry and revocation. 3. Qualify max-size lookup, memory, rotation and corrupt/stale candidate refusal.
+
+**Security, resources and failure boundary.** No generic feed platform, runtime download or mandatory new provider. Set per-type/per-cell budgets from the reference host before implementation. Keep last valid nonexpired data; expiry semantics must be explicit per type and cannot preserve a revoked allowlist indefinitely.
+
+Each stage closes the shared phase gate with the phase-specific tests and
+acceptance criteria. Scope not named in this phase is excluded.
 
 **Objective.** One safe way for large, changing security data to reach cells,
 without a release and without any runtime download.
@@ -396,7 +628,8 @@ general dataset channel exists.
   platform limit, for example 10,000 entries per domain list), usable from rules
   with `in_list`.
 - **Platform datasets**: published search engine crawler ranges, a larger
-  leaked-password corpus (at least 1,000,000 entries), and later the greylist
+  leaked-password corpus sized from measured detection benefit and memory, and,
+  only if admitted, the greylist
   (Phase 8). Sources come with a release or from an import an administrator
   enables in the control plane. A cell never fetches anything.
 - Per-cell dataset versions in the heartbeat (built on Phase 1).
@@ -405,7 +638,7 @@ general dataset channel exists.
 activation already used for snapshots. A dataset that fails validation is
 refused, the last valid version stays active, and the failure is alerted.
 
-**Dependencies.** Phase 1, Phase 3 (memory bounds).
+**Dependencies.** Phase 1, Phase 3 (memory bounds), Phase 4 (propagation evidence).
 
 **Acceptance criteria.**
 
@@ -420,9 +653,24 @@ refused, the last valid version stays active, and the failure is alerted.
 for activation, refusal, and last valid state. A memory measurement at maximum
 size.
 
+**Completion checkpoint, 21 November 2026.**
+
+| Implementation | Documentation | Automated/runtime | Browser |
+| --- | --- | --- | --- |
+| Dataset admission/delivery scope open | Type/budget/expiry contract open | Signature/expiry/max-size matrix open | List/version UI requires suite |
+
 ---
 
 ## Phase 6: Rate limiting
+
+**Execution plan.** Priority: P1 after F1 is closed.
+
+**Ordered stages.** 1. Deliver measured window/key semantics. 2. Add bounded response-outcome counting for login/API abuse. 3. Qualify per-cell and approximate shared modes under skew, membership change and outage.
+
+**Security, resources and failure boundary.** No exact-global-quota claim or request-path coordination. Bound key length/cardinality and hashed values. Traffic on one of three cells must not be assessed only by a balanced-load test. Preserve fallback budgets and state error bounds, underutilization and recovery behavior.
+
+Each stage closes the shared phase gate with the phase-specific tests and
+acceptance criteria. Scope not named in this phase is excluded.
 
 **Objective.** Rate limits that follow real abuse patterns, are accurate at
 window edges, and give a stated approximation across cells.
@@ -467,18 +715,33 @@ aggregation is asynchronous and only adds mitigations; it never delays a request
 login abuse scenario. A memory bound test at maximum keys. Browser tests for the
 new rule options.
 
+**Completion checkpoint, 21 November 2026.**
+
+| Implementation | Documentation | Automated/runtime | Browser |
+| --- | --- | --- | --- |
+| Fixed limits present; enhancements open | Approximation/error semantics open | Skew/outcome/saturation matrix open | New rule-option gate open |
+
 ---
 
 ## Phase 7: Challenge and bot mitigation
 
+**Execution plan.** Priority: P1 for token correctness; P2 conditional for new bot signals.
+
+**Ordered stages.** 1. Qualify pool-wide encrypted keys, rotation, revocation and domain/client binding. 2. Qualify API/mobile/accessibility behavior and bounded solve cost. 3. Admit crawler/fingerprint/bot signals only after provenance, privacy and false-positive experiments.
+
+**Security, resources and failure boundary.** Token portability does not make token budgets globally exact. Protect secrets from customer-visible snapshots; bound retained keys, tokens and solve CPU. Keep valid overlap keys during rotation; reject untrusted keys. Fingerprints or solved work are not proof of humanity, and crawler trust cannot bypass unrelated security.
+
+Each stage closes the shared phase gate with the phase-specific tests and
+acceptance criteria. Scope not named in this phase is excluded.
+
 **Objective.** A challenge that works across cells and PoPs, adapts to risk,
 does not break APIs or mobile clients, and is backed by explainable bot signals.
 
-**Current state.** Proof of work at a fixed 16 bits with a per-cell key that
-never rotates. Tokens are bound to the exact address and user agent. Non-HTML
-requests get a plain 403. Under attack mode bypasses `/api/` and
-`/.well-known/` (fixed). No crawler verification, no TLS fingerprint, no bot
-signals.
+**Current state.** Proof of work uses a per-cell key without the planned
+rotation lifecycle. Tokens bind to the client prefix key, with optional UA
+binding, and incident commands accept bounded bypass-prefix settings. Qualified
+pool-wide portability, verified crawler data and bot signals are still absent.
+The historical exact-address/mandatory-UA description is obsolete.
 
 **Scope.**
 
@@ -488,8 +751,9 @@ signals.
 - **Binding** to the client key (Phase 3) and the user agent family, so a client
   that changes address inside its prefix keeps its token. Each token has its own
   request budget, so a token shared by a bot farm stops working.
-- **Adaptive difficulty** from the penalty box (Phase 3), reputation (Phase 8),
-  and the domain state, capped by a measured solve time.
+- **Adaptive difficulty** from the penalty box (Phase 3), optional reputation (Phase 8),
+  and the domain state, capped by a measured solve time. A missing/deferred
+  reputation signal is neutral; Phase 7 must not depend cyclically on Phase 8.
 - **API-aware behavior**: non-HTML requests get a machine-readable refusal with
   the reason. Each domain chooses its own bypass prefixes and methods for under
   attack mode, instead of the fixed list.
@@ -532,9 +796,24 @@ key handling. E2E across two edges. The harness with bot and clean corpora.
 Browser and accessibility tests of the challenge page. An external review of
 the token and key design, included in Phase 11.
 
+**Completion checkpoint, 21 November 2026.**
+
+| Implementation | Documentation | Automated/runtime | Browser |
+| --- | --- | --- | --- |
+| Local challenge present; portability/rotation open | Key/failure/accessibility contract open | Cross-cell/rotation/clean-client matrix open | Challenge mobile/visual/accessibility gate open |
+
 ---
 
 ## Phase 8: Client reputation and shared threat intelligence
+
+**Execution plan.** Priority: P2 conditional; not a core release prerequisite.
+
+**Ordered stages.** 1. Run a poisoning/privacy/NAT feasibility experiment. 2. If admitted, deploy opt-in shadow summaries with decay and bounded retention. 3. Enforce only after independent multi-tenant and outage evidence.
+
+**Security, resources and failure boundary.** No new service or synchronous lookup. A source tenant must not be able to punish another through fabricated or low-confidence evidence. Cap sources, aggregation CPU, entries and TTL; expire stale influence and fall back to local protection. If feasibility fails, explicitly defer the feature.
+
+Each stage closes the shared phase gate with the phase-specific tests and
+acceptance criteria. Scope not named in this phase is excluded.
 
 **Objective.** A client that attacks one domain or PoP is treated with suspicion
 everywhere within minutes, without blocking shared NATs, without exposing one
@@ -553,7 +832,9 @@ per cell and per domain.
   a TTL on each entry.
 - Cells expose `client_reputation` (a band) and `greylisted` as rule fields. The
   platform default is to challenge greylisted clients, never to block them.
-  Domains can opt out or ask for stricter handling.
+  Only explicitly enrolled domains participate; cross-tenant influence is off
+  until poisoning and NAT-safety qualification passes. Stricter handling must
+  not turn reputation alone into an unreviewed platform-wide block.
 - **NAT and crawler safety**: a key with a high share of clean traffic or solved
   challenges is excluded or capped. Verified crawlers are never greylisted.
 - **Privacy and isolation**: client addresses in the aggregate are kept for 7
@@ -581,9 +862,24 @@ until its entries expire, then fall back to local protection only.
 in the harness. Policy tests for tenant isolation. A retention test for the
 aggregate.
 
+**Completion checkpoint, 21 November 2026.**
+
+| Implementation | Documentation | Automated/runtime | Browser |
+| --- | --- | --- | --- |
+| Conditional: feasibility/admission open | Privacy/provenance/opt-in decision open | Poisoning/NAT/TTL matrix not run | Only required if admitted; no placeholder pass |
+
 ---
 
 ## Phase 9: API and account protection
+
+**Execution plan.** Priority: P1 for schema safety; P2 conditional for JWT/discovery.
+
+**Ordered stages.** 1. Finish bounded JSON/body schema semantics and test incomplete inspection. 2. If admitted, qualify uploaded-key JWT algorithm/issuer/audience/expiry and rotation. 3. Admit discovery or YAML only for demonstrated demand and safe compilation.
+
+**Security, resources and failure boundary.** No remote JWKS on the request path, unbounded schema recursion or credential logs. Reuse typed compiled tables; budget compile time, bytes, fields and validation CPU. A malformed candidate preserves the previous schema/key set; expired credentials never become valid during control outage.
+
+Each stage closes the shared phase gate with the phase-specific tests and
+acceptance criteria. Scope not named in this phase is excluded.
 
 **Objective.** Positive security for APIs and protection against account
 takeover, both decided at the edge.
@@ -627,9 +923,24 @@ starts in shadow mode (Phase 4).
 validation. E2E per check. Harness measurements of false positives and latency.
 Browser tests of the schema and JWT screens.
 
+**Completion checkpoint, 21 November 2026.**
+
+| Implementation | Documentation | Automated/runtime | Browser |
+| --- | --- | --- | --- |
+| Basic checks present; bounded schema/JWT scope open | Schema limits and conditional admission open | Body/key/rotation/privacy matrix open | Schema/JWT UI gate open if scope admitted |
+
 ---
 
 ## Phase 10: Investigation and analytics
+
+**Execution plan.** Priority: P1 for decision trace and loss visibility; P2 for episode views.
+
+**Ordered stages.** 1. Deliver bounded trace fields and explicit unavailable signals. 2. Qualify scoped cursor queries, redaction and log/export freshness and drops. 3. Add attack episodes/views only after counted samples prove their value.
+
+**Security, resources and failure boundary.** No serving-path query or extra analytics service. Reuse ClickHouse rollups and existing export jobs; set line-byte, cardinality, retention and query budgets. Telemetry failure may lose accounted events but never stop serving. Do not repeat the existing LogPush implementation.
+
+Each stage closes the shared phase gate with the phase-specific tests and
+acceptance criteria. Scope not named in this phase is excluded.
 
 **Objective.** An operator or domain owner can explain any decision and
 follow an attack from start to end.
@@ -658,7 +969,7 @@ heartbeat reports. Attacks are not grouped.
 bounded queries. The request path only adds bounded fields to the existing log
 line.
 
-**Dependencies.** Phases 2, 3, 4, 7, and 8.
+**Dependencies.** Phases 2, 3 and 4 for core traces. Phases 7 and 8 only for their admitted signal fields; deferred signals are explicitly unavailable.
 
 **Acceptance criteria.**
 
@@ -672,19 +983,38 @@ line.
 **Verification.** ClickHouse query tests against a counted sample. E2E from
 cell to ClickHouse to the API. Browser tests for traces, episodes, and views.
 
+**Completion checkpoint, 21 November 2026.**
+
+| Implementation | Documentation | Automated/runtime | Browser |
+| --- | --- | --- | --- |
+| Logs/export present; trace/query scope open | Retention/loss/trace contract open | Counted scope/loss/query matrix open | Trace/event view gate open |
+
 ---
 
 ## Phase 11: Full qualification and external review
 
+**Execution plan.** Priority: P1 release gate; reproduced unsafe failure is P0.
+
+**Ordered stages.** 1. Reconcile every earlier gate against one release manifest. 2. Execute integrated load, IPv4/IPv6, failure, recovery and soak scenarios. 3. Obtain scoped external security review and close release-blocking findings.
+
+**Security, resources and failure boundary.** No production/customer testing or new fleet topology just for optional features. Use existing qualification tooling; choose the smallest topology that proves actual PoP/cell failover and record coverage limits. Measure whole-host headroom, disk/network limits, recovery and rollback, not summed container throughput.
+
+Each stage closes the shared phase gate with the phase-specific tests and
+acceptance criteria. Scope not named in this phase is excluded.
+
 **Objective.** Prove that the finished WAF works as one system on a real
 multi-PoP fleet, under load and failure.
 
-**Current state.** Earlier gates were often closed on a development stack. No
-staging run, performance envelope, or external review exists.
+**Current state.** Staging and local performance records exist, as linked in
+the starting point. They leave integrated load/failure/IPv6 gates open. No
+release-matched external review was established by this audit.
 
 **Scope.**
 
-- A staging fleet with three PoPs in two regions.
+- A production-like staging fleet that proves independent PoP failure and
+  multi-cell behavior. The original three-PoP/two-region target is used only
+  when the deployed routing/failure model requires it; justify the topology
+  instead of creating infrastructure for an arbitrary count.
 - **Attack scenarios**: an L7 flood from 10,000 addresses and from IPv6
   rotation, credential stuffing, scanners, the evasion corpus, and a headless
   browser farm. The clean corpus runs at the same time.
@@ -695,14 +1025,16 @@ staging run, performance envelope, or external review exists.
 - **An external review** of the challenge tokens and keys, dataset signing,
   tenant isolation, and the bypass corpus.
 
-**Dependencies.** Phases 1 to 10.
+**Dependencies.** Phase 0, required work in Phases 1 to 10, and Phase 12 integration. Conditional capabilities need an explicit admission or deferral decision, not a placeholder implementation.
 
 **Acceptance criteria.**
 
-- Every attack scenario is mitigated. The clean corpus's false positive rate
-  stays at or below each phase's stated rate.
-- In each failure, serving continues from the last valid state, and the
-  documented failure behavior matches what happened.
+- Every scenario has a counted expected outcome, measured detection/admission
+  result and stated coverage limit. Clean-traffic false positives remain within
+  the baseline-derived, ratified phase budget. No promise to stop every attack.
+- Each failure matches its documented policy: retain last valid serving state
+  where available, honor expiry/revocation, and fail closed when identity or
+  recovery material is unavailable. Record degraded capacity and recovery time.
 - The sizing guide quotes only numbers from this run.
 - The external review is published with its scope, findings, and fixes.
 
@@ -710,15 +1042,228 @@ staging run, performance envelope, or external review exists.
 stored record listing the release, the commit, and every result. No unexecuted
 test is reported as passed.
 
+**Completion checkpoint, 21 November 2026.**
+
+| Implementation | Documentation | Automated/runtime | Browser |
+| --- | --- | --- | --- |
+| Existing runner present; full release gate open | Historical records retained; current release record open | Integrated fleet/failure/external review open | Release-matched suite required |
+
 ---
+
+## Phase 12: Request and response rules
+
+**Execution plan.** Priority: P1 to close admitted work; implementation present.
+
+**Ordered stages.** 1. Reconcile the existing four increment records and migrations. 2. Close complete browser, visual and accessibility qualification. 3. Integrate WAF ordering, cache-key/purge, invalid-candidate and rollback evidence on the release.
+
+**Security, resources and failure boundary.** No second engine or repeated table/migration creation. Preserve current bounds and the recorded 50-rules-per-type benchmark comparison. Original visitor and rewritten origin targets must remain unambiguous; blocked/challenged requests cannot be transformed into an allow. Invalid state retains the active generation.
+
+Each stage closes the shared phase gate with the phase-specific tests and
+acceptance criteria. Scope not named in this phase is excluded.
+
+**Admission.** The owner admitted this phase on 2026-11-21 independently of
+the other WAF phases. Its four increments are now implemented with the
+[qualification record](operations/request-rules-qualification-2026-11-21.md).
+Close the outstanding browser gate and integrate security/cache regression
+evidence; do not restart its migrations or implementation.
+
+**Objective.** Let a domain redirect, rewrite, change headers, and set cache
+behavior per request, with the same typed conditions as custom rules, decided
+in the cell from the signed snapshot.
+
+**Historical starting point before implementation.** A domain had typed custom rules (block, challenge, log,
+allow, skip managed rules) and up to 16 cache path rules that match a path
+prefix or suffix and either bypassed the cache or set an edge TTL. The only
+redirect was the HTTPS redirect. Nothing rewrote the URL sent to the origin.
+Request and response headers could not be set or removed per domain.
+
+**Scope.** One **Rules** tab on the domain page, next to Firewall rules, with one
+section per rule type. Every rule has a name, an on/off switch, a priority, and
+up to five conditions from the custom-rule condition builder. Only fields that
+are known before any detection runs are offered: hostname, path, query string,
+method, country, continent, ASN, client IP, user agent, referer, header, cookie,
+file extension, and TLS version. Score and detection fields are not offered, so
+a rule never makes a request pay for scoring.
+
+1. **Redirect rules.** The cell answers with a redirect and the request never
+   reaches the origin. The target is a fixed URL, the same path on another
+   host the rule names, or the path with one prefix replaced by another, with
+   the query string kept or dropped. The status is 301, 302, 307, or 308. The
+   first matching rule wins.
+2. **URL rewrite rules.** The path and query string sent to the origin change.
+   The visitor's URL does not. The path is set to a fixed value or has a prefix
+   replaced. The query string is kept, dropped, or set to a fixed value. The
+   first matching rule wins.
+3. **Header rules.** Set or remove request headers sent to the origin, and set
+   or remove response headers sent to the visitor. Every matching rule applies,
+   in priority order. Response headers are applied on cache hits too.
+4. **Cache rules.** Bypass the cache, or set the edge TTL, the browser TTL, and
+   whether origin cache headers are respected. The first matching rule wins.
+   Cache rules replace the cache path rules: each stored path rule becomes a
+   cache rule with a `starts with` or `ends with` path condition, through an
+   expand and contract migration.
+
+**Presets.** Each type offers presets for common needs. A preset asks for a few
+values, writes ordinary rules marked with the preset's name, and replaces its
+earlier rules when it is saved again. A preset rule edited by hand becomes an
+ordinary rule, as custom-rule presets do today.
+
+- Redirects: www to the apex domain, the apex domain to www, and moving a path
+  prefix to a new prefix.
+- URL rewrites: removing a path prefix before the origin, and adding one.
+- Headers: security response headers (`Strict-Transport-Security`,
+  `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`,
+  `Permissions-Policy`), removing origin identity headers (`Server`,
+  `X-Powered-By`), and allowing cross-origin use of static files.
+- Cache: caching static files by extension for a chosen time, bypassing the
+  cache for admin and sign-in paths, and bypassing it when a session cookie is
+  present.
+
+**Bounds.** At most 50 rules of each type per domain, five conditions per rule,
+ten header operations per rule, and 50 header operations applied per request.
+Redirect targets and rewritten paths are at most 2,048 bytes. Header names are
+tokens of at most 64 bytes and values are at most 1,024 bytes, with no control
+characters. Values are fixed text only: there is no regex, no capture groups,
+and no expression language.
+
+**Protected behavior.**
+
+- Rules run after the security stages (custom rules, rate limits, the managed
+  WAF, challenges, and the built-in limits), so a redirect or rewrite never lets
+  a request skip them. Custom rules and the WAF match the visitor's URL.
+- The cache key and URL purge stay on the visitor's URL. Two URLs that rewrite
+  to the same origin path are cached separately, and purging the visitor's URL
+  removes what the visitor sees. A cache rule's outcome is part of the cache
+  policy hash, as a path rule's outcome is today.
+- A header rule cannot set or remove `Host`, `Content-Length`,
+  `Transfer-Encoding`, `Connection` and the other hop-by-hop headers,
+  `Forwarded`, `X-Forwarded-*`, `X-CDN-*`, `X-CDNF-*`, or the headers that
+  carry the challenge, security, and diagnostic decisions. A request header
+  rule does not change the cache key, and the documentation says so.
+- A rewritten path is normalized and must start with `/`. A path that leaves
+  the root after normalization (`..`) is refused when the rule is saved and
+  again in the cell. The origin's address and Host header never change.
+- A redirect target is `http` or `https` with a valid hostname, or a path. A
+  rule whose fixed target is the URL it matches is refused when it is saved.
+  Response body rewriting stays out of scope.
+
+**Technical direction.** One `request_rules` table holds every type: the domain,
+the type, the name, the priority, the switch, the typed conditions, the typed
+action, the preset, and a fingerprint. Database constraints check the type, the
+priority, and the unique fingerprint. Controllers, form requests, and policies follow the
+custom-rule endpoints, with cursor pagination, `Idempotency-Key`, and a `202`
+operation for every change. Each change raises the domain revision and is
+compiled into the signed snapshot as ordered lists per type. The cell evaluates
+them in its access phase with the custom-rule condition matcher, after the
+security stages and before the cache key. Response header operations run in the
+header filter. Cells ship the evaluator before the control plane sends the new
+snapshot field, and a snapshot without the field means no rules. The access log
+records the matched rule of each type, so Analytics and Logs can show which
+rule acted.
+
+**Dependencies.** No implementation dependency on earlier WAF phases; current
+release completion still requires Phase 0 and Phase 11 integration.
+
+**Acceptance criteria.**
+
+- Each type behaves as described on a real cell over IPv4 and IPv6, including
+  a cache hit for response headers and a purge of a rewritten URL.
+- A blocked or challenged request is never redirected or rewritten.
+- A refused rule (a protected header, a looping target, a path outside the
+  root, a value over its bound) is refused by the API and the panel with a
+  stable error code, and an invalid snapshot never replaces the active one.
+- Every stored cache path rule is served the same way after the migration, as
+  shown by the cache headers of the same requests before and after.
+- The edge cell benchmark in `tests/e2e/edge_cell_benchmark.py`, with 50 rules
+  of each type and none matching, costs at most 5% more CPU per cached request
+  than with no rules. The measured numbers are recorded in this phase.
+
+**Verification.** Feature tests for each type: the happy path, permissions
+(administrator, assigned user, other user), validation of every bound,
+idempotency, reorder, and rollback to the previous revision. Contract tests for
+the snapshot shape. `tests/e2e/request_rules.py` on real cells. Browser tests
+for the Rules tab with visual snapshots and accessibility checks, run with the
+antislop and `cdnf-ui-design` delivery gates. The domain-panel guide and the
+API reference describe every type and its bounds.
+
+**Completion checkpoint, 21 November 2026.**
+
+| Implementation | Documentation | Automated/runtime | Browser |
+| --- | --- | --- | --- |
+| Four increments present; preserve migrations | Reference and qualification record present | Historical IPv4/IPv6/runtime/performance passes; integration open | Pending complete suite/visual/axe evidence; current checkpoint does not pass |
+
+---
+
+## Capability decisions and prerequisites
+
+These are capability-fit decisions, not a replacement feature checklist.
+**P0** means a demonstrated or exposure-specific production blocker; **P1**
+means essential reliability or measured high-value work; **P2** means a useful
+conditional capability; **P3** means optional work that can wait. A candidate
+row does not authorize implementation, a new dependency or a new service.
+Existing commitments above remain visible; optional stages need an explicit
+admission/deferral decision before dependent work begins.
+
+| Capability / status | Value and actual behavior | Priority, cost, decision and proof |
+| --- | --- | --- |
+| Domain overview and administration / Partial qualification | Claims, delegation, assigned users and both panels already manage desired state. | P1: preserve lifecycle/permission paths; Stage 0A proves competing parent/child claims, revocation, deletion and idempotency. No registrar, new hierarchy or dashboard. |
+| Authoritative/secondary DNS and DNS analytics / Partial qualification | Hidden primary plus TSIG/catalog secondaries and dnstap/ClickHouse already provide serving/replication/visibility. | P1: finish Stage 0B negative-answer, transfer/expiry, serial, dual-stack and loss/rcode evidence. External multi-provider secondary imports are deferred: conflicting state ownership adds little immediate value. |
+| DNSSEC / Missing lifecycle | Authenticating signed answers requires both signing and a valid parent DS chain; it does not encrypt DNS. | P1 feasibility, P2 conditional implementation: first evaluate key ownership/escrow, Geo-DNS and signed transfers; then, if admitted, revisioned signing/DS workflow; finally real validating-resolver tests for rotation, expiry, stale DS, restore, TCP and larger responses. No hand-managed runtime-only keys. Defer if recovery cannot preserve trust without new infrastructure. |
+| Secure origin modes / Partial | Server verification authenticates the origin; current HTTP/unverified TLS remain explicit modes. | P1: qualify current semantics and review defaults/custom trust with a migration/rollback plan. Measure handshake/reuse cost with the same trust policy. Never improve latency by disabling certificate or destination checks. |
+| Origin client authentication / Missing | A client certificate lets an origin verify the requesting CDN identity; the origin must enforce it to prevent direct bypass. | P2 conditional: first define per-tenant key scope and origin enforcement; then reuse encrypted storage and assigned signed delivery; finally qualify overlap rotation, revoke/expiry, cross-tenant refusal, backup origins and handshake cost. No shared cross-tenant credential or new CA service. Server verification remains required. |
+| WAF, custom/managed rules and account protection / Partial | Signature scores, typed policy and basic schema/password/prompt heuristics exist. They do not establish calibrated bot/attack probabilities. | P1: finish Phases 1 to 4/6 and bounded schema checks; P2 conditional JWT. Corpus accuracy, body coverage, memory and failure behavior precede new detections. Keep response scanning limitations explicit. |
+| API identity gateway / Missing, Not needed | Management-panel authentication is separate from authenticating applications proxied through the CDN. | Reject a new identity/Access gateway: sessions, callbacks, upstream identity availability and protocol bypass are a separate product. Retain application/origin authentication and policy-based management. |
+| Bot signals and AI crawler control / Partial policy building blocks | Typed UA matching exists; real crawler identity requires maintained, verified datasets. robots.txt is advisory, not proof of identity. | P2 conditional after Phases 4/5/7: first establish provenance/freshness; then reuse typed crawler policy and existing analytics; finally qualify spoofed claims, stale ranges, clean crawlers and rollback. Fingerprint/heuristic scoring waits for measured false-positive and operating value. No separate crawler service, monetization or external request-path check. |
+| Agent readiness and Markdown responses / Missing, Not needed | Readiness guidance concerns origin content; negotiated HTML conversion changes response bytes, validators and cache variants. | P3: documentation guidance only if requested. Reject runtime HTML-to-Markdown conversion and automatic page rewriting: untrusted parsing and variant costs are unjustified. Origins can serve negotiated content. |
+| Cache diagnostics / Partial | HIT/MISS/BYPASS, typed cache policy and purge exist; redacted reasons would make incorrect admission or TTLs easier to diagnose. | P1 correctness, P2 diagnostics through Phases 0B/10: first qualify variants/internal-header trust; then expose bounded no-store/bypass/purge reason metadata; finally test auth/cookies/Vary/rewrite and cross-tenant redaction through runtime/API/UI. Reuse current log line; budget bytes and cardinality. |
+| Tiered caching / Missing | An upper cache tier can reduce origin fetches after lower-tier misses. | Defer P3 until measured origin amplification remains costly after current locking/admission. Feasibility must count extra latency, inter-PoP traffic, purge consistency and upper-tier outage. No extra serving dependency without evidence of net value. |
+| Persistent cache reserve / Missing, Not needed | An object-store cache adds a further freshness/revalidation/retention layer. | Reject now: new credentials, consistency, egress and recovery obligations. The backup object store does not become a serving cache. |
+| HTTP/2, WebSockets and compression / Partial qualification | Existing listeners, origin options and Gzip/Brotli support need streaming/variant and resource evidence. | P1: measure connection reuse, handshake and compression CPU/bytes before tuning. Qualify ETag/Vary/Range/Content-Length and sensitive responses. No new codecs, minification or response-body transformations without benefit. |
+| HTTP/3 and gRPC / Missing qualified edge paths | QUIC changes client transport; gRPC requires upstream HTTP/2 and stream/trailer semantics, not merely an HTTP/2 listener. | Defer P3 HTTP/3 and P2 demand-gated gRPC. TCP gateway routing does not automatically support UDP; stream-body WAF limits must be explicit. Admission needs identity/SSRF/resource/timeout design and real dual-stack long-stream/failure tests, not a protocol toggle. |
+| Redirect/rewrite/header/cache rules / Partial qualification | Phase 12 already implements bounded typed mutations after security, with protected origin/Host semantics. | P1: close its browser and release gates. No second engine, arbitrary origin override, custom regex or rule language. Measure worst-case misses and rule cardinality without dropping security order. |
+| Rule simulation / Partial preview | Validation preview is not execution simulation; historical estimates are only as complete as stored fields. | P2 conditional after Phase 4: first specify unknown fields and trace scope; then reuse one matcher with bounded synthetic input; finally prove trace/runtime agreement. No origin probe from arbitrary simulated input, secret replay or duplicate evaluator. |
+| Custom errors / Built-in responses; customer templates missing | A small status-preserving response can improve incident usability without general response rewriting. | Defer P3 until demanded. Bound template bytes, allow no script or remote fetch, preserve status/Retry-After and private/no-store, and prove no shared cached error leaks. Reuse current response handling; no template runtime. |
+| Origin failover, health and steering / Partial qualification | Validated primary/backup, hysteresis, hold-down/failback, pool endpoints and Geo-DNS already exist. | P1: qualify active/passive disagreement, both-down, DNS TTL lag, unsafe/partial retries, IPv4/IPv6 and recovery. No arbitrary origin pool, smart-routing service or affinity before existing behavior is proved. |
+| Programmable edge routes / Missing, Not needed | Customer code would execute before origin requests; typed rules already address bounded transformations. | Reject code execution, snippets and plugin runtimes: tenant sandboxing, CPU accounting, outbound policy and language lifecycle create a new platform. |
+| Log export and live diagnostics / Export present; live stream missing | Existing gzip HTTPS/S3 export has cursor-after-acceptance, retry and retention-gap semantics. Existing ClickHouse logs can support bounded polling. | P1 export/freshness/loss proof through Phases 0B/10; P2 conditional polling before streaming. Bound sessions, queries, retention and redaction; show sampling/drops/lag. No synchronous subscriber or new streaming service, and no exactly-once delivery claim. |
+| DDoS and network controls / Partial local protection | Gateway/cell connection, request and incident controls are bounded local defenses; a saturated uplink is outside their capacity. | P1 failure/capacity truth. Reject volumetric-scrubbing claims, new BGP control and machine-learned scoring. Keep the existing Simple Anycast contract; no architecture expansion to imitate a larger network. |
+| Email DNS versus mail forwarding / DNS records present; forwarding missing, Not needed | MX/TXT can describe mail policy; routing/catch-all would receive and deliver messages to verified destinations. | Reject forwarding/catch-all: SMTP queues, abuse, loops, retries and forwarding authentication are a new operational plane. Retain email DNS; bounded SPF/DKIM/DMARC diagnostics only when requested, with no automatic policy rewrites. |
+| Image optimization / Byte caching present; transformations missing, Not needed | Decode/resize/transcode creates expensive derived variants. | Reject in this roadmap: decoder vulnerabilities, bombs, source-fetch SSRF and variant explosion lack a demonstrated need. Cache origin-produced variants. |
+
+### Engineering references
+
+Official primary references consulted for the retained engineering decisions:
+
+- [HTTP caching semantics](https://www.rfc-editor.org/rfc/rfc9111.html) for shared
+  cache admission, authorization, variants and revalidation; this motivates the
+  cache isolation matrix rather than maximizing hit ratio.
+- [NGINX proxy module](https://nginx.org/en/docs/http/ngx_http_proxy_module.html)
+  for cache locking/revalidation, temporary storage and upstream TLS settings.
+  Runtime safety depends on the actual Lua/filter configuration as well.
+- [PowerDNS DNSSEC](https://docs.powerdns.com/authoritative/dnssec/index.html)
+  and [zone metadata](https://docs.powerdns.com/authoritative/domainmetadata.html)
+  for signing/transfer design; backend capability is not a completed key/DS
+  lifecycle in CDNFoundry.
+- [CRS anomaly scoring](https://coreruleset.org/docs/2-how-crs-works/2-1-anomaly_scoring/)
+  for the distinction between detection points and the eventual threshold
+  decision. A numeric transformation is not a calibrated probability.
+- [TLS 1.3](https://www.rfc-editor.org/rfc/rfc8446.html) for authenticated
+  connections and certificate lifecycle reasoning. Client authentication and
+  server verification address different directions of trust.
+
+These describe behavior, not a comparative benchmark or proof of this runtime.
+No new library or infrastructure requirement follows from a reference.
 
 ## 4. Completion
 
 The roadmap is complete when:
 
-- Phases 1 to 11 have passed their gates on the same release.
-- Every row in the capability table reads Verified, or states in the
-  documentation why it stays limited.
+- Phase 0, required work in Phases 1 to 12, and every admitted optional stage
+  have passed their gates on the same release. Deferred candidates are recorded
+  as out of scope, never as implemented or passed.
+- Each retained capability has scoped, release-matched verification or an
+  explicit documented limitation. A limitation cannot waive an unresolved
+  security, serving, recovery or current UI checkpoint.
 - The harness runs in qualification for every release. A release that worsens
   a recorded false positive rate, detection rate, or latency beyond its
   tolerance fails.
@@ -731,5 +1276,33 @@ Volumetric scrubbing and BGP control (the edge cannot absorb a saturated
 uplink), machine-learned attack or bot scoring, third-party CAPTCHA or any
 outside verification on the request path, synchronous calls between cells or
 PoPs, custom regex or an expression language in rules, full CRS response
-inspection and response rewriting, customer-uploaded `SecRule` content,
+inspection and response body rewriting, customer-uploaded `SecRule` content,
 Kubernetes, microservices, Kafka, and a second dashboard or backend.
+
+## 6. Review scope and validation
+
+The review sampled every requested subsystem's entry points, data flow and
+trust boundaries; it is not a line-by-line security proof. Source absence
+findings remain scoped to the inspected paths. Historical records retain their
+original attribution and workload limits. Public primary documentation informed
+the capability decisions; no provider dashboard or comparative benchmark was
+used to establish superiority or performance.
+
+During this planning audit, `python3 -m unittest discover -s tests/contract`
+passed **55 tests in 2.507 seconds**, and
+`python3 -m unittest discover -s tests/qualification` passed **26 tests in
+4.429 seconds**. The latter includes intentionally failed/invalid evidence
+cases; its passing result verifies the evidence tooling, not an actual TLS,
+browser or fleet qualification run. Full logs were captured in temporary files.
+`make docs-check` passed the documentation generators, local links, executable
+blocks, Markdown lint, production build and built-site validation. Compose
+`config --quiet` passed for development, development with the isolated test
+override, and production using the example environment. These are syntax and
+documentation checks, not running-service qualification.
+
+No new runtime, fleet, browser, throughput, detection-rate or false-positive
+run was performed. Existing UI qualification remains open as recorded above;
+this prose-only review cannot close it. No migration, persistent database
+operation, volume removal, production deployment, dependency change or source
+implementation was performed. Existing screenshot and browser snapshot changes
+were preserved. Only this roadmap is a retained planning deliverable.

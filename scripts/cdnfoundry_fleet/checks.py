@@ -134,7 +134,7 @@ def _public_listeners(transport: Any, target: Target, node: dict[str, Any]) -> t
     return True, ""
 
 
-def dns_port_conflicts(transport: Any, target: Target, node: dict[str, Any]) -> tuple[bool, str]:
+def dns_port_conflicts(transport: Any, target: Target, node: dict[str, Any], *, allow_resolved: bool = False) -> tuple[bool, str]:
     """DNSdist publishes port 53. A host resolver already on it (Ubuntu's systemd-resolved listens on 127.0.0.x) breaks a wildcard bind."""
     if node["role"] not in {"dns", "dns-edge"}:
         return True, ""
@@ -142,7 +142,8 @@ def dns_port_conflicts(transport: Any, target: Target, node: dict[str, Any]) -> 
     if not result.ok:
         return True, ""  # cannot tell; the start itself will report a real conflict
     # Docker's own proxy on the port is this stack from an earlier start, not a foreign listener.
-    owners = [line.split()[4].rsplit(":", 1)[0].strip("[]") for line in result.stdout.splitlines() if len(line.split()) >= 5 and "docker-proxy" not in line]
+    owners = [line.split()[4].rsplit(":", 1)[0].strip("[]") for line in result.stdout.splitlines()
+              if len(line.split()) >= 5 and "docker-proxy" not in line and not (allow_resolved and 'systemd-resolve' in line)]
     families = ((node.get("bind_ipv4") or "0.0.0.0", "0.0.0.0"), (node.get("bind_ipv6") or "", "::"))
     for bind, wildcard in families:
         if not bind:

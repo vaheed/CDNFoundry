@@ -88,7 +88,7 @@ class CredentialCheckTest extends TestCase
         Queue::assertNothingPushed();
     }
 
-    public function test_leaked_password_is_a_flag_field_for_custom_rules(): void
+    public function test_leaked_password_is_a_flag_field_for_firewall_rules(): void
     {
         Queue::fake();
         [$user, $domain] = $this->ownedDomain();

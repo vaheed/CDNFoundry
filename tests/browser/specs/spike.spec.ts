@@ -13,8 +13,12 @@ test.describe('administrator overview', () => {
         await expect(page.getByTestId('overview-recent')).toBeVisible({ timeout: 20_000 });
         await expect(page.getByTestId('sidebar-version')).toHaveText(/^v\d+\.\d+\.\d+/);
         await expectAccessible(page);
-        // Recent operations list audit entries other specs create while they run, so the region is masked and the rest is compared.
-        await expect(page).toHaveScreenshot('overview.png', { fullPage: true, mask: [page.getByTestId('overview-recent')] });
+        // Other specs change this list. Fix the masked region's height so its row wrapping cannot shift the panels below it.
+        await page.addStyleTag({ content: '[data-testid="overview-recent"] { height: 400px !important; min-height: 0 !important; max-height: 400px !important; overflow: hidden !important; }' });
+        await expect(page).toHaveScreenshot('overview.png', {
+            fullPage: true,
+            mask: [page.getByTestId('overview-recent')],
+        });
     });
 
     test('opens global search with the keyboard', async ({ page, isMobile }) => {

@@ -25,6 +25,7 @@ erDiagram
     DOMAINS ||--o{ CACHE_PURGES : requests
     CACHE_PURGES ||--o{ EDGE_TASKS : delivers
     DOMAINS ||--o{ SECURITY_RULES : filters
+    DOMAINS ||--o{ REQUEST_RULES : transforms
     DOMAINS ||--o{ USAGE_ROLLUPS : aggregates
     USERS ||--o{ OPERATIONS : initiates
 ```
@@ -37,12 +38,20 @@ erDiagram
 | DNS | `dns_records`, `dns_clusters`, `dns_deployments`, `dns_zone_changes`, `platform_dns_settings`, `platform_dns_deployments`, `nameserver_address_probes` |
 | Edge | `edge_pools` (kind, routing mode, optional pool-owned Anycast pair), `edge_pool_endpoints` (explicit per-edge participation/readiness and Geo-Unicast pairs), `edges`, `edge_cells`, `domain_edge_placements`, `edge_revisions`, `edge_artifacts`, `edge_tasks`, `domain_edge_cells`, `edge_probe_results` |
 | Cache | domain cache fields and `cache_purges` linked to edge tasks |
+| Request behavior | `request_rules`: domain-owned redirects, rewrites, header and cache rules, ordered by type and priority; optional preset ownership |
 | TLS | `tls_certificates`, `tls_orders`, `acme_accounts`, `acme_challenges` |
 | Security | domain security state, `security_rules`, `platform_rulesets`, `platform_ruleset_rules`, `platform_ruleset_domains`, `waf_exclusions`, `security_events`, `emergency_modes` |
 | Analytics and operations | `usage_rollups`, `generated_reports`, `backups`, `fleet_releases`, `fleet_rollouts`, `fleet_rollout_edges`, `control_nodes`, `control_plane_state`, Laravel jobs and failed jobs |
 | Product policy | `system_settings`: JSONB groups checked against `core/config/platform.php` |
 
 ## Growth and retention
+
+Request rules have a unique `(domain_id, type, fingerprint)` constraint and an
+index on `(domain_id, type, priority)`. PostgreSQL checks the supported types
+and JSON array/object shapes; application validation checks typed conditions,
+actions, limits, and protected headers. They are desired state, not an access
+log. Enabled rules are compiled into signed edge snapshots. See
+[Request rules](../reference/request-rules.md).
 
 Request logs, DNS query logs, and traffic aggregates live only in ClickHouse; PostgreSQL holds desired state and a small
 amount of bounded history. Every table that grows with activity has a retention rule and a scheduled job.

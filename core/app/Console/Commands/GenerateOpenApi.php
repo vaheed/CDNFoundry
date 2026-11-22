@@ -225,7 +225,7 @@ class GenerateOpenApi extends Command
         }
 
         $lines[] = 'Download the machine-readable';
-        $lines[] = '[OpenAPI 3.1 contract](https://raw.githubusercontent.com/vaheed/CDNFoundry/main/docs/public/openapi.json).';
+        $lines[] = '[OpenAPI 3.1 contract on dev](https://raw.githubusercontent.com/vaheed/CDNFoundry/dev/docs/public/openapi.json).';
         $lines[] = '';
 
         return implode(PHP_EOL, $lines);

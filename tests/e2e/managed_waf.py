@@ -90,6 +90,8 @@ def main() -> None:
             item.chmod(0o644)
         run("docker", "run", "-d", "--name", CELL, "--network", NETWORK,
             "-e", "EDGE_RUNTIME_FILE=/var/lib/cdnfoundry/runtime/active.json", "-e", "EDGE_STATUS_TOKEN=e2e",
+            # The assertions read access-log rows from the container log.
+            "-e", "EDGE_ACCESS_LOG_STDOUT=true",
             "-v", f"{runtime}:/var/lib/cdnfoundry/runtime/active.json:ro",
             "-v", f"{temporary / 'tls.crt'}:/run/edge/tls.crt:ro", "-v", f"{temporary / 'tls.key'}:/run/edge/tls.key:ro",
             "--tmpfs", "/var/cache/nginx:rw,noexec,nosuid,size=64m,mode=0777", IMAGE)

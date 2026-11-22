@@ -148,8 +148,9 @@ says that a log-only rule matched on a request; the domain knows which rules it
 listed. A domain with log-only rules is scored twice per request.
 
 ::: warning What changed for inspection
-A request that the cell scores is inspected once, in the scoring step, with the
-domain's adjustments applied. The cache location then skips its own second
+A request normally has one scoring pass with the domain's adjustments applied.
+Log-only adjustments need the two scoring passes described above. After a
+successful scoring result, the cache location skips its own additional
 inspection of that request. Responses are not inspected: the managed WAF covers
 requests. The cell switches inline inspection off only after the scoring step
 returned a score for the complete request. If scoring is unavailable, the cell

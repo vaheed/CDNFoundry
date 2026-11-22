@@ -18,10 +18,16 @@ prove that customer traffic reaches both failure domains.
 - [Production best practices](production-best-practices.md): network, secret, DNS, edge, origin, cache, TLS,
   observability, backup, capacity, and change-control checklists. Read it before the first release or any topology change.
 - [Production qualification](production-qualification.md): the two-POP acceptance gate and its evidence.
-- [v2.0.3 release notes](releases/v2.0.3.md): Fleet fixes from real-host testing, monitoring and backup settings in Fleet web, and a step-by-step HA guide.
-- [v2.0.2 release notes](releases/v2.0.2.md): a live action page, hosts that prepare together, an inventory, and an optional Alertmanager webhook.
-- [v2.0.1 release notes](releases/v2.0.1.md): Fleet picks, signs, and installs the release for you, and the Fleet web has a new layout.
-- [v2.0.0 release notes](releases/v2.0.0.md): what changed, what is qualified, and what stays with the operator.
+- [Staging qualification, 2026-11-15](staging-qualification-2026-11-15.md): partial results from the staging fleet.
+- [Hardware requirements](hardware-requirements.md): sizing guidance and capacity planning.
+- [v2.1.3 release notes](releases/v2.1.3.md): WAF body scoring, per-domain budgets, IPv6 client counting, security reporting, and challenge binding.
+- [Performance audit](performance-audit-2026-11-21.md): measured workloads and component costs, with their limits.
+- [Request-rule qualification](request-rules-qualification-2026-11-21.md): runtime and browser evidence for redirects, rewrites, headers, and cache rules.
+- [Fleet host and backup qualification](fleet-bootstrap-qualification.md): verified receipts, host preparation, and the untested host matrix.
+
+Earlier release records remain available in the sidebar and through search.
+Qualification records describe their tested source and environment, not a
+blanket production guarantee for the current branch.
 
 ## See what is happening
 

@@ -11,6 +11,7 @@ const viewports = {
 
 export default defineConfig({
     testDir: './fleet-specs',
+    testIgnore: '**/docs-screenshots.spec.ts',
     snapshotPathTemplate: '{testDir}/__snapshots__/{projectName}/{arg}{ext}',
     timeout: 60_000,
     fullyParallel: false,

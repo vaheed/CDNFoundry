@@ -55,15 +55,38 @@ mkdir -p \
     /var/cache/nginx/content/streaming
 chown -R cdnf:cdnf /var/cache/nginx
 
+if [ "${1:-}" = /usr/local/openresty/bin/openresty ] && [ -f /usr/lib/libjemalloc.so.2 ]; then
+    # ModSecurity allocates and copies strings for every rule it evaluates. With musl's allocator that was about a third of
+    # a WAF request's CPU; jemalloc served the same requests with about 30 % less CPU and about 30 MiB less memory per cell.
+    export LD_PRELOAD=/usr/lib/libjemalloc.so.2
+fi
+
+config=/usr/local/openresty/nginx/conf/nginx.conf
+syslog_access_log='^[[:space:]]*access_log syslog:server=vector:9000,'
+stdout_access_log='    access_log /dev/stdout edge_json buffer=64k flush=1s;'
+case "${EDGE_ACCESS_LOG_STDOUT:-false}" in
+    true|false) ;;
+    *) echo 'EDGE_ACCESS_LOG_STDOUT must be true or false' >&2; exit 1 ;;
+esac
+
 if [ "${1:-}" = /usr/local/openresty/bin/openresty ] && ! getent hosts vector >/dev/null 2>&1; then
     # OpenResty resolves syslog destinations while loading its configuration.
     # Keep serving from the bounded Docker stdout log if Vector is unavailable
     # during startup; a telemetry outage must not make every cell unavailable.
     fallback_config=/var/lib/nginx/tmp/nginx-without-syslog.conf
-    sed '/^[[:space:]]*access_log syslog:server=vector:9000,/d' \
-        /usr/local/openresty/nginx/conf/nginx.conf > "$fallback_config"
+    awk -v pattern="$syslog_access_log" -v line="$stdout_access_log" '$0 ~ pattern { print line; next } { print }' \
+        "$config" > "$fallback_config"
     echo 'Vector DNS unavailable; serving with bounded stdout telemetry only' >&2
     exec "$@" -c "$fallback_config"
+fi
+
+if [ "${1:-}" = /usr/local/openresty/bin/openresty ] && [ "${EDGE_ACCESS_LOG_STDOUT:-false}" = true ]; then
+    # A local copy of every access-log line on the container log, for qualification and diagnosis. It costs dockerd CPU on
+    # every request, so it is off unless asked for.
+    stdout_config=/var/lib/nginx/tmp/nginx-with-stdout-log.conf
+    awk -v pattern="$syslog_access_log" -v line="$stdout_access_log" '{ print } $0 ~ pattern { print line }' \
+        "$config" > "$stdout_config"
+    exec "$@" -c "$stdout_config"
 fi
 
 exec "$@"

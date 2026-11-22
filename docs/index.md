@@ -9,7 +9,7 @@ hero:
   tagline: Free and open source under the Apache 2.0 license. DNS, HTTPS delivery, caching, and analytics stay on servers you control.
   actions:
     - theme: brand
-      text: Install the quick start
+      text: Choose your starting point
       link: /getting-started/
     - theme: alt
       text: Read how it works
@@ -38,6 +38,7 @@ hero:
 | DNS | A public DNS front end (DNSdist) in front of private PowerDNS. Records can be DNS-only, proxied, or Geo-DNS. |
 | Edge | A fixed number of OpenResty cells on each point of presence (PoP). A bad change never replaces the last working one. |
 | TLS | Managed certificates (DNS-01) and uploaded certificates. Private keys are encrypted at rest. |
+| Request rules | [Redirects, URL rewrites, headers, and cache overrides](guides/request-rules.md), with typed conditions and presets. |
 | Cache and security | URL purge and full purge, per-client limits, and a managed web application firewall (WAF). |
 | Analytics | Logs and usage in ClickHouse, and Grafana dashboards for operators. |
 

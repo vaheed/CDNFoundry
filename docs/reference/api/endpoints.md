@@ -93,6 +93,13 @@ for authentication, pagination, response, and retry behaviour.
 | `GET` | `/domains/{domain}/logs/security` | Required | No | `get.domains.domain.logs.security` |
 | `GET` | `/domains/{domain}/proxy` | Required | No | `get.domains.domain.proxy` |
 | `PATCH` | `/domains/{domain}/proxy` | Required | Supported | `patch.domains.domain.proxy` |
+| `PUT` | `/domains/{domain}/request-rules/order` | Required | Supported | `put.domains.domain.request-rules.order` |
+| `DELETE` | `/domains/{domain}/request-rules/presets/{preset}` | Required | Supported | `delete.domains.domain.request-rules.presets.preset` |
+| `PUT` | `/domains/{domain}/request-rules/presets/{preset}` | Required | Supported | `put.domains.domain.request-rules.presets.preset` |
+| `DELETE` | `/domains/{domain}/request-rules/{rule}` | Required | Supported | `delete.domains.domain.request-rules.rule` |
+| `PATCH` | `/domains/{domain}/request-rules/{rule}` | Required | Supported | `patch.domains.domain.request-rules.rule` |
+| `GET` | `/domains/{domain}/request-rules` | Required | No | `get.domains.domain.request-rules` |
+| `POST` | `/domains/{domain}/request-rules` | Required | Supported | `post.domains.domain.request-rules` |
 | `GET` | `/domains/{domain}/revisions` | Required | No | `get.domains.domain.revisions` |
 | `POST` | `/domains/{domain}/rollback` | Required | Supported | `post.domains.domain.rollback` |
 | `DELETE` | `/domains/{domain}/security/ai-protection` | Required | Supported | `delete.domains.domain.security.ai-protection` |
@@ -301,4 +308,4 @@ for authentication, pagination, response, and retry behaviour.
 | `POST` | `/admin/users` | Required | Supported | `post.admin.users` |
 
 Download the machine-readable
-[OpenAPI 3.1 contract](https://raw.githubusercontent.com/vaheed/CDNFoundry/main/docs/public/openapi.json).
+[OpenAPI 3.1 contract on dev](https://raw.githubusercontent.com/vaheed/CDNFoundry/dev/docs/public/openapi.json).

@@ -5,15 +5,17 @@ description: Manage DNS records, import and export zones, and understand how cha
 
 # Authoritative DNS
 
+<Screenshot name="app-dns-records" alt="The DNS records tab for a test domain, with record values, proxy state, and record actions." />
+
 This page shows how to manage the DNS records of a domain, import and export a zone, and see how a change reaches the DNS servers. **You need:** an active domain. A zone is the set of records for one domain. "Authoritative" means CDNFoundry answers for the zone itself. See the [glossary](../reference/glossary.md) for other terms.
 
 | Concern | Where it lives, and the limits |
 | --- | --- |
 | Desired records | Control PostgreSQL |
-| Runtime records | Derived PowerDNS PostgreSQL |
+| Runtime records | Derived PostgreSQL on the hidden primary; SQLite zone caches on private secondaries |
 | Public ingress | DNSdist only, UDP and TCP port 53 |
 | Change | Each change raises the domain revision. Bulk and import changes are all-or-nothing |
-| Target bounds | 16 clusters and 8 nameserver identities |
+| Target bounds | Up to 16 registered cluster rows, one enabled hidden primary, and 8 nameserver identities |
 | Failure | An invalid candidate never replaces the active records |
 | Query ceiling | DNSdist answers UDP queries over 500 queries/second per source IP or IPv6 /64, and over 50,000 queries/second globally, with a truncated (TC) reply so real resolvers retry over TCP instead of losing the query |
 | TCP limits | 10 connections per client address, 100 queries and 30 seconds per connection, 5-second read and write timeouts |
@@ -28,11 +30,11 @@ flowchart LR
       Revision --> Render["Canonical RRsets + serial"] --> Validate["Validate zone"]
       Validate -- failure --> Preserve["Keep previous zones"]
     end
-    subgraph Activate["Activate targets"]
-      Validate --> Target1["Cluster 1"] --> Active1["Active zone"]
-      Validate --> Target2["Cluster 2"] --> Active2["Active zone"]
-      Active1 --> Receipt["Acknowledgements"]
-      Active2 --> Receipt
+    subgraph Activate["Publish and transfer"]
+      Validate --> Primary["Enabled hidden primary"]
+      Primary --> Receipt["Primary deployment acknowledgement"]
+      Primary -->|"TSIG-signed transfer"| Nodes["Private secondary nodes"]
+      Nodes --> Public["Public DNSdist answers"]
     end
 ```
 
@@ -83,10 +85,17 @@ exported. Re-importing with replacement recreates the desired customer records.
 
 ## Reconciliation
 
-Reconciliation is how a desired record becomes a live DNS answer. Each enabled, healthy DNS cluster has one deployment row per active domain.
-A worker builds the records in a fixed order, compares checksums, writes or replaces
-the zone on the target, checks that it is active, and records the acknowledgement. A failed
-target keeps its previous active records.
+Reconciliation is how a desired record becomes a live DNS answer. The enabled,
+healthy hidden primary has one deployment row per active domain. A worker
+builds the records in a fixed order, compares checksums, writes the candidate,
+checks the active zone, and records the primary's acknowledgement. A failed
+replacement retains the previous valid zone.
+
+Private secondary nodes pull signed zone transfers from that primary. Their
+agents report convergence separately through DNS cursors and pending changes.
+After a successful primary operation, query each public DNS host as well; the
+primary's acknowledgement alone does not prove every secondary is current.
+See [DNS nodes and the hidden primary](../operations/dns-nodes.md).
 
 Administrators can reconcile one domain (`POST /api/domains/{domain}/dns/reconcile`), all DNS zones (`POST /api/admin/dns/reconcile`), or the platform DNS
 identity. Global work runs in chunks of 500 domain IDs.

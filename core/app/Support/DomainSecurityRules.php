@@ -11,7 +11,7 @@ use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
-/** Creating one custom rule of a domain: the validation, limits, revision, audit entry, and queued edge work every entry point shares. */
+/** Creating one firewall rule of a domain: the validation, limits, revision, audit entry, and queued edge work every entry point shares. */
 final class DomainSecurityRules
 {
     public static function create(Domain $domain, array $input, ?User $actor, ?string $ipAddress): SecurityRule

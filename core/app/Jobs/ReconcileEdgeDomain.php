@@ -21,6 +21,7 @@ use App\Support\ManagedCertificateNames;
 use App\Support\ManagedWaf;
 use App\Support\OriginPolicy;
 use App\Support\PlatformSettings;
+use App\Support\RequestRuleData;
 use App\Support\SecurityConfig;
 use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -153,6 +154,7 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
             ],
             'security' => SecurityConfig::compile($domain),
             'waf' => ManagedWaf::compile($domain),
+            'rules' => RequestRuleData::forEdge($domain),
             'tls' => [
                 'mode' => $domain->tls_mode,
                 'certificate' => $domain->activeTlsCertificate !== null && $domain->activeTlsCertificate->expires_at->isFuture()

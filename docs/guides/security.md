@@ -1,11 +1,11 @@
 ---
 title: Security and DDoS readiness
-description: Write typed custom rules, choose a limit profile, and use the incident controls, with their bounds and recovery steps.
+description: Write typed firewall rules, choose a limit profile, and use the incident controls, with their bounds and recovery steps.
 ---
 
 # Security and DDoS readiness
 
-CDNFoundry gives each domain bounded application-layer controls: custom rules,
+CDNFoundry gives each domain bounded application-layer controls: firewall rules,
 rate and connection limits, and incident actions. This page shows how to
 use them and what each one does.
 
@@ -16,45 +16,48 @@ need upstream transit controls or provider scrubbing.
 
 ```mermaid
 flowchart TD
-    subgraph Gate["Availability gate"]
-      Request["Incoming request"] --> Maintenance{"Maintenance?"}
-      Maintenance -- Yes --> Response["Bounded HTTP 503"]
-    end
-    subgraph Enforce["Layered enforcement"]
-      Maintenance -- No --> Client["Trusted client IP"] --> Rules["Custom rules"]
-      Rules --> Profile["Profile ceilings"] --> Limits["Rate + concurrency"]
-      Limits --> Method["Method + size bounds"] --> Serve["Cache or origin"]
-    end
-    subgraph Observe["Outcome"]
-      Response --> Event["Reason + telemetry"]
-      Serve --> Event
-    end
+    Request["Incoming request"] --> Bounds["Host, emergency, method and size checks"]
+    Bounds --> Client["Trusted client IP and containment"]
+    Client --> Detect["Configured detections and WAF scoring"]
+    Detect --> Rules["Firewall rules, then rate-limit rules"]
+    Rules --> WAF["Managed WAF decision and challenges"]
+    WAF --> Limits["Request and concurrency limits"]
+    Limits --> Domain["Domain HTTPS redirect and maintenance"]
+    Domain --> RequestRules["Request rules"]
+    RequestRules --> Serve["Cache or validated origin"]
+    Serve -.-> Event["Redacted telemetry"]
 ```
 
 | Layer | Purpose |
 | --- | --- |
 | Trusted-client parsing | Trust forwarded addresses only from configured proxies |
-| Custom rules | Up to five typed conditions and one action per rule |
+| Firewall rules | Up to five typed conditions and one action per rule |
 | Profiles | Fixed presets or bounded manual values |
 | Readiness | Remove stale, drained, failed, or overloaded targets |
 | Incident controls | Explicit actions for a domain, pool, cell, or edge |
 
 For application attack detection, see [Managed WAF](managed-waf.md).
+For redirects, origin URL rewrites, header changes, and cache overrides, use
+[Request rules](request-rules.md). Those run after security and cannot bypass
+a block or challenge. The diagram shows the normal path; any earlier rejection
+ends processing at that stage.
 
-## Custom rules
+## Firewall rules
+
+<Screenshot name="app-firewall-rules" alt="The domain Firewall rules tab with typed conditions, access actions, and ordering in the seeded test stack." />
 
 **You need:** update rights on the domain.
 
 A rule is up to five conditions that must all match, and one action. Rules are
 typed: every condition is a field from a fixed list, an operator from a fixed
 list, and a value. There are no regular expressions and no expression language.
-The [custom rule reference](../reference/security-rules.md) lists every field,
+The [firewall rule reference](../reference/security-rules.md) lists every field,
 operator, and action with examples, and complete recipes.
 
 <DocTabs :labels="['Domain panel', 'API']">
 <template #tab-1>
 
-Open the domain, then **Custom rules**. **Add rule** opens a sheet with the
+Open the domain, then **Firewall rules**. **Add rule** opens a sheet with the
 conditions, the action, and a "Reads as" line that shows the rule in words.
 **Move up** and **Move down** change the order. To add many rules at once, use
 the API's bulk import.
@@ -116,7 +119,7 @@ string. A visitor whose country, continent, or ASN is unknown never matches
 
 ### Leaked passwords
 
-A detection never blocks by itself: it sets a field, and a custom rule decides what
+A detection never blocks by itself: it sets a field, and a firewall rule decides what
 to do with it. `leaked_password` is set for login requests only.
 
 1. Name the login paths of the domain (up to 5 exact paths such as `/api/login`),
@@ -130,7 +133,7 @@ to do with it. `leaked_password` is set for login requests only.
    hash up in a leaked-password set held in fixed shared memory. The set is built
    from a list that ships inside the cell image of the release. It is never
    downloaded at runtime and is never changed by a domain.
-3. Add a custom rule on `leaked_password` equals `true` with the action `log`,
+3. Add a firewall rule on `leaked_password` equals `true` with the action `log`,
    `challenge`, or `block`.
 
 The password and its hash are never logged, stored, or sent anywhere. A request is
@@ -162,7 +165,7 @@ or `sensitive_data_api_key`. `DELETE` turns it off.
 `PUT /api/domains/{domain}/security/ai-protection` names up to five `endpoints`
 (exact paths) and the JSON `prompt_field` (dots for a nested field, such as
 `input.prompt`). On a `POST` or `PUT` to one of them the cell reads at most the
-first 16 KB of the body and sets two fields for custom rules:
+first 16 KB of the body and sets two fields for firewall rules:
 
 - `prompt_injection_score`: 99 when no known injection phrase is present, 29 for
   one phrase, and 1 for two or more. It matches a fixed list of phrases such as
@@ -260,13 +263,13 @@ never below 1, so a request that trips several rules scores near 1 and a clean
 request scores 99. `attack_score` counts every category. The three other fields
 count only SQL injection, cross-site scripting, or command injection signs.
 
-- A custom rule on `attack_score < 20` blocks requests that are very likely
+- A firewall rule on `attack_score < 20` blocks requests that are very likely
   attacks, in any profile. It runs before the managed rules and can also `log`
   or `challenge`.
 - The Observe profile scores and logs without blocking. The score is stored on
   every request event as `attack_score` and its three category fields (0 means the
   request was not scored).
-- A domain whose WAF profile is Off is scored only while a custom rule uses an
+- A domain whose WAF profile is Off is scored only while a firewall rule uses an
   attack score field, at paranoia level 1, and is never blocked by the managed
   rules.
 - A request that could not be scored never matches an attack score condition. A
@@ -279,7 +282,7 @@ count only SQL injection, cross-site scripting, or command injection signs.
 
 ### Rate-limit rules
 
-A rate-limit rule is a custom rule that also counts. Turn on **Limit the request
+A rate-limit rule is a firewall rule that also counts. Turn on **Limit the request
 rate** in the rule sheet, or send a `rate_limit` object in the API:
 
 ```json
@@ -299,7 +302,7 @@ rate** in the rule sheet, or send a `rate_limit` object in the API:
   `log`.
 - A rate-limit rule with no conditions counts every request of the domain. Only a
   rate-limit rule may have no conditions.
-- Rate-limit rules run after the domain's other custom rules and before the
+- Rate-limit rules run after the domain's other firewall rules and before the
   managed WAF. A client that an `allow` rule trusts is not counted.
 - **IPv6 clients count per prefix.** A host controls a whole IPv6 prefix, so a
   client key is the first 64 bits of an IPv6 address, and a client cannot get a
@@ -328,7 +331,7 @@ rate** in the rule sheet, or send a `rate_limit` object in the API:
 
 ### Presets: user agents and hotlinks
 
-Two presets write ordinary custom rules, so they follow the same order, limits,
+Two presets write ordinary firewall rules, so they follow the same order, limits,
 and revisions as any rule. In the panel they are under **Presets** on the rules
 tab. In the API they are `PUT` and `DELETE` on
 `/api/domains/{domain}/security/presets/user-agent` and `.../hotlink`, and
@@ -401,7 +404,7 @@ it reached.
   domain's automatic security state.
 - Domain owners see the names and descriptions of the rulesets that apply, and how
   many requests platform rules matched in the last 24 hours, on the domain's
-  **Custom rules** tab and at `GET /api/domains/{id}/security/platform-rulesets`.
+  **Firewall rules** tab and at `GET /api/domains/{id}/security/platform-rulesets`.
   They never see a platform rule's conditions.
 - Up to 10 rulesets, 100 rules per ruleset, and 500 listed domains per ruleset.
 
@@ -409,7 +412,7 @@ it reached.
 
 **You need:** view rights on the domain.
 
-The **Security events** tab lists the requests that a custom rule, a platform
+The **Security events** tab lists the requests that a firewall rule, a platform
 ruleset, or the managed firewall blocked, and the requests a rule logged. Each row
 shows the time, the rule that acted, the action, the attack score, the path, and the
 country. The network, user agent, and request ID columns are available from the
@@ -446,7 +449,7 @@ is `PUT /api/domains/{domain}/security/alert` with `threshold` (1 to 1,000,000) 
 `period_minutes`; `DELETE` removes it and `GET` reads it.
 
 - The count is the blocked, challenged, and rate-limited requests that all cells
-  report for the domain, from custom rules, platform rulesets, and the managed
+  report for the domain, from firewall rules, platform rulesets, and the managed
   firewall. Requests that a rule only logs are not counted.
 - **One alert per attack.** After an alert the domain stays quiet for an hour, even
   while the attack continues, then alerts again if the count is still over the
@@ -462,7 +465,7 @@ is `PUT /api/domains/{domain}/security/alert` with `threshold` (1 to 1,000,000) 
 | `block` | Answers 403 (`custom_rule_block`). |
 | `challenge` | Asks a browser for the same short proof of work as the incident profile. A solved challenge lasts one hour. Scripts without a token get 403. |
 | `log` | Records a `custom_rule_log` security event and continues. |
-| `allow` | Stops evaluating custom rules and skips the challenge. |
+| `allow` | Stops evaluating firewall rules and skips the challenge. |
 | `skip_managed` | Turns the managed WAF off for matching requests. Body size limits still apply. |
 
 ### How rules run
@@ -478,15 +481,17 @@ is `PUT /api/domains/{domain}/security/alert` with `threshold` (1 to 1,000,000) 
   or replace the existing set in one revision.
 - A rule the cell cannot read (no conditions, more than five, or an unknown field)
   never matches and never stops the cell.
-- Custom rules never count against the domain: `custom_rule_block`,
+- Firewall rules never count against the domain: `custom_rule_block`,
   `custom_rule_challenge`, and `custom_rule_log` are recorded but do not raise the
   automatic security state.
 
-::: warning Upgrading from 1.x
-The old IP, CIDR, country, and continent rules are converted in place by one
-migration, keep their IDs and priorities, and become one condition each. The old
-rule shape is gone from the API. The migration cannot be reversed, so run it as
-an explicit upgrade step with a database backup.
+::: warning Earlier rule storage
+On a supported upgrade with the old single-match rule schema, the typed-rule
+migration converts IP, CIDR, country, and continent rules in place. Each becomes
+one condition and retains its ID and priority. The old shape is no longer
+accepted by the API, and the migration cannot be reversed. Back up before the
+explicit migration step. This is not an upgrade path from 1.x; see
+[Upgrade and rollback](../deployment/upgrade.md).
 :::
 
 ## Profiles
@@ -549,7 +554,7 @@ this way, while a crowd of such clients is the distributed evidence that tighten
 the domain.
 
 A domain's own protections never count against it. A request refused by a customer
-custom rule (`custom_rule_block`) or an operator restriction (`domain_restricted`), a method restriction (`invalid_method`), an
+firewall rule (`custom_rule_block`) or an operator restriction (`domain_restricted`), a method restriction (`invalid_method`), an
 emergency mode (`edge_emergency_mode`), an incident profile refusal (`incident_method`,
 `incident_body_size`, `challenge_required`, `challenge_invalid`), or an unknown host or SNI is
 still recorded as an event, but it does not raise the rate.

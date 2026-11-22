@@ -49,6 +49,9 @@ class T:
 
     def run(self, target: Target, command: str, **_):
         self.ran.append((target.name, command))
+        if command == 'sh -s':
+            assert b'/etc/os-release' in _['stdin']
+            assert _['timeout'] == 1800
         if "ip -o -4 addr" in command:
             return R(0, self.addresses.get(target.name, ""))
         if "find /data/caddy/certificates" in command:
@@ -89,7 +92,7 @@ def test_a_host_address_is_enough_fleet_names_the_node_and_reads_everything_else
     assert kw["name"] == "control-2" and kw["public_ipv4"] == "93.184.216.20"
     assert kw["replication_address"] == "10.0.0.2" and kw["active_replication_address"] == "10.0.0.1"
     assert captured["cert"] == cert[0]
-    assert any("PATH" in c or "apt-get" in c for n, c in transport.ran if n == "control-2")
+    assert any(c == 'sh -s' for n, c in transport.ran if n == 'control-2')
     assert not (engine.work / "ha-incoming" / "ingress.key").exists()
 
 

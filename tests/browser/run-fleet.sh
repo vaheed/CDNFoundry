@@ -7,7 +7,16 @@ cd "$(dirname "$0")"
 [ -d node_modules ] || npm install --no-audit --no-fund
 npx playwright install chromium
 status=0
+config=playwright.fleet.config.ts
+for argument in "$@"; do
+  if [[ "$argument" == *docs-screenshots.spec.ts ]]; then
+    config=playwright.fleet-docs.config.ts
+  fi
+done
 for project in light-desktop light-phone dark-desktop dark-phone; do
-  npx playwright test -c playwright.fleet.config.ts --project="$project" "$@" || status=1
+  npx playwright test -c "$config" --project="$project" "$@" || status=1
+  if [[ "$#" == 0 ]]; then
+    npx playwright test -c playwright.fleet-docs.config.ts --project="$project" || status=1
+  fi
 done
 exit "$status"

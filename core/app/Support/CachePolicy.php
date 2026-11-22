@@ -24,14 +24,12 @@ final class CachePolicy
         'consent' => ['label' => 'Consent banners', 'names' => ['cookieconsent_status', 'CookieConsent']],
     ];
 
-    public const MAX_PATH_RULES = 16;
-
     public static function defaults(): array
     {
         return [
             'enabled' => true, 'edge_ttl_seconds' => 3600, 'browser_ttl_seconds' => 300,
             'maximum_object_bytes' => 104857600, 'respect_origin_headers' => true,
-            'query_policy' => 'include_all', 'query_parameters' => [], 'ignore_cookie_names' => [], 'path_rules' => [],
+            'query_policy' => 'include_all', 'query_parameters' => [], 'ignore_cookie_names' => [],
             'status_ttl_seconds' => self::DEFAULT_TTLS, 'admission_requests' => 2,
             'stale_if_error_seconds' => 60, 'stale_while_revalidate_seconds' => 30,
             'mode' => 'normal', 'maximum_variants_per_resource' => 32,
@@ -45,7 +43,8 @@ final class CachePolicy
             $settings['query_policy'] = $settings['include_query_string'] ? 'include_all' : 'ignore_all';
         }
 
-        unset($settings['bypass_cookie_names']);
+        // Per-path caching moved to cache rules (request rules of the cache type).
+        unset($settings['bypass_cookie_names'], $settings['path_rules']);
 
         return [...self::defaults(), ...$settings];
     }
@@ -63,12 +62,8 @@ final class CachePolicy
             'query_parameters.*' => ['required', 'regex:/^[A-Za-z0-9_.~-]{1,64}$/', 'distinct'],
             'ignore_cookie_names' => ['present', 'array', 'max:32'],
             'ignore_cookie_names.*' => ['required', 'regex:/^[A-Za-z0-9_.-]{1,63}\*?$/', 'distinct'],
-            'path_rules' => ['present', 'array', 'max:'.self::MAX_PATH_RULES],
-            'path_rules.*' => ['required', 'array:match,value,action,ttl_seconds'],
-            'path_rules.*.match' => ['required', Rule::in(['prefix', 'suffix'])],
-            'path_rules.*.value' => ['required', 'string', 'regex:/^[A-Za-z0-9\/_.~%-]{1,128}$/'],
-            'path_rules.*.action' => ['required', Rule::in(['bypass', 'ttl'])],
-            'path_rules.*.ttl_seconds' => ['required_if:path_rules.*.action,ttl', 'prohibited_if:path_rules.*.action,bypass', 'nullable', 'integer', 'between:1,31536000'],
+            // Per-path caching is set by cache rules under Rules; the old field is refused so a client cannot think it applied.
+            'path_rules' => ['prohibited'],
             'status_ttl_seconds' => ['required', 'array', 'max:16'],
             'status_ttl_seconds.*' => ['required', 'integer', 'between:0,31536000'],
             'admission_requests' => ['required', 'integer', 'between:1,10'],
@@ -77,19 +72,6 @@ final class CachePolicy
             'mode' => ['required', Rule::in(['normal', 'cache_only', 'stale_only'])],
             'maximum_variants_per_resource' => ['required', 'integer', 'between:1,128'],
         ];
-    }
-
-    /** Cross-field checks the per-field rules cannot express. Returns messages keyed by field. */
-    public static function pathRuleErrors(array $rules): array
-    {
-        $errors = [];
-        foreach (array_values($rules) as $index => $rule) {
-            if (($rule['match'] ?? null) === 'prefix' && is_string($rule['value'] ?? null) && ! str_starts_with($rule['value'], '/')) {
-                $errors["path_rules.$index.value"] = 'A path prefix must start with /.';
-            }
-        }
-
-        return $errors;
     }
 
     public static function profile(string $name): array

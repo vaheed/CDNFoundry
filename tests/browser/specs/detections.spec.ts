@@ -7,6 +7,7 @@ async function openAction(page: Page, testId: string, heading: string) {
     await signIn(page, 'admin', 'admin@browser.test', adminPassword);
     await page.goto('/admin/domains/1');
     await settle(page);
+    await page.getByRole('tab', { name: 'Overview', exact: true }).click();
     await page.getByTestId(testId).click();
     const modal = page.locator('.fi-modal-window:visible');
     await expect(modal.getByRole('heading', { name: heading })).toBeVisible();

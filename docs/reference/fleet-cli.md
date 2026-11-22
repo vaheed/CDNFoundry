@@ -74,6 +74,12 @@ Deploy re-rendered configs to the nodes whose bundle changed.
 | --- | --- |
 | `--plan-only` | Show the plan and change nothing |
 
+## backup-list
+
+List the latest 25 control backup receipts and snapshot IDs.
+
+No options beyond the shared ones.
+
 ## backup-now
 
 Start a control backup on the active control node and wait.

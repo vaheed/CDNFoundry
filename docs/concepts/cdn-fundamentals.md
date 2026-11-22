@@ -78,9 +78,11 @@ is a shared service endpoint. It does not mean one domain owns a container.
 
 ### 3. The cell applies policy and uses the origin when needed
 
-The cell checks the client address, maintenance state, security rules, method
-and size limits, cache policy, and origin policy. It then returns a cached
-response or opens a limited connection to the configured origin.
+The cell checks the host, client address, security policy, and request limits.
+[Request rules](../guides/request-rules.md) then decide redirects, origin URL
+rewrites, headers, and cache overrides. A redirect can end the request locally.
+Otherwise the cell returns an eligible cached response or opens a bounded
+connection through the configured origin policy.
 
 The control plane (the Laravel application) is not involved at this point. An
 edge that already has its configuration keeps serving if the control plane is

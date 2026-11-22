@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Real OpenResty qualification of typed custom rules: every field, operator family, and action on a running cell."""
 
+import argparse
 import ipaddress
 import json
 import os
@@ -15,6 +16,7 @@ import openresty_runtime as runtime
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 NAME = "cdnf-e2e-custom-rules-e2e"
+IMAGE = "cdnfoundry/edge-runtime:e2e"
 MMDB_VOLUME = base.MMDB_VOLUME
 EDGE_NETWORK = base.EDGE_NETWORK
 run = base.run
@@ -136,13 +138,18 @@ def waf_profile(name: str, **tuning: object) -> dict:
             "off_categories": [], "off_rules": [], "log_only_rules": [], **tuning}
 
 
-def access_entries(hostname: str) -> list[dict]:
-    logs = run("docker", "logs", NAME, check=False)
-    entries = []
-    for line in (logs.stdout + logs.stderr).splitlines():
-        if line.startswith("{") and f'"hostname":"{hostname}"' in line:
-            entries.append(json.loads(line))
-    return entries
+def access_entries(hostname: str, path: str | None = None) -> list[dict]:
+    # Response completion can precede Docker publishing the access-log row.
+    deadline = time.monotonic() + 5
+    while True:
+        logs = run("docker", "logs", NAME)
+        entries = []
+        for line in (logs.stdout + logs.stderr).splitlines():
+            if line.startswith("{") and f'"hostname":"{hostname}"' in line:
+                entries.append(json.loads(line))
+        if any(path is None or entry["path"] == path for entry in entries) or time.monotonic() >= deadline:
+            return entries
+        time.sleep(0.1)
 
 
 def get(hostname: str, path: str = "/", *headers: str, method: str = "GET", data: str | None = None) -> tuple[int, str, str]:
@@ -240,10 +247,12 @@ def qualify(directory: pathlib.Path) -> None:
         "--tmpfs", "/var/cache/nginx:rw,size=64m", "--tmpfs", "/var/lib/nginx/tmp:rw,size=32m",
         "--memory", "512m", "--cpus", "0.5", "--pids-limit", "96", "--ulimit", "nofile=65536:65536",
         "-e", "EDGE_RUNTIME_FILE=/var/lib/cdnfoundry/runtime/active.json", "-e", "EDGE_STATUS_TOKEN=runtime-test-token",
+        # The assertions read access-log rows from the container log.
+        "-e", "EDGE_ACCESS_LOG_STDOUT=true",
         "-e", "GEOIP_DATABASE=/mmdb/GeoLite2-City.mmdb", "-e", "GEOIP_ASN_DATABASE=/var/lib/cdnfoundry/runtime/asn.mmdb",
         "-v", f"{directory}:/var/lib/cdnfoundry/runtime:ro",
         "-v", f"{directory / 'tls.crt'}:/run/edge/tls.crt:ro", "-v", f"{directory / 'tls.key'}:/run/edge/tls.key:ro",
-        "-v", f"{MMDB_VOLUME}:/mmdb:ro", "cdnfoundry/edge-runtime:e2e")
+        "-v", f"{MMDB_VOLUME}:/mmdb:ro", IMAGE)
     for _ in range(60):  # the cell loads its state a few seconds after it starts
         probe = run("docker", "run", "--rm", "--network", f"container:{NAME}", "curlimages/curl:8.16.0", "-s", "-o", "/dev/null", "-w", "%{http_code}", "-H", "Host: plain.example", "http://127.0.0.1:8080/", check=False).stdout
         if probe == "200":
@@ -363,20 +372,20 @@ def qualify(directory: pathlib.Path) -> None:
     expect(get("scoreoff.example", xss), 403, blocked)
     expect(get("scorerce.example", rce), 403, blocked)
     expect(get("scorerce.example", sqli), 200)
-    cleans = [entry for entry in access_entries("scoreoff.example") if entry["path"] == clean]
-    attacks = [entry for entry in access_entries("scoreoff.example") if entry["path"] == sqli]
+    cleans = [entry for entry in access_entries("scoreoff.example", clean) if entry["path"] == clean]
+    attacks = [entry for entry in access_entries("scoreoff.example", sqli) if entry["path"] == sqli]
     assert cleans and cleans[0]["attack_score"] == 99, cleans
     assert attacks and 1 <= attacks[0]["attack_score"] < 20 and attacks[0]["attack_score_sqli"] < 20, attacks
     # the observe profile scores and logs without blocking, and a log rule on the SQL injection score records its event
     expect(get("scoremonitor.example", sqli), 200)
-    monitored = [entry for entry in access_entries("scoremonitor.example") if entry["path"] == sqli]
+    monitored = [entry for entry in access_entries("scoremonitor.example", sqli) if entry["path"] == sqli]
     assert monitored and monitored[0]["attack_score"] < 40 and monitored[0]["waf_action"] == "monitor", monitored
     expect(get("scoremonitor.example", clean), 200)
-    assert [entry for entry in access_entries("scoremonitor.example") if entry["path"] == clean][0]["attack_score"] == 99
+    assert [entry for entry in access_entries("scoremonitor.example", clean) if entry["path"] == clean][0]["attack_score"] == 99
     # a blocking profile refuses the payload and keeps its established reason; the clean request passes with a score of 99
     expect(get("scorebalanced.example", sqli), 403, "waf_block")
     expect(get("scorebalanced.example", clean), 200)
-    blocked_entry = [entry for entry in access_entries("scorebalanced.example") if entry["path"] == sqli][0]
+    blocked_entry = [entry for entry in access_entries("scorebalanced.example", sqli) if entry["path"] == sqli][0]
     assert blocked_entry["waf_action"] == "block" and blocked_entry["attack_score"] < 20, blocked_entry
     # a skip_managed rule lets the same payload through
     expect(get("scoreskip.example", sqli), 403, "waf_block")
@@ -422,9 +431,8 @@ def qualify(directory: pathlib.Path) -> None:
     expect(get("tunerule.example", "/", scanner), 200)
     expect(get("tunerule.example", sqli), 403, "waf_block")
     expect(get("tunethreshold.example", sqli), 200)
-    assert [entry for entry in access_entries("tunethreshold.example") if entry["path"] == sqli][0]["attack_score"] < 40
+    assert [entry for entry in access_entries("tunethreshold.example", sqli) if entry["path"] == sqli][0]["attack_score"] < 40
     # the catalog the control plane validates against is the one the cells run: same release, one control per category and rule
-    image = "cdnfoundry/edge-runtime:e2e"
     version = run("docker", "exec", NAME, "sh", "-c", "grep -h -o -m1 \"ver:'OWASP_CRS/[0-9.]*'\" /etc/cdnfoundry/crs/rules/REQUEST-901-INITIALIZATION.conf").stdout.strip()
     catalog = json.loads((ROOT / "core/resources/contracts/crs-rules.json").read_text())
     assert version == f"ver:'OWASP_CRS/{catalog['ruleset'].split('/')[1]}'", (version, catalog["ruleset"])
@@ -472,13 +480,13 @@ def qualify(directory: pathlib.Path) -> None:
 
     # the phase gate: the same scripted attack is stopped by a rule on the attack score, a rate-limit rule, and a platform ruleset,
     # and each stop is in the request telemetry the cell ships to Vector, with its reason, action, and score
-    stopped_by_score = [entry for entry in access_entries("scoreoff.example") if entry["path"] == sqli and entry["status"] == 403]
+    stopped_by_score = [entry for entry in access_entries("scoreoff.example", sqli) if entry["path"] == sqli and entry["status"] == 403]
     assert stopped_by_score and stopped_by_score[0]["security_reason"] == "custom_rule_block" and stopped_by_score[0]["security_rule"] == "r1" and stopped_by_score[0]["security_action"] == "block" and 1 <= stopped_by_score[0]["attack_score"] < 20, stopped_by_score
     stopped_by_rate = [entry for entry in access_entries("ratepath.example") if entry["status"] == 429]
     assert stopped_by_rate and stopped_by_rate[0]["security_reason"] == "custom_rule_rate_limited" and stopped_by_rate[0]["security_rule"] == "r1" and stopped_by_rate[0]["security_action"] == "block", stopped_by_rate
-    stopped_by_platform = [entry for entry in access_entries("platformone.example") if entry["path"] == "/wp-login.php" and entry["status"] == 403]
+    stopped_by_platform = [entry for entry in access_entries("platformone.example", "/wp-login.php") if entry["path"] == "/wp-login.php" and entry["status"] == 403]
     assert stopped_by_platform and stopped_by_platform[0]["security_reason"] == "platform_rule_block" and stopped_by_platform[0]["security_rule"] == "p1", stopped_by_platform
-    waf_stop = [entry for entry in access_entries("scorebalanced.example") if entry["path"] == sqli and entry["status"] == 403]
+    waf_stop = [entry for entry in access_entries("scorebalanced.example", sqli) if entry["path"] == sqli and entry["status"] == 403]
     assert waf_stop and waf_stop[0]["security_rule"] == "waf", waf_stop
 
     # a malformed or oversized rule never matches and never takes the cell down
@@ -487,9 +495,16 @@ def qualify(directory: pathlib.Path) -> None:
 
 
 def main() -> None:
+    global IMAGE
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--image", help="qualify this already-built runtime image")
+    args = parser.parse_args()
     run("docker", "compose", "-f", "compose.dev.yml", "up", "-d", "--force-recreate", "origin-http")
     run("docker", "compose", "-f", "compose.dev.yml", "up", "-d", "mmdb-updater")
-    run("docker", "build", "-f", "docker/openresty/Dockerfile", "-t", "cdnfoundry/edge-runtime:e2e", ".")
+    if args.image:
+        IMAGE = args.image
+    else:
+        run("docker", "build", "-f", "docker/openresty/Dockerfile", "-t", IMAGE, ".")
     with tempfile.TemporaryDirectory(prefix="cdnf-rules-") as directory:
         os.chmod(directory, 0o755)
         try:

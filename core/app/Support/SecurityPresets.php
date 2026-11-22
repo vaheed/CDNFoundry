@@ -12,7 +12,7 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * Two presets over the typed rules: blocking or challenging user agents, and hotlink protection. A preset is nothing but
- * ordinary custom rules marked with their preset, so the rule engine, order, limits, and revisions stay the ones every rule uses.
+ * ordinary firewall rules marked with their preset, so the rule engine, order, limits, and revisions stay the ones every rule uses.
  */
 final class SecurityPresets
 {
