@@ -22,8 +22,9 @@ Fleet reports success. Failed refreshes retain the previous table and show an er
 
 The prerequisite script detects the distribution and installs packages using apt, dnf/yum, apk,
 pacman, or zypper. It verifies required commands, Compose, and the Docker daemon. Unknown
-distributions and unsupported init systems stop explicitly when automatic preparation is required;
-preconfigured hosts with working dependencies and Docker are accepted without reconfiguration.
+distributions and unsupported init systems stop explicitly when automatic preparation is required.
+Preconfigured hosts with working dependencies and Docker are accepted without reconfiguration or root access.
+Installing packages or starting Docker still requires root.
 This is a bounded set of installation
 recipes, not a claim that every Linux distribution is supported.
 

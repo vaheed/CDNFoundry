@@ -33,9 +33,33 @@ def test_unknown_distribution_with_working_dependencies_is_not_reconfigured(tmp_
         binary = bindir / name
         binary.write_text('#!/bin/sh\nexit 0\n')
         binary.chmod(0o755)
+    identity = bindir / 'id'
+    identity.write_text('#!/bin/sh\necho 1000\n')
+    identity.chmod(0o755)
     result = subprocess.run(['sh',str(SCRIPT)],env={**os.environ,'CDNF_OS_RELEASE':str(release),'PATH':str(bindir)+':'+os.environ['PATH']},capture_output=True,text=True)
     assert result.returncode == 0, result.stderr
     assert 'already ready' in result.stdout
+
+
+def test_unprivileged_host_cannot_install_missing_dependencies(tmp_path):
+    release = tmp_path / 'os-release'
+    release.write_text('ID=ubuntu\n')
+    bindir = tmp_path / 'bin'
+    bindir.mkdir()
+    attempted = tmp_path / 'mutation-attempted'
+    for name, body in {
+        'id': 'echo 1000',
+        'docker': 'exit 1',
+        'apt-get': f'touch "{attempted}"; exit 99',
+        'systemctl': f'touch "{attempted}"; exit 99',
+    }.items():
+        binary = bindir / name
+        binary.write_text('#!/bin/sh\n'+body+'\n')
+        binary.chmod(0o755)
+    result = subprocess.run(['sh', str(SCRIPT)], env={**os.environ, 'CDNF_OS_RELEASE': str(release), 'PATH': str(bindir)+':'+os.environ['PATH']}, capture_output=True, text=True)
+    assert result.returncode == 1
+    assert 'requires root' in result.stderr
+    assert not attempted.exists()
 
 
 def test_installing_a_missing_tool_preserves_an_existing_docker_installation(tmp_path):

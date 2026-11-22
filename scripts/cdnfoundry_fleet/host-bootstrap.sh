@@ -21,7 +21,6 @@ if [ "${1:-}" = --plan ]; then
     [ -n "$family" ] || unsupported
     exit 0
 fi
-[ "$(id -u)" = 0 ] || { echo 'Host preparation requires root.' >&2; exit 1; }
 need=0
 docker_needed=0
 for tool in docker python3 openssl tar ss flock bash curl iptables ip6tables; do command -v "$tool" >/dev/null || need=1; done
@@ -30,6 +29,7 @@ if [ "$need" = 0 ] && timeout 30 docker info >/dev/null 2>&1; then
     echo 'Host dependencies and Docker daemon are already ready.'
     exit 0
 fi
+[ "$(id -u)" = 0 ] || { echo 'Host preparation requires root.' >&2; exit 1; }
 if [ "$need" = 1 ] && [ -z "$family" ]; then unsupported; fi
 if command -v systemctl >/dev/null && [ -d /run/systemd/system ]; then
     init=systemd
