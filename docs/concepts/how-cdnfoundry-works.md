@@ -131,7 +131,8 @@ directory in one step. It keeps the previous runtime state so it can go back.
 2. The client connects to the edge gateway at that address.
 3. The gateway checks the destination plus Host and SNI, and picks an assigned cell.
 4. OpenResty picks the domain's certificate and policy from its active runtime data.
-5. Security checks and request limits run before cache and origin handling.
+5. Security checks and request limits run first. Request rules then apply
+   redirects, origin URL rewrites, headers, and cache overrides, in that order.
 6. A cache hit is answered locally. An eligible miss goes to the validated origin.
 7. The edge sends redacted telemetry to Vector after it has served the request.
 

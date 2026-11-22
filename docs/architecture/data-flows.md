@@ -58,28 +58,50 @@ sequenceDiagram
       participant Cache as Bounded cache
       participant V as Vector
     end
-    C->>E: HTTP/HTTPS request
+    participant G as Edge gateway
+    C->>G: HTTP/HTTPS connection
+    G->>E: Route by SNI or Host, send trusted PROXY metadata
     E->>E: Select domain, certificate, client IP, security policy
-    E->>Cache: Deterministic cache-key lookup
-    alt Cache hit
-      Cache-->>E: Cached response
-    else Miss or bypass
-      E->>O: Bounded upstream request
-      O-->>E: Origin response
-      E->>Cache: Admit only when policy permits
+    E->>E: Enforce security, then evaluate request rules
+    alt Redirect rule matches
+      E-->>C: Redirect response without origin access
+    else Continue serving
+      E->>Cache: Deterministic cache-key lookup
+      alt Cache hit
+        Cache-->>E: Cached response
+      else Miss or bypass
+        E->>O: Bounded upstream request
+        O-->>E: Origin response
+        E->>Cache: Admit only when policy permits
+      end
+      E-->>C: Normalized response
     end
-    E-->>C: Normalized response
     E-->>V: Redacted best-effort event
 ```
 
 1. DNS returns the address of a pool endpoint that is ready to accept traffic.
-2. The client connects to the OpenResty cell assigned to that address.
-3. OpenResty rejects hosts it does not know. For known hosts, it picks the certificate from its runtime data.
-4. Lua code works out the real client address. It then applies maintenance mode, the ordered security rules, the profile limits, the cache policy, and the origin policy.
-5. A cache hit is answered locally. A miss goes to the one origin configured for that hostname.
+2. The gateway selects an assigned cell using TLS SNI or the HTTP Host header.
+   It passes connection metadata using PROXY protocol. The cell trusts that
+   metadata only from configured gateway networks.
+3. OpenResty selects a certificate from local runtime data. It rejects unknown
+   hosts and mismatches between the TLS SNI and HTTP host.
+4. Lua enforces method, header and body bounds, identifies the client using the
+   trusted-proxy policy, and evaluates detections, firewall rules, rate limits,
+   the managed WAF decision, challenges, and request/concurrency limits. The
+   domain HTTPS redirect and maintenance response precede request rules.
+5. Request rules run as redirects, rewrites, headers, then cache rules. A
+   redirect ends processing. Otherwise an eligible cache hit is answered
+   locally; a miss or bypass uses the hostname's validated origin policy,
+   including configured failover. Cache keys and URL purges use the original
+   visitor URL even when the upstream URL was rewritten.
 6. OpenResty sends an access event straight to Vector.
 
 Laravel and ClickHouse take no part in the serving decision.
+
+The sequence above summarizes the serving path; a redirect ends before cache
+lookup. See [Request rules](../reference/request-rules.md#when-rules-run) and
+[Firewall evaluation order](../reference/security-rules.md#order)
+for the individual rule stages.
 
 ## Runtime mutation
 

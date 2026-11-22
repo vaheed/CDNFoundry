@@ -48,12 +48,16 @@ flowchart LR
 
 1. DNS gave the client the address of a PoP.
 2. The gateway sends the connection to the right cell by host name.
-3. The cell picks the certificate and applies the domain's security rules.
-4. A cached copy is returned at once. Otherwise the cell asks your origin.
+3. The cell picks the certificate and applies the domain's security checks.
+4. [Request rules](../guides/request-rules.md) can return a redirect, rewrite the
+   origin URL, change headers, or choose cache settings. An eligible cached
+   response is served locally; a miss or bypass reaches a validated origin.
 5. The cell sends one redacted event to Vector.
 
-**Check it worked:** the response carries an `X-CDNF-Cache` header, and a
-second request for the same URL is a hit.
+**Check it worked:** request a cache-eligible object twice and inspect
+`X-CDNF-Cache`. A hit requires caching to be enabled, an admitted response, and
+an unexpired object. Authenticated requests, development mode, and bypass rules
+can correctly produce a bypass instead. See [Cache and purge](../guides/cache.md).
 
 ## A configuration change
 
@@ -71,8 +75,8 @@ flowchart LR
 1. You save a change. Laravel checks permission and input.
 2. Laravel writes the new desired state and raises the revision in one
    transaction.
-3. After the commit, one background job is queued. The page returns `202` with
-   an operation ID.
+3. After the commit, background work is queued. An asynchronous API mutation
+   returns `202` with an operation ID; the panels show deployment status.
 4. The worker builds the DNS zone and the signed edge artifact from the latest
    revision. It skips work for an older revision.
 5. Each edge agent pulls the artifact, checks its signature and checksum,

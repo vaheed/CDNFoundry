@@ -54,6 +54,11 @@ types such as MX and TXT.
 
 ## Zone-wide validation
 
+Zones are currently unsigned. CDNFoundry does not publish a DNSSEC signing-key
+or parent DS lifecycle. When migrating a previously signed domain, follow the
+[delegation steps](../getting-started/first-domain.md#delegate-and-activate-the-domain)
+so old parent DS records do not make the new unsigned zone fail validation.
+
 - A duplicate record is rejected after normalization.
 - A published CNAME cannot share a name with any other record.
 - A Geo-DNS record must be the only record of its type at its name.
