@@ -5,7 +5,7 @@ description: Measured cost of the edge cell, the WAF, the authoritative DNS path
 
 # Performance audit, 2026-11-21
 
-This page records a measured performance audit of the edge cell, the managed WAF, the authoritative DNS path, telemetry and the control plane: the baseline, what limited each one, what was changed, and the same measurements afterwards. Sizing advice built on it is in [Hardware requirements](hardware-requirements.md). The raw results are in [`evidence/performance-2026-11-21`](https://github.com/vaheed/CDNFoundry/tree/main/docs/operations/evidence/performance-2026-11-21).
+This page records a measured performance audit of the edge cell, the managed WAF, the authoritative DNS path, telemetry and the control plane: the baseline, what limited each one, what was changed, and the same measurements afterwards. Sizing advice built on it is in [Hardware requirements](hardware-requirements.md). The raw results are in [`evidence/performance-2026-11-21`](https://github.com/vaheed/CDNFoundry/tree/910b32d77801cce0a8dd67cbf4041a754734756d/docs/operations/evidence/performance-2026-11-21).
 
 | Gate | Status |
 | --- | --- |
