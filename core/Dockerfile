@@ -1,4 +1,4 @@
-FROM php:8.5-fpm-alpine@sha256:51414d5291758fe27f58a64c7e8a078465d32cc7dcef7bda803f5b36019802e0 AS php-dependencies
+FROM php:8.6-fpm-alpine@sha256:3892978a38794b348f73d6926fb63e352b5338f8b302cdd2cf0ed968f63b50c5 AS php-dependencies
 
 RUN apk add --no-cache --upgrade 'curl>=8.22.0-r0' 'libcurl>=8.22.0-r0' 'libcrypto3>=3.5.8-r0' 'libssl3>=3.5.8-r0' 'musl-utils>=1.2.6-r3' 'openssl>=3.5.8-r0' 'libexpat>=2.10.0-r0' 'bind-tools>=9.20.29-r0' icu-libs 'libpq>=18.7-r0' libzip libmaxminddb nginx supervisor su-exec postgresql-client restic \
     && apk add --no-cache --virtual .build-deps $PHPIZE_DEPS icu-dev postgresql-dev libzip-dev \
@@ -20,7 +20,7 @@ RUN --mount=type=cache,target=/tmp/composer-cache \
         sleep $((attempt * 5)); \
     done
 
-FROM node:26-alpine@sha256:233761595746769ebfdb6090f44fc7cdf818ae0ce62d2b37e0367723b9823e36 AS frontend-assets
+FROM node:26-alpine@sha256:6bd9ab43c0ec0190ca7b2d193906cb8b7edf6e7f4afa43ddeccd6452710bffb5 AS frontend-assets
 
 WORKDIR /app
 
