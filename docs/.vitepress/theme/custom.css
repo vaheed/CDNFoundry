@@ -279,6 +279,14 @@ body {
   text-align: center;
 }
 
+/* Mermaid's dark edge-label background needs the same readable token pair as the frame. */
+.vp-doc .cdnf-diagram-svg .labelBkg,
+.vp-doc .cdnf-diagram-svg .edgeLabel,
+.vp-doc .cdnf-diagram-svg .edgeLabel p {
+  color: var(--vp-c-text-1) !important;
+  background-color: var(--vp-c-bg-soft) !important;
+}
+
 .vp-doc .cdnf-diagram-svg svg {
   display: block;
   width: auto;
