@@ -5,7 +5,7 @@ description: Read traffic analytics and logs, understand what is masked or missi
 
 # Analytics, logs, and usage
 
-<Screenshot name="app-analytics" alt="The Analytics page in the domain panel, with traffic for the selected domain and range." />
+<Screenshot name="app-analytics" alt="The domain Analytics page with range and domain filters and an analytics availability message in the seeded test stack." />
 
 This page shows how to read traffic, DNS, and log data for a domain, how the platform protects privacy, and how to export usage. **You need:** access to the domain. Administrators also need the `/admin` panel for platform-wide views.
 

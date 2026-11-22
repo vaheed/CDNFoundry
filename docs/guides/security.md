@@ -16,19 +16,16 @@ need upstream transit controls or provider scrubbing.
 
 ```mermaid
 flowchart TD
-    subgraph Gate["Availability gate"]
-      Request["Incoming request"] --> Maintenance{"Maintenance?"}
-      Maintenance -- Yes --> Response["Bounded HTTP 503"]
-    end
-    subgraph Enforce["Layered enforcement"]
-      Maintenance -- No --> Client["Trusted client IP"] --> Rules["Firewall rules"]
-      Rules --> Profile["Profile ceilings"] --> Limits["Rate + concurrency"]
-      Limits --> Method["Method + size bounds"] --> Serve["Cache or origin"]
-    end
-    subgraph Observe["Outcome"]
-      Response --> Event["Reason + telemetry"]
-      Serve --> Event
-    end
+    Request["Incoming request"] --> Bounds["Host, emergency, method and size checks"]
+    Bounds --> Client["Trusted client IP and containment"]
+    Client --> Detect["Configured detections and WAF scoring"]
+    Detect --> Rules["Firewall rules, then rate-limit rules"]
+    Rules --> WAF["Managed WAF decision and challenges"]
+    WAF --> Limits["Request and concurrency limits"]
+    Limits --> Domain["Domain HTTPS redirect and maintenance"]
+    Domain --> RequestRules["Request rules"]
+    RequestRules --> Serve["Cache or validated origin"]
+    Serve -.-> Event["Redacted telemetry"]
 ```
 
 | Layer | Purpose |
@@ -40,8 +37,14 @@ flowchart TD
 | Incident controls | Explicit actions for a domain, pool, cell, or edge |
 
 For application attack detection, see [Managed WAF](managed-waf.md).
+For redirects, origin URL rewrites, header changes, and cache overrides, use
+[Request rules](request-rules.md). Those run after security and cannot bypass
+a block or challenge. The diagram shows the normal path; any earlier rejection
+ends processing at that stage.
 
 ## Firewall rules
+
+<Screenshot name="app-firewall-rules" alt="The domain Firewall rules tab with typed conditions, access actions, and ordering in the seeded test stack." />
 
 **You need:** update rights on the domain.
 
@@ -482,11 +485,13 @@ is `PUT /api/domains/{domain}/security/alert` with `threshold` (1 to 1,000,000) 
   `custom_rule_challenge`, and `custom_rule_log` are recorded but do not raise the
   automatic security state.
 
-::: warning Upgrading from 1.x
-The old IP, CIDR, country, and continent rules are converted in place by one
-migration, keep their IDs and priorities, and become one condition each. The old
-rule shape is gone from the API. The migration cannot be reversed, so run it as
-an explicit upgrade step with a database backup.
+::: warning Earlier rule storage
+On a supported upgrade with the old single-match rule schema, the typed-rule
+migration converts IP, CIDR, country, and continent rules in place. Each becomes
+one condition and retains its ID and priority. The old shape is no longer
+accepted by the API, and the migration cannot be reversed. Back up before the
+explicit migration step. This is not an upgrade path from 1.x; see
+[Upgrade and rollback](../deployment/upgrade.md).
 :::
 
 ## Profiles

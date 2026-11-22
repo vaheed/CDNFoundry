@@ -46,7 +46,11 @@ chain order, and coverage of every proxied hostname. A wildcard covers only one 
 
 ## HTTPS serves the bootstrap certificate
 
-The runtime could not choose an active certificate for the domain. Check:
+The normal runtime rejects the TLS handshake when a hostname is unknown, TLS
+is disabled, or its certificate is missing, expired, or invalid. It does not
+serve the bootstrap certificate as a customer fallback. If you see that
+certificate, confirm that you reached the expected gateway and current cell
+listener rather than an incorrect address or an older deployment. Check:
 
 - the hostname and SNI;
 - the TLS mode;
@@ -61,9 +65,11 @@ Never replace the bootstrap pair with a customer key.
 
 Check each of these:
 
-- cache is enabled for the domain, and development mode has not expired;
+- cache is enabled for the domain, and development mode is off or has expired;
 - the request method, `Authorization` header, and cookies (any cookie not on the ignored list bypasses the cache);
 - the query-key policy;
+- the first matching **Rules → Cache** rule, and whether a rewrite changed the
+  upstream URL (the cache key still uses the original visitor URL);
 - the response status, `Set-Cookie`, `Cache-Control`, and `Vary`;
 - range handling and object size;
 - free cache capacity in the cell.
