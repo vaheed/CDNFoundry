@@ -168,7 +168,12 @@ flowchart TD
 
 Run `show-start-order` to list your own nodes in this order. Fleet also writes `STARTUP-ORDER.md` in the bundle directory. The control host starts `control-db` and Valkey, runs the application migration, starts `pdns-db`, then runs the PowerDNS migration. A DNS host has no database to migrate.
 
-This is service order only. It does not mean you can create dependent settings early. After the DNS services are healthy, register and test the DNS clusters in the panel, enable them, and only then apply the platform DNS identity.
+This is service order only. After DNS services are healthy, the one hidden
+primary must be registered, tested, and enabled before the platform DNS identity
+is applied. Guided Fleet bootstrap performs that registration and initial
+identity seeding; review the result in the panel. In a manual bundle workflow,
+follow [First domain](../getting-started/first-domain.md) rather than registering
+each secondary as a writable cluster.
 
 A `dns-edge` host starts DNS first. Its edge services start only after you set its `EDGE_ID` (see [Enroll an edge by hand](production-fleet-operator-guide.md#edge-registration-and-mtls-enrollment)). When Fleet runs `bootstrap`, it enrolls the edge for you.
 
