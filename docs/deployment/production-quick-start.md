@@ -7,6 +7,13 @@ description: Install CDNFoundry on one control node and two combined DNS and edg
 
 This page installs the smallest practical production fleet. You use a JSON file that describes your hosts. Fleet, the infrastructure tool, turns it into one deployment bundle per host. You then start each bundle, configure DNS and edges in the admin panel (or the API), and prove that traffic works.
 
+This is the explicit **setup, render, transfer, and start** workflow. For the
+guided SSH installation, start with [Fleet web](../operations/fleet-web.md#deploy)
+or the [Fleet engine](../operations/fleet-engine.md). Guided bootstrap prepares
+hosts, registers the DNS primary, seeds the platform identity, enrolls edges,
+and provisions their runtime key material. The manual steps below make those
+boundaries visible; do not repeat them against an already bootstrapped fleet.
+
 The fleet has three hosts:
 
 - one **control node**: the control plane, with monitoring and operational logs on the same host;
@@ -53,7 +60,11 @@ Only DNSdist is public on port 53. PowerDNS and its database stay private. See t
 
 Keep IPv6 disabled until it is routable end to end.
 
-Fleet does not create panel users, register DNS clusters, enroll edge identities, change registrar delegation, or prove public traffic readiness. You do those in steps 5 to 9.
+Rendering bundles alone does not create panel users, register the DNS primary,
+enroll edge identities, change registrar delegation, or prove public traffic
+readiness. This walkthrough performs those tasks in steps 5 to 9. Guided Fleet
+bootstrap automates infrastructure registration and enrollment, but registrar
+changes, user setup, and public traffic qualification still need your review.
 
 ## The steps at a glance
 
@@ -171,7 +182,7 @@ Never commit `fleet.json`, Fleet state, generated bundles, `.env.prod`, or priva
 
 ### Issue the edge listener material
 
-Each combined DNS and edge bundle needs a serving certificate for its edge listener and a stable recovery key in `/dev/shm/cdnfoundry/`. Fleet does not create them. Issue them from the fleet's edge-server CA on the workstation that holds the state. Run this once per PoP, changing the hostname, address, and output path:
+Each combined DNS and edge bundle needs a serving certificate for its edge listener and a stable recovery key in `/dev/shm/cdnfoundry/`. In this manual bundle workflow, issue them from the fleet's edge-server CA on the workstation that holds the state. Guided Fleet bootstrap provisions them as part of enrollment. Run this manual step once per PoP, changing the hostname, address, and output path:
 
 ```bash
 sudo ./scripts/issue-edge-listener-material.sh \

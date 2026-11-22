@@ -7,7 +7,7 @@ description: Run a CDNFoundry production fleet with Fleet. Set up the plan, rend
 
 This guide shows how to run a fleet with the Fleet CLI (`scripts/cdnfoundry-fleet`). You will create a plan, render one bundle per host, check the bundles, deploy them, and keep the fleet up to date. For the design behind these steps, see the [Fleet reference](production-fleet.md). For every option, see the [Fleet CLI reference](../reference/fleet-cli.md) and the [configuration reference](production-fleet-config-reference.md).
 
-**You need:** a workstation with Python 3, PyYAML, and OpenSSL, a checkout of CDNFoundry at an exact release, and root SSH access to your hosts. Docker Engine with Compose v2 is needed on the hosts, not on the workstation.
+**You need:** a workstation with Python 3, PyYAML, and OpenSSL, a checkout of CDNFoundry at an exact release, and SSH access as root or a user with passwordless sudo. Docker Engine with Compose v2 is needed on the hosts, not on the workstation. Guided bootstrap can prepare supported hosts; see [host preparation](../operations/fleet-engine.md#adding-a-node) for its distribution and service-manager limits.
 
 ```mermaid
 flowchart LR
@@ -324,7 +324,13 @@ Expected: `validate` prints `{"status": "valid"}` and replaces nothing. `render`
 
 `validate` renders into a temporary directory. `render` builds a full new generation, then swaps it into place and keeps the previous one. Add `--node NAME` to either command to work on one host.
 
-Fleet checks generated configuration only. It does not check public DNS, TLS, registrar delegation, account access, or customer traffic. Follow the [starter quick start](production-quick-start.md) for that. Keep host-local Compose overrides (for example a resolver workaround) in your own inventory, because Fleet does not import them. Merge them into a new bundle and validate before you swap it in.
+The `validate` and `render` commands check generated configuration. They do not
+qualify public DNS, customer TLS, registrar delegation, or customer traffic.
+Guided Fleet installation also performs host preparation and health checks;
+those do not replace the [starter quick start's acceptance checks](production-quick-start.md)
+or [production qualification](../operations/production-qualification.md).
+Keep any host-local override in your inventory and incorporate it into a signed
+release before deployment. Fleet does not import arbitrary host configuration.
 
 ## Deploy with Fleet
 

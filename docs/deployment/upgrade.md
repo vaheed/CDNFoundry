@@ -9,8 +9,11 @@ This page shows how to move a running fleet to a new release, check it, and go b
 
 **You need:** a working fleet, your checkout on the target release tag (`git fetch --tags && git checkout vX.Y.Z`), and a verified off-host backup.
 
-::: danger v2.0.0 is a breaking release
-There is no upgrade from 1.x or 0.x. Deploy v2.0.0 from scratch with the [production quick start](production-quick-start.md). Do not point v2.0.0 images at a 1.x or 0.x database or volumes. This page applies to updates within 2.x.
+::: danger Compatibility with installations before 2.x
+There is no in-place upgrade from 1.x or 0.x. Install a fresh 2.x fleet using the
+[production quick start](production-quick-start.md). Do not point 2.x images at
+a legacy database or volumes. The [v2.0.0 release notes](../operations/releases/v2.0.0.md)
+record the original compatibility boundary. This page covers updates within 2.x.
 :::
 
 ::: danger Keep durable state
@@ -29,7 +32,10 @@ Never remove named volumes. Never regenerate encryption keys or certificate auth
 
 ## Order
 
-The order protects serving. Edge and DNS hosts keep serving the last valid runtime generation during the whole upgrade, so a failed step never stops traffic.
+The order preserves serving capacity. Running edge and DNS runtimes retain
+their last valid configuration when a replacement fails validation. Host or
+network loss and expired certificates can still interrupt service; keep enough
+healthy targets available while changing one host at a time.
 
 1. **Canary first.** Update one DNS or edge host. Check that DNS answers, the edge heartbeats, and HTTPS works.
 2. **Control plane.** Apply the Laravel migration, then the PowerDNS migration. Then replace `core`, Horizon, and the Scheduler together.

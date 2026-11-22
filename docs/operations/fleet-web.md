@@ -305,6 +305,8 @@ described in [Backup and recovery](backup-and-recovery.md).
 
 ## Backups
 
+<Screenshot name="fleet-backups" alt="Fleet backup history after a refresh, showing snapshot receipts and restore controls from the disposable test fleet." />
+
 - **Refresh backups** reads the latest 25 backup receipts from the active control node, including backups
   started outside Fleet. The table shows creation time, status, the full snapshot ID, and added bytes.
   A connection failure keeps the previous table visible with an error; it is not reported as an empty history.
