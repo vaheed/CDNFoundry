@@ -13,9 +13,18 @@ input. A timeout can occur after the server commits desired state.
 The control API is rooted at `/api`. The admin and domain panels use the same
 access rules, so a user can do through the API only what the panels allow.
 The [endpoint catalog](endpoints.md) is generated from the Laravel route list.
-The [OpenAPI 3.1 contract](https://raw.githubusercontent.com/vaheed/CDNFoundry/main/docs/public/openapi.json)
-is a downloadable build file.
+The [development OpenAPI 3.1 contract](https://raw.githubusercontent.com/vaheed/CDNFoundry/dev/docs/public/openapi.json)
+tracks `dev`. For a deployed release, use `docs/public/openapi.json` from its
+exact source checkout instead. The development branch and a deployed release
+can differ.
 Errors are described in [API errors](errors.md).
+
+The generated contract covers routes, access requirements, common parameters,
+and response envelopes. It does not define every endpoint's full input schema.
+Use the feature guides for typed payload examples and validation limits. For
+redirects, rewrites, headers, cache rules, ordering, and presets, start with
+[Request rules](../../guides/request-rules.md) and its
+[API shapes](../request-rules.md#api).
 
 ## Authentication
 

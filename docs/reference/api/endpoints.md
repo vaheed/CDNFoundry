@@ -308,4 +308,4 @@ for authentication, pagination, response, and retry behaviour.
 | `POST` | `/admin/users` | Required | Supported | `post.admin.users` |
 
 Download the machine-readable
-[OpenAPI 3.1 contract](https://raw.githubusercontent.com/vaheed/CDNFoundry/main/docs/public/openapi.json).
+[OpenAPI 3.1 contract on dev](https://raw.githubusercontent.com/vaheed/CDNFoundry/dev/docs/public/openapi.json).
