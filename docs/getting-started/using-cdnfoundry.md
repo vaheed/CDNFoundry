@@ -97,6 +97,14 @@ See [Proxy and origins](../guides/proxy-and-origins.md) and
 
 ## Normal feature workflows
 
+### Change request behavior
+
+Open the domain's **Rules** tab for redirects, URL rewrites, headers, and cache
+rules. Use a narrow condition and a temporary redirect while testing, wait for
+the deployment acknowledgement, then check the response. Request rules run
+after security checks and cannot bypass a block or challenge. Follow
+[Request rules](../guides/request-rules.md) for a complete first example.
+
 ### Manage authoritative DNS
 
 - Create and edit records within the zone boundary.
@@ -132,8 +140,9 @@ numbers for billing unless you have defined and tested that use yourself.
 ### Purge content
 
 Use a URL purge for a known, small set of URLs. Use a full purge only when all
-cached content of the domain must go. A purge empties the edge cache. It does not
-change anything at your origin.
+cached content of the domain must go. A purge invalidates cached copies. A full
+purge advances the cache epoch rather than scanning and deleting disk files.
+Neither form changes content at your origin.
 
 ## Understand operation status
 

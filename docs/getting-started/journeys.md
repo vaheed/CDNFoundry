@@ -42,9 +42,10 @@ You use the CDN for your own sites. An administrator has created your account.
 4. [Proxy and origins](../guides/proxy-and-origins.md): point the CDN at your server.
 5. [TLS](../guides/tls.md): get HTTPS.
 6. [Cache and purge](../guides/cache.md) and [Compression](../guides/compression.md): make it fast.
-7. [Security](../guides/security.md) and [Managed WAF](../guides/managed-waf.md): protect it.
-8. [Analytics](../guides/analytics.md): see what happens.
-9. Stuck? [Troubleshoot by symptom](../troubleshooting/by-symptom.md).
+7. [Request rules](../guides/request-rules.md): redirect visitors, rewrite origin URLs, and adjust headers or caching.
+8. [Security](../guides/security.md) and [Managed WAF](../guides/managed-waf.md): protect it.
+9. [Analytics](../guides/analytics.md): see what happens.
+10. Stuck? [Troubleshoot by symptom](../troubleshooting/by-symptom.md).
 
 ## I am on call
 

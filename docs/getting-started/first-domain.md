@@ -16,6 +16,11 @@ your first customer domain.
 - a domain you control for the platform itself, for example `cdn.example.net`,
   and access to its registrar.
 
+If an administrator has already prepared the platform, start at
+[Add the customer domain](#add-the-customer-domain). Domain users can instead
+follow [Domains](../guides/domains.md) for the delegated account workflow.
+The DNS primary and platform identity are configured once, not per customer.
+
 ::: warning Delegation is an external change
 Test the platform zone and both DNS hosts directly before you change registrar
 delegation. CDNFoundry cannot undo a wrong change at a registrar or parent zone.
@@ -53,8 +58,14 @@ curl -X POST "$CDNF_URL/api/admin/dns/clusters/$CLUSTER_ID/test" \
   -H "Idempotency-Key: $(uuidgen)"
 ```
 
-`primary.json` uses the same fields as the panel form. See the
-[endpoint catalog](../reference/api/endpoints.md) for the exact names.
+Create `primary.json` locally with `name`, `location`, `api_url`, `api_key`,
+`transfer_endpoint`, and `nameservers` (an array of objects with `hostname`).
+`server_id` is optional and normally `localhost`. Use the actual private
+listener addresses for your deployment. Keep the file private and remove it
+after registration because it contains the PowerDNS API key.
+Use the field names above. [API conventions](../reference/api/index.md) explain
+authentication and replay; the [endpoint catalog](../reference/api/endpoints.md)
+lists routes.
 
 </template>
 </DocTabs>
@@ -158,4 +169,6 @@ qualification only. It is not proof of public delegation.
 - Add a proxied hostname and an explicit, safe origin with
   [Proxy and origins](../guides/proxy-and-origins.md).
 - The first eligible proxied hostname starts [managed TLS](../guides/tls.md).
+- After HTTPS works, use [Request rules](../guides/request-rules.md) for redirects,
+  origin URL changes, header policies, and cache exceptions.
 - Give other people access with [Users and access](../guides/users-and-access.md).

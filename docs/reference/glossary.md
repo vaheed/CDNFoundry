@@ -10,8 +10,8 @@ alphabetical order.
 
 ## A
 
-**Anycast.** Several machines announce the same IP address, and the network
-sends each client to the nearest one. CDNFoundry can serve a pool's traffic
+**Anycast.** Several machines announce the same IP address, and network routing
+chooses a path to one of them. This need not be geographically nearest. CDNFoundry can serve a pool's traffic
 this way. See [Simple Anycast](../operations/simple-anycast.md).
 
 **Artifact.** A signed file the control plane builds for the edges. It holds the
@@ -99,6 +99,10 @@ Traffic for it goes through an edge.
 increments an epoch so every older object counts as stale.
 
 ## R
+
+**Request rule.** A domain rule that redirects a visitor, rewrites an origin
+URL, changes headers, or selects cache settings. Request rules run after
+security decisions. See [Request rules](../guides/request-rules.md).
 
 **Revision.** A number that goes up each time a domain's desired state changes.
 Targets report which revision they hold.

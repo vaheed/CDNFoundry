@@ -17,7 +17,7 @@ before you install anything.
 | --- | --- | --- | --- |
 | **Admin panel** | Run the platform: pools, PoPs, DNS, users, settings, audit | Administrators | `https://<control host>/admin/login` |
 | **Domain panel** | Manage your own domains: DNS, origins, TLS, cache, security, analytics | Domain users | `https://<control host>/app/login` |
-| **API** | Do anything the panels do, from scripts | Both | `https://<control host>/api`, with a token |
+| **API** | Automate domain and platform operations with scoped tokens | Both | `https://<control host>/api`, with a token |
 | **Fleet CLI** | Install, upgrade, back up, and roll back hosts | Infrastructure operators | `scripts/cdnfoundry-fleet` on your workstation |
 | **Fleet web** | The same Fleet actions, as a web page | Infrastructure operators | `cdnfoundry-fleet web`, then `http://127.0.0.1:8765` on your workstation |
 | **Grafana** | Watch traffic, security, hosts, and usage on dashboards | Operations, security, support, business | `http://127.0.0.1:3000` on the telemetry host, through your own authenticated proxy |
@@ -35,6 +35,7 @@ open them. They store data and metrics for the tools above. Keep them private.
 | Install a fleet | Fleet CLI or Fleet web | [Production quick start](../deployment/production-quick-start.md) |
 | Add a domain and serve it | Domain panel, or the API | [Domains](../guides/domains.md) |
 | Change DNS records | Domain panel, or the API | [Authoritative DNS](../guides/dns.md) |
+| Redirect a URL, rewrite an origin path, or change headers | Domain panel **Rules**, or the API | [Request rules](../guides/request-rules.md) |
 | See if a PoP is healthy | Admin panel **Edges**, or Grafana **PoP fleet** | [Edges and placement](../guides/edges.md) |
 | See traffic and errors | Domain panel **Analytics**, or Grafana | [Analytics](../guides/analytics.md) |
 | Upgrade the platform | Fleet CLI or Fleet web | [Upgrade](../deployment/upgrade.md) |
