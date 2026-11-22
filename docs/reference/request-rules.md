@@ -5,6 +5,9 @@ description: Redirects, URL rewrites, header rules, and cache rules on a domain,
 
 # Request rules
 
+For a first rule, follow the [request rules guide](../guides/request-rules.md).
+This reference defines the supported inputs, presets, limits, and API shapes.
+
 Request rules change what a request does at the edge without touching your origin. Each rule has up to **five
 conditions** that must all match, from the same condition builder as [firewall rules](security-rules.md), and one
 action of its type. The edge decides every rule from the signed configuration it already holds; no request waits for
@@ -218,6 +221,10 @@ Every request a rule acted on carries the rule in the access log, in the `reques
 commas, for example `rewrite:12,header:4,cache:31`. At most eight rules are listed. Requests no rule changed carry an
 empty value. If many header rules match, the list keeps the rewrite and cache decisions and the first header matches
 that fit within this bound.
+
+This field is retained in ClickHouse raw events. The standard domain log API
+does not currently select it. A domain owner should verify the response and
+deployment status; an operator can inspect the raw telemetry when needed.
 
 ## API
 

@@ -16,8 +16,11 @@ These guides show how to do each task in the panel and, where it exists, through
 | Proxied hostnames and safe origins | [Proxy and origins](proxy-and-origins.md) |
 | Enrollment, pools, cells, placement | [Edges and placement](edges.md) |
 | Managed DNS-01 and custom certificates | [TLS](tls.md) |
+| Redirects, URL rewrites, headers, cache overrides, and presets | [Request rules](request-rules.md) |
 | Cache policy, development mode, purges | [Cache and purge](cache.md) |
 | Gzip, Brotli, canonical cache objects, pressure fallback | [Compression](compression.md) |
 | Rules, profiles, readiness, and incident controls | [Security](security.md) |
 | Fixed ModSecurity and OWASP CRS profiles and exclusions | [Managed WAF](managed-waf.md) |
 | Logs, analytics, privacy, usage exports | [Analytics and usage](analytics.md) |
+| Delivery and security notifications | [Notifications](notifications.md) |
+| Redacted HTTP and DNS event delivery | [Log push](log-push.md) |

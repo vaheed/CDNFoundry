@@ -32,6 +32,8 @@ from adding it to serving traffic.
 
 ### A domain page
 
+<Screenshot name="app-domain-overview" alt="A domain Overview with delegation, DNS, delivery, TLS, cache, and security sections from the seeded test stack." />
+
 Open a domain to see its page. It has an **Overview** and tabs for the work:
 
 | Tab | What it holds | Read |
@@ -39,7 +41,11 @@ Open a domain to see its page. It has an **Overview** and tabs for the work:
 | **Overview** | Cards for Delegation, DNS, Delivery, TLS, Cache, and Security | This page |
 | **DNS records** | Your records, with proxy, origin, health-check, backup-origin, and Geo-DNS settings | [DNS](dns.md), [Proxy and origins](proxy-and-origins.md), [Geo-DNS](geo-dns.md) |
 | **Firewall rules** | Typed rules: up to five conditions and one action, with rate limits and presets | [Security](security.md#firewall-rules) |
-| **Rules** | Redirects, URL rewrites, header rules, and cache rules decided at the edge, one tab each, with presets such as HTTP to HTTPS, security headers, and longer caching for static files | [Request rules](../reference/request-rules.md) |
+| **Rules** | Redirects, URL rewrites, header rules, and cache rules decided at the edge, one tab each, with presets such as HTTP to HTTPS, security headers, and longer caching for static files | [Request rules guide](request-rules.md) |
+| **Security events** | Mitigated requests, rule matches, reasons, and investigation filters | [Security events](security.md#security-events) |
+| **Scripts and connections** | Browser-reported resources, newly observed resources, and approval actions when client-side security is enabled | [Client-side security](security.md#client-side-security) |
+| **History** | Operator actions and automatic changes, including security-state changes; filter by source to distinguish them | [Security state](security.md#security-state), [Operations](../concepts/revisions-and-operations.md) |
+| **Log push** | Destinations, delivery state, and tests when domain-user log push is enabled by an administrator | [Log push](log-push.md) |
 | **WAF exclusions** | Shown only when the domain still has exclusions saved before they were disabled. They have no effect; delete them | [Managed WAF](managed-waf.md) |
 
 The **Overview** tab is a set of sections. Each shows its facts and, on its title row, the buttons that change them, so an
