@@ -185,6 +185,7 @@ const operate = [
       { text: 'Request-rule qualification', link: '/operations/request-rules-qualification-2026-11-21' },
       { text: 'Fleet host and backup qualification', link: '/operations/fleet-bootstrap-qualification' },
       { text: 'Hardware requirements', link: '/operations/hardware-requirements' },
+      { text: 'Release notes v2.1.4', link: '/operations/releases/v2.1.4' },
       { text: 'Release notes v2.1.3', link: '/operations/releases/v2.1.3' },
       { text: 'Release notes v2.1.2', link: '/operations/releases/v2.1.2' },
       { text: 'Release notes v2.1.1', link: '/operations/releases/v2.1.1' },
