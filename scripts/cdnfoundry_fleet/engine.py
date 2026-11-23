@@ -327,6 +327,47 @@ class FleetEngine:
         files = tmpfs_material.issue(self.work, self.repo_root, node)
         return tmpfs_material.install(self.transport, self.targets(state)[name], files)
 
+    def recover(self, names: list[str] | None = None) -> actions.Outcome:
+        """Restore boot prerequisites and start existing containers without deploying a bundle."""
+        state = self.state()
+        selected = names or [n for n, node in state["nodes"].items() if node["enabled"]]
+        unknown = set(selected) - state["nodes"].keys()
+        if unknown:
+            raise ValidationError(f"Unknown nodes: {', '.join(sorted(unknown))}")
+        self._missing_access(state, selected)
+        targets, done = self.targets(state), []
+        material: dict[str, dict[str, bytes]] = {}
+        # Recovery must never mint a replacement encryption key. Check every node before changing hosts.
+        for name in selected:
+            if tmpfs_material.needs_material(state["nodes"][name]["role"]):
+                folder = self.work / "secrets" / "nodes" / name / "listener"
+                paths = {n: folder / n for n in ("edge-runtime.crt", "edge-runtime.key", "edge-state-encryption.key")}
+                if state["nodes"][name]["role"] == "dns-edge":
+                    paths["node.key"] = self.work / "pki" / "nodes" / name / "node.key"
+                if any(not p.is_file() for p in paths.values()):
+                    raise ValidationError(f"{name}: existing runtime material is missing from the vault; restore its backup before recovery")
+                material[name] = {n: p.read_bytes() for n, p in paths.items()}
+        for name in actions.order_nodes(state["nodes"], ha_standby=(state.get("ha") or {}).get("standby")):
+            if name not in selected:
+                continue
+            self.say(f"{name}: restore boot prerequisites and start existing containers")
+            release = shlex.quote(state["nodes"][name].get("release") or state["global"]["release"])
+            checked = self.transport.run(targets[name], f"test \"$(cat /opt/cdnfoundry/RELEASE)\" = {release}")
+            if not checked.ok:
+                return actions.Outcome(False, done, name, "installed release does not match the vault; recovery stopped")
+            if name in material:
+                ok, detail = tmpfs_material.install(self.transport, targets[name], material[name])
+                if not ok:
+                    return actions.Outcome(False, done, name, detail)
+            started = self.transport.run(targets[name], tmpfs_material.recovery_command(), timeout=300)
+            if not started.ok:
+                return actions.Outcome(False, done, name, (started.stderr or started.stdout).strip()[-300:])
+            ok, detail = gate_with_retry(lambda: node_gate(self.transport, targets[name], state["nodes"][name], state), report=self._report_gate)
+            if not ok:
+                return actions.Outcome(False, done, name, detail)
+            done.append(name)
+        return actions.Outcome(True, done)
+
     def _switchover(self, node: str) -> None:
         from .control_cli import Control
 

@@ -742,6 +742,7 @@ def test_cli_parser_exposes_all_commands_and_help() -> None:
         "upgrade",
         "apply-config",
         "rollback",
+        "recover",
         "security",
         "backup-now",
         "backup-list",

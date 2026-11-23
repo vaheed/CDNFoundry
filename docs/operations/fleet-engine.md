@@ -121,9 +121,47 @@ then hands the node its edge ID and a one-time bootstrap token. The country and 
 Geo-DNS.
 
 Edge and DNS-edge hosts keep a listener certificate and key, a state encryption key, and (DNS-edge only) the node
-key in `/dev/shm/cdnfoundry`. The files are owned by UID 10101 with mode 0400. Fleet issues them from its own PKI
-and stores them in the vault. It writes them again on every deploy, because `/dev/shm` is memory and does not
-survive a reboot. Fleet also turns host swap off, as the bundle requires. Nobody copies keys by hand.
+key in `/dev/shm/cdnfoundry`. Private keys are owned by UID 10101 with mode 0400; certificates use mode 0444.
+Fleet issues them from its own PKI and stores them in the vault. Every deploy also streams an archive directly
+into `systemd-creds encrypt --with-key=host`. Only the encrypted credential is stored on the host, at
+`/etc/credstore.encrypted/cdnfoundry-edge-material`. This requires systemd with encrypted credential support
+(`systemd-creds`, version 250 or later); provisioning fails if it is unavailable. Fleet disables host swap.
+
+Fleet installs `cdnfoundry-edge-material.service` and a Docker dependency. On each boot the oneshot service
+decrypts the credential into memory and restores the files before Docker may start. It does not need the
+control plane or the Fleet workstation to be online. Empty directories created by failed Docker mounts are
+removed; nonempty directories and symbolic links are rejected. A failed restore blocks Docker startup.
+Provisioning also restores the material immediately without restarting Docker or unrelated containers.
+
+The encrypted credential is bound to the host's systemd credential key in `/var/lib/systemd/credential.secret`.
+It prevents plaintext key files on disk; it does not protect against root access or theft of both the host key
+and credential. The Fleet vault remains the external recovery source: replacing a host or losing its credential
+key requires Fleet provisioning from that vault. Never generate a replacement edge state encryption key to
+recover existing encrypted state. Older installations need a Fleet deploy to install this boot integration.
+For a failed boot, inspect `journalctl -u cdnfoundry-edge-material.service -u docker.service`, then use
+Fleet recovery below. Do not delete edge state volumes.
+
+### Recover after a host reboot
+
+Update the Fleet checkout on the workstation holding your existing vault, then run:
+
+```sh
+python3 scripts/cdnfoundry-fleet recover
+```
+
+Use `--vault /path/to/fleet.db` if the vault is not at the default location. To recover one node, add
+`--node pop-1`; repeat `--node` to select several. The default is every enabled host in startup order.
+The command checks the installed release against the vault, installs edge boot recovery from the existing
+vault material, enables and starts Docker on each selected host, and starts only stopped long-running
+containers belonging to the installed Compose release. It never pulls images, uploads a bundle, runs
+migrations, or starts one-time migration containers. Each host must pass the normal health gate before
+recovery proceeds to the next host. A failure stops the command; rerunning it is safe.
+
+Control, DNS, monitoring, edge, and combined DNS-edge hosts all use this command. Hosts without edge
+roles retain their persistent secret files and need no edge credential. An edge with missing vault
+material fails before any hosts are changed; restore the vault backup rather than creating another key.
+The command does not reboot hosts. Qualify a maintenance reboot one host at a time, keeping another PoP
+available, and check both container health and fresh edge heartbeats after each reboot.
 
 If a host binds DNS to a wildcard address and `systemd-resolved` already listens on port 53, bootstrap stops before
 it starts anything and names the fix:

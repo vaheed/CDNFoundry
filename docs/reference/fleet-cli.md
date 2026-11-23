@@ -354,6 +354,14 @@ Print the Fleet SSH public key; add it to root's authorized_keys on every node.
 
 No options beyond the shared ones.
 
+## recover
+
+Restore boot material and start existing release containers; deploys no images or configs.
+
+| Option | Meaning |
+| --- | --- |
+| `--node` `NODE` | repeatable; default is every enabled node |
+
 ## remove-node
 
 Remove a host from the plan; it does not stop or clean the host.
