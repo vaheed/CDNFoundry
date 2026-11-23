@@ -116,3 +116,82 @@ action. Dials: ENERGY 1 / RHYTHM 1 / MOTION 1. The UI Delivery Gate passed; fina
 | C-3 | PASS: the page contains backup receipts and the existing recovery actions. |
 | C-4 | PASS: final theme, viewport, visual, and validation checks passed. |
 | C-5 | PASS: executed checks and missing host qualification are distinguished above. |
+
+## Boot recovery qualification, 23 November 2026
+
+Recorded 23 November 2026. Scope: memory-backed boot material, recovery through the shared Fleet engine,
+CLI and local web controls, and README domain captures. No application migration or image update.
+
+| Gate | Result |
+| --- | --- |
+| Implementation | PASS: encrypted boot credential, ordered restore before Docker, safe empty-directory recovery, all-role recovery command and web controls |
+| Documentation | PASS: Fleet engine/web guides, generated CLI reference, README tour |
+| Automated qualification | PASS: 19 recovery/provisioning/parser, 44 web backend, and 24 action/vault regressions |
+| Runtime qualification | PASS: isolated cold restore, invalid-credential dependency failure, and an approved real staging reboot with restored files, 17 healthy containers, DNS, trusted HTTPS, fresh heartbeats, and SSH recovery |
+| Browser qualification | PASS: Fleet web 146 passed and 42 expected duplicate-crawl/desktop-capture skips; domain captures 2 passed; rule-table visual/axe checks 4 passed |
+
+The broad Python run returned 366 passed and one failure in the CLI command inventory assertion.
+The expected command list was updated for `recover`, and that test passed in the final affected regression run.
+The complete broad suite was not rerun after that test correction; the affected suites above were rerun.
+
+Staging: boot recovery was installed using pop2's existing key bytes. The same recovery container-start
+command ran on the control host and pop2. Both retained healthy running containers and enabled Docker.
+An explicitly approved pop2 reboot is confirmed by its exported boot time. Authoritative SOA replies,
+HTTPS with certificate verification (302, verification result 0), and fresh heartbeats returned.
+The new boot ID and startup journal confirm material restoration before Docker returned. SSH initially refused connections and returned after the requested five-minute wait; all 17 running containers were healthy, and keys were regular files owned by UID 10101 with mode 0400 (certificate mode 0444). Pop1 remains dependent on recovery from the owner's workstation vault.
+IPv6 host reboot qualification was not executed; staging has no configured public IPv6 in this inventory.
+
+### Boot recovery UI delivery gate
+
+Design read: use the existing Fleet Nodes page, host detail, forms, and background action log.
+Keep recovery separate from installation and retain the shared shell, typography, surfaces, and primary accent.
+Dials: ENERGY 1 / RHYTHM 2 / MOTION 1. README images are genuine seeded captures, including four complete redirect rows.
+
+| Item | Evidence |
+| --- | --- |
+| R-01 | PASS: no gradient or surface styling added. |
+| R-02 | PASS: added UI labels and help contain no em dash. |
+| R-03 | PASS: overflow checks and snapshots passed at 390px and 1440px. |
+| R-04 | PASS: no icon or icon system added. |
+| R-05 | PASS: recovery uses existing Fleet forms and job pages. |
+| R-06 | PASS: existing typography retained; no font CSS changes. |
+| R-07 | PASS: no background pattern added. |
+| R-08 | PASS: no decorative arrow added. |
+| R-09 | PASS: failed recovery has a textual job status and explanation. |
+| R-10 | PASS: no glass effect added. |
+| R-11 | PASS: existing form and button shapes retained. |
+| R-12 | PASS: no shadow changes. |
+| R-13 | PASS: no glow added. |
+| R-14 | PASS: scoped recovery controls are forms, with no feature-card layout. |
+| R-15 | PASS: Recover all enabled hosts and Recover this host describe the scope. |
+| R-16 | PASS: copy names keys, stopped containers, the installed release, and health checks. |
+| R-17 | PASS: README values come from the seeded database, explicitly identified as test data. |
+| R-18 | PASS: no testimonials added. |
+| R-19 | PASS: no animation added. |
+| R-20 | PASS: existing operator shell and host actions retained. |
+| R-21 | PASS: both themes tested; no default theme change. |
+| R-22 | PASS: no illustration added. |
+| R-23 | PASS: owner requested the captures; no navigation category or invented asset added. |
+| R-24 | PASS: navigation/link browser checks and documentation link validation passed. |
+| R-25 | PASS: axe checks passed on changed pages in all four Fleet projects. |
+| R-26 | PASS: web actions call the shared engine in background jobs; success and failure routes tested. |
+| R-27 | PASS: existing job flow shows running, completed, and failed states; empty Nodes hides recovery. |
+| R-28 | PASS: no FAQ added. |
+| R-29 | PASS: existing shared colors retained; no CSS changes. |
+| R-30 | PASS: Fleet's existing host list, forms, and action log remain the design. |
+| R-31 | PASS: design read and scoped action labels explain ordering and reuse. |
+| R-32 | PASS: native controls, keyboard navigation, and visible focus checks passed. |
+| R-33 | PASS: changes are in server-rendered source; captures use Playwright without image editing. |
+| R-34 | PASS: changed captures reviewed in both themes at desktop and phone widths. |
+| R-35 | PASS: full Fleet browser runner exited 0; 146 passed. |
+| R-36 | PASS: actual serving recovery and remaining SSH/IPv6 limits are recorded separately. |
+| R-37 | PASS: established design direction and dials declared before capture. |
+| R-38 | PASS: screenshot source is the disposable seeded browser database and fixture vault. |
+| R-39 | PASS: semantic headings, native forms, axe checks, and phone layout checks passed. |
+| R-40 | PASS: no media or unmeasured performance claim added. |
+| Liveliness | PASS: section headings separate recovery from installation; existing accent identifies the primary install action. |
+| C-1 | PASS: fleet and host actions expose their actual scope beside their controls. |
+| C-2 | PASS: both actions reach background jobs; backend success and browser failure paths passed. |
+| C-3 | PASS: recovery occupies the existing Nodes/host pages, with no additional dashboard or filler section. |
+| C-4 | PASS: final snapshots, theme, width, keyboard, validation, and error-state checks passed. |
+| C-5 | PASS: seeded data, executed qualification, and remaining limits are identified explicitly. |
