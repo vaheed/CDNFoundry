@@ -94,3 +94,43 @@ def test_only_edge_roles_need_the_material_and_the_plans_provision_before_valida
     plan = actions.plan_config_change(nodes, {"pop-1", "control-1"}, "v2")
     assert [s.kind for s in plan.steps if s.node == "pop-1"][0] == "provision"
     assert "provision" not in [s.kind for s in plan.steps if s.node == "control-1"]
+
+
+def test_restore_recovers_empty_mount_directories_and_preserves_key_bytes(tmp_path: Path) -> None:
+    import os
+
+    runtime = tmp_path / 'runtime'
+    runtime.mkdir()
+    for name in ('edge-runtime.crt', 'edge-runtime.key', 'edge-state-encryption.key'):
+        (runtime / name).mkdir()
+    credentials = tmp_path / 'credentials'
+    credentials.mkdir()
+    files = {'edge-runtime.crt': b'certificate', 'edge-runtime.key': b'private', 'edge-state-encryption.key': b'a' * 64}
+    (credentials / 'edge-material').write_bytes(provision.archive(files))
+    script = provision.restore_script().replace(provision.TMPFS_DIR, str(runtime))
+    # The test directory is on disk; production must require tmpfs.
+    script = script.replace('test "$(stat -f -c %T "$runtime")" = tmpfs', ':')
+    script = script.replace('chown -R 10101:10101 "$runtime"', ':')
+    for _ in range(2):
+        done = subprocess.run(['sh', '-c', script], env={**os.environ, 'CREDENTIALS_DIRECTORY': str(credentials)}, capture_output=True, text=True)
+        assert done.returncode == 0, done.stderr
+        assert {n: (runtime / n).read_bytes() for n in files} == files
+        assert (runtime / 'edge-runtime.key').stat().st_mode & 0o777 == 0o400
+    (runtime / 'edge-runtime.key').unlink()
+    (runtime / 'edge-runtime.key').mkdir()
+    (runtime / 'edge-runtime.key' / 'unexpected').write_text('preserve')
+    done = subprocess.run(['sh', '-c', script], env={**os.environ, 'CREDENTIALS_DIRECTORY': str(credentials)}, capture_output=True)
+    assert done.returncode != 0
+    assert (runtime / 'edge-runtime.key' / 'unexpected').read_text() == 'preserve'
+
+
+def test_boot_recovery_gates_docker_and_encrypts_material_before_persistence() -> None:
+    cmd = provision.install_command()
+    assert 'systemd-creds encrypt --with-key=host --name=edge-material - ' in cmd
+    assert 'LoadCredentialEncrypted=edge-material:' in cmd
+    assert 'Before=docker.service' in cmd
+    assert 'Requires=cdnfoundry-edge-material.service' in cmd
+    assert 'After=cdnfoundry-edge-material.service' in cmd
+    assert 'systemctl start cdnfoundry-edge-material.service' in cmd
+    assert 'RemainAfterExit' not in cmd
+    assert 'rm -rf' not in cmd
