@@ -64,6 +64,14 @@ def test_unknown_node_is_rejected(tmp_path, monkeypatch):
     assert not calls
 
 
+def test_explicitly_selected_disabled_node_is_rejected(tmp_path, monkeypatch):
+    runner, calls, _ = engine(tmp_path, monkeypatch)
+    runner.state()['nodes']['node']['enabled'] = False
+    with pytest.raises(ValidationError, match='Enable nodes before recovery'):
+        runner.recover(['node'])
+    assert not calls
+
+
 def test_release_mismatch_stops_before_provisioning(tmp_path, monkeypatch):
     runner, _, installed = engine(tmp_path, monkeypatch)
     runner.transport.run = lambda *_a, **_kw: SimpleNamespace(ok=False)

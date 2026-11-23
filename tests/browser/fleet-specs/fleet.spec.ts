@@ -260,3 +260,17 @@ test('management networks take several CIDRs and are added and removed one at a 
     await page.getByRole('button', { name: 'Remove 2001:db8::/32' }).click();
     await expect(page.getByTestId('management-networks-open')).toBeVisible();
 });
+
+test('recovery offers the fleet and one host, and reports missing saved keys', async ({ page }) => {
+    await page.goto('/nodes/pop-tehran-a');
+    await expect(page.getByRole('button', { name: 'Recover this host', exact: true })).toBeEnabled();
+    await expectAccessible(page);
+    await noHorizontalOverflow(page);
+    await page.goto('/nodes');
+    await page.getByRole('button', { name: 'Recover all enabled hosts', exact: true }).click();
+    await expect(page).toHaveURL(/\/jobs\//);
+    await expect(page.locator('[data-state="failed"]')).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator('main')).toContainText('existing runtime material is missing from the vault');
+    await expectAccessible(page);
+    await noHorizontalOverflow(page);
+});

@@ -334,6 +334,9 @@ class FleetEngine:
         unknown = set(selected) - state["nodes"].keys()
         if unknown:
             raise ValidationError(f"Unknown nodes: {', '.join(sorted(unknown))}")
+        disabled = [n for n in selected if not state["nodes"][n]["enabled"]]
+        if disabled:
+            raise ValidationError(f"Enable nodes before recovery: {', '.join(disabled)}")
         self._missing_access(state, selected)
         targets, done = self.targets(state), []
         material: dict[str, dict[str, bytes]] = {}
