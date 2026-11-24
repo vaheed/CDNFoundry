@@ -44,6 +44,13 @@ An edge-agent volume belongs to one edge row and host. Restore it only to that
 identity, or rotate the edge and enroll again.
 :::
 
+## Remove an edge
+
+Drain the edge, then disable it from **Edges → More**. **Remove** becomes available
+when both states are set. You can also remove it from its overview or edit page.
+Confirming removes the control-plane row and its cells, records an audit entry, and
+queues platform DNS reconciliation. Retire the host separately with Fleet.
+
 ## Pools
 
 Administrators create `shared`, `reserved`, `quarantine`, or `dedicated` pools. Pool names
