@@ -154,12 +154,15 @@ Independent, open source, and built with passion.
 Your support helps keep CDNFoundry moving forward.
 
 ### [Buy Me a Beer — $10](https://nowpayments.io/payment/?iid=6197093183)
+
 A little appreciation for the work behind CDNFoundry.
 
 ### [Fuel the Development — $100](https://nowpayments.io/payment/?iid=4356260277)
+
 Keep the updates, improvements, and security patches coming.
 
 ### [Shape the Future — $1,000](https://nowpayments.io/payment/?iid=5697188206)
+
 Propose and sponsor a feature you want to see in CDNFoundry.
 
 *Feature sponsorship is subject to roadmap alignment and technical feasibility.*
