@@ -1277,11 +1277,13 @@ services:
     logging: *bounded-logging
     <<: *hardened
     cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
-    mem_limit: 256m
+    mem_limit: 1g
+    cpus: 1
     build:
       context: ./docker/mmdb-updater
     environment:
-      MMDB_PROVIDER: ${MMDB_PROVIDER:-dbip-npm}
+      MMDB_PROVIDER: ${MMDB_PROVIDER:-ipfire}
+      MMDB_IPFIRE_DOWNLOAD_URL: ${MMDB_IPFIRE_DOWNLOAD_URL:-}
       MMDB_TARGET_FILE: ${MMDB_TARGET_FILE:-GeoLite2-City.mmdb}
       MMDB_DOWNLOAD_INTERVAL_SECONDS: ${MMDB_DOWNLOAD_INTERVAL_SECONDS:-86400}
       MMDB_DOWNLOAD_RETRIES: ${MMDB_DOWNLOAD_RETRIES:-5}
