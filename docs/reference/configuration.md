@@ -152,16 +152,17 @@ object storage; other Restic backends need their own credential/mount wiring.
 | `ALERTMANAGER_URL` | optional control | Default `http://alertmanager:9093`. The health page reads the running configuration from it to report whether alerts have a receiver |
 | `VECTOR_METRICS_URL` | optional control | Vector metrics probe URL when overridden |
 | `MMDB_STALE_HOURS` | optional control | Health threshold; default `48` |
-| `MMDB_PROVIDER` | updater | `dbip-npm` (default, verified against the registry's SHA-512), `dbip-jsdelivr`, `dbip-official`, `ip66`, or `generic`. Production accepts a download only when it is verified: `dbip-npm` verifies itself, and every other provider needs `MMDB_EXPECTED_SHA256` or `MMDB_CHECKSUM_URL`. `generic` needs `MMDB_DOWNLOAD_URL`. The autonomous-system database has no verified default source: set `MMDB_ASN_DOWNLOAD_URL` and a checksum for it, or events carry ASN 0 |
+| `MMDB_PROVIDER` | updater | `ipfire` (default, verified with the bundled IPFire public key), `dbip-npm` (verified against the registry's SHA-512), `dbip-jsdelivr`, `dbip-official`, `ip66`, or `generic`. Production accepts a download only when it is verified: `ipfire` and `dbip-npm` verify themselves; other providers need `MMDB_EXPECTED_SHA256` or `MMDB_CHECKSUM_URL`. `generic` needs `MMDB_DOWNLOAD_URL`. IPFire supplies country, continent and ASN for IPv4/IPv6 without credentials. Custom MMDB URLs override either output independently |
+| `MMDB_IPFIRE_DOWNLOAD_URL` | updater | Optional mirror of the signed IPFire download. Signature verification always uses the bundled IPFire public key |
 | `MMDB_TARGET_FILE` | updater | Default `GeoLite2-City.mmdb` |
 | `MMDB_DOWNLOAD_INTERVAL_SECONDS` | updater | Default `86400`, clamped to at least 300 |
 | `MMDB_DOWNLOAD_RETRIES` | updater | Default `5` |
 | `MMDB_EXPECTED_SHA256` | updater | Lowercase SHA-256 the download must match |
 | `MMDB_CHECKSUM_URL` | updater | HTTPS URL of a published SHA-256 (first field of the first line) the download must match |
-| `MMDB_REQUIRE_VERIFICATION` | updater | Production sets `true`: a download is activated only when one of the two checksums vouches for it. Otherwise the previous database, or the bundled empty fallback on a first start, stays in use |
+| `MMDB_REQUIRE_VERIFICATION` | updater | Production sets `true`: a download is activated only after IPFire signature verification, npm package integrity, or a configured checksum. Otherwise the previous database, or the bundled empty fallback on a first start, stays in use |
 | `MMDB_DOWNLOAD_URL` | generic provider | HTTPS artifact URL; when set, it overrides the provider's URL |
 | `MMDB_DOWNLOAD_HEADER` | generic provider | Optional authorization header; treat as secret |
-| `MMDB_ASN_DOWNLOAD_URL`, `MMDB_ASN_EXPECTED_SHA256`, `MMDB_ASN_CHECKSUM_URL` | updater | Optional source and checksum of the autonomous-system database that edge cells use to add an ASN to each event. Empty uses the provider's ASN file when the provider has one; a failure leaves ASN at 0 and never stops the updater |
+| `MMDB_ASN_DOWNLOAD_URL`, `MMDB_ASN_EXPECTED_SHA256`, `MMDB_ASN_CHECKSUM_URL` | updater | Optional source and checksum of the autonomous-system database that edge cells use to add an ASN to each event. Blank uses IPFire ASN when `MMDB_PROVIDER=ipfire`. Custom sources require their own checksum in production. Failures retain the previous valid file; only a first-start failure leaves ASN at 0 |
 
 Grafana telemetry variables are:
 
@@ -399,3 +400,41 @@ this fixture at a staging or production cell. These are not deployment settings.
 | `EDGE_CHALLENGE_BITS` | cells | Difficulty of the browser challenge's proof of work in leading zero bits, from 12 (a few thousand hashes) to 24 (millions, noticeable on a phone). Default `16`. A value outside the range is logged and the default applies |
 | `EDGE_ACCESS_LOG_STDOUT` | cells | `true` also writes every access-log line to the container log (buffered, flushed each second), for qualification and diagnosis. Default `false`: Vector is the only destination. The copy cost dockerd about half a core at 4,600 requests per second on one cell, and the operational log collector parsed every line only to drop it. A cell that cannot resolve Vector at startup writes the copy whatever this setting says |
 | `EDGE_CHALLENGE_BIND_USER_AGENT` | cells | `true` also binds a challenge token to the visitor's User-Agent, so a changed browser string asks for the challenge again. Default `false`: the token follows the client key |
+
+### Cached IP data and custom MMDB sources
+
+The default updater downloads [IPFire Location](https://www.ipfire.org/location/), verifies its
+signature against the bundled IPFire public key, and converts it locally with MaxMind's MMDB
+writer. No account, API key or request-time API is used. Checks run every 86,400 seconds.
+
+The shared `mmdb` volume caches the signed native `IPFire.db` and complete MMDB records for
+IPv4/IPv6 country, continent, ASN, organization and anycast, satellite, anonymous-proxy and
+hostile-network flags. The data is attributed to IPFire and licensed
+[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); derived MMDBs retain this
+attribution in their metadata. Network flags are cached information and do not automatically
+create blocking rules. Current telemetry stores country, continent and ASN, not the extra flags.
+
+The runtime filenames remain `GeoLite2-City.mmdb` and `GeoLite2-ASN.mmdb`. IPFire supplies
+country and continent but no city coordinates or timezones; the City filename is a runtime path,
+not a claim that those fields exist. Set `MMDB_PROVIDER=dbip-npm` for DB-IP City, or `generic`
+with `MMDB_DOWNLOAD_URL` for an operator-supplied MMDB. `MMDB_DOWNLOAD_HEADER` supports
+an authenticated download, including an API key. This header is never sent to the default IPFire
+source. Production custom downloads require `MMDB_EXPECTED_SHA256` or `MMDB_CHECKSUM_URL`.
+A checksum may cover the downloaded archive or the enclosed MMDB, so vendor archive checksums work;
+ASN overrides use the corresponding `MMDB_ASN_*` settings. Custom overrides can also be used
+independently with `MMDB_PROVIDER=ipfire`.
+
+Candidates must pass real IPv4/IPv6 MMDB lookups before atomic activation. Invalid signatures,
+older signed native databases, malformed data, checksum failures and provider outages preserve
+the previous files. On first start, empty bundled fallbacks are installed before downloading, so DNS can serve default
+answers immediately during an outage. Conversion is bounded to four million networks, 256 MiB files, a 600-second conversion
+limit, one CPU and a 1 GiB container. A pinned public key is updated only through a reviewed image release.
+The bundled key comes from
+the official libloc 0.9.20 release; its SHA-256 is
+`c9b397a24e93db4ff71044011d836d6b74b5432aa4076c80c8b6df9d8494ba41`.
+
+Unchanged signed input reuses a checksum-verified conversion cache tied to the converter version.
+Per-file `.revision`, `.last-update` and `.fallback` sidecars identify active content, successful
+checks and first-start degradation. ASN success never clears City's fallback marker or advances
+its freshness timestamp. Edge workers reopen changed MMDBs within 30 seconds without restarting
+and keep the previous handle on failure. PowerDNS retains its existing City-file reload mechanism.

@@ -277,7 +277,18 @@ The default health thresholds in that file are three failures before removal, tw
 
 ## MMDB (GeoIP database) behavior
 
-The MMDB files hold the GeoIP data used for country and ASN answers. The `mmdb-updater` service runs in the `dns` and `edge` profiles and fills the `mmdb` volume. By default it downloads the `dbip-npm` database once a day: it reads the SHA-512 that the npm registry publishes for the package, refuses the file if it does not match, and only then activates it. PowerDNS reloads the new file within a minute. Until a verified database is installed, the node serves an empty placeholder and every Geo-DNS record answers its default value (the file `FALLBACK_IN_USE` marks that state in the `mmdb` volume). The autonomous-system database has no verified default source, so events carry ASN 0 until you set `MMDB_ASN_DOWNLOAD_URL` with a checksum. A bundle contains only the Compose files, volumes, and variables that its role uses, so a control or monitoring host has no MMDB settings.
+The `mmdb-updater` service caches IP geolocation and ASN data locally. Its default provider is
+[IPFire Location](https://www.ipfire.org/location/): daily IPv4/IPv6 downloads without an API
+key, verified with a bundled IPFire public key and converted to the MMDB files already used by
+PowerDNS and edge cells. Records include country, continent, ASN, organization and network flags;
+IPFire does not provide city coordinates. The native signed database is cached as well.
+
+PowerDNS reloads changed files within a minute; edge workers reopen them within 30 seconds.
+Download, signature or conversion failures retain previous valid files. A first-start outage uses
+empty fallbacks, so Geo-DNS serves default answers and ASN is unknown until recovery.
+Custom MMDB sources, checksum verification and authenticated download headers remain supported;
+see [Cached IP data and custom MMDB sources](../reference/configuration.md#cached-ip-data-and-custom-mmdb-sources).
+Fleet bundles include only the settings and volumes selected for the node's role.
 
 To check a rendered bundle on the control machine:
 
