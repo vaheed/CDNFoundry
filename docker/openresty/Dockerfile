@@ -91,6 +91,7 @@ COPY docker/nginx/proxy-cache.conf /etc/nginx/proxy-cache.conf
 COPY docker/nginx/cache-upstream.conf /etc/nginx/cache-upstream.conf
 COPY docker/nginx/origin-proxy.conf /etc/nginx/origin-proxy.conf
 COPY docker/openresty/runtime.lua /etc/cdnfoundry/runtime.lua
+COPY docker/openresty/geoip.lua /etc/cdnfoundry/geoip.lua
 COPY docker/openresty/cache_key.lua /etc/cdnfoundry/cache_key.lua
 COPY docker/openresty/waf_body.lua /etc/cdnfoundry/waf_body.lua
 COPY docker/openresty/domain_budget.lua /etc/cdnfoundry/domain_budget.lua
