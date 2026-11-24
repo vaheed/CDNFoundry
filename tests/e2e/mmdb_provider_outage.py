@@ -51,7 +51,7 @@ def main() -> None:
             logs = ""
             while time.monotonic() < deadline:
                 logs = run("docker", "logs", NAME, check=False).stdout
-                if "initial update failed; preserving existing database" in logs:
+                if "city update failed; preserving previous valid database" in logs:
                     break
                 time.sleep(0.5)
             else:

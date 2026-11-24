@@ -2,6 +2,7 @@
 """Qualify the GeoIP updater's fallback and download verification on disposable containers."""
 from __future__ import annotations
 
+import argparse
 import base64
 import gzip
 import hashlib
@@ -26,9 +27,16 @@ def run(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
 
 
 def main() -> None:
+    global IMAGE
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--image', help='qualify an already-built updater image')
+    args = parser.parse_args()
+    if args.image:
+        IMAGE = args.image
     suffix = uuid.uuid4().hex[:8]
     network = f'cdnf-mmdb-{suffix}'
-    run('docker', 'build', '-q', '-t', IMAGE, 'docker/mmdb-updater')
+    if not args.image:
+        run('docker', 'build', '-q', '-t', IMAGE, 'docker/mmdb-updater')
     with tempfile.TemporaryDirectory(prefix=network) as directory:
         served = pathlib.Path(directory) / 'served'
         served.mkdir(mode=0o755)
@@ -36,6 +44,11 @@ def main() -> None:
             handle.write(subprocess.run(['docker', 'run', '--rm', '--entrypoint', 'cat', IMAGE, '/opt/fallback/GeoLite2-City.mmdb'], check=True, capture_output=True).stdout)
         digest = hashlib.sha256((served / 'db.mmdb').read_bytes()).hexdigest()
         database = (served / 'db.mmdb').read_bytes()
+        with tarfile.open(served / 'download', 'w:gz') as archive:
+            member = tarfile.TarInfo('GeoLite2-City/GeoLite2-City.mmdb')
+            member.size = len(database)
+            archive.addfile(member, io.BytesIO(database))
+
 
         def publish_registry(prefix: str, advertised_integrity_of: bytes) -> None:
             """A local npm registry: /dbip-city-lite/latest names a package whose integrity the updater must check."""
@@ -57,13 +70,23 @@ def main() -> None:
         publish_registry('tampered', b'not the package')
         run('docker', 'network', 'create', network)
         run('docker', 'run', '-d', '--name', f'{network}-origin', '--network', network, '-v', f'{served}:/srv:ro',
-            'python:3.13-alpine@sha256:399babc8b49529dabfd9c922f2b5eea81d611e4512e3ed250d75bd2e7683f4b0', 'python3', '-m', 'http.server', '8000', '-d', '/srv')
+            'python:3.13-alpine@sha256:399babc8b49529dabfd9c922f2b5eea81d611e4512e3ed250d75bd2e7683f4b0', 'python3', '-c', '''
+from http.server import HTTPServer, SimpleHTTPRequestHandler
+import os
+os.chdir('/srv')
+class Handler(SimpleHTTPRequestHandler):
+ def do_GET(self):
+  if self.path.startswith('/download') and self.headers.get('Authorization') != 'Bearer e2e-source-key':
+   self.send_error(403);return
+  super().do_GET()
+HTTPServer(('0.0.0.0',8000),Handler).serve_forever()
+''')
         time.sleep(2)
 
         def updater(volume: str, *env: str, default_url: bool = True) -> tuple[str, str]:
             name = f'{network}-{volume}'
             run('docker', 'volume', 'create', name)
-            args = ['docker', 'run', '-d', '--name', name, '--network', network, '-v', f'{name}:/mmdb', '-e', 'MMDB_DOWNLOAD_RETRIES=0']
+            args = ['docker', 'run', '-d', '--name', name, '--network', network, '-v', f'{name}:/mmdb', '-e', 'MMDB_PROVIDER=dbip-npm', '-e', 'MMDB_DOWNLOAD_RETRIES=0', '-e', 'MMDB_ASN_DOWNLOAD_URL=http://127.0.0.1:9/none']
             if default_url:
                 args += ['-e', f'MMDB_DOWNLOAD_URL=http://{network}-origin:8000/db.mmdb']
             for item in env:
@@ -86,6 +109,19 @@ def main() -> None:
 
             good, logs = updater('good', 'MMDB_REQUIRE_VERIFICATION=true', f'MMDB_EXPECTED_SHA256={digest}')
             assert 'FALLBACK_IN_USE' not in good and 'LAST_UPDATE' in good, (good, logs)
+            authenticated, logs = updater('authenticated', 'MMDB_PROVIDER=generic', 'MMDB_REQUIRE_VERIFICATION=true',
+                                          f'MMDB_EXPECTED_SHA256={digest}',
+                                          f'MMDB_DOWNLOAD_URL=http://{network}-origin:8000/download?license_key=e2e-placeholder&suffix=tar.gz',
+                                          'MMDB_DOWNLOAD_HEADER=Authorization: Bearer e2e-source-key')
+            assert 'FALLBACK_IN_USE' not in authenticated and 'LAST_UPDATE' in authenticated, (authenticated, logs)
+            assert 'e2e-placeholder' not in logs and 'e2e-source-key' not in logs, logs
+            archive_digest = hashlib.sha256((served / 'download').read_bytes()).hexdigest()
+            archive_verified, logs = updater('archiveverified', 'MMDB_PROVIDER=generic', 'MMDB_REQUIRE_VERIFICATION=true',
+                                            f'MMDB_EXPECTED_SHA256={archive_digest}',
+                                            f'MMDB_DOWNLOAD_URL=http://{network}-origin:8000/download?license_key=e2e-placeholder&suffix=tar.gz',
+                                            'MMDB_DOWNLOAD_HEADER=Authorization: Bearer e2e-source-key')
+            assert 'FALLBACK_IN_USE' not in archive_verified and 'LAST_UPDATE' in archive_verified, (archive_verified, logs)
+
             # The default provider needs no configured checksum: the registry's published SHA-512 vouches for the package.
             registry = f'MMDB_NPM_REGISTRY_URL=http://{network}-origin:8000/'.rstrip('/')+'/'
             npm_good, logs = updater('npmgood', 'MMDB_REQUIRE_VERIFICATION=true', f'{registry}good', default_url=False)
@@ -96,9 +132,9 @@ def main() -> None:
             assert 'FALLBACK_IN_USE' in npm_bad and 'package integrity mismatch' in logs, (npm_bad, logs)
             print(json.dumps({'qualification': 'mmdb_fallback', 'image': IMAGE, 'starts_without_a_source': 'passed',
                               'unverified_refused': 'passed', 'checksum_mismatch_refused': 'passed', 'verified_activated': 'passed',
-                              'registry_integrity_activated': 'passed', 'registry_integrity_mismatch_refused': 'passed'}))
+                              'authenticated_query_archive': 'passed', 'provider_archive_checksum': 'passed', 'registry_integrity_activated': 'passed', 'registry_integrity_mismatch_refused': 'passed'}))
         finally:
-            for volume in ('down', 'unverified', 'wrong', 'good', 'npmgood', 'npmbad'):
+            for volume in ('down', 'unverified', 'wrong', 'good', 'authenticated', 'archiveverified', 'npmgood', 'npmbad'):
                 run('docker', 'rm', '-f', f'{network}-{volume}', check=False)
                 run('docker', 'volume', 'rm', f'{network}-{volume}', check=False)
             run('docker', 'rm', '-f', f'{network}-origin', check=False)
