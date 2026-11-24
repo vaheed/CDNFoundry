@@ -840,8 +840,10 @@ dedicated bootstrap listener certificate and matching private key at
 `/dev/shm/cdnfoundry/edge-runtime.key`. Provision the stable edge recovery key
 as 64 hex characters at `/dev/shm/cdnfoundry/edge-state-encryption.key`.
 Both private files must be on tmpfs, owned by UID 10101, and mode `0400`.
-Disable host swap and restore them from external secret storage after every
-host boot. Do not copy
+Disable host swap. Fleet provisioning installs a host-encrypted systemd credential
+and a Docker startup dependency that restore these files after every host boot.
+For manual installation, provide an equivalent restore step before Docker starts;
+see the Fleet engine operations guide. Do not copy
 the node identity key into these paths: that key also identifies control or
 DNS services and must remain separate from the serving listener key.
 

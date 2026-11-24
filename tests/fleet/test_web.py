@@ -617,3 +617,24 @@ def test_management_networks_are_added_and_removed_one_at_a_time_from_the_config
     assert status == 400 and "Not in the management networks" in body
     status, body, _ = post(port, "/management-networks/add", {"csrf": "wrong", "networks": "192.0.2.0/24"})
     assert status == 400
+
+
+@pytest.mark.parametrize('path,names', [('/recover', None), ('/nodes/control-1/recover', ['control-1'])])
+def test_recovery_runs_the_shared_engine_as_a_background_job(served, monkeypatch, path, names):
+    from cdnfoundry_fleet.actions import Outcome
+    from cdnfoundry_fleet.engine import FleetEngine
+    web, port = served
+    add_node(web, port)
+    called = []
+    monkeypatch.setattr(FleetEngine, 'recover', lambda self, selected=None: called.append(selected) or Outcome(True, ['control-1']))
+    assert 'Recover all enabled hosts' in get(port, '/nodes')[1]
+    assert 'Recover this host' in get(port, '/nodes/control-1')[1]
+    status, _, response = post(port, path, {'csrf': web.csrf})
+    assert status == 303
+    assert 'Finished' in wait_job(port, response.getheader('Location'))
+    assert called == [names]
+
+
+def test_recovery_rejects_a_missing_csrf_token(served):
+    _, port = served
+    assert post(port, '/recover', {})[0] == 400

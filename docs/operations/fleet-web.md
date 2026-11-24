@@ -205,6 +205,19 @@ cannot, the control panel does not open. You have three ways around that:
 The table lists each node's name, role, host, IPv4 address, release, and state.
 The state is "Not checked" until you run a check.
 
+### Recover after a reboot
+
+After updating the checkout, restart Fleet web. Choose **Recover all enabled hosts** on Nodes,
+or open a host and choose **Recover this host**.
+The action restores its saved runtime keys, enables Docker at boot, starts stopped containers from
+the installed release, and checks their health. Progress and failures appear in the action log.
+It uses the same engine as `cdnfoundry-fleet recover` and does not deploy another release.
+
+Your existing vault must contain the edge's original listener and recovery keys. Missing material
+stops recovery before any hosts change; restore the vault backup rather than generating another key.
+See [boot recovery requirements](fleet-engine.md#recover-after-a-host-reboot), including the systemd
+encrypted credential requirement for edge hosts.
+
 ### Add and install a node
 
 <div class="steps">

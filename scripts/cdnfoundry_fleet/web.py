@@ -783,7 +783,9 @@ class FleetWeb:
             key_block = ("<h2>Fleet SSH public key</h2><p>One key reaches every node. Add this line to <b>/root/.ssh/authorized_keys</b> on each host "
                          "<b>before</b> you add it here. Fleet logs in with key authentication only.</p>"
                          f'<pre class="log" tabindex="0" aria-label="Fleet SSH public key">{esc(self.fleet_public_key())}</pre>')
-            return 200, self.layout(path, "Nodes", listing + key_block + "<h2>Add a node</h2>" + self.action_form("/nodes/add", "Add node and show plan", primary=True, fields=fields), flash)
+            recovery = ('<h2>Recover after a reboot</h2><p>Restore saved runtime keys, enable Docker at boot, and start stopped containers from the installed release. Each host must pass its health check.</p>'
+                        + self.action_form("/recover", "Recover all enabled hosts")) if nodes else ""
+            return 200, self.layout(path, "Nodes", listing + recovery + key_block + "<h2>Add a node</h2>" + self.action_form("/nodes/add", "Add node and show plan", primary=True, fields=fields), flash)
         if path.startswith("/nodes/") and path.endswith("/logs"):
             return self._logs_page(path, nodes, query)
         if path.startswith("/nodes/"):
@@ -806,7 +808,9 @@ class FleetWeb:
                    '<label>Continent code<input name="continent" value="NA" maxlength="2" required placeholder="NA"></label>') if enroll else ""
             body = (facts + self._node_hardware(name, node) + "<h2>SSH login</h2>" + f"<p>Fleet logs in as <b>{esc(login.user)}@{esc(login.host)}:{login.port}</b>. The Fleet key must be on this host (see the <a href=\"/deploy#connect\">Deploy page</a>).</p>" + ssh_form
                     + "<h2>Install only this host</h2><p>Most people use the <a href=\"/deploy\">Deploy page</a> to install everything in order.</p><ol>" + "".join(f"<li>{esc(s.label())}</li>" for s in plan.steps) + "</ol>"
-                    + self.action_form(f"/nodes/{esc(name)}/bootstrap", "Install and start this node", primary=True, fields=geo))
+                    + self.action_form(f"/nodes/{esc(name)}/bootstrap", "Install and start this node", primary=True, fields=geo)
+                    + '<h2>Recover after a reboot</h2><p>Restore this host\'s saved runtime keys and start stopped containers from its installed release.</p>'
+                    + self.action_form(f"/nodes/{esc(name)}/recover", "Recover this host"))
             return 200, self.layout(path, name, body, flash)
         if path == "/inventory":
             return 200, self.layout(path, "Inventory", self._inventory_page(nodes), flash)
@@ -1092,6 +1096,11 @@ class FleetWeb:
             return self._sync(f"configure-{feature}", save_feature, "/config", f"{feature.capitalize()} settings saved. Deploy the changes to send them to the hosts.")
         if path == "/config/apply":
             return job("Deploy changed configs", lambda e: e.apply_config(), "config")
+        if path == "/recover":
+            return job("Recover enabled hosts", lambda e: e.recover(), "recover")
+        if path.startswith("/nodes/") and path.endswith("/recover"):
+            name = path.split("/")[2]
+            return job(f"Recover {name}", lambda e: e.recover([name]), "recover")
         if path == "/rollback/run":
             need("ROLLBACK")
             return job("Roll back the fleet", lambda e: f"returned {e.rollback()}", "rollback")

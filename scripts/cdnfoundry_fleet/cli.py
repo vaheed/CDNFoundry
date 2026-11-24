@@ -27,7 +27,7 @@ DEFAULT_VAULT = Path.home() / ".config" / "cdnfoundry-fleet" / "fleet.db"
 PASSPHRASE_ENV = "CDNF_FLEET_PASSPHRASE"
 PASSPHRASE_FILE_ENV = "CDNF_FLEET_PASSPHRASE_FILE"
 
-ENGINE_COMMANDS = {"test-connection", "ssh-defaults", "dns-names", "management-tls", "deploy", "set-release", "public-key", "node-ssh", "trust-release-key", "bootstrap", "upgrade", "apply-config", "rollback", "security", "backup-now", "backup-list", "restore", "vault-backup", "inventory", "watch", "management-networks"}
+ENGINE_COMMANDS = {"test-connection", "ssh-defaults", "dns-names", "management-tls", "deploy", "set-release", "public-key", "node-ssh", "trust-release-key", "bootstrap", "upgrade", "apply-config", "rollback", "recover", "security", "backup-now", "backup-list", "restore", "vault-backup", "inventory", "watch", "management-networks"}
 EXIT_OK = 0
 EXIT_USAGE = 2
 EXIT_VALIDATION = 3
@@ -266,6 +266,8 @@ def parser() -> argparse.ArgumentParser:
     cfg.add_argument("--plan-only", action="store_true", help="Show the plan and change nothing")
     rb = sub.add_parser("rollback", parents=[command_common], help="return nodes to the previous release and config")
     rb.add_argument("--node", action="append", help="repeatable; default is the whole fleet")
+    recovery = sub.add_parser("recover", parents=[command_common], help="restore boot material and start existing release containers; deploys no images or configs")
+    recovery.add_argument("--node", action="append", help="repeatable; default is every enabled node")
     sec = sub.add_parser("security", parents=[command_common], help="known vulnerabilities in the running release")
     sec.add_argument("--available-manifest", help="a newer signed manifest to check for fixes")
     sec.add_argument("--json", action="store_true", help="Print the result as JSON")
@@ -1286,6 +1288,9 @@ def _engine_command_body(args: argparse.Namespace, store: FleetState, output_dir
             return EXIT_OK
         _confirm(args, "Deploy the changed configs")
         return outcome(engine.apply_config())
+    elif args.command == "recover":
+        _confirm(args, "Restore boot prerequisites and start existing containers on " + (", ".join(args.node) if args.node else "every enabled node"))
+        return outcome(engine.recover(args.node))
     elif args.command == "rollback":
         _confirm(args, "Return " + (", ".join(args.node) if args.node else "the whole fleet") + " to the previous release")
         rolled = engine.rollback(args.node)

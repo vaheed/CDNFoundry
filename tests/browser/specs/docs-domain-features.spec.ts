@@ -11,6 +11,7 @@ test('documentation domain features use the current tabs', async ({ page }, info
     test.skip(!info.project.name.endsWith('-desktop'), 'documentation captures use desktop width');
     test.setTimeout(120_000);
     const scheme = info.project.name.startsWith('dark') ? 'dark' : 'light';
+    await page.setViewportSize({ width: 1440, height: 1080 });
     await signIn(page, 'app', 'user@browser.test', userPassword);
     await page.goto('/app/domains');
     await settle(page);
@@ -26,6 +27,10 @@ test('documentation domain features use the current tabs', async ({ page }, info
         await page.getByRole('tab', { name: new RegExp(`^${tab}`) }).click();
         await settle(page);
         await expect(page.getByRole('tab', { name: new RegExp(`^${tab}`) })).toHaveAttribute('aria-selected', 'true');
+        if (tab === 'Rules') {
+            await expect(page.locator('table tbody tr')).toHaveCount(4);
+            await expect(page.getByRole('button', { name: /^Redirects/ })).toHaveAttribute('aria-pressed', 'true');
+        }
         await expectAccessible(page);
         await page.screenshot({ path: `${output}/${scheme}/${name}.png` });
     }

@@ -38,7 +38,14 @@ network provider when an attack exceeds its capacity. See the
 
 ## See the product
 
-![The domain panel with assigned domains and verification states, captured from the seeded development browser stack.](docs/public/screenshots/light/app-domains.png)
+Open a domain to review its DNS, origin, TLS, cache, and security settings.
+
+![An open domain with its status and configuration sections in the domain panel, using seeded test data.](docs/public/screenshots/light/app-domain-overview.png)
+
+The Rules tab groups redirects, URL rewrites, headers, and cache rules. Each row shows its conditions,
+action, and whether it is enabled.
+
+![The open domain's Rules tab, showing ordered redirects, matching conditions, target URLs, and enabled states.](docs/public/screenshots/light/app-request-rules.png)
 
 Explore the [admin panel](https://vaheed.github.io/CDNFoundry/guides/admin-panel)
 and [domain panel](https://vaheed.github.io/CDNFoundry/guides/domain-panel) tours.
@@ -105,6 +112,11 @@ opens `http://127.0.0.1:8765` in your browser. Everything else happens in the br
 page asks you to choose the vault passphrase, enter your domains, release, and hosts, and it
 lets you review the plan and deploy a signed release with digest-pinned images. On later runs it asks for the passphrase to unlock. Use `--port 9000` to pick another port. Fleet web listens on your own machine only; to
 use it on a remote workstation, open an SSH tunnel.
+
+Fleet restores edge runtime keys into memory before Docker starts after a host reboot. To install boot
+recovery on an existing fleet and start stopped containers from its current release, update this checkout
+and run `python3 scripts/cdnfoundry-fleet recover` with your existing vault. See
+[Fleet recovery](docs/operations/fleet-engine.md#recover-after-a-host-reboot) for requirements and checks.
 
 Run the script from the repository root, or by its full path. Do not run files inside
 `scripts/cdnfoundry_fleet/` directly: they are a Python package, not scripts.
