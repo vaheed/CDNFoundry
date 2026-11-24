@@ -42,11 +42,6 @@ Open a domain to review its DNS, origin, TLS, cache, and security settings.
 
 ![An open domain with its status and configuration sections in the domain panel, using seeded test data.](docs/public/screenshots/light/app-domain-overview.png)
 
-The Rules tab groups redirects, URL rewrites, headers, and cache rules. Each row shows its conditions,
-action, and whether it is enabled.
-
-![The open domain's Rules tab, showing ordered redirects, matching conditions, target URLs, and enabled states.](docs/public/screenshots/light/app-request-rules.png)
-
 Explore the [admin panel](https://vaheed.github.io/CDNFoundry/guides/admin-panel)
 and [domain panel](https://vaheed.github.io/CDNFoundry/guides/domain-panel) tours.
 The documentation site shows real captures in light and dark themes with generated test data.
@@ -162,23 +157,12 @@ CDNFoundry is licensed under [Apache-2.0](LICENSE).
 
 ## Support CDNFoundry
 
-Independent, open source, and built with passion.
-Your support helps keep CDNFoundry moving forward.
+Help keep CDNFoundry independent, open source, and actively maintained.
 
-### [Buy Me a Beer — $10](https://nowpayments.io/payment/?iid=6197093183)
+| Sponsorship tier | Description | Amount |
+| --- | --- | ---: |
+| **Buy Me a Beer** | Show your appreciation. | [$10](https://nowpayments.io/payment/?iid=6197093183) |
+| **Support Development** | Support ongoing updates and maintenance. | [$100](https://nowpayments.io/payment/?iid=4356260277) |
+| **Sponsor a Feature** | Propose and fund a new feature. | [$1,000](https://nowpayments.io/payment/?iid=5697188206) |
 
-A little appreciation for the work behind CDNFoundry.
-
-### [Fuel the Development — $100](https://nowpayments.io/payment/?iid=4356260277)
-
-Keep the updates, improvements, and security patches coming.
-
-### [Shape the Future — $1,000](https://nowpayments.io/payment/?iid=5697188206)
-
-Propose and sponsor a feature you want to see in CDNFoundry.
-
-*Feature sponsorship is subject to roadmap alignment and technical feasibility.*
-
----
-
-**Open source. Community supported. Built to last.**
+*Feature sponsorship is subject to technical review and roadmap alignment.*
