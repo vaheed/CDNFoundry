@@ -37,3 +37,20 @@ test('every adjustment has an example and a plain-words tooltip', async ({ page 
     await expectAccessible(page);
     await expect(modal).toHaveScreenshot('waf-tuning-form.png');
 });
+
+test('a scoped exclusion asks for a path or method with examples and tooltips', async ({ page }) => {
+    const modal = await openWaf(page);
+    await modal.getByText('Adjust managed rules').click();
+    await expect(modal.getByText('Turn off only for a path or method', { exact: true })).toBeVisible();
+    await modal.getByRole('button', { name: 'Add an exclusion' }).click();
+    await expect(modal.getByRole('textbox', { name: /^Path starts with/ })).toHaveAttribute('placeholder', '/api/webhooks');
+    await expect(modal.locator('.fi-select-input-placeholder', { hasText: 'For example Cross-site scripting' })).toBeVisible();
+    await expect(modal.locator('.fi-select-input-placeholder', { hasText: 'For example POST' })).toBeVisible();
+    for (const label of ['Categories', 'Single rules', 'Path starts with', 'Methods']) {
+        await expect(modal.getByText(label, { exact: true }).first()).toBeVisible();
+    }
+    expect(await modal.locator('[x-tooltip]').count()).toBeGreaterThanOrEqual(9);
+    await modal.getByRole('textbox', { name: /^Path starts with/ }).scrollIntoViewIfNeeded();
+    await expectAccessible(page);
+    await expect(modal).toHaveScreenshot('waf-scoped-exclusion.png');
+});

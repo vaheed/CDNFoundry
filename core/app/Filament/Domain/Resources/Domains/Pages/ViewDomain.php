@@ -503,10 +503,22 @@ class ViewDomain extends ViewRecord
                             ->multiple()->searchable()->maxItems(ManagedWafTuning::MAXIMUM_RULES)->options(self::wafRuleOptions())->placeholder('Search by number or name, for example 942100'),
                         Select::make('log_only_rules')->label(FilamentHelp::label('Log only', 'A log-only rule still runs but never counts toward blocking. The security events show when one matched.'))
                             ->multiple()->searchable()->maxItems(ManagedWafTuning::MAXIMUM_RULES)->options(self::wafRuleOptions())->placeholder('Search by number or name, for example 941100'),
+                        Repeater::make('scoped_exclusions')->label(FilamentHelp::label('Turn off only for a path or method', 'Stops the rules or categories you choose, but only for requests whose path starts with the prefix and whose method is listed. Everywhere else they keep running. Up to '.ManagedWafTuning::MAXIMUM_SCOPED_EXCLUSIONS.' entries.'))
+                            ->maxItems(ManagedWafTuning::MAXIMUM_SCOPED_EXCLUSIONS)->addActionLabel('Add an exclusion')->defaultItems(0)->collapsible()->itemLabel(fn (array $state): ?string => ($state['path_prefix'] ?? '') !== '' ? $state['path_prefix'] : null)
+                            ->schema([
+                                Select::make('categories')->label(FilamentHelp::label('Categories', 'Every rule of a chosen category stops running inside the scope.'))
+                                    ->multiple()->options(ManagedWafTuning::categoryLabels())->placeholder('For example Cross-site scripting'),
+                                Select::make('rules')->label(FilamentHelp::label('Single rules', 'These rules stop running inside the scope. Name at least one category or rule.'))
+                                    ->multiple()->searchable()->maxItems(ManagedWafTuning::MAXIMUM_SCOPED_TARGETS)->options(self::wafRuleOptions())->placeholder('Search by number or name, for example 941100'),
+                                TextInput::make('path_prefix')->label(FilamentHelp::label('Path starts with', 'The exclusion applies to this path and everything below it, compared after the address is decoded and tidied. Start with a slash and leave out the query string. A prefix that ends in a slash needs that slash. Leave it empty to scope by method only.'))
+                                    ->maxLength(200)->placeholder('/api/webhooks'),
+                                Select::make('methods')->label(FilamentHelp::label('Methods', 'The exclusion applies only to these methods. Leave it empty to scope by path only. A scope needs a path, a method, or both.'))
+                                    ->multiple()->options(array_combine(ManagedWafTuning::SCOPE_METHODS, ManagedWafTuning::SCOPE_METHODS))->placeholder('For example POST'),
+                            ]),
                     ]),
                 ])->fillForm(fn (): array => ['profile' => $this->record->waf_profile, ...ManagedWafTuning::normalize($this->record->waf_tuning)])
                 ->action(function (array $data): void {
-                    $response = app(WafController::class)->update(request()->merge(['profile' => $data['profile'], 'tuning' => Arr::only($data, ['paranoia_level', 'inbound_threshold', 'disabled_categories', 'disabled_rules', 'log_only_rules'])]), $this->record);
+                    $response = app(WafController::class)->update(request()->merge(['profile' => $data['profile'], 'tuning' => Arr::only($data, ['paranoia_level', 'inbound_threshold', 'disabled_categories', 'disabled_rules', 'log_only_rules', 'scoped_exclusions'])]), $this->record);
                     if ($response->getStatusCode() === 409) {
                         Notification::make()->danger()->title('WAF protection is unavailable')->body('No enabled pool offers the managed WAF yet. Ask an administrator to enable a WAF-capable shared pool; nothing was changed.')->send();
 

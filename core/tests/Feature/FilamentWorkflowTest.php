@@ -562,14 +562,27 @@ class FilamentWorkflowTest extends TestCase
 
         $domain->refresh();
         $this->assertSame('balanced', $domain->waf_profile);
-        $this->assertSame(['paranoia_level' => 2, 'inbound_threshold' => 7, 'disabled_categories' => ['xss'], 'disabled_rules' => [942100], 'log_only_rules' => [913100]], $domain->waf_tuning);
+        $this->assertSame(['paranoia_level' => 2, 'inbound_threshold' => 7, 'disabled_categories' => ['xss'], 'disabled_rules' => [942100], 'log_only_rules' => [913100], 'scoped_exclusions' => []], $domain->waf_tuning);
         Queue::assertPushed(ReconcileEdgeDomain::class);
+
+        // An exclusion scoped to a path prefix and a method is saved with the other adjustments; one without a scope is refused.
+        Livewire::test(ViewDomain::class, ['record' => $domain->id])
+            ->mountAction('wafProfile')
+            ->fillForm(['scoped_exclusions' => [['categories' => ['xss'], 'rules' => [], 'path_prefix' => '/api/webhooks', 'methods' => ['POST']]]])
+            ->callMountedAction()
+            ->assertHasNoActionErrors();
+        $this->assertSame([['rules' => [], 'categories' => ['xss'], 'path_prefix' => '/api/webhooks', 'methods' => ['POST']]], $domain->refresh()->waf_tuning['scoped_exclusions']);
+        Livewire::test(ViewDomain::class, ['record' => $domain->id])
+            ->mountAction('wafProfile')
+            ->fillForm(['scoped_exclusions' => [['categories' => ['xss'], 'rules' => [], 'path_prefix' => '', 'methods' => []]]])
+            ->callMountedAction();
+        $this->assertSame('/api/webhooks', $domain->refresh()->waf_tuning['scoped_exclusions'][0]['path_prefix'], 'an exclusion with no scope is refused and the saved one stays');
 
         // The dialog opens with the saved adjustments, and clearing every field clears the tuning.
         Livewire::test(ViewDomain::class, ['record' => $domain->id])
             ->mountAction('wafProfile')
             ->assertSet('mountedActions.0.data.disabled_rules', [942100])
-            ->fillForm(['paranoia_level' => null, 'inbound_threshold' => null, 'disabled_categories' => [], 'disabled_rules' => [], 'log_only_rules' => []])
+            ->fillForm(['paranoia_level' => null, 'inbound_threshold' => null, 'disabled_categories' => [], 'disabled_rules' => [], 'log_only_rules' => [], 'scoped_exclusions' => []])
             ->callMountedAction()
             ->assertHasNoActionErrors();
         $this->assertNull($domain->refresh()->waf_tuning);
