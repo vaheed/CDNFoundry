@@ -12,6 +12,7 @@ class EdgePool extends Model
     // Retained only for mixed-version database compatibility during contract.
     protected $hidden = ['waf_canary_state'];
 
+    /** @return HasMany<EdgeCell, $this> */
     public function cells(): HasMany
     {
         return $this->hasMany(EdgeCell::class);

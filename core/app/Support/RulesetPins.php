@@ -2,6 +2,8 @@
 
 namespace App\Support;
 
+use App\Models\EdgeCell;
+
 /** The rule engine and rule set commits every cell image is pinned to; the same file is checked against the image build in tests/contract. */
 final class RulesetPins
 {
@@ -35,7 +37,7 @@ final class RulesetPins
     /**
      * The worst state among the running cells of a pool: different beats unreported beats pinned. A pool with no running cell has none.
      *
-     * @param  iterable<\App\Models\EdgeCell>  $cells
+     * @param  iterable<EdgeCell>  $cells
      * @return array{state: string, counts: array<string, int>}
      */
     public static function summary(iterable $cells): array
