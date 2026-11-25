@@ -7,6 +7,27 @@ single source of truth; `make version-check` enforces it.
 
 ## [Unreleased]
 
+## [2.1.5] - 2026-11-25
+
+### Added
+
+- Administrators can remove a disabled, drained edge after confirmation. Active or assigned edges remain protected.
+- The documentation homepage and README include project sponsorship links.
+
+### Changed
+
+- Fleet uses signed IPFire location data by default and refreshes country and ASN databases daily. Custom MMDB sources remain supported.
+- Cells reopen GeoIP database handles after an update without restarting.
+
+### Fixed
+
+- Browser challenge proofs work on domains that allow only GET or HEAD, including Under Attack mode. The internal proof POST is exempt from domain and incident method restrictions; ordinary requests keep their configured method restrictions.
+- The IPFire updater uses the patched Alpine runtime.
+
+See the [v2.1.5 release notes](docs/operations/releases/v2.1.5.md) for deployment, rollback, and qualification limits.
+
+## [2.1.4] - 2026-11-22
+
 ### Added
 
 - Redirect rules on a domain, in the new **Rules** tab and at `/api/domains/{domain}/request-rules`. A rule has up to five conditions from the firewall-rule builder and redirects to a fixed URL, the same path on another host, or the path with a prefix replaced, with 301, 302, 307, or 308. The edge decides them from the signed snapshot after every security stage, and never sends a redirect to the address a request already has. Presets write the www to apex, apex to www, and moved-path redirects. The access log names the rule that acted (`request_rule`). See the [request rules reference](docs/reference/request-rules.md).
