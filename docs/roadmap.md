@@ -313,11 +313,28 @@ with recovery headroom. No unbounded retries or fan-out; bulk work cannot starve
 interactive/runtime lanes. Use existing components and fixtures. Failure
 preserves prior valid state and reports degradation explicitly.
 
-**Completion checkpoint, 21 November 2026.**
+**Execution record, 25 November 2026** (development host, working tree on `dev`;
+edge-runtime image built from this checkout; the development host number is not a
+fleet result).
+
+| Item | Result |
+| --- | --- |
+| F1 overflow | Implemented: keys without a counter share one overflow counter per rule and window, held to the rule's threshold. `rate_limit_isolation.py` passed with the new late-key and healthy-tenant assertions. The dense-cell share rule (no floor beyond about 650 domains) is covered by contract tests only; a real cell at maximum domain count and physical allocation failure were not run. |
+| API isolation | `ApiTenantIsolationTest` passed: nested routes, idempotency keys per user, token revocation. |
+| Origin, SNI, body | `origin_destinations.py`, `sni_host_binding.py`, `waf_body_inspection.py` passed. No secure-origin-mode change is proposed: the API requires an explicit `verify_tls`, the panel defaults it to on, and HTTP and unverified HTTPS stay documented, opt-in modes. |
+| Real-cell runs that passed | `custom_rules` (rerun alone; the first batch run hit its 30 minute limit with no output, most likely a first image build, cause not proven), `request_rules`, `challenge_binding`, `client_containment`, `ipv6_rate_limit_keys`, `security_report_fairness`, `client_address`, `openresty_runtime`, `dns_node_convergence`, `uploaded_tls`, `telemetry_analytics`, `log_push`, `offhost_recovery`. |
+| Historical failures classified | `application_protection` (`schema_body_too_large` missing): an observation limit, not a serving defect. The request is refused with 403; the heartbeat report carries five reasons per domain ranked by count, and this fixture's domain has six. The test now asserts the bound. `cell_generation_reload` (state not loaded): a fixture defect. It ran a 20 day old development image that lacked a variable the mounted configuration uses; it now runs the image built from the checkout and passes. A product-level change to rotate rare reasons into the report is not admitted. |
+| Not passing or not run | `dns_authoritative` failed and `managed_tls` stopped at the DNS-01 publishing step: the development stack has no PowerDNS primary or database containers (`pdns-primary`, `pdns-db`, `pdns-migrate`), and the platform identity update could not resolve `local-pdns`. The likely cause is that environment, not the code, but this is unproven. `edge_purge_protocol` needs registry digest-pinned images and was not run. |
+| Not started | Stage B HA fencing and restart with the control plane down, signed-artifact replay and wrong-assignment cases, cache variant and pressure matrix, UDP truncation and negative-answer cases. Stage C integrated gateway, cell, agent, Vector and DNS budgets: cold start, steady, burst, soak, saturation and recovery on a reference host. Phase 12 browser gate reconciliation. |
+| Browser | `edge-health` and `every-screen` passed (108 of 108, desktop and phone, light and dark, with accessibility checks). The full suite was not run. |
+
+**Completion checkpoint, 25 November 2026.**
 
 | Implementation | Documentation | Automated/runtime | Browser |
 | --- | --- | --- | --- |
-| Open: F1 and reproduced defects require implementation work | This plan is current; behavior/runbooks follow actual changes | Open: release-matched foundation matrix not executed by this planning audit | Open for existing Phase 12 gate and any subsequent UI change; no waiver |
+| Open: F1 shipped; Stage B and C items above remain | Current for shipped behavior | Open: the matrix above has failures and gaps, no release-matched pass | Open: the full suite and the Phase 12 gate are not closed; no waiver |
+
+Phase 0 is not complete.
 
 ---
 
