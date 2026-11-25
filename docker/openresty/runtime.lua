@@ -798,6 +798,49 @@ local function primary_rule(rule_ids)
     return rule_ids[1]
 end
 
+local MAX_SCOPED_EXCLUSIONS = 20
+local MAX_OFF_ENTRIES = 160
+
+-- Whether a request is inside the scope of an exclusion: its method is listed (or none is) and its normalized path is the
+-- prefix or below it (or no prefix is given). nginx's $uri is already percent-decoded with dot segments resolved, and a prefix
+-- is stored without percent escapes, dot segments or empty segments, so a client cannot spell its way out of or into a scope.
+local function exclusion_applies(entry, method, uri)
+    if type(entry.methods) == "table" and #entry.methods > 0 then
+        local found = false
+        for _, name in ipairs(entry.methods) do
+            if name == method then found = true; break end
+        end
+        if not found then return false end
+    end
+    local prefix = entry.path_prefix
+    if type(prefix) == "string" and prefix ~= "" then
+        if prefix:sub(-1) == "/" then
+            if uri:sub(1, #prefix) ~= prefix then return false end
+        elseif uri ~= prefix and uri:sub(1, #prefix + 1) ~= prefix .. "/" then
+            return false
+        end
+    end
+    return true
+end
+
+-- Appends the rules and categories the domain excluded for this method and path to the list of ids the scoring pass removes.
+-- Only digits are copied, so nothing in a snapshot can add anything else to the header, and the list is bounded.
+local function add_scoped_exclusions(off, waf_settings, method, uri)
+    local entries = waf_settings.scoped_exclusions
+    if type(entries) ~= "table" then return end
+    for index, entry in ipairs(entries) do
+        if index > MAX_SCOPED_EXCLUSIONS then break end
+        if type(entry) == "table" and exclusion_applies(entry, method, uri) then
+            for _, list in ipairs({entry.categories or {}, entry.rules or {}}) do
+                for _, id in ipairs(list) do
+                    local text = tostring(id)
+                    if text:match("^%d+$") and #off < MAX_OFF_ENTRIES then off[#off + 1] = text end
+                end
+            end
+        end
+    end
+end
+
 local function score_request(body_limit, off_list)
     local outcome, body = waf_body.get(body_limit)
     if not waf_body.is_known(outcome) then return nil, outcome end
@@ -2133,6 +2176,7 @@ function M.access()
         local off = {}
         for _, prefix in ipairs(waf_settings.off_categories or {}) do off[#off + 1] = tostring(prefix) end
         for _, id in ipairs(waf_settings.off_rules or {}) do off[#off + 1] = tostring(id) end
+        add_scoped_exclusions(off, waf_settings, method, ngx.var.uri or "/")
         local detected
         local log_only = waf_settings.log_only_rules or {}
         if #log_only > 0 and scoring then detected = score_request(limit, off) end

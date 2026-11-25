@@ -88,6 +88,7 @@ dev-waf-e2e: dev-waf-image
 	python3 tests/e2e/managed_waf.py
 	python3 tests/e2e/waf_body_inspection.py
 	python3 tests/e2e/ruleset_version_mismatch.py
+	python3 tests/e2e/waf_scoped_exclusions.py
 	python3 tests/e2e/rate_limit_isolation.py
 	python3 tests/e2e/ipv6_rate_limit_keys.py
 	python3 tests/e2e/client_containment.py
