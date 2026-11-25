@@ -3,7 +3,7 @@ COMPOSE_TEST := $(COMPOSE_DEV) -f compose.test.yml
 COMPOSE_PROD := docker compose --env-file .env.prod -f compose.prod.yml
 COMPOSE_PROD_EXAMPLE := docker compose --env-file .env.prod.example -f compose.prod.yml
 
-.PHONY: backend-test contract-check dev-assets dev-control-up dev-up dev-edge-up dev-edge-status dev-scale-up dev-down dev-migrate dev-clickhouse-migrate dev-pdns-migrate dev-test dev-e2e dev-waf-image dev-waf-e2e dev-gateway-e2e dev-cache-e2e dev-compression-e2e dev-origin-failover-e2e dev-analytics-e2e dev-backup-e2e dev-recovery-e2e dev-upgrade-e2e dev-throughput-e2e dev-mmdb-e2e dev-scale-e2e dev-grafana-smoke dev-observability-seed dev-grafana-browser dev-operational-logs-smoke dev-production-qualification dev-logs prod-pull prod-migrate prod-clickhouse-migrate prod-pdns-migrate prod-control prod-dns prod-telemetry prod-edge prod-logs config-check openapi-check version-check waf-version-check check-no-screenshots docs-dev docs-build docs-check fleet-test qualification-tools-check supply-chain-check
+.PHONY: backend-test contract-check dev-assets dev-control-up dev-up dev-edge-up dev-edge-status dev-scale-up dev-down dev-migrate dev-clickhouse-migrate dev-pdns-migrate dev-test dev-e2e dev-waf-image dev-waf-baseline dev-waf-e2e dev-gateway-e2e dev-cache-e2e dev-compression-e2e dev-origin-failover-e2e dev-analytics-e2e dev-backup-e2e dev-recovery-e2e dev-upgrade-e2e dev-throughput-e2e dev-mmdb-e2e dev-scale-e2e dev-grafana-smoke dev-observability-seed dev-grafana-browser dev-operational-logs-smoke dev-production-qualification dev-logs prod-pull prod-migrate prod-clickhouse-migrate prod-pdns-migrate prod-control prod-dns prod-telemetry prod-edge prod-logs config-check openapi-check version-check waf-version-check check-no-screenshots docs-dev docs-build docs-check fleet-test qualification-tools-check supply-chain-check
 
 backend-test: dev-test
 
@@ -79,9 +79,15 @@ dev-e2e: dev-waf-image
 dev-waf-image:
 	docker build -f docker/openresty/Dockerfile -t cdnfoundry/edge-runtime:waf-qualification .
 
+dev-waf-baseline: dev-waf-image
+	mkdir -p storage/qualification
+	python3 tests/e2e/waf_baseline.py run --output storage/qualification/waf-baseline.json
+	python3 tests/e2e/waf_latency_matrix.py --image cdnfoundry/edge-runtime:waf-qualification --output storage/qualification/waf-latency.json
+
 dev-waf-e2e: dev-waf-image
 	python3 tests/e2e/managed_waf.py
 	python3 tests/e2e/waf_body_inspection.py
+	python3 tests/e2e/ruleset_version_mismatch.py
 	python3 tests/e2e/rate_limit_isolation.py
 	python3 tests/e2e/ipv6_rate_limit_keys.py
 	python3 tests/e2e/client_containment.py
