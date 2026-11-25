@@ -19,7 +19,7 @@ that exist.
 - **Dashboard** is the Grafana dashboard that shows the cause. See
   [Grafana by team](../operations/grafana-by-team.md).
 
-There are 77 alerts.
+There are 78 alerts.
 
 ## Team: noc
 
@@ -38,6 +38,7 @@ There are 77 alerts.
 | `SLOBurnEdgeAvailabilityFast` | critical | 2m | Edge availability is burning its error budget 14.4 times too fast over 1h and 5m | [Runbook](../operations/runbooks.md#edge-availability-burn) | SLOs |
 | `SLOBurnEdgeLatencyFast` | critical | 2m | Edge latency (95 percent under 500 ms) is burning its error budget 14.4 times too fast over 1h and 5m | [Runbook](../operations/runbooks.md#edge-latency-burn) | SLOs |
 | `AcmeIssuanceFailing` | warning | 15m | Managed certificate orders are failing as often as they succeed | [Runbook](../operations/runbooks.md#acme-failure) | TLS posture |
+| `CellRulesetDiffers` | warning | 2m | A cell runs a WAF engine or rule set that differs from the pinned version, or does not report it | [Runbook](../operations/runbooks.md#cell-ruleset-differs) | Config & purge propagation |
 | `DnsSerialPropagationSlow` | warning | 2m | A DNS deployment has waited over five minutes to reach its desired serial | [Runbook](../operations/runbooks.md#dns-cluster-failure) | DNS authoritative |
 | `EdgeCacheHitCollapse` | warning | 15m | The cache hit ratio fell below half of its value at the same time yesterday | [Runbook](../operations/runbooks.md#cache-hit-collapse) | Cache |
 | `EdgeCellCapacityPressure` | warning | 5m | A bounded edge-cell resource is nearing its limit | [Runbook](../operations/runbooks.md#cell-cache-or-compression-pressure) | PoP detail |
