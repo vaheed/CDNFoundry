@@ -561,7 +561,7 @@
   {
    "id": "evasion:xss-after-limit-padding",
    "class": "limits",
-   "note": "XSS placed after 300 KiB of padding, beyond the High limit but inside the Recommended limit",
+   "note": "XSS placed after 300 KB of padding in one parameter: beyond the High inspection limit, inside the Recommended limit",
    "expect": {
     "balanced": "block",
     "strict": "refuse"
@@ -572,10 +572,11 @@
     "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
    },
    "body_repeat": {
-    "unit": "pad=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&",
-    "count": 9500
+    "unit": "a",
+    "count": 300000
    },
-   "body_suffix": "q=%3Cscript%3Ealert(1)%3C%2Fscript%3E&note=hello"
+   "body_suffix": "&q=%3Cscript%3Ealert(1)%3C%2Fscript%3E&note=hello",
+   "body_prefix": "pad="
   },
   {
    "id": "evasion:header-too-large",

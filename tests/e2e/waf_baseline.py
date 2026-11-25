@@ -75,7 +75,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.rfile.readline()
         else:
             self.rfile.read(int(self.headers.get("Content-Length") or 0))
-        print(json.dumps({"c": self.headers.get("X-CDN-Client-Address", ""), "m": self.command}), flush=True)
+        print(json.dumps({"c": self.headers.get("X-Forwarded-For", ""), "m": self.command}), flush=True)
         reply = b"origin-ok"
         self.send_response(200)
         self.send_header("Content-Length", str(len(reply)))
@@ -268,9 +268,11 @@ def container_rows(name: str, since: str, prefix: str) -> list[dict]:
 
 def decide(status: int, row: dict | None, reached: bool) -> str:
     """blocked: the WAF denied it. logged: it reached the origin but the WAF scored or monitored it. passed: nothing flagged it.
-    refused: the cell rejected it before the origin for another reason (limits, malformed). error: no answer."""
-    if status == 0 and row is None:
-        return "error"
+    refused: the cell rejected it before the origin for another reason (limits, malformed). error: no answer at all.
+    unlogged: it reached the origin but the cell logged no row for it, which is a harness or logging fault, never a pass."""
+    if row is None and not reached:
+        # No access-log row joined: the cell rejected it before the access phase (limits, malformed framing), so the status is the evidence.
+        return "error" if status == 0 else "refused"
     if row is None:
         return "unlogged"
     if row.get("waf_action") == "block" and not reached:
@@ -351,25 +353,33 @@ def summarise_host(item: dict, crs: list[dict], evasion: list[dict], clean: list
     by_category: dict[str, dict] = {}
     for category in sorted({entry["category"] for entry in in_scope}):
         by_category[category] = rates([entry for entry in in_scope if entry["category"] == category])
+    hard = [entry for entry in clean if corpus.is_hard_negative(entry["id"])]
+    clean = [entry for entry in clean if not corpus.is_hard_negative(entry["id"])]
     by_class = {name: rates([entry for entry in clean if entry["category"] == name]) for name in sorted({entry["category"] for entry in clean})}
+    by_method = {name: rates([entry for entry in clean if entry["method"] == name]) for name in sorted({entry["method"] for entry in clean})}
     latencies = [entry["seconds"] for entry in clean if entry["decision"] in ("passed", "logged")]
     return {
         "profile": item["profile"], "paranoia_level": item["paranoia"], "hostname_label": item["name"],
         "crs_attacks_in_scope": rates(in_scope), "crs_attacks_in_scope_by_category": by_category,
         "crs_attacks_above_paranoia": rates([entry for entry in attacks if entry["floor"] > level]),
-        "crs_negative_stages": rates([entry for entry in crs if entry["category"] == "negative"]),
+        "crs_stages_without_expected_rules": rates([entry for entry in crs if entry["category"] == "negative"]),
+        "clean_hard_negatives": rates(hard), "clean_hard_negatives_by_class": {name: rates([entry for entry in hard if entry["category"] == name])
+                                                                              for name in sorted({entry["category"] for entry in hard})},
         "evasion": rates(evasion),
-        "clean": rates(clean), "clean_by_class": by_class,
+        "clean": rates(clean), "clean_by_class": by_class, "clean_by_method": by_method,
         "clean_false_positive_rate": rates(clean)["block_rate"], "clean_false_positive_rate_ci95": rates(clean)["block_rate_ci95"],
+        "hard_negative_false_positive_rate": rates(hard)["block_rate"], "hard_negative_false_positive_rate_ci95": rates(hard)["block_rate_ci95"],
         "clean_client_latency_ms": {"p50": percentile(latencies, 0.50), "p95": percentile(latencies, 0.95), "p99": percentile(latencies, 0.99),
                                     "note": "client-observed with 16 concurrent connections; the capacity benchmark records CPU per request"},
     }
 
 
-def slim(results: list[dict], floors: dict[str, int] | None = None) -> list[dict]:
-    return [{"id": entry["id"], "category": entry["category"], "decision": entry["decision"], "status": entry["status"], "seconds": entry["seconds"],
-             "floor": (floors or {}).get(entry["id"], 1), "waf_score": (entry["row"] or {}).get("waf_score"),
-             "attack_score": (entry["row"] or {}).get("attack_score"), "reason": (entry["row"] or {}).get("security_reason")} for entry in results]
+def slim(results: list[dict], requests: list[corpus.CorpusRequest], floors: dict[str, int] | None = None) -> list[dict]:
+    """The fields the record keeps for each request. ``results`` is in the order of ``requests``."""
+    return [{"id": entry["id"], "category": entry["category"], "method": request.method, "decision": entry["decision"], "status": entry["status"],
+             "seconds": entry["seconds"], "floor": (floors or {}).get(entry["id"], 1), "waf_score": (entry["row"] or {}).get("waf_score"),
+             "attack_score": (entry["row"] or {}).get("attack_score"), "reason": (entry["row"] or {}).get("security_reason")}
+            for entry, request in zip(results, requests)]
 
 
 # --- the record -------------------------------------------------------------------------------------------------------------------
@@ -432,7 +442,8 @@ def build_record(args: argparse.Namespace) -> dict:
             "crs": {"commit": corpus.pinned_crs_commit(), "stages": crs_stats, "digest": crs_digest},
             "evasion": {**evasion_stats, "digest": corpus.corpus_digest(evasion_requests)},
             "clean": {"version": corpus.CLEAN_CORPUS_VERSION, "seed": corpus.CLEAN_CORPUS_SEED, "scale": args.clean_scale, "requests": len(clean_requests),
-                      "classes": corpus.clean_class_counts(clean_requests), "digest": corpus.corpus_digest(clean_requests),
+                      "classes": corpus.clean_class_counts(clean_requests),
+                      "hard_negatives": sum(1 for request in clean_requests if corpus.is_hard_negative(request.identifier)), "digest": corpus.corpus_digest(clean_requests),
                       "provenance": "generated from a seed, never recorded from a live system; coverage input, not proof of accuracy"},
         },
         "hosts": {}, "evasion_cases": [],
@@ -446,10 +457,10 @@ def build_record(args: argparse.Namespace) -> dict:
             for item in hosts:
                 started = time.monotonic()
                 since = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
-                crs_results = slim(replay(cell_ip, item["hostname"], crs_requests, addresses, args.workers, since), floors) if crs_requests else []
+                crs_results = slim(replay(cell_ip, item["hostname"], crs_requests, addresses, args.workers, since), crs_requests, floors) if crs_requests else []
                 evasion_run = replay(cell_ip, item["hostname"], evasion_requests, addresses, args.workers, since)
-                clean_results = slim(replay(cell_ip, item["hostname"], clean_requests, addresses, args.workers, since))
-                evasion_results[item["name"]] = slim(evasion_run)
+                clean_results = slim(replay(cell_ip, item["hostname"], clean_requests, addresses, args.workers, since), clean_requests)
+                evasion_results[item["name"]] = slim(evasion_run, evasion_requests)
                 record["hosts"][item["name"]] = summarise_host(item, crs_results, evasion_results[item["name"]], clean_results)
                 record["hosts"][item["name"]]["replay_seconds"] = round(time.monotonic() - started, 1)
                 print(f"{item['name']}: crs in-scope detection {record['hosts'][item['name']]['crs_attacks_in_scope']['detection_rate']}, "

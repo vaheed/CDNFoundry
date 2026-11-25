@@ -85,6 +85,15 @@ class BaselineHarnessTest(unittest.TestCase):
         self.assertEqual(set(counts), {"browser_page_load", "form_post", "json_api", "file_upload", "mobile_api", "webhook", "crawler"})
         self.assertTrue(all(count >= 500 for count in counts.values()), counts)
         self.assertEqual(len({request.identifier for request in first}), len(first), "identifiers must be unique")
+        hard = [request for request in first if corpus.is_hard_negative(request.identifier)]
+        self.assertTrue(0.03 < len(hard) / len(first) < 0.10, "hard negatives are a small, separately reported share")
+        ordinary = " ".join(request.body.decode("latin1") + request.path for request in first if not corpus.is_hard_negative(request.identifier)).lower()
+        import re
+        for marker in ("<b>", "<script", "%3cscript", "%3cb%3e"):
+            self.assertNotIn(marker, ordinary, f"ordinary clean traffic must not contain {marker!r}")
+        self.assertIsNone(re.search(corpus.HARD_WORD_PATTERN, ordinary), "ordinary clean traffic uses no word that is also an attack keyword")
+        hard_text = " ".join(request.body.decode("latin1") + request.path for request in hard).lower()
+        self.assertIsNotNone(re.search(corpus.HARD_WORD_PATTERN, hard_text))
 
     def test_clean_corpus_uses_the_framings_it_claims(self) -> None:
         requests = corpus.clean_corpus(scale=0.2)
@@ -184,6 +193,7 @@ class BaselineHarnessTest(unittest.TestCase):
         self.assertEqual(baseline.decide(413, {"waf_action": "inspect", "security_reason": "body_too_large"}, False), "refused")
         self.assertEqual(baseline.decide(0, None, False), "error")
         self.assertEqual(baseline.decide(200, None, True), "unlogged")
+        self.assertEqual(baseline.decide(413, None, False), "refused", "a rejection before the access phase has no log row; its status is the evidence")
 
     def test_a_block_that_still_reached_the_origin_is_not_a_block(self) -> None:
         self.assertEqual(baseline.decide(403, {"waf_action": "block"}, True), "passed")
@@ -213,10 +223,10 @@ class BaselineHarnessTest(unittest.TestCase):
         self.assertTrue(all(row["length_header"] is None and row["connection"] == "close" and row["host"] == "stub.test" for row in chunked))
         self.assertEqual(sorted(row["body"] for row in chunked), [b"name=alice", b"q=<script>"])
 
-    def test_a_request_with_no_log_row_is_counted_as_unanswered_not_passed(self) -> None:
+    def test_a_request_the_origin_served_but_the_cell_did_not_log_is_counted_as_unanswered_not_passed(self) -> None:
         requests = [corpus.CorpusRequest("a", "clean", "page", path="/about", headers=[("User-Agent", "t")])]
         results = baseline.replay("127.0.0.1", "stub.test", requests, baseline.ClientAddresses(), 1, "now",
-                                  cell_log=lambda _: [], origin_log=lambda _: [], settle=0)
+                                  cell_log=lambda _: [], origin_log=lambda _: StubCell.origin, settle=0)
         self.assertEqual(results[0]["decision"], "unlogged")
         self.assertEqual(baseline.rates(results)["unanswered"], 1)
 

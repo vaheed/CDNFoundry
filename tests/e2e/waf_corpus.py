@@ -217,7 +217,7 @@ def evasion_corpus() -> tuple[list[CorpusRequest], dict]:
             body = base64.b64decode(entry["body_base64"])
         if "body_repeat" in entry:
             body = entry["body_repeat"]["unit"].encode() * entry["body_repeat"]["count"]
-        body += entry.get("body_suffix", "").encode("utf-8")
+        body = entry.get("body_prefix", "").encode("utf-8") + body + entry.get("body_suffix", "").encode("utf-8")
         path = entry.get("path", "/")
         if "path_repeat" in entry:
             path = entry["path_repeat"]["prefix"] + entry["path_repeat"]["unit"] * entry["path_repeat"]["count"]
@@ -244,22 +244,32 @@ LAST = ["Ahmadi", "Berg", "Costa", "Dubois", "Eriksen", "Farahani", "Garcia", "H
         "Nouri", "Okafor", "Petrov", "Rossi", "Sato", "Tanaka", "Usman", "Vogel", "Wagner", "Yilmaz", "Zhang"]
 CITIES = ["Tehran", "Berlin", "Lisbon", "Osaka", "Toronto", "Nairobi", "Oslo", "Lima", "Hanoi", "Cairo", "Dublin", "Madrid", "Prague"]
 WORDS = ("order delivery invoice account profile settings meeting schedule report summary payment refund shipping address product review "
-         "catalog category article tutorial support ticket project milestone update release notes weather recipe travel hotel booking "
-         "flight guide question answer comment reply thanks please select update delete insert union table drop script alert onload "
-         "admin password user group where from having like order limit").split()
-SENTENCES = [
-    "Thanks for the quick delivery, the package arrived on Monday and everything was fine.",
-    "Could you update my shipping address before the order leaves the warehouse?",
-    "I selected the blue one, but the confirmation email says green. Please check.",
+         "catalog category article tutorial support ticket project milestone upgrade release notes weather recipe travel hotel booking "
+         "flight guide question answer comment reply thanks please garden coffee music football camera laptop hiking recipe museum").split()
+# Words and sentences that sit close to attack signatures. They are the hard negatives: legitimate text a rule set may still flag.
+# They are reported on their own, so the ordinary false positive rate is not inflated by them and they are not hidden.
+HARD_WORDS = "select union drop insert delete update exec eval script alert onload system cmd".split()
+HARD_WORD_PATTERN = r"\b(" + "|".join(HARD_WORDS) + r")\b"
+HARD_SENTENCES = [
     "The meeting notes are in the shared folder; drop me a line if something is missing.",
-    "Where can I find the invoice for last month? It's under billing, right?",
-    "Please don't delete my draft, I'm still editing the introduction (it's 90% done).",
-    "Our team's O'Brien & Sons account needs a new admin; the current one left the company.",
+    "Could you update my shipping address before the order leaves the warehouse?",
+    "Please don't delete my draft; select the second version and drop the first one.",
+    "The script that imports the catalog takes 20 minutes; can we run it from cron instead of /bin/sh?",
+    "Use the onload event of the page to set the focus; an alert box would be too intrusive.",
+    "Why does the report say 'where is my order' for 3 of 4 customers? The from-address looks fine.",
+]
+SENTENCES = [
+    "I chose the blue one, but the confirmation email says green. Please check.",
+    "Where can I find the invoice for last month? It is under billing, right?",
+    "Please keep my draft, I am still editing the introduction and it is nearly done.",
+    "Our team needs a new account owner; the current one left the company.",
+    "Thanks for the quick delivery, the package arrived on Monday and everything was fine.",
+    "Could you change my shipping address before the order leaves the warehouse?",
+    "The meeting notes are in the shared folder; send me a message if something is missing.",
+    "Release notes for 4.2: fixed the sorting of the product list and the broken pagination.",
+    "Great article! The part about joining two lists was clearer than my textbook.",
+    "Is it fine to use bold text in a comment, or does the editor remove formatting?",
     "Looking for a hotel near the station, 2 nights, from 12/03 to 14/03, under $120.",
-    "Is it ok to use <b>bold</b> in a comment, or does the editor strip tags? Just asking.",
-    "The script that imports the catalog takes 20 minutes; can we run it at night instead?",
-    "Release notes for 4.2: fixed the table sorting, union of the two lists is now stable.",
-    "Great article! The part about `SELECT` vs `JOIN` was clearer than my textbook.",
 ]
 PATHS = ["/", "/about", "/pricing", "/blog", "/blog/how-we-cache-static-assets", "/docs/getting-started", "/products", "/products/42",
          "/category/shoes", "/search", "/cart", "/checkout", "/account", "/account/orders", "/contact", "/help/faq", "/news/2026/11/launch"]
@@ -280,8 +290,31 @@ BROWSER_HEADERS = [("Accept", "text/html,application/xhtml+xml,application/xml;q
                    ("Accept-Language", "en-US,en;q=0.9"), ("Accept-Encoding", "gzip, deflate, br"), ("Upgrade-Insecure-Requests", "1")]
 
 
-def _text(rng: random.Random, sentences: int = 1) -> str:
-    return " ".join(rng.choice(SENTENCES) for _ in range(sentences))
+HARD_SHARE = 0.06
+
+
+def _identifier(kind: str, index: int, hard: bool) -> str:
+    """Hard negatives carry their own identifier prefix, so every result can be split without a second lookup."""
+    return f"clean-hard:{kind}:{index}" if hard else f"clean:{kind}:{index}"
+
+
+def _hard(rng: random.Random) -> bool:
+    return rng.random() < HARD_SHARE
+
+
+def _text(rng: random.Random, sentences: int = 1, hard: bool = False) -> str:
+    pool = SENTENCES + HARD_SENTENCES if hard else SENTENCES
+    chosen = [rng.choice(pool) for _ in range(sentences)]
+    if hard and not any(sentence in HARD_SENTENCES for sentence in chosen):
+        chosen[0] = rng.choice(HARD_SENTENCES)
+    return " ".join(chosen)
+
+
+def _words(rng: random.Random, count: int, hard: bool = False) -> str:
+    chosen = [rng.choice(WORDS) for _ in range(count)]
+    if hard:
+        chosen[0] = rng.choice(HARD_WORDS)
+    return " ".join(chosen)
 
 
 def _name(rng: random.Random) -> str:
@@ -297,14 +330,14 @@ def _urlencode(pairs: list[tuple[str, str]]) -> str:
     return urlencode(pairs)
 
 
-def _browser(rng: random.Random, index: int) -> CorpusRequest:
+def _browser(rng: random.Random, index: int, hard: bool = False) -> CorpusRequest:
     kind = rng.random()
     if kind < 0.45:
         path = rng.choice(PATHS)
         if rng.random() < 0.35:
             path += "?" + _urlencode([("utm_source", rng.choice(["newsletter", "twitter", "partner"])), ("utm_campaign", f"autumn-{rng.randint(1, 20)}")])
     elif kind < 0.65:
-        path = "/search?" + _urlencode([("q", " ".join(rng.choice(WORDS) for _ in range(rng.randint(1, 4)))), ("page", str(rng.randint(1, 9)))])
+        path = "/search?" + _urlencode([("q", _words(rng, rng.randint(1, 4), hard)), ("page", str(rng.randint(1, 9)))])
     elif kind < 0.85:
         path = f"{rng.choice(['/products', '/blog', '/news'])}/{rng.randint(1, 5000)}?" + _urlencode([("sort", rng.choice(["price", "date", "name"])), ("dir", rng.choice(["asc", "desc"]))])
     else:
@@ -314,24 +347,24 @@ def _browser(rng: random.Random, index: int) -> CorpusRequest:
         headers.append(("Cookie", f"session={rng.getrandbits(96):024x}; theme={rng.choice(['dark', 'light'])}; consent=1"))
     if rng.random() < 0.5:
         headers.append(("Referer", f"https://www.example.com{rng.choice(PATHS)}"))
-    return CorpusRequest(f"clean:browser_page_load:{index}", "clean", "browser_page_load", path=path, headers=headers)
+    return CorpusRequest(_identifier("browser_page_load", index, hard), "clean", "browser_page_load", path=path, headers=headers)
 
 
-def _form(rng: random.Random, index: int) -> CorpusRequest:
+def _form(rng: random.Random, index: int, hard: bool = False) -> CorpusRequest:
     form = rng.choice(["contact", "signup", "address", "comment", "search"])
     if form == "contact":
-        path, pairs = "/contact", [("name", _name(rng)), ("email", _email(rng)), ("subject", rng.choice(["Question", "Feedback", "Invoice"])), ("message", _text(rng, rng.randint(1, 3)))]
+        path, pairs = "/contact", [("name", _name(rng)), ("email", _email(rng)), ("subject", rng.choice(["Question", "Feedback", "Invoice"])), ("message", _text(rng, rng.randint(1, 3), hard))]
     elif form == "signup":
         path, pairs = "/signup", [("username", f"{rng.choice(FIRST).lower()}{rng.randint(1, 9999)}"), ("email", _email(rng)), ("password", f"pw-{rng.getrandbits(64):016x}!"), ("terms", "on")]
     elif form == "address":
         path, pairs = "/account/address", [("name", _name(rng)), ("street", f"{rng.randint(1, 300)} {rng.choice(LAST)} Street"), ("city", rng.choice(CITIES)), ("postal", str(rng.randint(10000, 99999))), ("country", rng.choice(["DE", "IR", "PT", "JP", "CA"]))]
     elif form == "comment":
-        path, pairs = f"/blog/{rng.randint(1, 900)}/comments", [("author", _name(rng)), ("comment", _text(rng, rng.randint(1, 4)))]
+        path, pairs = f"/blog/{rng.randint(1, 900)}/comments", [("author", _name(rng)), ("comment", _text(rng, rng.randint(1, 4), hard))]
     else:
-        path, pairs = "/search", [("q", " ".join(rng.choice(WORDS) for _ in range(rng.randint(1, 5))))]
+        path, pairs = "/search", [("q", _words(rng, rng.randint(1, 5), hard))]
     headers = [("User-Agent", rng.choice(BROWSERS)), ("Content-Type", "application/x-www-form-urlencoded"), ("Origin", "https://www.example.com"),
                ("Referer", f"https://www.example.com{path}"), ("Accept", "text/html,application/xhtml+xml")]
-    return CorpusRequest(f"clean:form_post:{index}", "clean", "form_post", method="POST", path=path, headers=headers, body=_urlencode(pairs).encode())
+    return CorpusRequest(_identifier("form_post", index, hard), "clean", "form_post", method="POST", path=path, headers=headers, body=_urlencode(pairs).encode())
 
 
 def _json_document(rng: random.Random, depth: int = 0) -> object:
@@ -343,15 +376,18 @@ def _json_document(rng: random.Random, depth: int = 0) -> object:
     return rng.choice([rng.randint(0, 100000), round(rng.random() * 100, 2), rng.random() < 0.5, None, _name(rng), _email(rng), rng.choice(SENTENCES), rng.choice(CITIES)])
 
 
-def _json_api(rng: random.Random, index: int) -> CorpusRequest:
+def _json_api(rng: random.Random, index: int, hard: bool = False) -> CorpusRequest:
     kind = rng.random()
     headers = [("User-Agent", rng.choice(BROWSERS)), ("Accept", "application/json"), ("Authorization", f"Bearer {rng.getrandbits(128):032x}")]
     if kind < 0.35:
         path = f"/api/v1/{rng.choice(['orders', 'products', 'users', 'invoices'])}?" + _urlencode([("limit", str(rng.choice([10, 20, 50]))), ("cursor", f"{rng.getrandbits(48):012x}"), ("filter[status]", rng.choice(["open", "paid", "shipped"]))])
-        return CorpusRequest(f"clean:json_api:{index}", "clean", "json_api", path=path, headers=headers)
-    method = rng.choice(["POST", "POST", "PUT", "PATCH"])
-    body = json.dumps({"data": _json_document(rng), "note": _text(rng), "request_id": f"{rng.getrandbits(64):016x}"}, ensure_ascii=rng.random() < 0.5).encode()
-    request = CorpusRequest(f"clean:json_api:{index}", "clean", "json_api", method=method, path=f"/api/v1/{rng.choice(['orders', 'products', 'users', 'invoices'])}/{rng.randint(1, 99999)}",
+        return CorpusRequest(_identifier("json_api", index, hard), "clean", "json_api", path=path, headers=headers)
+    method = rng.choice(["POST", "POST", "PUT", "PATCH", "DELETE"])
+    if method == "DELETE":
+        return CorpusRequest(_identifier("json_api", index, hard), "clean", "json_api", method="DELETE",
+                             path=f"/api/v1/{rng.choice(['orders', 'products', 'users', 'invoices'])}/{rng.randint(1, 99999)}", headers=headers)
+    body = json.dumps({"data": _json_document(rng), "note": _text(rng, 1, hard), "request_id": f"{rng.getrandbits(64):016x}"}, ensure_ascii=rng.random() < 0.5).encode()
+    request = CorpusRequest(_identifier("json_api", index, hard), "clean", "json_api", method=method, path=f"/api/v1/{rng.choice(['orders', 'products', 'users', 'invoices'])}/{rng.randint(1, 99999)}",
                             headers=headers + [("Content-Type", "application/json")], body=body)
     if rng.random() < 0.12:
         request.transport = "chunked"
@@ -359,11 +395,11 @@ def _json_api(rng: random.Random, index: int) -> CorpusRequest:
     return request
 
 
-def _upload(rng: random.Random, index: int) -> CorpusRequest:
+def _upload(rng: random.Random, index: int, hard: bool = False) -> CorpusRequest:
     boundary = f"----CDNFoundryBoundary{rng.getrandbits(48):012x}"
     kind = rng.choice(["text", "csv", "png", "pdf"])
     if kind == "text":
-        name, mime, content = "notes.txt", "text/plain", (_text(rng, rng.randint(1, 20)) + "\n").encode()
+        name, mime, content = "notes.txt", "text/plain", (_text(rng, rng.randint(1, 20), hard) + "\n").encode()
     elif kind == "csv":
         name, mime = "export.csv", "text/csv"
         content = "id,name,email,city\n".encode() + "".join(f"{i},{_name(rng)},{_email(rng)},{rng.choice(CITIES)}\n" for i in range(rng.randint(2, 40))).encode()
@@ -373,40 +409,40 @@ def _upload(rng: random.Random, index: int) -> CorpusRequest:
     else:
         name, mime = "report.pdf", "application/pdf"
         content = b"%PDF-1.4\n" + base64.b64encode(bytes(rng.getrandbits(8) for _ in range(rng.randint(200, 1500)))) + b"\n%%EOF\n"
-    parts = (f'--{boundary}\r\nContent-Disposition: form-data; name="title"\r\n\r\n{_name(rng)} {rng.choice(WORDS)}\r\n'
+    parts = (f'--{boundary}\r\nContent-Disposition: form-data; name="title"\r\n\r\n{_name(rng)} {_words(rng, 1, hard)}\r\n'
              f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{name}"\r\nContent-Type: {mime}\r\n\r\n').encode() + content + f"\r\n--{boundary}--\r\n".encode()
     headers = [("User-Agent", rng.choice(BROWSERS)), ("Content-Type", f"multipart/form-data; boundary={boundary}"), ("Origin", "https://www.example.com")]
-    return CorpusRequest(f"clean:file_upload:{index}", "clean", "file_upload", method="POST", path="/account/upload", headers=headers, body=parts)
+    return CorpusRequest(_identifier("file_upload", index, hard), "clean", "file_upload", method="POST", path="/account/upload", headers=headers, body=parts)
 
 
-def _mobile(rng: random.Random, index: int) -> CorpusRequest:
+def _mobile(rng: random.Random, index: int, hard: bool = False) -> CorpusRequest:
     headers = [("User-Agent", rng.choice(MOBILE_AGENTS)), ("Accept", "application/json"), ("Authorization", f"Bearer {rng.getrandbits(160):040x}"),
                ("X-Device-Id", f"{rng.getrandbits(128):032x}"), ("X-App-Version", f"{rng.randint(1, 6)}.{rng.randint(0, 9)}.{rng.randint(0, 9)}")]
     if rng.random() < 0.5:
         path = f"/mobile/v2/{rng.choice(['feed', 'profile', 'rides', 'wallet'])}?" + _urlencode([("since", str(1700000000 + rng.randint(0, 99999999))), ("lat", f"{rng.uniform(-60, 60):.5f}"), ("lng", f"{rng.uniform(-170, 170):.5f}")])
-        return CorpusRequest(f"clean:mobile_api:{index}", "clean", "mobile_api", path=path, headers=headers)
+        return CorpusRequest(_identifier("mobile_api", index, hard), "clean", "mobile_api", path=path, headers=headers)
     body = json.dumps({"device": {"os": rng.choice(["android", "ios"]), "locale": rng.choice(["en-US", "fa-IR", "de-DE"])}, "events": [{"type": rng.choice(["open", "tap", "scroll"]), "ts": 1700000000 + rng.randint(0, 99999999)} for _ in range(rng.randint(1, 8))]}).encode()
-    return CorpusRequest(f"clean:mobile_api:{index}", "clean", "mobile_api", method="POST", path="/mobile/v2/events", headers=headers + [("Content-Type", "application/json")], body=body)
+    return CorpusRequest(_identifier("mobile_api", index, hard), "clean", "mobile_api", method="POST", path="/mobile/v2/events", headers=headers + [("Content-Type", "application/json")], body=body)
 
 
-def _webhook(rng: random.Random, index: int) -> CorpusRequest:
+def _webhook(rng: random.Random, index: int, hard: bool = False) -> CorpusRequest:
     kind = rng.choice(["payment", "push", "ticket"])
     if kind == "payment":
         body = json.dumps({"id": f"evt_{rng.getrandbits(80):020x}", "type": rng.choice(["payment.succeeded", "payment.failed", "refund.created"]), "data": {"amount": rng.randint(100, 500000), "currency": rng.choice(["usd", "eur", "irr"]), "customer": f"cus_{rng.getrandbits(48):012x}"}})
         headers = [("User-Agent", "PaymentHooks/1.0"), ("X-Signature", f"t={1700000000 + rng.randint(0, 99999999)},v1={rng.getrandbits(256):064x}")]
     elif kind == "push":
-        body = json.dumps({"ref": "refs/heads/main", "commits": [{"id": f"{rng.getrandbits(160):040x}", "message": _text(rng), "author": {"name": _name(rng)}} for _ in range(rng.randint(1, 3))]})
+        body = json.dumps({"ref": "refs/heads/main", "commits": [{"id": f"{rng.getrandbits(160):040x}", "message": _text(rng, 1, hard), "author": {"name": _name(rng)}} for _ in range(rng.randint(1, 3))]})
         headers = [("User-Agent", "GitHub-Hookshot/abc1234"), ("X-GitHub-Event", "push"), ("X-Hub-Signature-256", f"sha256={rng.getrandbits(256):064x}")]
     else:
-        body = json.dumps({"ticket": rng.randint(1, 99999), "action": rng.choice(["created", "updated", "closed"]), "comment": _text(rng, 2), "requester": _email(rng)})
+        body = json.dumps({"ticket": rng.randint(1, 99999), "action": rng.choice(["created", "updated", "closed"]), "comment": _text(rng, 2, hard), "requester": _email(rng)})
         headers = [("User-Agent", "Helpdesk-Webhook/3.1"), ("X-Webhook-Token", f"{rng.getrandbits(128):032x}")]
-    return CorpusRequest(f"clean:webhook:{index}", "clean", "webhook", method="POST", path=f"/hooks/{kind}", headers=headers + [("Content-Type", "application/json")], body=body.encode())
+    return CorpusRequest(_identifier("webhook", index, hard), "clean", "webhook", method="POST", path=f"/hooks/{kind}", headers=headers + [("Content-Type", "application/json")], body=body.encode())
 
 
-def _crawler(rng: random.Random, index: int) -> CorpusRequest:
+def _crawler(rng: random.Random, index: int, hard: bool = False) -> CorpusRequest:
     path = rng.choice(["/robots.txt", "/sitemap.xml", "/sitemap-posts.xml", "/feed.xml", rng.choice(PATHS), f"/blog/{rng.randint(1, 900)}", f"/products/{rng.randint(1, 5000)}?page={rng.randint(1, 30)}"])
     headers = [("User-Agent", rng.choice(CRAWLERS)), ("Accept", "*/*"), ("Accept-Encoding", "gzip")]
-    return CorpusRequest(f"clean:crawler:{index}", "clean", "crawler", method=rng.choice(["GET", "GET", "GET", "HEAD"]), path=path, headers=headers)
+    return CorpusRequest(_identifier("crawler", index, hard), "clean", "crawler", method=rng.choice(["GET", "GET", "GET", "HEAD"]), path=path, headers=headers)
 
 
 CLEAN_GENERATORS = {"browser_page_load": _browser, "form_post": _form, "json_api": _json_api, "file_upload": _upload,
@@ -419,7 +455,7 @@ def clean_corpus(seed: int = CLEAN_CORPUS_SEED, scale: float = 1.0) -> list[Corp
     for name, size in CLEAN_CLASS_SIZES.items():
         rng = random.Random(f"{seed}:{name}")
         generator = CLEAN_GENERATORS[name]
-        requests += [generator(rng, index) for index in range(max(1, int(size * scale)))]
+        requests += [generator(rng, index, _hard(rng)) for index in range(max(1, int(size * scale)))]
     return requests
 
 
@@ -437,3 +473,7 @@ def clean_class_counts(requests: list[CorpusRequest]) -> dict[str, int]:
     for request in requests:
         counts[request.category] = counts.get(request.category, 0) + 1
     return counts
+
+
+def is_hard_negative(identifier: str) -> bool:
+    return identifier.startswith("clean-hard:")
