@@ -23,6 +23,7 @@ single source of truth; `make version-check` enforces it.
 
 - Browser challenge proofs work on domains that allow only GET or HEAD, including Under Attack mode. The internal proof POST is exempt from domain and incident method restrictions; ordinary requests keep their configured method restrictions.
 - The IPFire updater uses the patched Alpine runtime.
+- The CSV dependency is updated to 9.29.1 to address GHSA-m9j4-54gj-jvf8.
 
 See the [v2.1.5 release notes](docs/operations/releases/v2.1.5.md) for deployment, rollback, and qualification limits.
 
