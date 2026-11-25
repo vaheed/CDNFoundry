@@ -96,7 +96,7 @@ class AlertContractTest(unittest.TestCase):
 
     def test_every_alert_has_a_prometheus_unit_test_or_is_a_burn_rate_alert(self) -> None:
         tested = {case["alertname"] for suite in yaml.safe_load((PROMETHEUS / "alerts.test.yml").read_text())["tests"] for case in suite.get("alert_rule_test", [])}
-        for required in ("CDNFoundryFailedOperations", "EdgeGlobal5xxRatioHigh", "PopTrafficDropped", "SLOBurnEdge5xxFast", "EmergencyModeEnabled"):
+        for required in ("CDNFoundryFailedOperations", "EdgeGlobal5xxRatioHigh", "PopTrafficDropped", "SLOBurnEdge5xxFast", "EmergencyModeEnabled", "CellRulesetDiffers"):
             self.assertIn(required, tested)
 
     def test_slo_rules_are_the_generated_file(self) -> None:

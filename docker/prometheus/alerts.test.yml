@@ -262,3 +262,28 @@ tests:
         summary: Emergency mode is switched on for a domain, pool, or the platform
         runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#emergency-mode
         dashboard_url: /d/cdnf-security-overview
+- interval: 1m
+  input_series:
+  - series: cdnfoundry_cell_ruleset_mismatch{edge="1",pop="pop-a",pool="1",cell="cell-01"}
+    values: 0 1 1 1 1
+  - series: cdnfoundry_cell_ruleset_mismatch{edge="1",pop="pop-a",pool="1",cell="cell-02"}
+    values: 0 0 0 0 0
+  alert_rule_test:
+  - eval_time: 1m
+    alertname: CellRulesetDiffers
+    exp_alerts: []
+  - eval_time: 4m
+    alertname: CellRulesetDiffers
+    exp_alerts:
+    - exp_labels:
+        severity: warning
+        team: noc
+        dashboard: cdnf-propagation
+        edge: "1"
+        pop: pop-a
+        pool: "1"
+        cell: cell-01
+      exp_annotations:
+        summary: A cell runs a WAF engine or rule set that differs from the pinned version, or does not report it
+        runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#cell-ruleset-differs
+        dashboard_url: /d/cdnf-propagation
