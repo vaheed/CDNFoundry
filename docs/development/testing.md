@@ -100,6 +100,8 @@ tests/browser/run.sh docs-screenshots.spec.ts docs-domain-features.spec.ts
 tests/browser/run-fleet.sh docs-screenshots.spec.ts
 ```
 
+`make docs-check` verifies that the generated captures record the current `VERSION` before building the documentation.
+
 Phone capture cases skip intentionally because documentation images are desktop
 captures. The separate site suite checks how those images fit on phones.
 The full Fleet runner starts a separate disposable fixture for documentation
