@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS cdnf.edge_events
     compression_fallback LowCardinality(String) DEFAULT 'none',
     waf_profile LowCardinality(String) DEFAULT 'off',
     waf_rule_id UInt32 DEFAULT 0,
+    waf_rule_ids String DEFAULT '',
     waf_score UInt16 DEFAULT 0,
     waf_action LowCardinality(String) DEFAULT 'off',
     waf_processing_us UInt32 DEFAULT 0,

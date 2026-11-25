@@ -135,6 +135,9 @@ transforms:
       .waf_processing_us = to_int(.waf_processing_us) ?? 0
       .waf_body_limit = slice!(to_string(.waf_body_limit) ?? "none", 0, 16)
       .waf_exclusion_id = to_int(.waf_exclusion_id) ?? 0
+      # The CRS rules that matched, at most eight six-digit ids joined by commas; anything else is dropped.
+      .waf_rule_ids = slice!(to_string(.waf_rule_ids) ?? "", 0, 63)
+      if !match(.waf_rule_ids, r'^[0-9]{6}(,[0-9]{6}){0,7}$') { .waf_rule_ids = "" }
       .security_rule = slice!(to_string(.security_rule) ?? "", 0, 24)
       # The request rules that acted, as "type:id" joined by commas (rewrite:3,cache:7), at most eight; anything else is dropped.
       .request_rule = slice!(to_string(.request_rule) ?? "", 0, 256)
@@ -466,6 +469,28 @@ tests:
             source: |-
               assert!(.request_rule == "rewrite:3,header:12,cache:7" || .request_rule == "")
               if .path == "/forged" { assert_eq!(.request_rule, "") } else { assert_eq!(.request_rule, "rewrite:3,header:12,cache:7") }
+  - name: keep_matched_waf_rule_ids_and_drop_anything_else
+    inputs:
+      - insert_at: safe_edge_events
+        type: log
+        log_fields:
+          domain_id: 1
+          path: /matched
+          waf_rule_ids: 941100,942100
+          security_action: block
+      - insert_at: safe_edge_events
+        type: log
+        log_fields:
+          domain_id: 1
+          path: /forged
+          waf_rule_ids: "941100,<script>"
+          security_action: block
+    outputs:
+      - extract_from: safe_edge_events
+        conditions:
+          - type: vrl
+            source: |-
+              if .path == "/forged" { assert_eq!(.waf_rule_ids, "") } else { assert_eq!(.waf_rule_ids, "941100,942100") }
   - name: keep_customer_dns_events_and_drop_the_synthetic_probe
     inputs:
       - insert_at: safe_dns_events
