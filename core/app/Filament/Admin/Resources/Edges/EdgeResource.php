@@ -26,6 +26,7 @@ use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\DB;
 
 class EdgeResource extends Resource
 {
@@ -145,6 +146,7 @@ class EdgeResource extends Resource
                 ViewAction::make()->iconButton(),
                 EditAction::make()->iconButton(),
                 ActionGroup::make([
+                    self::removeAction(),
                     Action::make('enable')->icon('phosphor-check-circle')->visible(fn (Edge $record): bool => ! $record->enabled)->action(fn (Edge $record) => self::changeState($record, ['enabled' => true], 'edge.enable')),
                     Action::make('disable')->icon('phosphor-prohibit')->color('danger')->requiresConfirmation()->visible(fn (Edge $record): bool => $record->enabled)->action(fn (Edge $record) => self::changeState($record, ['enabled' => false], 'edge.disable')),
                     Action::make('drain')->icon('phosphor-pause-circle')->color('warning')->requiresConfirmation()->visible(fn (Edge $record): bool => ! $record->drained)->action(fn (Edge $record) => self::changeState($record, ['drained' => true], 'edge.drain')),
@@ -161,6 +163,37 @@ class EdgeResource extends Resource
     public static function getRelations(): array
     {
         return [PoolEndpointsRelationManager::class, CellsRelationManager::class];
+    }
+
+    public static function removeAction(): Action
+    {
+        return Action::make('remove')
+            ->label('Remove')
+            ->icon('phosphor-trash')
+            ->color('danger')
+            ->extraAttributes(['data-testid' => 'edge-remove'])
+            ->visible(fn (Edge $record): bool => ! $record->enabled)
+            ->disabled(fn (Edge $record): bool => ! $record->drained)
+            ->tooltip(fn (Edge $record): ?string => $record->drained ? null : 'Drain this edge before removing it.')
+            ->requiresConfirmation()
+            ->modalHeading('Remove edge')
+            ->modalDescription('Remove this edge and its cells from the control plane. Retire the host separately through Fleet.')
+            ->modalSubmitActionLabel('Remove edge')
+            ->modalSubmitAction(fn (Action $action): Action => $action->extraAttributes(['data-testid' => 'edge-remove-confirm']))
+            ->modalCancelAction(fn (Action $action): Action => $action->extraAttributes(['data-testid' => 'edge-remove-cancel']))
+            ->successNotificationTitle('Edge removed')
+            ->successRedirectUrl(fn (): string => self::getUrl('index'))
+            ->action(function (Edge $record, Action $action): void {
+                abort_unless(auth()->user()?->isAdmin(), 403);
+                DB::transaction(function () use ($record): void {
+                    $edge = Edge::query()->lockForUpdate()->findOrFail($record->getKey());
+                    abort_if($edge->enabled || ! $edge->drained, 409, 'Drain and disable the edge before deletion.');
+                    AuditLog::record(auth()->user(), 'edge.deleted', $edge, [], request()->ip());
+                    $edge->delete();
+                    ReconcilePlatformDnsIdentity::dispatchForRoutingChange(auth()->id());
+                });
+                $action->success();
+            });
     }
 
     private static function formatRuntimeVersions(?array $versions, string $empty): string

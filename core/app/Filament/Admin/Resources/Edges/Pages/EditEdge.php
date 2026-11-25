@@ -11,6 +11,11 @@ class EditEdge extends EditRecord
 {
     protected static string $resource = EdgeResource::class;
 
+    protected function getHeaderActions(): array
+    {
+        return [EdgeResource::removeAction()];
+    }
+
     protected function mutateFormDataBeforeSave(array $data): array
     {
         $data['country_code'] = strtoupper($data['country_code']);

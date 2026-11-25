@@ -16,7 +16,7 @@ anyone who must keep traffic and data on their own network.
 
 | Tool | What it is for |
 | --- | --- |
-| **Admin panel** | Run the platform: pools, PoPs, DNS, users, settings, audit |
+| **Admin panel** | Run the platform: pools, PoPs, DNS, users, settings, audit, and removal of retired edges |
 | **Domain panel** | Customers manage their domains: DNS, origins, TLS, cache, security, analytics |
 | **API** | Automate domain and platform operations with policy-scoped tokens |
 | **Fleet CLI and Fleet web** | Install, upgrade, back up, and roll back hosts over SSH, from the command line or a local web page |
@@ -29,7 +29,8 @@ anyone who must keep traffic and data on their own network.
 - **HTTPS:** managed ACME DNS-01 and uploaded certificates, renewal, and edge distribution.
 - **Cache:** domain policies, development mode, URL and full purges, gzip and Brotli.
 - **Request rules:** redirects, URL rewrites, request and response header changes, and cache overrides with presets.
-- **Security:** typed firewall rules, managed ModSecurity/OWASP CRS WAF, rate and connection limits, challenges, and incident controls.
+- **Security:** typed firewall rules, managed ModSecurity/OWASP CRS WAF, rate and connection limits, browser challenges, and incident controls. Challenge verification works on GET-only domains.
+- **Geolocation:** signed IPFire country and ASN data refreshed daily, with custom MMDB sources supported.
 - **Visibility:** domain analytics, redacted logs, revision acknowledgements, and operation status.
 
 Application controls have resource limits. Protect the uplink through your
@@ -41,11 +42,6 @@ network provider when an attack exceeds its capacity. See the
 Open a domain to review its DNS, origin, TLS, cache, and security settings.
 
 ![An open domain with its status and configuration sections in the domain panel, using seeded test data.](docs/public/screenshots/light/app-domain-overview.png)
-
-The Rules tab groups redirects, URL rewrites, headers, and cache rules. Each row shows its conditions,
-action, and whether it is enabled.
-
-![The open domain's Rules tab, showing ordered redirects, matching conditions, target URLs, and enabled states.](docs/public/screenshots/light/app-request-rules.png)
 
 Explore the [admin panel](https://vaheed.github.io/CDNFoundry/guides/admin-panel)
 and [domain panel](https://vaheed.github.io/CDNFoundry/guides/domain-panel) tours.
@@ -124,12 +120,12 @@ Run the script from the repository root, or by its full path. Do not run files i
 Next: [Production quick start](https://vaheed.github.io/CDNFoundry/deployment/production-quick-start)
 and the [Fleet web guide](https://vaheed.github.io/CDNFoundry/operations/fleet-web).
 
-## Release 2.1.4
+## Release 2.1.5
 
-This release adds request and response rules, Fleet Linux host preparation, and backup verification history.
-It includes database migrations that move existing cache path rules into the Rules tab. Review the
-[2.1.4 release notes](docs/operations/releases/v2.1.4.md) for deployment order, rollback limits, and open
-qualification gates before upgrading.
+This release fixes browser verification on GET-only domains, including Under Attack mode. It also adds daily signed
+IPFire location updates, live GeoIP database refreshes, and administrator removal of disabled, drained edges.
+There are no new database migrations since 2.1.4. Review the
+[2.1.5 release notes](docs/operations/releases/v2.1.5.md) for deployment, rollback, and qualification limits.
 
 ## Read the docs
 
@@ -159,3 +155,15 @@ security problems as described in [SECURITY.md](SECURITY.md). Follow the
 ## License
 
 CDNFoundry is licensed under [Apache-2.0](LICENSE).
+
+## Support CDNFoundry
+
+Help keep CDNFoundry independent, open source, and actively maintained.
+
+| Sponsorship tier | Description | Amount |
+| --- | --- | ---: |
+| **Buy Me a Beer** | Show your appreciation. | [$10](https://nowpayments.io/payment/?iid=6197093183) |
+| **Support Development** | Support ongoing updates and maintenance. | [$100](https://nowpayments.io/payment/?iid=4356260277) |
+| **Sponsor a Feature** | Propose and fund a new feature. | [$1,000](https://nowpayments.io/payment/?iid=5697188206) |
+
+*Feature sponsorship is subject to technical review and roadmap alignment.*

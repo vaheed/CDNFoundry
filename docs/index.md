@@ -49,4 +49,16 @@ volumetric attack that fills your uplink. See the [FAQ](getting-started/faq.md) 
 [private CDN design guide](getting-started/private-cdn-design.md) for the
 trade-offs.
 
+## Support CDNFoundry
+
+Help keep CDNFoundry independent, open source, and actively maintained.
+
+| Sponsorship tier | Description | Amount |
+| --- | --- | ---: |
+| **Buy Me a Beer** | Show your appreciation. | [$10](https://nowpayments.io/payment/?iid=6197093183) |
+| **Support Development** | Support ongoing updates and maintenance. | [$100](https://nowpayments.io/payment/?iid=4356260277) |
+| **Sponsor a Feature** | Propose and fund a new feature. | [$1,000](https://nowpayments.io/payment/?iid=5697188206) |
+
+*Feature sponsorship is subject to technical review and roadmap alignment.*
+
 </div>

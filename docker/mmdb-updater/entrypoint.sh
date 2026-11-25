@@ -3,8 +3,9 @@ set -Eeuo pipefail
 
 readonly MMDB_DIR="${MMDB_DIR:-/mmdb}"
 MMDB_TARGET_FILE="${MMDB_TARGET_FILE:-GeoLite2-City.mmdb}"
-# dbip-npm verifies itself: the npm registry publishes the SHA-512 of the package, so no checksum has to be configured.
-readonly MMDB_PROVIDER="${MMDB_PROVIDER:-dbip-npm}"
+# IPFire is signed and keyless; other providers and authenticated MMDB sources remain supported.
+readonly MMDB_PROVIDER="${MMDB_PROVIDER:-ipfire}"
+readonly MMDB_IPFIRE_DOWNLOAD_URL="${MMDB_IPFIRE_DOWNLOAD_URL:-https://location.ipfire.org/databases/1/location.db.xz}"
 readonly MMDB_NPM_REGISTRY_URL="${MMDB_NPM_REGISTRY_URL:-https://registry.npmjs.org}"
 MMDB_DOWNLOAD_URL="${MMDB_DOWNLOAD_URL:-}"
 readonly MMDB_DOWNLOAD_HEADER="${MMDB_DOWNLOAD_HEADER:-}"
@@ -16,8 +17,8 @@ readonly MMDB_REQUIRE_VERIFICATION="${MMDB_REQUIRE_VERIFICATION:-false}"
 MMDB_FALLBACK_FILE="${MMDB_FALLBACK_FILE:-/opt/fallback/GeoLite2-City.mmdb}"
 readonly MMDB_DOWNLOAD_RETRIES="${MMDB_DOWNLOAD_RETRIES:-5}"
 MMDB_DOWNLOAD_INTERVAL_SECONDS="${MMDB_DOWNLOAD_INTERVAL_SECONDS:-86400}"
-# The autonomous-system database is optional enrichment. It is updated the same way as the city
-# database, but a failure never stops the updater and is never reported as unhealthy.
+# Cache the complete ASN records, including organization names, alongside the city database.
+# Sources must supply usable IPv4 and IPv6 records and pass verification before activation.
 readonly MMDB_ASN_TARGET_FILE="${MMDB_ASN_TARGET_FILE:-GeoLite2-ASN.mmdb}"
 readonly MMDB_ASN_DOWNLOAD_URL="${MMDB_ASN_DOWNLOAD_URL:-}"
 readonly MMDB_ASN_EXPECTED_SHA256="${MMDB_ASN_EXPECTED_SHA256:-}"
@@ -84,29 +85,33 @@ fetch() {
     args=(
         --fail --location --silent --show-error
         --retry "$MMDB_DOWNLOAD_RETRIES" --retry-delay 5 --retry-all-errors
-        --connect-timeout 20 --max-time 600 --output "$output"
+        --connect-timeout 20 --max-time 600 --max-filesize 268435456 --output "$output"
     )
-    [[ -z "$MMDB_DOWNLOAD_HEADER" ]] || args+=(--header "$MMDB_DOWNLOAD_HEADER")
+    if [[ "${3:-true}" == true && -n "$MMDB_DOWNLOAD_HEADER" ]]; then args+=(--header "$MMDB_DOWNLOAD_HEADER"); fi
     curl "${args[@]}" "$url"
 }
 
-extract_mmdb() {
-    local artifact="$1" destination="$2" source_url="$3"
-    mkdir -p "$destination"
-    case "${source_url,,}" in
-        *.tar.gz|*.tgz) tar -xzf "$artifact" -C "$destination" ;;
-        *.zip) unzip -q "$artifact" -d "$destination" ;;
-        *.mmdb.gz) gzip -dc "$artifact" > "$destination/$MMDB_TARGET_FILE" ;;
-        *)
-            if file "$artifact" | grep -qi 'gzip compressed'; then
-                gzip -dc "$artifact" > "$destination/$MMDB_TARGET_FILE"
-            else
-                cp "$artifact" "$destination/$MMDB_TARGET_FILE"
-            fi
-            ;;
-    esac
-    find "$destination" -type f -iname '*.mmdb' -print0 | sort -z | head -z -n 1 | tr -d '\0'
-}
+extract_mmdb() (
+    local artifact="$1" destination="$2" member
+    mkdir -p "$destination" || return 1
+    ulimit -f 262144
+    # Authenticated download endpoints often have no extension, or put the archive format in a query.
+    # Stream just one MMDB out of an archive instead of extracting arbitrary archive paths to disk.
+    if tar -tzf "$artifact" > "$destination/members" 2>/dev/null; then
+        member="$(sort "$destination/members" | awk 'tolower($0) ~ /\.mmdb$/ {print; exit}')"
+        [[ -n "$member" ]] || return 1
+        tar -xzOf "$artifact" -- "$member" > "$destination/$MMDB_TARGET_FILE" || return 1
+    elif unzip -Z1 "$artifact" > "$destination/members" 2>/dev/null; then
+        member="$(sort "$destination/members" | awk 'tolower($0) ~ /\.mmdb$/ {print; exit}')"
+        [[ -n "$member" ]] || return 1
+        unzip -p "$artifact" "$member" > "$destination/$MMDB_TARGET_FILE" || return 1
+    elif file "$artifact" | grep -qi 'gzip compressed'; then
+        gzip -dc "$artifact" > "$destination/$MMDB_TARGET_FILE" || return 1
+    else
+        cp "$artifact" "$destination/$MMDB_TARGET_FILE" || return 1
+    fi
+    printf '%s\n' "$destination/$MMDB_TARGET_FILE"
+)
 
 # Download the dbip-city-lite package from the npm registry, check it against the SHA-512 integrity the
 # registry publishes for that exact version, and stream the database out of it.
@@ -129,7 +134,7 @@ fetch_npm_database() {
 }
 
 validate_candidate() {
-    local candidate="$1" expected="$MMDB_EXPECTED_SHA256"
+    local candidate="$1" expected="$MMDB_EXPECTED_SHA256" artifact="${2:-}"
     [[ -s "$candidate" ]] || { log 'download contained no non-empty MMDB'; return 1; }
     if [[ -z "$expected" && -n "$MMDB_CHECKSUM_URL" ]]; then
         expected="$(curl --fail --silent --show-error --location --max-time 60 "$MMDB_CHECKSUM_URL" | head -n 1 | awk '{print $1}')"
@@ -140,21 +145,37 @@ validate_candidate() {
         return 1
     fi
     if [[ -n "$expected" ]]; then
-        printf '%s  %s\n' "$expected" "$candidate" | sha256sum -c - >/dev/null || { log 'checksum mismatch'; return 1; }
+        if ! printf '%s  %s\n' "$expected" "$candidate" | sha256sum -c - >/dev/null 2>&1; then
+            # Providers commonly publish the archive checksum rather than the enclosed MMDB checksum.
+            [[ -n "$artifact" ]] && printf '%s  %s\n' "$expected" "$artifact" | sha256sum -c - >/dev/null 2>&1 || {
+                log 'checksum mismatch'; return 1;
+            }
+        fi
     fi
     # Status 6 means a well-formed database with no entry for the probe address; any other failure
     # means the file cannot be read.
     local status=0
     mmdblookup --file "$candidate" --ip 1.1.1.1 >/dev/null 2>&1 || status=$?
     [[ "$status" == 0 || "$status" == 6 ]] || { log 'the candidate is not a readable MMDB'; return 1; }
+    status=0
+    mmdblookup --file "$candidate" --ip 2606:4700:4700::1111 >/dev/null 2>&1 || status=$?
+    [[ "$status" == 0 || "$status" == 6 ]] || { log 'the candidate does not support IPv6'; return 1; }
+    if [[ "$ASN_MODE" == true ]]; then
+        local address
+        for address in 1.1.1.1 2606:4700:4700::1111; do
+            mmdblookup --file "$candidate" --ip "$address" autonomous_system_number 2>/dev/null | grep -Eq '[1-9][0-9]* <uint32>' || {
+                log 'the ASN candidate has no usable IPv4/IPv6 ASN records'; return 1;
+            }
+        done
+    fi
 }
 
-update_once() {
+update_once() (
     local work artifact extract candidate url success=false
     work="$(mktemp -d)"
     artifact="$work/artifact"
     extract="$work/extract"
-    trap 'rm -rf "$work"' RETURN
+    trap 'rm -rf "$work"' EXIT
 
     ARTIFACT_VERIFIED=false
     # update_once runs inside an `if`, where `set -e` is off, so every step reports failure explicitly.
@@ -164,35 +185,100 @@ update_once() {
     else
         while IFS= read -r url; do
             [[ -n "$url" ]] || continue
-            log "downloading from $url"
+            log "downloading the configured MMDB source"
             if fetch "$url" "$artifact"; then success=true; break; fi
-            log "download failed for $url"
+            log "configured MMDB download failed"
         done < <(download_urls)
 
         [[ "$success" == true ]] || return 1
         candidate="$(extract_mmdb "$artifact" "$extract" "$url")" || return 1
     fi
-    validate_candidate "$candidate" || return 1
+    validate_candidate "$candidate" "$artifact" || return 1
 
-    install -m 0644 "$candidate" "$MMDB_DIR/.${MMDB_TARGET_FILE}.candidate" || return 1
-    mv -f "$MMDB_DIR/.${MMDB_TARGET_FILE}.candidate" "$MMDB_DIR/$MMDB_TARGET_FILE" || return 1
-    timestamp > "$MMDB_DIR/LAST_UPDATE" || return 1
-    rm -f "$MMDB_DIR/FALLBACK_IN_USE"
+    activate_candidate "$candidate"
+)
+
+activate_candidate() {
+    local candidate="$1"
+    if ! cmp -s "$candidate" "$MMDB_DIR/$MMDB_TARGET_FILE"; then
+        install -m 0644 "$candidate" "$MMDB_DIR/.${MMDB_TARGET_FILE}.candidate" || return 1
+        mv -f "$MMDB_DIR/.${MMDB_TARGET_FILE}.candidate" "$MMDB_DIR/$MMDB_TARGET_FILE" || return 1
+    fi
+    # Content stamps let readers reopen a replaced mmap without restarting the cell.
+    sha256sum "$candidate" | awk '{print $1}' > "$MMDB_DIR/.${MMDB_TARGET_FILE}.revision" || return 1
+    mv -f "$MMDB_DIR/.${MMDB_TARGET_FILE}.revision" "$MMDB_DIR/${MMDB_TARGET_FILE}.revision" || return 1
+    timestamp > "$MMDB_DIR/${MMDB_TARGET_FILE}.last-update" || return 1
+    rm -f "$MMDB_DIR/${MMDB_TARGET_FILE}.fallback"
+    if [[ "$ASN_MODE" != true ]]; then
+        timestamp > "$MMDB_DIR/LAST_UPDATE" || return 1
+        rm -f "$MMDB_DIR/FALLBACK_IN_USE"
+    fi
     log "activated $MMDB_TARGET_FILE"
 }
 
-if ! update_once; then
-    log 'initial update failed; preserving existing database'
-    if [[ ! -s "$MMDB_DIR/$MMDB_TARGET_FILE" ]]; then
-        # DNS must still start. Geo-DNS answers fall back to each record's default until a real
-        # database is installed; FALLBACK_IN_USE marks the degraded state for operators.
-        [[ -s "$MMDB_FALLBACK_FILE" ]] || exit 1
-        install -m 0644 "$MMDB_FALLBACK_FILE" "$MMDB_DIR/.${MMDB_TARGET_FILE}.candidate"
-        mv -f "$MMDB_DIR/.${MMDB_TARGET_FILE}.candidate" "$MMDB_DIR/$MMDB_TARGET_FILE"
-        timestamp > "$MMDB_DIR/FALLBACK_IN_USE"
-        log 'WARNING: installed the empty fallback database; Geo-DNS uses default answers until an update succeeds'
+install_fallback() {
+    local target="$1" fallback="$2" primary="$3"
+    if [[ ! -s "$MMDB_DIR/$target" ]]; then
+        install -m 0644 "$fallback" "$MMDB_DIR/.$target.candidate" || return 1
+        mv -f "$MMDB_DIR/.$target.candidate" "$MMDB_DIR/$target" || return 1
+        timestamp > "$MMDB_DIR/$target.fallback"
+        if [[ "$primary" == true ]]; then timestamp > "$MMDB_DIR/FALLBACK_IN_USE"; fi
+        log "WARNING: installed the empty fallback for $target; lookups use unknown/default values until recovery"
     fi
-fi
+}
+
+update_ipfire() (
+    local work candidate native_hash output_hash compiler_hash cached_native cached_output cached_compiler cached_file
+    work="$(mktemp -d)" || return 1
+    trap 'rm -rf "$work"' EXIT
+    # Bound expanded downloads and generated files as well as transfer sizes and runtime.
+    ulimit -f 262144
+    fetch "$MMDB_IPFIRE_DOWNLOAD_URL" "$work/location.db.xz" false || return 1
+    xz --memlimit-decompress=128MiB -dc "$work/location.db.xz" > "$work/location.db" || return 1
+    timeout 60 python3 /usr/local/bin/ipfire-export "$work/location.db" "$MMDB_DIR/IPFire.db" --verify-only || return 1
+    native_hash="$(sha256sum "$work/location.db" | awk '{print $1}')"
+    compiler_hash="$({
+        sha256sum /usr/local/bin/mmdb-compiler /usr/local/bin/ipfire-export
+        python3 -c 'import location; print(location.__version__)'
+    } | sha256sum | awk '{print $1}')"
+    candidate=""
+    if [[ -f "$MMDB_DIR/IPFire.cache" ]]; then
+        read -r cached_native cached_output cached_compiler < "$MMDB_DIR/IPFire.cache" || true
+        if [[ "$native_hash" == "$cached_native" && "$compiler_hash" == "$cached_compiler" ]]; then
+            cached_file="$MMDB_DIR/$MMDB_ASN_TARGET_FILE"
+            if [[ -z "$MMDB_DOWNLOAD_URL" ]]; then cached_file="$MMDB_DIR/$MMDB_TARGET_FILE"; fi
+            if [[ -s "$cached_file" && "$(sha256sum "$cached_file" | awk '{print $1}')" == "$cached_output" ]]; then
+                candidate="$cached_file"
+            fi
+        fi
+    fi
+    if [[ -z "$candidate" ]]; then
+        candidate="$work/IPFire.mmdb"
+        timeout 600 python3 /usr/local/bin/ipfire-export "$work/location.db" "$MMDB_DIR/IPFire.db" \
+            | GOMEMLIMIT=768MiB timeout 600 /usr/local/bin/mmdb-compiler "$candidate" || return 1
+    fi
+    output_hash="$(sha256sum "$candidate" | awk '{print $1}')"
+    # Signature verification covers the native input; both generated record layouts must still validate.
+    ARTIFACT_VERIFIED=true
+    MMDB_EXPECTED_SHA256=""
+    MMDB_CHECKSUM_URL=""
+    ASN_MODE=true
+    validate_candidate "$candidate" || return 1
+    if [[ -z "$MMDB_DOWNLOAD_URL" ]]; then
+        ASN_MODE=false
+        activate_candidate "$candidate" || return 1
+    fi
+    if [[ -z "$MMDB_ASN_DOWNLOAD_URL" ]]; then
+        ASN_MODE=true
+        MMDB_TARGET_FILE="$MMDB_ASN_TARGET_FILE"
+        activate_candidate "$candidate" || return 1
+    fi
+    install -m 0644 "$work/location.db" "$MMDB_DIR/.IPFire.db.candidate" || return 1
+    mv -f "$MMDB_DIR/.IPFire.db.candidate" "$MMDB_DIR/IPFire.db" || return 1
+    printf '%s %s %s\n' "$native_hash" "$output_hash" "$compiler_hash" > "$MMDB_DIR/.IPFire.cache.candidate" || return 1
+    mv -f "$MMDB_DIR/.IPFire.cache.candidate" "$MMDB_DIR/IPFire.cache" || return 1
+    log 'verified and cached IPFire data under CC BY-SA 4.0; https://www.ipfire.org/location/'
+)
 
 update_asn() {
     (
@@ -202,26 +288,32 @@ update_asn() {
         MMDB_EXPECTED_SHA256="$MMDB_ASN_EXPECTED_SHA256"
         MMDB_CHECKSUM_URL="$MMDB_ASN_CHECKSUM_URL"
         MMDB_FALLBACK_FILE="${MMDB_ASN_FALLBACK_FILE:-/opt/fallback/GeoLite2-ASN.mmdb}"
-        if [[ "$MMDB_PROVIDER" == dbip-npm && -z "$MMDB_DOWNLOAD_URL" ]]; then
-            # No verified autonomous-system source is published for this provider, so nothing is attempted.
-            if [[ ! -s "$MMDB_DIR/$MMDB_TARGET_FILE" && -s "$MMDB_FALLBACK_FILE" ]]; then
-                install -m 0644 "$MMDB_FALLBACK_FILE" "$MMDB_DIR/$MMDB_TARGET_FILE"
-                log 'no ASN source is configured (set MMDB_ASN_DOWNLOAD_URL and a checksum); events carry ASN 0'
-            fi
-        elif ! update_once; then
+        if ! update_once; then
             log 'ASN update failed; preserving the existing ASN database'
-            if [[ ! -s "$MMDB_DIR/$MMDB_TARGET_FILE" && -s "$MMDB_FALLBACK_FILE" ]]; then
-                install -m 0644 "$MMDB_FALLBACK_FILE" "$MMDB_DIR/$MMDB_TARGET_FILE"
-                log 'installed the empty ASN fallback; events carry ASN 0 until an update succeeds'
-            fi
+            install_fallback "$MMDB_TARGET_FILE" "$MMDB_FALLBACK_FILE" false
         fi
     ) || true
 }
 
-update_asn
+update_databases() {
+    if [[ "$MMDB_PROVIDER" == ipfire && ( -z "$MMDB_DOWNLOAD_URL" || -z "$MMDB_ASN_DOWNLOAD_URL" ) ]]; then
+        update_ipfire || log 'IPFire update failed; preserving previous valid databases'
+    fi
+    if [[ "$MMDB_PROVIDER" != ipfire || -n "$MMDB_DOWNLOAD_URL" ]]; then
+        update_once || log 'city update failed; preserving previous valid database'
+    fi
+    install_fallback "$MMDB_TARGET_FILE" "$MMDB_FALLBACK_FILE" true || return 1
+    if [[ "$MMDB_PROVIDER" != ipfire || -n "$MMDB_ASN_DOWNLOAD_URL" ]]; then
+        update_asn
+    fi
+    install_fallback "$MMDB_ASN_TARGET_FILE" "${MMDB_ASN_FALLBACK_FILE:-/opt/fallback/GeoLite2-ASN.mmdb}" false
+}
 
+# Let DNS and cells start immediately even if the first provider request times out.
+install_fallback "$MMDB_TARGET_FILE" "$MMDB_FALLBACK_FILE" true
+install_fallback "$MMDB_ASN_TARGET_FILE" "${MMDB_ASN_FALLBACK_FILE:-/opt/fallback/GeoLite2-ASN.mmdb}" false
+update_databases
 while true; do
     sleep "$MMDB_DOWNLOAD_INTERVAL_SECONDS"
-    update_once || log 'update failed; preserving previous valid database'
-    update_asn
+    update_databases
 done

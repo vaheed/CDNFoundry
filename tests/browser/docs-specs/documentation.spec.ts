@@ -52,3 +52,21 @@ test('home navigation and local search expose the feature guide', async ({ page 
     await expect(page).toHaveURL(/\/guides\/request-rules(?:#.*)?$/);
     await expectNoOverflow(page);
 });
+
+test('home shows sponsorship tiers with accessible payment links', async ({ page }) => {
+    await page.goto('./');
+    const heading = page.getByRole('heading', { name: /^Support CDNFoundry/ });
+    await heading.scrollIntoViewIfNeeded();
+    const table = page.getByRole('table').filter({ hasText: 'Sponsorship tier' });
+    await expect(table).toBeVisible();
+    for (const [amount, invoice] of [['$10', '6197093183'], ['$100', '4356260277'], ['$1,000', '5697188206']]) {
+        const link = table.getByRole('link', { name: amount, exact: true });
+        await expect(link).toHaveAttribute('href', `https://nowpayments.io/payment/?iid=${invoice}`);
+        await link.focus();
+        await expect(link).toBeFocused();
+    }
+    await expect(page.getByText('Feature sponsorship is subject to technical review and roadmap alignment.', { exact: true })).toBeVisible();
+    await expectNoOverflow(page);
+    await expectAccessible(page);
+    await expect(table).toHaveScreenshot('documentation-support.png');
+});

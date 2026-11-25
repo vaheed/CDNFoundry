@@ -16,6 +16,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -112,8 +113,8 @@ func TestControlRequestsRejectPlaintextAndRedirects(t *testing.T) {
 }
 
 func TestVersionCommand(t *testing.T) {
-	if version != "2.1.4" {
-		t.Fatalf("unexpected release version %q", version)
+	if !regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`).MatchString(version) {
+		t.Fatalf("release version %q is not MAJOR.MINOR.PATCH", version)
 	}
 }
 

@@ -22,8 +22,7 @@ local certificate_cache = {}
 local certificate_cache_order = {}
 local certificate_cache_limit = 512
 local cache_control_directives
-local geo_database
-local asn_database
+local geoip = require "geoip"
 -- The hostnames a cell serves, counted once per loaded state: the divisor of every per-domain budget.
 local counted_hosts = setmetatable({}, {__mode = "k"})
 
@@ -534,24 +533,9 @@ end
 function M.start()
     refresh(false)
     load_leaked_passwords()
-    local geo_path = os.getenv("GEOIP_DATABASE") or ""
-    if geo_path ~= "" then
-        local ok_module, maxminddb = pcall(require, "maxminddb")
-        if ok_module then
-            local ok_open, database = pcall(maxminddb.open, geo_path)
-            if ok_open then geo_database = database else ngx.log(ngx.WARN, "GeoIP database unavailable: ", database) end
-        else
-            ngx.log(ngx.WARN, "GeoIP module unavailable: ", maxminddb)
-        end
-    end
-    local asn_path = os.getenv("GEOIP_ASN_DATABASE") or ""
-    if asn_path ~= "" then
-        local ok_module, maxminddb = pcall(require, "maxminddb")
-        if ok_module then
-            local ok_open, database = pcall(maxminddb.open, asn_path)
-            if ok_open then asn_database = database else ngx.log(ngx.WARN, "GeoIP ASN database unavailable: ", database) end
-        end
-    end
+    geoip.refresh()
+    local geo_timer_ok, geo_timer_error = ngx.timer.every(30, geoip.refresh)
+    if not geo_timer_ok then ngx.log(ngx.ERR, "GeoIP refresh timer failed: ", geo_timer_error) end
     local ok, err = ngx.timer.every(1, refresh)
     if not ok then ngx.log(ngx.ERR, "runtime refresh timer failed: ", err) end
     restart_generation = ngx.shared.runtime_limits:get("control:restart_generation") or 0
@@ -730,23 +714,11 @@ local function client_address(security)
 end
 
 local function geography(ip)
-    if not geo_database then return "unknown", "unknown" end
-    local ok, result = pcall(geo_database.lookup, geo_database, ip)
-    if not ok or not result then return "unknown", "unknown" end
-    local ok_country, country = pcall(result.get, result, "country", "iso_code")
-    local ok_continent, continent = pcall(result.get, result, "continent", "code")
-    return ok_country and country or "unknown", ok_continent and continent or "unknown"
+    return geoip.geography(ip)
 end
 
--- The autonomous system number of a client, or 0 when the ASN database is absent or has no entry.
 local function autonomous_system(ip)
-    if not asn_database then return 0 end
-    local ok, result = pcall(asn_database.lookup, asn_database, ip)
-    if not ok or not result then return 0 end
-    local ok_number, number = pcall(result.get, result, "autonomous_system_number")
-    number = ok_number and tonumber(number) or 0
-    if number < 0 or number > 4294967295 then return 0 end
-    return math.floor(number)
+    return geoip.autonomous_system(ip)
 end
 
 -- The attack score runs from 1 (attack) to 99 (clean): 99 minus five points for every CRS anomaly point, never below 1.
@@ -2033,7 +2005,11 @@ function M.access()
     local method = ngx.req.get_method()
     if emergency.allow_get_head_only and method ~= "GET" and method ~= "HEAD" then return security_reject(405, "edge_emergency_mode") end
     local incident = incident_for(config)
-    if incident then
+    -- Method allowlists protect origin traffic. The internal proof endpoint needs POST even on a GET-only site;
+    -- it still passes body limits, client containment, firewall rules and proof validation, and never reaches the origin.
+    local challenge_submission = method == "POST" and (ngx.var.uri or "/") == CHALLENGE_PATH
+        and ((incident and incident.challenge == true) or security_has_challenge_rule(rules_for(security)))
+    if incident and not challenge_submission then
         local incident_allows = false
         for _, allowed_method in ipairs(incident.methods or {}) do
             if method == allowed_method then incident_allows = true; break end
@@ -2044,7 +2020,7 @@ function M.access()
     for _, allowed_method in ipairs(security.allowed_methods or {"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}) do
         if method == allowed_method then method_allowed = true; break end
     end
-    if not method_allowed then return security_reject(405, "invalid_method") end
+    if not method_allowed and not challenge_submission then return security_reject(405, "invalid_method") end
     if request_header_size() > (tonumber(limits.maximum_header_size) or 32768) then return security_reject(431, "header_too_large") end
     local size = body_size()
     if emergency.disable_request_bodies and size > 0 then return security_reject(413, "edge_emergency_mode") end

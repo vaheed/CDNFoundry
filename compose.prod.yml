@@ -1154,11 +1154,13 @@ services:
     logging: *bounded-logging
     <<: *hardened
     cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
-    mem_limit: 256m
+    mem_limit: 1g
+    cpus: 1
     image: ${CDNF_MMDB_UPDATER_IMAGE:?CDNF_MMDB_UPDATER_IMAGE must be an immutable image reference}
     profiles: [control, dns, edge]
     environment:
       MMDB_PROVIDER: ${MMDB_PROVIDER}
+      MMDB_IPFIRE_DOWNLOAD_URL: ${MMDB_IPFIRE_DOWNLOAD_URL}
       MMDB_TARGET_FILE: ${MMDB_TARGET_FILE}
       MMDB_DOWNLOAD_INTERVAL_SECONDS: ${MMDB_DOWNLOAD_INTERVAL_SECONDS}
       MMDB_DOWNLOAD_RETRIES: ${MMDB_DOWNLOAD_RETRIES}

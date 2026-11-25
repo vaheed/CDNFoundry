@@ -51,6 +51,7 @@ class ViewEdge extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
+            EdgeResource::removeAction(),
             Action::make('showEnrollment')->icon('phosphor-terminal-window')
                 ->label('Enrollment instructions')
                 ->visible(fn (): bool => filled($this->bootstrapToken))
