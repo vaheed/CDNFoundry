@@ -10,13 +10,18 @@ local M = {}
 M.ENTRY_BYTES = 256
 -- The part of a dictionary that budgets add up to. The rest absorbs slab fragmentation and the bookkeeping keys below.
 M.BUDGET_FRACTION = 0.5
--- A domain always gets at least this many entries, however many domains share the cell.
+-- A domain gets at least this many entries as long as every domain's share still fits the budgeted capacity.
 M.MINIMUM_SHARE = 100
 
--- How many entries one domain may hold in the dictionary at any time: an equal part of the budgeted capacity.
+-- How many entries one domain may hold in the dictionary at any time: an equal part of the budgeted capacity. The floor holds only
+-- while the shares add up to the budget. On a cell with more domains than the floor can serve, a floor would let the shares sum
+-- past the dictionary and one domain's keys would again evict another's, so the share shrinks to an equal part (at least one
+-- entry) instead. A domain whose keys do not fit is still limited by its rules' overflow counters.
 function M.share(dictionary, domains)
     local entries = math.floor(dictionary:capacity() * M.BUDGET_FRACTION / M.ENTRY_BYTES)
-    return math.max(M.MINIMUM_SHARE, math.floor(entries / math.max(1, domains)))
+    local equal = math.floor(entries / math.max(1, domains))
+    if equal >= M.MINIMUM_SHARE then return equal end
+    return math.max(1, math.min(M.MINIMUM_SHARE, equal))
 end
 
 -- Admits one new entry of a domain against a per-window limit. An entry that lives for at most two windows is counted in the

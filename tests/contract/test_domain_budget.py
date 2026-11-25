@@ -67,9 +67,24 @@ class DomainBudget(unittest.TestCase):
     def test_a_domain_share_is_an_equal_part_of_the_budgeted_capacity_with_a_floor(self):
         out = self.lua("""
 local d = dictionary(100, 1048576)            -- 1 MiB / 256 bytes * 0.5 = 2048 entries
-print(budget.share(d, 1), budget.share(d, 4), budget.share(d, 16), budget.share(d, 100000), budget.share(d, 0))
+print(budget.share(d, 1), budget.share(d, 4), budget.share(d, 16), budget.share(d, 20), budget.share(d, 100000), budget.share(d, 0))
 """)
-        self.assertEqual(out.split(), ["2048", "512", "128", "100", "2048"])
+        # 2048 entries: 100 domains still get the floor of 100 (20 domains: 102), and more domains than that get an equal part.
+        self.assertEqual(out.split(), ["2048", "512", "128", "102", "1", "2048"])
+
+    def test_shares_never_add_up_to_more_than_the_budgeted_capacity_at_any_domain_count(self):
+        out = self.lua("""
+local d = dictionary(100, 32 * 1048576)      -- the production rate_rules dictionary: 65536 budgeted entries
+local worst = 0
+for _, hosts in ipairs({1, 10, 100, 655, 656, 1000, 5000, 100000}) do
+  local total = budget.share(d, hosts) * hosts
+  if hosts <= 655 then assert(total <= 65536, hosts) end
+  worst = math.max(worst, budget.share(d, hosts) == 1 and 1 or 0)
+end
+-- Beyond 655 domains the floor is dropped: the share is an equal part or one entry, never the floor of 100.
+print(budget.share(d, 655), budget.share(d, 656), budget.share(d, 1000), budget.share(d, 100000), worst)
+""")
+        self.assertEqual(out.split(), ["100", "99", "65", "1", "1"])
 
     def test_entries_are_admitted_up_to_the_limit_then_refused_and_the_window_resets(self):
         out = self.lua("""
