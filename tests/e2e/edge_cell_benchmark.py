@@ -56,6 +56,8 @@ WAF_PROFILES = {
             "off_categories": [], "off_rules": [], "log_only_rules": [], "exclusions": []},
     "balanced": {"name": "balanced", "paranoia_level": 1, "inbound_threshold": 5, "outbound_threshold": 4, "body_limit_bytes": 1048576,
                  "blocking": True, "off_categories": [], "off_rules": [], "log_only_rules": [], "exclusions": []},
+    "monitor": {"name": "monitor", "paranoia_level": 1, "inbound_threshold": 5, "outbound_threshold": 4, "body_limit_bytes": 1048576,
+                "blocking": False, "off_categories": [], "off_rules": [], "log_only_rules": [], "exclusions": []},
     "strict": {"name": "strict", "paranoia_level": 2, "inbound_threshold": 3, "outbound_threshold": 3, "body_limit_bytes": 262144,
                "blocking": True, "off_categories": [], "off_rules": [], "log_only_rules": [], "exclusions": []},
 }
@@ -64,12 +66,19 @@ local hosts = {}
 for name in string.gmatch(os.getenv("BENCH_HOSTS"), "[^,]+") do hosts[#hosts + 1] = name end
 local path = os.getenv("BENCH_PATH")
 local method = os.getenv("BENCH_METHOD") or "GET"
+local json_body = os.getenv("BENCH_JSON_BODY") == "1"
+local login_body = os.getenv("BENCH_LOGIN_BODY") == "1"
 local body = os.getenv("BENCH_BODY_BYTES") and string.rep("a", tonumber(os.getenv("BENCH_BODY_BYTES"))) or nil
 local counter = 0
 request = function()
     counter = counter + 1
     local headers = {Host = hosts[(counter % #hosts) + 1], ["User-Agent"] = "Mozilla/5.0 (X11; Linux x86_64) bench"}
     if body then headers["Content-Type"] = "application/x-www-form-urlencoded" end
+    if body and json_body then
+        headers["Content-Type"] = "application/json"
+        return wrk.format(method, path, headers, '{"messages":"' .. body .. '"}')
+    end
+    if body and login_body then return wrk.format(method, path, headers, "user=alice&field=" .. body) end
     return wrk.format(method, path, headers, body and ("field=" .. body) or nil)
 end
 done = function(summary, latency, requests)
@@ -152,7 +161,44 @@ def never_matching_rules(count: int) -> dict:
     }
 
 
-def runtime_document(hostnames: list[str], waf: str, certificate: str, private_key: str, cache_enabled: bool, request_rules: int = 0) -> dict:
+DETECTIONS = {
+    "credential_check": {"login_paths": [{"path": "/login", "format": "form", "username_field": "user", "password_field": "field"}], "body_bytes": 8192},
+    "sensitive_data": {"kinds": ["card", "iban", "private_key", "api_key"], "response_bytes": 16384},
+    "ai_protection": {"endpoints": ["/v1/chat"], "prompt_field": "messages", "body_bytes": 16384},
+}
+DETECTION_PATHS = {"credential_check": ("/login", "POST"), "sensitive_data": ("/page.html", "GET"), "ai_protection": ("/v1/chat", "POST")}
+
+
+def security_rule(identifier: int, conditions: list[dict], rate_limit: dict | None = None) -> dict:
+    rule = {"id": identifier, "name": None, "priority": identifier, "action": "block", "conditions": conditions}
+    if rate_limit:
+        rule["rate_limit"] = rate_limit
+    return rule
+
+
+def extra_security(args: argparse.Namespace) -> dict:
+    """Custom firewall rules that never match, and rate-limit rules that count every request but never trip, as the matrix asks."""
+    rules = [security_rule(index + 1, [{"field": "path", "operator": "equals", "value": f"/never-{index}"}]) for index in range(args.security_rules)]
+    for index in range(args.rate_limit_rules):
+        rules.append(security_rule(args.security_rules + index + 1, [{"field": "path", "operator": "starts_with", "value": "/"}],
+                                   {"key": "client_ip", "threshold": 1000000000, "period_seconds": 60, "duration_seconds": 10}))
+    extra = {"rules": rules}
+    if args.detection:
+        extra[args.detection] = DETECTIONS[args.detection]
+    return extra
+
+
+def waf_profile(args: argparse.Namespace) -> dict:
+    profile = dict(WAF_PROFILES[args.waf])
+    if args.log_only_rules:
+        catalog = json.loads((ROOT / "core/resources/contracts/crs-rules.json").read_text())["rules"]
+        identifiers = [int(entry["id"]) for entry in catalog][:args.log_only_rules]
+        profile["log_only_rules"] = identifiers
+    return profile
+
+
+def runtime_document(hostnames: list[str], waf: str, certificate: str, private_key: str, cache_enabled: bool, request_rules: int = 0,
+                     args: argparse.Namespace | None = None) -> dict:
     limits = {
         "requests_per_second": 1000000, "request_burst": 1000000, "connections_per_client": 100000,
         "connections_per_domain": 100000, "cache_admissions_per_second": 1000000,
@@ -172,8 +218,8 @@ def runtime_document(hostnames: list[str], waf: str, certificate: str, private_k
                            "connect_timeout_ms": 1000, "response_timeout_ms": 5000, "retry_count": 0, "websocket": False,
                            "health_check": None, "private_allowlist": ["172.16.0.0/12", "192.168.0.0/16", "10.0.0.0/8"],
                            "blocked_networks": [], "blocked_addresses": []},
-                "security": {"limits": limits, "rules": []},
-                "waf": WAF_PROFILES[waf],
+                "security": {"limits": limits, "rules": [], **(extra_security(args) if args else {})},
+                "waf": waf_profile(args) if args else WAF_PROFILES[waf],
                 "tls": {"mode": "custom", "certificate_id": "bench"},
                 **({"rules": never_matching_rules(request_rules)} if request_rules else {}),
             } for index, hostname in enumerate(hostnames)
@@ -210,7 +256,7 @@ def start(args: argparse.Namespace, directory: pathlib.Path, hostnames: list[str
         "-addext", "subjectAltName=" + ",".join(f"DNS:{host}" for host in hostnames),
         "-keyout", str(directory / "edge.key"), "-out", str(directory / "edge.crt"))
     runtime = runtime_document(hostnames, args.waf, (directory / "edge.crt").read_text(), (directory / "edge.key").read_text(),
-                               not args.no_cache, args.request_rules)
+                               not args.no_cache, args.request_rules, args)
     runtime_file = directory / "active.json"
     runtime_file.write_text(json.dumps(runtime, separators=(",", ":")))
     stamp_file = directory / "active.stamp"
@@ -277,6 +323,10 @@ def measure(args: argparse.Namespace, hostnames: list[str], label: str) -> dict:
     env_args = ["-e", f"BENCH_HOSTS={','.join(hostnames)}", "-e", f"BENCH_PATH={args.path}", "-e", f"BENCH_METHOD={args.method}"]
     if args.body_bytes:
         env_args += ["-e", f"BENCH_BODY_BYTES={args.body_bytes}"]
+    if args.detection == "ai_protection":
+        env_args += ["-e", "BENCH_JSON_BODY=1"]
+    if args.detection == "credential_check":
+        env_args += ["-e", "BENCH_LOGIN_BODY=1"]
     exec_prefix = ["docker", "exec"] + env_args
     if args.scheme == "https":
         cell_address = run("docker", "inspect", "--format", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}", CELL).stdout.strip()
@@ -301,7 +351,8 @@ def measure(args: argparse.Namespace, hostnames: list[str], label: str) -> dict:
     errors = sum(data[key] for key in ("errors_connect", "errors_read", "errors_write", "errors_timeout", "errors_status"))
     return {
         "label": label, "waf": args.waf, "request_rules_per_type": args.request_rules, "scheme": args.scheme, "path": args.path, "method": args.method,
-        "body_bytes": args.body_bytes, "cache": not args.no_cache, "cell_cpus": args.cpus, "connections": args.connections,
+        "body_bytes": args.body_bytes, "cache": not args.no_cache, "log_only_rules": args.log_only_rules,
+        "security_rules": args.security_rules, "rate_limit_rules": args.rate_limit_rules, "detection": args.detection, "cell_cpus": args.cpus, "connections": args.connections,
         "hostnames": len(hostnames), "duration_s": round(seconds, 2),
         "requests": data["requests"], "rps": round(rps, 1), "errors": errors, "status_errors": data["errors_status"],
         "p50_ms": round(data["p50_ms"], 2), "p95_ms": round(data["p95_ms"], 2), "p99_ms": round(data["p99_ms"], 2),
@@ -343,6 +394,10 @@ def main() -> None:
     parser.add_argument("--cell-env", action="append", default=[], help="extra NAME=value for the cell")
     parser.add_argument("--nginx-conf", default="", help="mount this file as the cell's nginx.conf (for A/B experiments)")
     parser.add_argument("--keep", action="store_true", help="leave the containers running after the benchmark")
+    parser.add_argument("--log-only-rules", type=int, default=0, help="put this many CRS rules in log-only mode")
+    parser.add_argument("--security-rules", type=int, default=0, help="add this many never-matching custom firewall rules to every host")
+    parser.add_argument("--rate-limit-rules", type=int, default=0, help="add this many rate-limit rules that count every request and never trip")
+    parser.add_argument("--detection", choices=sorted(DETECTIONS), default="", help="turn one detection on for every host")
     parser.add_argument("--request-rules", type=int, default=0, help="add this many never-matching request rules of each type to every host")
     args = parser.parse_args()
     hostnames = [f"bench-{index}.bench.test" for index in range(args.hostnames)]
