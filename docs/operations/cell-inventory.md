@@ -29,6 +29,10 @@ All cell ports are published on loopback for diagnostics only. Customer traffic 
 
 Each cell container has its own tmpfs cache, request-temporary storage, and logs. It runs read-only with limits of 512 MiB memory, 0.5 CPU, 128 processes, and 32,768 open files. The agent has smaller limits and no Docker socket.
 
+## Rule set version
+
+Each cell reports the commit of the WAF engine (ModSecurity) and of the OWASP Core Rule Set it was built from. The image records them at build time from its own checkouts, and each heartbeat carries them. The **Cells** list shows **Pinned** when both equal the versions pinned by this release, **Different** when either does not, and **Not reported** for a cell running an image that predates version reporting. Hover the badge for the first 12 characters of each commit. The `CellRulesetDiffers` alert fires after 2 minutes. A different cell keeps serving with its own rule set, so the fix is to update its image through a Fleet release.
+
 ## Assign a service pool to a slot
 
 A slot serves nothing until it belongs to a service pool. Creating an edge or a pool in the panel or API assigns no slot. A PoP enrolled with the Fleet tool is the exception: `cdnf:edges:enroll` puts all its slots in the default shared pool.

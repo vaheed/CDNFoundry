@@ -198,6 +198,14 @@ Every alert links here. To find a runbook from an alert's name, look it up in th
 
 **First action:** Check whether the PoP still serves (Synthetic probes). If it does not, drain it; if it does, restart only the agent.
 
+## Cell rule set differs {#cell-ruleset-differs}
+
+**Open:** Fleet → Edges → the edge → Cells, column **Rule set**.
+
+**Likely causes:** The cell runs an older or locally built edge-runtime image, or its image predates version reporting.
+
+**First action:** Roll the edge to the current signed release with Fleet. Traffic is not affected; the cell keeps serving its own rule set until then.
+
 ## Pool serving the last published set {#pool-serving-last-published-set}
 
 **Open:** PoP fleet.

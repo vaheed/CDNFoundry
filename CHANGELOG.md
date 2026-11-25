@@ -7,8 +7,13 @@ single source of truth; `make version-check` enforces it.
 
 ## [Unreleased]
 
+### Added
+
+- Cells report the WAF engine and Core Rule Set commits they were built from. The Cells list shows whether they match the pinned versions, and the `CellRulesetDiffers` alert fires when they do not.
+
 ### Security
 
+- On cells with more domains than the 100-entry rate-limit floor can serve, domain shares shrink to an equal part instead of oversubscribing the shared dictionary, so one domain's keys cannot evict another's.
 - Rate-limit rules no longer let client keys through once a domain's counter share is exhausted: untracked keys share one bounded overflow counter per rule and window, held to the rule's threshold.
 
 ## [2.1.5] - 2026-11-25

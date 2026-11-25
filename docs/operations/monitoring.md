@@ -118,6 +118,7 @@ The two provisioned [Grafana command centers](grafana.md) read these metrics, re
 | `TelemetryDeliveryFailures` | Vector component errors increase |
 | `TelemetryBufferNearLimit` | a ClickHouse buffer is over 80% of its limit for 5 minutes |
 | `TelemetryCollectorUnavailable` | Vector scrape down for 2 minutes |
+| `CellRulesetDiffers` | an assigned cell runs a WAF engine or rule set commit that differs from the pinned one, or reports none, for 2 minutes |
 
 The rule files in `docker/prometheus/` define more alerts for edge gateways, traffic ratios, propagation, security, SLO burn, Loki, and operational logs. See [operational logging](operational-logging.md) for the log alerts.
 

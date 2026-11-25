@@ -320,7 +320,7 @@ rate** in the rule sheet, or send a `rate_limit` object in the API:
 - A domain may have 20 rate-limit rules (a platform setting, never above 50). The
   counters live in fixed shared memory on the cell, and **each domain has its own
   share of it**: an equal part of half the dictionary, divided by the hostnames
-  the cell serves, with a floor of 100 entries. Counters take 70% of the share,
+  the cell serves, with a floor of 100 entries while the shares fit (up to about 650 domains on a cell). Beyond that the floor is dropped and the share is an equal part, at least one entry, so the shares never add up to more than the budget. Counters take 70% of the share,
   active mitigations 20%, and the last 10% is reserved for overflow counters. A
   domain that sees more distinct keys than its share (many client addresses or
   header values) records a `rate_limit_state_full` event, and every key without a
