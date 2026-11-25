@@ -200,7 +200,7 @@ Every alert links here. To find a runbook from an alert's name, look it up in th
 
 ## Cell rule set differs {#cell-ruleset-differs}
 
-**Open:** Fleet → Edges → the edge → Cells, column **Rule set**.
+**Open:** Fleet → Service pools, column **Rule set**, then Fleet → Edges → the edge → Cells, column **Rule set**.
 
 **Likely causes:** The cell runs an older or locally built edge-runtime image, or its image predates version reporting.
 

@@ -9,7 +9,7 @@ single source of truth; `make version-check` enforces it.
 
 ### Added
 
-- Cells report the WAF engine and Core Rule Set commits they were built from. The Cells list shows whether they match the pinned versions, and the `CellRulesetDiffers` alert fires when they do not.
+- Cells report the WAF engine and Core Rule Set commits they were built from. The Cells list shows whether they match the pinned versions, and the `CellRulesetDiffers` alert fires when they do not. The Service pools list shows the same state for each pool.
 
 ### Security
 
