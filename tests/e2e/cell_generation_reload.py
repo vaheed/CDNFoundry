@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """A cell decodes its runtime state only when the agent's stamp changes, and its workers follow the CPU limit."""
 
+import os
 import pathlib
 import subprocess
 import tempfile
 import time
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-CELL_IMAGE = "cdnfoundry-dev-edge-a-cell-03"
+# The image built from this checkout. A long-lived development image can predate the configuration the test mounts over it.
+CELL_IMAGE = os.environ.get("CDNF_WAF_IMAGE", "cdnfoundry/edge-runtime:waf-qualification")
 NETWORK = "cdnfoundry-dev_telemetry"
 NAME = "cdnfoundry-generation-reload-test"
 
