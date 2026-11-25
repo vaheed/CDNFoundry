@@ -500,11 +500,50 @@ exclusion scope and the bypass attempts. A failure injection that stops the
 scoring listener and checks the fallback, the counter, and the alert. The
 benchmark compared with Phase 1.
 
-**Completion checkpoint, 21 November 2026.**
+**Recorded results, 26 November 2026.**
+
+- **Body coverage (stage 1).** The Phase 1 harness re-run on the Phase 2 image: every attack
+  blocked with a `Content-Length` is also blocked chunked, over HTTP/2 over TLS and over
+  cleartext HTTP/2 with no length, in query, form, JSON and multipart bodies (all expectations
+  met, 0 unmet). The body-admission, failure-policy and scoring-listener-failure qualifications
+  (`waf_body_inspection.py`, `managed_waf.py`) pass on the new image.
+- **Matched rules (stage 2).** Each scoring CRS rule appends its id when the image is built, the
+  scoring listener returns the ids with the points, and the cell keeps at most 8 in the new
+  `waf_rule_ids` field. In the re-run, 56,737 of 56,737 blocks (100%) carry a matched rule other
+  than `949110`. Categories are the first three digits of the id. A block decided by the inline
+  fallback after a scoring failure has no ids and still says `949110`.
+- **Scoped exclusions (stage 2).** `tuning.scoped_exclusions`: rules or categories off for a
+  normalized path prefix, methods, or both, in the API and the domain WAF dialog. The real-cell
+  qualification (`waf_scoped_exclusions.py`) shows a rule stops only inside its scope: a longer
+  name, another path, dot segments, case, another method, and the excluded path in the query, a
+  header, a path parameter or a later segment do not enter it, and another category still blocks
+  inside it. Per-parameter exclusions stay unavailable.
+- **Explicit failure (stage 2).** Scoring failures were already logged as `waf_inspection_failed`;
+  they are now exported as `cdnfoundry_waf_scoring_failures_recent` and alerted by
+  `WafScoringFailing` (rule-tested), with a runbook. The fallback and its unadjusted rules are
+  documented.
+- **Clean false positives** at Recommended are unchanged against the Phase 1 baseline
+  (`compare` reports no regression for all 13 hosts).
+- **One pass (stage 3): deferred, with the measured cost.** The duplicate pass exists only when a
+  domain has log-only rules: ten of them raise a cached GET from 3,361 to 6,400 µs of CPU
+  (+90%). A single-pass candidate is possible in principle, because every scoring rule now
+  reports its id and could report its points, letting the cell subtract log-only matches from
+  one evaluation. It is not admitted: equivalence with removing the rule is unproven (CRS rules
+  read accumulated scores, and per-category and per-paranoia totals would each need the same
+  subtraction), and keeping the existing connection for several requests was not evaluated.
+  Inspection is not reduced for a target; the two-pass path stays, and domains pay the measured
+  cost only when they use log-only rules.
+- **Cost against the Phase 1 controls** (medians of three runs, same method): cached GET CPU per
+  request 399 vs 436 µs Off, 3,369 vs 2,914 µs Observe, 2,852 vs 3,361 µs Recommended and
+  4,245 vs 4,006 µs High; a 4 KiB POST at Recommended 9,077 vs 10,440 µs; peak memory within 2.4
+  MiB. The differences run both ways, from -15% to +16%, which is the size of the run-to-run
+  spread on this host, so no change in cost is claimed.
+
+**Completion checkpoint, 26 November 2026.**
 
 | Implementation | Documentation | Automated/runtime | Browser |
 | --- | --- | --- | --- |
-| Body reader present; detail/exclusions/optimization open | Current body behavior recorded; remaining scope open | Historical body passes; complete phase open | Exclusion/detail UI gate open |
+| Complete for stages 1 and 2. Stage 3 deferred with the measured cost recorded | Complete: WAF reference, managed WAF guide, telemetry schema, runbook, monitoring, baseline page | Passed: harness re-run (no regression, 100% of blocks name a rule, 0 unmet evasion expectations), body inspection, managed WAF, scoped exclusion and mismatch qualifications on the new image, Vector and ClickHouse schema checks, alert rule tests, full PHP suite (802 passed), latency subset. Fleet qualification stays open | Passed: `waf-tuning` spec with the new exclusion form (placeholders, tooltips, accessibility, four snapshots); earlier `edge-health`, `screens-rich` and `every-screen` |
 
 ---
 

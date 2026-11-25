@@ -1,0 +1,165 @@
+{
+ "cases": {
+  "balanced-body-0": {
+   "body_bytes": 0,
+   "cell_cpu_cores": 0.99,
+   "cpu_us_per_request": 2851.9,
+   "cpu_us_per_request_runs": [
+    3227.6,
+    2663.0,
+    2851.9
+   ],
+   "errors": 0,
+   "group": "profile-by-body",
+   "p50_ms": 81.13,
+   "p95_ms": 145.68,
+   "p99_ms": 194.19,
+   "peak_rss_mib": 78.6,
+   "request_count": 20786,
+   "requests_per_second": 350.9,
+   "rps_runs": [
+    310.3,
+    375.9,
+    350.9
+   ],
+   "runs": 3,
+   "status_errors": 0,
+   "throttled_periods": 38,
+   "waf": "Recommended"
+  },
+  "balanced-body-4096": {
+   "body_bytes": 4096,
+   "cell_cpu_cores": 0.99,
+   "cpu_us_per_request": 9077.3,
+   "cpu_us_per_request_runs": [
+    8595.6,
+    9077.3,
+    9557.7
+   ],
+   "errors": 0,
+   "group": "profile-by-body",
+   "p50_ms": 267.23,
+   "p95_ms": 415.35,
+   "p99_ms": 478.75,
+   "peak_rss_mib": 80.9,
+   "request_count": 6638,
+   "requests_per_second": 110.2,
+   "rps_runs": [
+    116.3,
+    110.2,
+    104.7
+   ],
+   "runs": 3,
+   "status_errors": 0,
+   "throttled_periods": 30,
+   "waf": "Recommended"
+  },
+  "monitor-body-0": {
+   "body_bytes": 0,
+   "cell_cpu_cores": 0.99,
+   "cpu_us_per_request": 3368.9,
+   "cpu_us_per_request_runs": [
+    3370.1,
+    3096.9,
+    3368.9
+   ],
+   "errors": 0,
+   "group": "profile-by-body",
+   "p50_ms": 97.29,
+   "p95_ms": 176.12,
+   "p99_ms": 209.32,
+   "peak_rss_mib": 78.4,
+   "request_count": 18378,
+   "requests_per_second": 296.9,
+   "rps_runs": [
+    296.8,
+    323.1,
+    296.9
+   ],
+   "runs": 3,
+   "status_errors": 0,
+   "throttled_periods": 43,
+   "waf": "Observe"
+  },
+  "off-body-0": {
+   "body_bytes": 0,
+   "cell_cpu_cores": 0.98,
+   "cpu_us_per_request": 398.7,
+   "cpu_us_per_request_runs": [
+    403.5,
+    398.7,
+    374.3
+   ],
+   "errors": 0,
+   "group": "profile-by-body",
+   "p50_ms": 11.65,
+   "p95_ms": 21.2,
+   "p99_ms": 30.81,
+   "peak_rss_mib": 77.1,
+   "request_count": 153297,
+   "requests_per_second": 2507.8,
+   "rps_runs": [
+    2474.6,
+    2507.8,
+    2671.5
+   ],
+   "runs": 3,
+   "status_errors": 0,
+   "throttled_periods": 25,
+   "waf": "Off"
+  },
+  "strict-body-0": {
+   "body_bytes": 0,
+   "cell_cpu_cores": 0.99,
+   "cpu_us_per_request": 4245.3,
+   "cpu_us_per_request_runs": [
+    4245.3,
+    4471.7,
+    3876.0
+   ],
+   "errors": 0,
+   "group": "profile-by-body",
+   "p50_ms": 119.65,
+   "p95_ms": 238.19,
+   "p99_ms": 301.92,
+   "peak_rss_mib": 78.4,
+   "request_count": 14373,
+   "requests_per_second": 235.7,
+   "rps_runs": [
+    235.7,
+    223.7,
+    257.8
+   ],
+   "runs": 3,
+   "status_errors": 0,
+   "throttled_periods": 32,
+   "waf": "High"
+  }
+ },
+ "created_at": "2026-11-25T22:08:10+00:00",
+ "environment": {
+  "cpu_model": "Intel(R) Xeon(R) CPU E5-2697 v4 @ 2.30GHz",
+  "docker": "29.1.3",
+  "edge_image_id": "sha256:1978b4926f6c1d99bffe2e8c8d767e0f7f13bc278447cee010db0e327189efe7",
+  "host_logical_cpus": 32,
+  "kernel": "6.8.0-149-generic",
+  "workers": "worker_processes 1;"
+ },
+ "git": {
+  "commit": "8e53836e1302a4415bf855a4d2e2762a468f744d",
+  "dirty": false
+ },
+ "kind": "waf-latency-benchmark",
+ "label": "phase-2 re-run",
+ "method": {
+  "cell_cpus": 1.0,
+  "connections": 32,
+  "duration_s": 20,
+  "hostnames": 20,
+  "note": "development host; wrk in its own container on the same host. Medians of the repeats.",
+  "object": "10 KB cached GET for body 0; POST with no cache otherwise",
+  "repeats": 3,
+  "warmup_s": 5
+ },
+ "record_version": 1
+}
