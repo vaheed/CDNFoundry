@@ -5,36 +5,30 @@ RUN go mod download
 COPY compiler/*.go ./
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /mmdb-compiler .
 
-FROM debian:trixie-slim@sha256:8aa5a7bf5a1955bddbe7d74fcdd0b91ab30e74362a8b73af672b0481b35b44a0 AS location-build
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential pkg-config python3-dev libssl-dev gettext ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-RUN apt-get update && apt-get install -y --no-install-recommends autoconf automake libtool intltool autopoint \
-    && rm -rf /var/lib/apt/lists/*
+FROM alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf AS location-build
+RUN apk add --no-cache --upgrade build-base pkgconf python3-dev openssl-dev gettext-dev \
+    autoconf automake libtool intltool linux-headers
 ADD --checksum=sha256:222260d6f900dcec736671011037904e25be615df870b16a3163829be9432de0 \
     https://source.ipfire.org/releases/libloc/libloc-0.9.20.tar.gz /tmp/libloc.tar.gz
 RUN mkdir /build && tar -xzf /tmp/libloc.tar.gz -C /build --strip-components=1 \
-    && cd /build && ./autogen.sh && ./configure --prefix=/usr/local --disable-perl --disable-lua \
+    && cd /build && ./autogen.sh && ./configure --prefix=/usr --disable-perl --disable-lua \
        --disable-man-pages --with-systemd=no --disable-static \
-       pythondir=/usr/local/lib/python3.13/dist-packages pyexecdir=/usr/local/lib/python3.13/dist-packages \
     && make -j2 && make DESTDIR=/out install
 
-FROM debian:trixie-slim@sha256:8aa5a7bf5a1955bddbe7d74fcdd0b91ab30e74362a8b73af672b0481b35b44a0
+FROM alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
 ARG SOURCE_REVISION=development RELEASE_VERSION=development BUILD_DATE=1970-01-01T00:00:00Z
 LABEL org.opencontainers.image.source="https://github.com/vaheed/CDNFoundry" \
       org.opencontainers.image.revision="${SOURCE_REVISION}" org.opencontainers.image.version="${RELEASE_VERSION}" \
       org.opencontainers.image.created="${BUILD_DATE}" org.opencontainers.image.description="CDNFoundry bounded MMDB updater" \
       org.opencontainers.image.licenses="Apache-2.0" org.opencontainers.image.documentation="https://vaheed.github.io/CDNFoundry/"
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    bash ca-certificates coreutils curl file gzip mmdb-bin python3 libssl3t64 tar unzip xz-utils \
-    && rm -rf /var/lib/apt/lists/*
-COPY --from=location-build /out/usr/local /usr/local
-RUN mkdir -p /usr/local/lib/python3.13/dist-packages \
-    && mv /usr/local/lib/python3.13/site-packages/* /usr/local/lib/python3.13/dist-packages/ \
-    && rmdir /usr/local/lib/python3.13/site-packages \
-    && rm -f /usr/local/var/lib/location/database.db /usr/local/etc/cron.daily/location-update \
-    && ldconfig && python3 -c 'import location; assert location.__version__ == "0.9.20"'
+RUN apk add --no-cache --upgrade python3 bash ca-certificates coreutils \
+    'curl>=8.22.0-r0' 'libcurl>=8.22.0-r0' 'libexpat>=2.10.0-r0' file \
+    'gzip>=1.14-r3' libmaxminddb tar unzip xz \
+    'libcrypto3>=3.5.8-r0' 'libssl3>=3.5.8-r0' 'musl-utils>=1.2.6-r3'
+COPY --from=location-build /out/usr /usr
+RUN rm -f /usr/var/lib/location/database.db /usr/etc/cron.daily/location-update \
+    && python3 -c 'import location; assert location.__version__ == "0.9.20"'
 COPY --from=compiler /mmdb-compiler /usr/local/bin/mmdb-compiler
 COPY ipfire-export.py /usr/local/bin/ipfire-export
 # Public verification key from the official libloc 0.9.20 release; changes require image review.
