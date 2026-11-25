@@ -261,7 +261,7 @@ class EdgeAgentController extends Controller
             'gateway.errors' => ['sometimes', 'integer', 'min:0'],
             'gateway.candidate_rejections' => ['sometimes', 'integer', 'min:0'],
             'cells.*.name' => ['required', 'regex:/^cell-(0[1-9]|[12][0-9]|3[0-2])$/', 'distinct'], 'cells.*.status' => ['required', 'in:ready,degraded,drained,stopped'],
-            'cells.*.capacity' => ['required', 'array', 'max:20'],
+            'cells.*.capacity' => ['required', 'array', 'max:24'],
             'noisy_domains' => ['sometimes', 'array'], 'passive_origins' => ['sometimes', 'array', 'max:100'],
         ]);
         // Liveness comes from the authenticated request alone. The two event lists are advisory:
@@ -292,6 +292,12 @@ class EdgeAgentController extends Controller
         if ($advisoryDropped > 0) {
             Log::warning('edge heartbeat dropped invalid advisory entries', ['edge_id' => $edge->id, 'dropped' => $advisoryDropped]);
         }
+        // The commit report is checked on its own: nested rules would make validation drop every other capacity field.
+        $request->validate([
+            'cells.*.capacity.ruleset_versions' => ['sometimes', 'array', 'max:4'],
+            'cells.*.capacity.ruleset_versions.crs' => ['nullable', 'string', 'regex:/^[a-f0-9]{40}$/'],
+            'cells.*.capacity.ruleset_versions.modsecurity' => ['nullable', 'string', 'regex:/^[a-f0-9]{40}$/'],
+        ]);
         $knownCells = $edge->cells()->pluck('id', 'name');
         if (isset($data['runtime_versions'])) {
             RuntimeVersions::validate($data['runtime_versions']);

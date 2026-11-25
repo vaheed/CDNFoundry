@@ -36,6 +36,8 @@ RUN git clone https://github.com/owasp-modsecurity/ModSecurity-nginx.git /tmp/Mo
     && LD_LIBRARY_PATH=/usr/local/modsecurity/lib MODSECURITY_INC=/usr/local/modsecurity/include MODSECURITY_LIB=/usr/local/modsecurity/lib \
        ./configure --with-compat --add-dynamic-module=/tmp/ngx_brotli --add-dynamic-module=/tmp/ModSecurity-nginx \
     && make modules
+# The commits the runtime was built from, read from the checkouts themselves, so a cell can report exactly what it runs.
+RUN printf '{"crs":"%s","modsecurity":"%s"}\n' "$(git -C /tmp/coreruleset rev-parse HEAD)" "$(git -C /tmp/ModSecurity rev-parse HEAD)" > /tmp/ruleset-versions.json
 
 FROM openresty/openresty:1.31.1.1-2-alpine@sha256:5f621903212ed7194a6bd31de7a76c1cfbe92e7b7a6fdb0f2b38626e97bd38c4
 ARG SOURCE_REVISION=development RELEASE_VERSION=development BUILD_DATE=1970-01-01T00:00:00Z
@@ -59,6 +61,7 @@ COPY --from=module-builder /tmp/ModSecurity/modsecurity.conf-recommended /etc/cd
 COPY --from=module-builder /tmp/ModSecurity/unicode.mapping /etc/cdnfoundry/unicode.mapping
 COPY --from=module-builder /tmp/coreruleset/crs-setup.conf.example /etc/cdnfoundry/crs-setup.conf
 COPY --from=module-builder /tmp/coreruleset/rules /etc/cdnfoundry/crs/rules
+COPY --from=module-builder /tmp/ruleset-versions.json /etc/cdnfoundry/ruleset-versions.json
 COPY docker/openresty/datasets/common-passwords.txt /tmp/common-passwords.txt
 COPY scripts/ci/build_leaked_passwords.py /tmp/build_leaked_passwords.py
 RUN apk add --no-cache --virtual .dataset-build python3 && python3 /tmp/build_leaked_passwords.py /tmp/common-passwords.txt /etc/cdnfoundry/leaked-passwords.sha256 \

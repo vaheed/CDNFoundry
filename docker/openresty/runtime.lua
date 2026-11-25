@@ -6,6 +6,20 @@ local cache_target = require "cache_key"
 local waf_body = require "waf_body"
 local domain_budget = require "domain_budget"
 local client_keys = require "client_key"
+
+-- The commits of the rule engine and the rule set this image was built from, written at build time. A cell reports them in its
+-- status so the control plane can compare them with the pinned versions. Anything that is not a full commit id is dropped.
+local ruleset_versions = (function()
+    local file = io.open("/etc/cdnfoundry/ruleset-versions.json", "rb")
+    local decoded = file and cjson.decode(file:read(4096) or "")
+    if file then file:close() end
+    local versions = {}
+    for _, component in ipairs({"crs", "modsecurity"}) do
+        local value = type(decoded) == "table" and decoded[component]
+        versions[component] = type(value) == "string" and value:match("^%x+$") and #value == 40 and value or cjson.null
+    end
+    return versions
+end)()
 local ffi = require "ffi"
 ffi.cdef[[
 int kill(int pid, int sig);
@@ -2857,6 +2871,7 @@ function M.passive_failures()
 				active_revision = state.sequence,
 				active_generation = state.generation_id,
                 openresty_version = ngx.config.nginx_version,
+                ruleset_versions = ruleset_versions,
                 -- The agent's own status request is one of Nginx's open connections; the count is the clients'.
                 active_connections = math.max(0, (tonumber(ngx.var.connections_active) or 0) - 1),
                 requests_per_second = requests_per_second,

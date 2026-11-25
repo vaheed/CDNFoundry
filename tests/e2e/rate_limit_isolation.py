@@ -113,6 +113,10 @@ def main() -> None:
                 time.sleep(1)
             else:
                 raise AssertionError(run("docker", "logs", CELL, check=False).stderr)
+            # The running cell reports the commits its image was built from, and they are the pinned ones.
+            status = json.loads(run("docker", "exec", CELL, "wget", "-q", "-O-", "--header=X-Edge-Status-Token: e2e", "http://127.0.0.1:9080/passive-failures").stdout)
+            pins = json.loads((ROOT / "core/resources/contracts/runtime-pins.json").read_text())
+            assert status["cell"]["capacity"]["ruleset_versions"] == pins, status["cell"]["capacity"].get("ruleset_versions")
             # "ready" used one count of its own key; the victim's keys below are different ones.
 
             # The rule counts in fixed 600 s windows. A window ending during the test would reset the victim's counter for a reason
