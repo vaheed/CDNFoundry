@@ -12,6 +12,7 @@ use App\Models\EdgeTask;
 use App\Models\Operation;
 use App\Support\FilamentHelp;
 use App\Support\PlatformSettings;
+use App\Support\RulesetPins;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\Select;
@@ -58,6 +59,18 @@ class CellsRelationManager extends RelationManager
                         $state === 'degraded' => 'warning',
                         default => 'info',
                     }),
+                TextColumn::make('capacity.ruleset_versions')->label(FilamentHelp::label('Rule set', 'The WAF engine and rule set commits this cell runs, compared with the versions pinned by this release. A different or unreported cell needs its image updated.'))->badge()
+                    ->state(fn (EdgeCell $record): string => RulesetPins::state(data_get($record->capacity, 'ruleset_versions')))
+                    ->formatStateUsing(fn (string $state): string => match ($state) {
+                        RulesetPins::MATCHING => 'Pinned',
+                        RulesetPins::DIFFERENT => 'Different',
+                        default => 'Not reported',
+                    })->color(fn (string $state): string => match ($state) {
+                        RulesetPins::MATCHING => 'success',
+                        RulesetPins::DIFFERENT => 'danger',
+                        default => 'gray',
+                    })->tooltip(fn (EdgeCell $record): ?string => is_array(data_get($record->capacity, 'ruleset_versions'))
+                        ? 'CRS '.substr((string) data_get($record->capacity, 'ruleset_versions.crs'), 0, 12).', ModSecurity '.substr((string) data_get($record->capacity, 'ruleset_versions.modsecurity'), 0, 12) : null),
                 TextColumn::make('capacity.assigned_domain_count')->label('Domains')->alignEnd()->placeholder('Not reported'),
                 TextColumn::make('capacity.active_connections')->label('Connections')->alignEnd()->placeholder('Not reported'),
                 TextColumn::make('capacity.cpu_usage')->label('CPU')->alignEnd()->placeholder('Not reported')

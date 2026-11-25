@@ -8,6 +8,7 @@ use App\Models\DnsDeployment;
 use App\Models\Edge;
 use App\Models\EdgeArtifact;
 use App\Models\EdgeCell;
+use App\Support\RulesetPins;
 use App\Models\EdgePool;
 use App\Models\EdgePoolEndpoint;
 use App\Models\EmergencyMode;
@@ -125,6 +126,9 @@ class MetricsController extends Controller
             $pool = $cell->pool?->id ?? 0;
             $revision = (int) ($cell->edge->capacity['gateway']['active_revision'] ?? 0);
             $lines[] = sprintf('cdnfoundry_cell_runtime_state{edge="%s",pop="%s",pool="%s",cell="%s",status="%s",revision="%d"} 1', $cell->edge_id, $this->label($popNames[$cell->edge_id] ?? 'unknown'), $pool, $cell->name, $cell->status, $revision);
+            if ($cell->edge_pool_id !== null && $cell->status !== 'stopped' && $capacity !== []) {
+                $lines[] = sprintf('cdnfoundry_cell_ruleset_mismatch{edge="%s",pop="%s",pool="%s",cell="%s"} %d', $cell->edge_id, $this->label($popNames[$cell->edge_id] ?? 'unknown'), $pool, $cell->name, RulesetPins::state($capacity['ruleset_versions'] ?? null) === RulesetPins::MATCHING ? 0 : 1);
+            }
             foreach ([['cache_usage', 'cache_limit', 'cache'], ['memory_usage', 'memory_limit', 'memory'], ['active_connections', 'connection_limit', 'connections']] as [$used, $limit, $resource]) {
                 if (is_numeric($capacity[$used] ?? null) && is_numeric($capacity[$limit] ?? null)) {
                     $lines[] = sprintf('cdnfoundry_cell_capacity_ratio{edge="%s",pop="%s",pool="%s",cell="%s",resource="%s"} %.6f', $cell->edge_id, $this->label($popNames[$cell->edge_id] ?? 'unknown'), $pool, $cell->name, $resource, (float) $capacity[$limit] > 0 ? (float) $capacity[$used] / (float) $capacity[$limit] : 0);

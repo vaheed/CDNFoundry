@@ -26,3 +26,17 @@ test('the edge page states the serving fact next to the heartbeat', async ({ pag
     await expect(page.getByText('Serving', { exact: true }).first()).toBeVisible();
     await expectAccessible(page);
 });
+
+test('the cells list states whether each cell runs the pinned rule set', async ({ page }) => {
+    await signIn(page, 'admin', 'admin@browser.test', adminPassword);
+    await page.goto('/admin/edges');
+    await page.getByRole('row').filter({ hasText: 'edge-with-a-very-long-point-of-presence-name' }).getByRole('link').first().click();
+    await settle(page);
+    await page.getByRole('tab', { name: /Cells/ }).click();
+    await settle(page);
+    await expect(page.getByRole('columnheader', { name: /Rule set/ })).toBeVisible();
+    // The seeded cells never reported commits, so none of them can be called pinned.
+    await expect(page.getByText('Not reported', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('Pinned', { exact: true })).toHaveCount(0);
+    await expectAccessible(page);
+});

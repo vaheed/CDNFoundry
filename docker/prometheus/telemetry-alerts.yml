@@ -271,6 +271,14 @@ groups:
           summary: An edge endpoint has not acknowledged its desired map
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#stale-edge-map-or-endpoint-mismatch
           dashboard_url: /d/cdnf-propagation
+      - alert: CellRulesetDiffers
+        expr: cdnfoundry_cell_ruleset_mismatch == 1
+        for: 2m
+        labels: { team: noc, severity: warning, dashboard: cdnf-propagation }
+        annotations:
+          summary: A cell runs a WAF engine or rule set that differs from the pinned version, or does not report it
+          runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#cell-ruleset-differs
+          dashboard_url: /d/cdnf-propagation
       - alert: EdgeCellCapacityPressure
         expr: cdnfoundry_cell_capacity_ratio >= 0.8
         for: 5m
