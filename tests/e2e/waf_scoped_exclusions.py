@@ -25,9 +25,11 @@ SQLI = urllib.parse.quote("1' UNION SELECT username, password FROM users-- -", s
 run = base.run
 
 
-def curl(ip: str, hostname: str, target: str, method: str = "GET", data: str | None = None) -> int:
+def curl(ip: str, hostname: str, target: str, method: str = "GET", data: str | None = None, headers: tuple[str, ...] = ()) -> int:
     command = ["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", "20", "--path-as-is", "--resolve", f"{hostname}:8080:{ip}",
                "-H", "User-Agent: CDNFoundry-WAF-Test/1.0", "-X", method]
+    for header in headers:
+        command += ["-H", header]
     if data is not None:
         command += ["-H", "Content-Type: application/x-www-form-urlencoded", "--data-binary", data]
     command.append(f"http://{hostname}:8080{target}")
@@ -82,6 +84,11 @@ def main() -> None:
             expect(403, f"/editor/../other?q={XSS}", "a dot segment is resolved before the scope is compared")
             expect(403, f"/Editor?q={XSS}", "the comparison is case sensitive")
             expect(ALLOWED, f"/%65ditor?q={XSS}", "a percent-escaped spelling is the same normalized path")
+            # Naming the excluded path somewhere else does not put the request in scope.
+            expect(403, f"/other?next=/editor&q={XSS}", "the excluded path in the query string")
+            expect(403, f"/other?q={XSS}", "the excluded path in a header", headers=("X-Original-URL: /editor", "Referer: https://scoped.waf.test/editor"))
+            expect(403, f"/other;/editor?q={XSS}", "the excluded path after a path parameter")
+            expect(403, f"/other/editor?q={XSS}", "the excluded path as a later segment")
             # The same payload on a domain without the exclusion, and another kind of attack inside the scope, still block.
             assert curl(ip, "plain.waf.test", f"/editor?q={XSS}") == 403
             expect(403, f"/editor?id={SQLI}", "SQL injection is not in the excluded category")
