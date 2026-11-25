@@ -7,6 +7,10 @@ single source of truth; `make version-check` enforces it.
 
 ## [Unreleased]
 
+### Security
+
+- Rate-limit rules no longer let client keys through once a domain's counter share is exhausted: untracked keys share one bounded overflow counter per rule and window, held to the rule's threshold.
+
 ## [2.1.5] - 2026-11-25
 
 ### Added

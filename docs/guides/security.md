@@ -320,13 +320,17 @@ rate** in the rule sheet, or send a `rate_limit` object in the API:
 - A domain may have 20 rate-limit rules (a platform setting, never above 50). The
   counters live in fixed shared memory on the cell, and **each domain has its own
   share of it**: an equal part of half the dictionary, divided by the hostnames
-  the cell serves, with a floor of 100 entries. Counters take three quarters of the
-  share and active mitigations the rest. A domain that sees more distinct keys
-  than its share (many client addresses or header values) stops counting the
-  extra keys until the window ends and records a `rate_limit_state_full` event, so
-  the extra keys are let through, never blocked. It cannot evict another domain's
-  counters or mitigations, and a client that is already mitigated stays blocked
-  until its duration ends. The per-client request counter of the baseline limits
+  the cell serves, with a floor of 100 entries. Counters take 70% of the share,
+  active mitigations 20%, and the last 10% is reserved for overflow counters. A
+  domain that sees more distinct keys than its share (many client addresses or
+  header values) records a `rate_limit_state_full` event, and every key without a
+  counter of its own is counted together in one overflow counter per rule and
+  window. That counter trips at the rule's threshold and applies the rule's
+  action to all untracked keys until the window ends. A new key therefore never
+  evades the rule, but during a key flood legitimate untracked visitors of that
+  domain share one allowance (collateral is limited to that domain). It cannot
+  evict another domain's counters or mitigations, and a client that is already
+  mitigated stays blocked until its duration ends. The per-client request counter of the baseline limits
   works the same way, and the domain-wide counter still applies to every request.
 
 ### Presets: user agents and hotlinks
