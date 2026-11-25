@@ -22,7 +22,8 @@ from ipv6_rate_limit_keys import address, proxy_header  # noqa: E402
 from managed_waf import IMAGE, NETWORK, host, run  # noqa: E402
 
 ORIGIN = "cdnf-e2e-challenge-origin"
-CELLS = {"default": "cdnf-e2e-challenge-default", "tuned": "cdnf-e2e-challenge-tuned", "invalid": "cdnf-e2e-challenge-invalid"}
+CELLS = {"default": "cdnf-e2e-challenge-default", "tuned": "cdnf-e2e-challenge-tuned", "invalid": "cdnf-e2e-challenge-invalid",
+         "incident": "cdnf-e2e-challenge-incident"}
 HTML = "text/html"
 
 
@@ -83,6 +84,7 @@ def start(name: str, runtime: pathlib.Path, temporary: pathlib.Path, subnet: str
     for key, value in environment.items():
         command += ["-e", f"{key}={value}"]
     command += ["-v", f"{runtime}:/var/lib/cdnfoundry/runtime/active.json:ro", "-v", f"{temporary / 'tls.crt'}:/run/edge/tls.crt:ro",
+                "-v", f"{pathlib.Path(__file__).resolve().parents[2] / 'docker/openresty/runtime.lua'}:/etc/cdnfoundry/runtime.lua:ro",
                 "-v", f"{temporary / 'tls.key'}:/run/edge/tls.key:ro", "--tmpfs", "/var/cache/nginx:rw,noexec,nosuid,size=64m,mode=0777", IMAGE]
     run(*command)
     ip = address(name)
@@ -107,9 +109,11 @@ def main() -> None:
         temporary.chmod(0o755)
         config = host("off", False, 0, origin_ip)
         config["domain"], config["domain_id"] = "chal.test", 601
+        # A site's method policy governs origin traffic, not the internal proof POST.
+        config["security"]["allowed_methods"] = ["GET", "HEAD"]
         config["security"]["limits"].update({"requests_per_second": 100000, "request_burst": 100000, "connections_per_client": 4096, "connections_per_domain": 100000})
         config["security"]["rules"] = [{"id": 1, "name": None, "priority": 1, "action": "challenge",
-                                        "conditions": [{"field": "path", "operator": "starts_with", "value": "/"}]}]
+                                        "conditions": [{"field": "path", "operator": "equals", "value": "/"}]}]
         runtime = temporary / "runtime.json"
         runtime.write_text(json.dumps({"schema_version": 1, "sequence": 1, "generation_id": "e2e-chal-1", "certificates": {}, "hosts": {"chal.test": config}}))
         runtime.chmod(0o644)
@@ -121,6 +125,22 @@ def main() -> None:
             default = start(CELLS["default"], runtime, temporary, subnet, {})
             tuned = start(CELLS["tuned"], runtime, temporary, subnet, {"EDGE_CHALLENGE_BITS": "12", "EDGE_CHALLENGE_BIND_USER_AGENT": "true"})
             invalid = start(CELLS["invalid"], runtime, temporary, subnet, {"EDGE_CHALLENGE_BITS": "3"})
+            incident_runtime = temporary / "incident.json"
+            incident_state = json.loads(runtime.read_text())
+            incident_state["hosts"]["chal.test"]["security"]["rules"] = []
+            incident_runtime.write_text(json.dumps(incident_state))
+            incident_runtime.chmod(0o644)
+            incident_ip = start(CELLS["incident"], incident_runtime, temporary, subnet, {"EDGE_CHALLENGE_BITS": "12"})
+            assert request(incident_ip, "198.51.100.80", "POST", "/.cdnf/challenge", body="x=1")[0] == 405, "an inactive endpoint must obey the method policy"
+            overlay = {"task_id": "restricted-method-challenge", "action": "security_overlay", "domain_id": 601,
+                       "sequence": 1, "state": "restricted", "incident": {"expires_at": int(time.time()) + 300,
+                       "waf": {"mode": "block"}, "methods": ["GET", "HEAD"], "max_body_bytes": 1024, "challenge": True}}
+            run("docker", "exec", CELLS["incident"], "wget", "-q", "-O-", "--header=X-Edge-Status-Token: e2e",
+                "--header=Content-Type: application/json", "--post-data=" + json.dumps(overlay), "http://127.0.0.1:9080/control")
+            incident_cookie, _ = token(incident_ip, "198.51.100.81")
+            assert request(incident_ip, "198.51.100.81", headers={"Cookie": f"cdnf_chal={incident_cookie}"})[0] == 200
+            assert request(incident_ip, "198.51.100.81", "POST", "/", body="x=1")[0] == 405
+            assert request(incident_ip, "198.51.100.82", "POST", "/.cdnf/challenge", body="x" * 513)[0] == 413
 
             # The default difficulty is 16 bits, and a bad setting falls back to it instead of weakening the challenge.
             cookie, bits = token(default, "2001:db8:a:b::1")
@@ -153,6 +173,8 @@ def main() -> None:
             assert request(tuned, "2001:db8:e:1::1", headers={"Cookie": f"cdnf_chal={tuned_cookie}", "User-Agent": "Browser/2"})[0] == 403, "the User-Agent binding was ignored"
 
             # A client without JavaScript is told what is needed instead of being left with a blank page.
+            assert request(default, "198.51.100.78", "POST", "/", body="x=1")[0] == 405
+            assert request(default, "198.51.100.79", "PUT", "/.cdnf/challenge", body="x=1")[0] == 405
             assert "needs JavaScript" in request(default, "198.51.100.77")[2]
             for name in cells:
                 log = run("docker", "logs", name, check=False)

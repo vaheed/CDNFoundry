@@ -2005,7 +2005,11 @@ function M.access()
     local method = ngx.req.get_method()
     if emergency.allow_get_head_only and method ~= "GET" and method ~= "HEAD" then return security_reject(405, "edge_emergency_mode") end
     local incident = incident_for(config)
-    if incident then
+    -- Method allowlists protect origin traffic. The internal proof endpoint needs POST even on a GET-only site;
+    -- it still passes body limits, client containment, firewall rules and proof validation, and never reaches the origin.
+    local challenge_submission = method == "POST" and (ngx.var.uri or "/") == CHALLENGE_PATH
+        and ((incident and incident.challenge == true) or security_has_challenge_rule(rules_for(security)))
+    if incident and not challenge_submission then
         local incident_allows = false
         for _, allowed_method in ipairs(incident.methods or {}) do
             if method == allowed_method then incident_allows = true; break end
@@ -2016,7 +2020,7 @@ function M.access()
     for _, allowed_method in ipairs(security.allowed_methods or {"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}) do
         if method == allowed_method then method_allowed = true; break end
     end
-    if not method_allowed then return security_reject(405, "invalid_method") end
+    if not method_allowed and not challenge_submission then return security_reject(405, "invalid_method") end
     if request_header_size() > (tonumber(limits.maximum_header_size) or 32768) then return security_reject(431, "header_too_large") end
     local size = body_size()
     if emergency.disable_request_bodies and size > 0 then return security_reject(413, "edge_emergency_mode") end
