@@ -88,7 +88,10 @@ RUN sed -i 's/^SecRuleEngine .*/SecRuleEngine On/' /etc/cdnfoundry/modsecurity.c
     && sed -i 's#^SecUnicodeMapFile .*#SecUnicodeMapFile /etc/cdnfoundry/unicode.mapping 20127#' /etc/cdnfoundry/modsecurity.conf \
     && find /etc/cdnfoundry/crs/rules -type f -name '*.conf' -exec sed -i -E \
        -e 's/phase:([1-5]),/phase:\1,nolog,/g' \
-       -e 's/^([[:space:]]*)log,\\$/\1nolog,\\/' {} +
+       -e 's/^([[:space:]]*)log,\\$/\1nolog,\\/' {} + \
+    && find /etc/cdnfoundry/crs/rules -type f -name 'REQUEST-9*.conf' -exec sed -i -E \
+       -e "s/setvar:'tx\\.inbound_anomaly_score_pl([1-4])=\\+%\\{tx\\.[a-z]+_anomaly_score\\}'/setvar:'tx.cdnf_matched=%{tx.cdnf_matched}|%{rule.id}',&/" {} + \
+    && test "$(grep -h -c "tx.cdnf_matched=" /etc/cdnfoundry/crs/rules/REQUEST-941-APPLICATION-ATTACK-XSS.conf)" -gt 20
 COPY docker/nginx/edge-runtime.conf /etc/nginx/conf.d/default.conf
 COPY docker/nginx/proxy-cache.conf /etc/nginx/proxy-cache.conf
 COPY docker/nginx/cache-upstream.conf /etc/nginx/cache-upstream.conf

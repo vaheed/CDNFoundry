@@ -9,7 +9,7 @@ backend-test: dev-test
 
 contract-check: config-check openapi-check
 	python3 scripts/ci/generate_phpstan_schema.py --check
-	python3 -m unittest tests/contract/test_edge_rejection_reasons.py tests/contract/test_cache_key_vectors.py tests/contract/test_waf_body_acquisition.py tests/contract/test_domain_budget.py tests/contract/test_runtime_pins.py tests/contract/test_waf_baseline.py tests/contract/test_waf_latency_matrix.py tests/contract/test_client_key.py tests/contract/test_security_event_reasons.py tests/contract/test_edge_waf_hot_path.py tests/observability/test_grafana_contract.py tests/observability/test_metrics_contract.py tests/observability/test_grafana_bootstrap.py tests/observability/test_operational_logging_contract.py
+	python3 -m unittest tests/contract/test_edge_rejection_reasons.py tests/contract/test_cache_key_vectors.py tests/contract/test_waf_body_acquisition.py tests/contract/test_domain_budget.py tests/contract/test_runtime_pins.py tests/contract/test_waf_matched_rules.py tests/contract/test_waf_baseline.py tests/contract/test_waf_latency_matrix.py tests/contract/test_client_key.py tests/contract/test_security_event_reasons.py tests/contract/test_edge_waf_hot_path.py tests/observability/test_grafana_contract.py tests/observability/test_metrics_contract.py tests/observability/test_grafana_bootstrap.py tests/observability/test_operational_logging_contract.py
 
 fleet-test:
 	python3 -m pytest -q tests/fleet

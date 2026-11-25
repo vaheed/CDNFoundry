@@ -10,6 +10,7 @@ unreachable or invalid. Everything runs in throwaway containers on a test networ
 
 import json
 import os
+import re
 import pathlib
 import subprocess
 import sys
@@ -139,7 +140,12 @@ def expect_blocked_by_waf(cell: str, marker: str, status: Result, label: str) ->
     row = cell_row(cell, marker)
     # A bare 403 proves nothing: the decision must carry ModSecurity's anomaly score and the CRS XSS category.
     assert row["waf_action"] == "block" and row["security_reason"] == "waf_block", (label, row)
-    assert row["waf_rule_id"] == 949110 and row["waf_score"] > 0 and 0 < row["attack_score_xss"] < 50, (label, row)
+    assert row["waf_score"] > 0 and 0 < row["attack_score_xss"] < 50, (label, row)
+    # The block names the CRS rules that matched, never the blocking evaluation, and carries ids only (no matched data).
+    matched = [int(value) for value in row["waf_rule_ids"].split(",")]
+    assert 1 <= len(matched) <= 8 and row["waf_rule_id"] in matched and row["waf_rule_id"] != 949110, (label, row)
+    assert any(941000 <= value <= 941999 for value in matched), (label, row)
+    assert re.fullmatch(r"[0-9]{6}(,[0-9]{6}){0,7}", row["waf_rule_ids"]), (label, row)
     assert row["waf_body_limit"] in ("inspected", "no_body"), (label, row)
     assert not origin_rows(marker), f"{label}: a blocked request reached the origin"
 

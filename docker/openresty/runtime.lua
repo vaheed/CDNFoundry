@@ -786,6 +786,18 @@ end
 -- scoring listener, which answers with a redirect whose address carries the points. The listener receives the whole decoded body
 -- with its own Content-Length, whatever framing the client used. Returns the scores, or nil and the reason no score exists: the
 -- body was too large, unreadable or encoded, or the listener failed. A request without a score has not been inspected.
+local MAX_MATCHED_RULES = 8
+
+-- The rule that best names why a request was blocked: the first match outside the protocol-enforcement categories (920, 921),
+-- which only describe how the request was framed, or the first match when only those matched.
+local function primary_rule(rule_ids)
+    for _, id in ipairs(rule_ids) do
+        local category = math.floor(id / 1000)
+        if category ~= 920 and category ~= 921 then return id end
+    end
+    return rule_ids[1]
+end
+
 local function score_request(body_limit, off_list)
     local outcome, body = waf_body.get(body_limit)
     if not waf_body.is_known(outcome) then return nil, outcome end
@@ -818,8 +830,19 @@ local function score_request(body_limit, off_list)
     if not status_line or not status_line:find(" 302 ", 1, true) or not location then return nil, "scoring_failed" end
     local total, sqli, xss, rce = location:match("total=(%d*)&sqli=(%d*)&xss=(%d*)&rce=(%d*)")
     if not total then return nil, "scoring_failed" end
+    -- The rules that added points, as "|941100|942100". Only the id of a CRS rule is read, at most eight of them, in the order
+    -- they matched; nothing the request contained comes back, so the ids carry no matched data.
+    local rule_ids, seen = {}, {}
+    for token in (location:match("&rules=([^&]*)") or ""):gmatch("%d+") do
+        local id = tonumber(token)
+        if id and id >= 900000 and id <= 999999 and not seen[id] then
+            seen[id] = true
+            rule_ids[#rule_ids + 1] = id
+            if #rule_ids == MAX_MATCHED_RULES then break end
+        end
+    end
     return {
-        total = tonumber(total) or 0, attack_score = points_to_score(total), attack_score_sqli = points_to_score(sqli),
+        rule_ids = rule_ids, total = tonumber(total) or 0, attack_score = points_to_score(total), attack_score_sqli = points_to_score(sqli),
         attack_score_xss = points_to_score(xss), attack_score_rce = points_to_score(rce),
     }
 end
@@ -2122,6 +2145,7 @@ function M.access()
             ngx.var.cdn_attack_score_sqli = tostring(scores.attack_score_sqli)
             ngx.var.cdn_attack_score_xss = tostring(scores.attack_score_xss)
             ngx.var.cdn_attack_score_rce = tostring(scores.attack_score_rce)
+            if #scores.rule_ids > 0 then ngx.var.cdn_waf_rule_ids = table.concat(scores.rule_ids, ",") end
             -- The score covers the whole request, headers and body, so it decided; inspecting the same request again on its way
             -- to the origin would apply the unadjusted rules. Inline inspection is switched off only here, after a score exists.
             if scoring then
@@ -2174,7 +2198,7 @@ function M.access()
         if incident_block and type(incident_block.waf) == "table" and incident_block.waf.mode == "block" then threshold = math.min(threshold, 3) end
         if request.scores.total >= threshold then
             ngx.var.cdn_waf_action = "block"
-            ngx.var.cdn_waf_rule_id = "949110"
+            ngx.var.cdn_waf_rule_id = tostring(primary_rule(request.scores.rule_ids) or 949110)
             ngx.var.cdn_waf_score = tostring(math.min(100, request.scores.total))
             ngx.var.cdn_security_rule = "waf"
             return security_reject(403, "waf_block")

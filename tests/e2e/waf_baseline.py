@@ -339,7 +339,11 @@ def rates(results: list[dict]) -> dict:
     count = collections.Counter(item["decision"] for item in results)
     total = len(results)
     detected = count["blocked"] + count["logged"]
-    return {"requests": total, "decisions": dict(sorted(count.items())), "blocked": count["blocked"], "logged": count["logged"],
+    blocks = [item for item in results if item["decision"] == "blocked" and "rule_ids" in item]
+    # A block that names a rule other than the blocking evaluation 949110 explains itself; the baseline of an image that predates
+    # matched-rule reporting has none, and says so with zero here.
+    explained = sum(1 for item in blocks if item["rule_ids"] and item.get("rule_id") not in (None, 0, 949110))
+    return {"blocks_with_matched_rule": explained, "blocks_checked": len(blocks), "requests": total, "decisions": dict(sorted(count.items())), "blocked": count["blocked"], "logged": count["logged"],
             "passed": count["passed"], "refused": count["refused"], "unanswered": count["error"] + count["unlogged"],
             "block_rate": round(count["blocked"] / total, 5) if total else 0.0, "block_rate_ci95": wilson(count["blocked"], total),
             "detection_rate": round(detected / total, 5) if total else 0.0, "detection_rate_ci95": wilson(detected, total),
@@ -378,7 +382,8 @@ def slim(results: list[dict], requests: list[corpus.CorpusRequest], floors: dict
     """The fields the record keeps for each request. ``results`` is in the order of ``requests``."""
     return [{"id": entry["id"], "category": entry["category"], "method": request.method, "decision": entry["decision"], "status": entry["status"],
              "seconds": entry["seconds"], "floor": (floors or {}).get(entry["id"], 1), "waf_score": (entry["row"] or {}).get("waf_score"),
-             "attack_score": (entry["row"] or {}).get("attack_score"), "reason": (entry["row"] or {}).get("security_reason")}
+             "attack_score": (entry["row"] or {}).get("attack_score"), "reason": (entry["row"] or {}).get("security_reason"),
+             "rule_id": (entry["row"] or {}).get("waf_rule_id"), "rule_ids": (entry["row"] or {}).get("waf_rule_ids", "")}
             for entry, request in zip(results, requests)]
 
 
