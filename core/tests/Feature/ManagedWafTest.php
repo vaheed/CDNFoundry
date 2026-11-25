@@ -129,6 +129,62 @@ class ManagedWafTest extends TestCase
         $this->actingAs($stranger)->patchJson("/api/domains/{$domain->id}/waf", ['tuning' => ['paranoia_level' => 2]])->assertNotFound();
     }
 
+    public function test_a_scoped_exclusion_is_validated_normalized_and_compiled_for_the_cell(): void
+    {
+        Queue::fake();
+        EdgePool::query()->where('kind', 'shared')->update(['waf_capable' => true, 'waf_runtime_version' => 'sha256:test']);
+        [$owner, $domain] = $this->ownedDomain();
+        $tuning = ['scoped_exclusions' => [
+            ['rules' => [942100, 941100, 942100], 'path_prefix' => '/api/webhooks', 'methods' => ['POST', 'PUT']],
+            ['categories' => ['xss'], 'path_prefix' => '/editor/'],
+            ['rules' => [942100], 'methods' => ['PUT']],
+        ]];
+        $this->actingAs($owner)->patchJson("/api/domains/{$domain->id}/waf", ['profile' => 'balanced', 'tuning' => $tuning])->assertAccepted();
+
+        $compiled = ManagedWaf::compile($domain->refresh())['scoped_exclusions'];
+        $this->assertCount(3, $compiled);
+        $this->assertContains(['rules' => [941100, 942100], 'categories' => [], 'path_prefix' => '/api/webhooks', 'methods' => ['POST', 'PUT']], $compiled);
+        $this->assertContains(['rules' => [], 'categories' => ['941'], 'path_prefix' => '/editor/', 'methods' => []], $compiled);
+        $this->assertContains(['rules' => [942100], 'categories' => [], 'path_prefix' => null, 'methods' => ['PUT']], $compiled);
+
+        // The same tuning in a different order and with duplicates compiles to the same bytes, so a resubmission changes nothing.
+        $this->actingAs($owner)->patchJson("/api/domains/{$domain->id}/waf", ['tuning' => ['scoped_exclusions' => array_reverse($tuning['scoped_exclusions'])]])->assertAccepted();
+        $this->assertSame($compiled, ManagedWaf::compile($domain->refresh())['scoped_exclusions']);
+
+        // An Off domain carries none.
+        $this->actingAs($owner)->patchJson("/api/domains/{$domain->id}/waf", ['profile' => 'off'])->assertAccepted();
+        $this->assertSame([], ManagedWaf::compile($domain->refresh())['scoped_exclusions']);
+    }
+
+    public function test_a_scoped_exclusion_refuses_unscoped_unknown_unbounded_and_unnormalized_input(): void
+    {
+        Queue::fake();
+        EdgePool::query()->where('kind', 'shared')->update(['waf_capable' => true, 'waf_runtime_version' => 'sha256:test']);
+        [$owner, $domain] = $this->ownedDomain();
+        $cases = [
+            [['rules' => [942100]]],                                              // applies everywhere: use Turn off
+            [['path_prefix' => '/api']],                                          // names nothing to exclude
+            [['rules' => [123456], 'path_prefix' => '/api']],                     // not in the pinned catalog
+            [['categories' => ['nonsense'], 'path_prefix' => '/api']],
+            [['rules' => [942100], 'path_prefix' => 'api']],                      // not rooted
+            [['rules' => [942100], 'path_prefix' => '/a/../b']],                  // dot segments
+            [['rules' => [942100], 'path_prefix' => '/a//b']],                    // empty segment
+            [['rules' => [942100], 'path_prefix' => '/a%2fb']],                   // percent escape
+            [['rules' => [942100], 'path_prefix' => '/'.str_repeat('a', 200)]],   // too long
+            [['rules' => [942100], 'methods' => ['TRACE']]],
+            [['rules' => [942100], 'methods' => ['GET'], 'parameter' => 'q']],   // a per-parameter scope does not exist
+            [['rules' => range(942100, 942100 + 20), 'path_prefix' => '/api']],
+            array_fill(0, 21, ['rules' => [942100], 'path_prefix' => '/api']),
+        ];
+        foreach ($cases as $entries) {
+            $this->actingAs($owner)->patchJson("/api/domains/{$domain->id}/waf", ['profile' => 'balanced', 'tuning' => ['scoped_exclusions' => $entries]])->assertUnprocessable();
+        }
+        $this->assertNull($domain->refresh()->waf_tuning);
+
+        $stranger = User::factory()->create();
+        $this->actingAs($stranger)->patchJson("/api/domains/{$domain->id}/waf", ['tuning' => ['scoped_exclusions' => [['rules' => [942100], 'path_prefix' => '/api']]]])->assertNotFound();
+    }
+
     public function test_the_rule_catalog_is_paginated_filtered_and_shows_each_rules_state(): void
     {
         [$owner, $domain] = $this->ownedDomain();

@@ -31,7 +31,7 @@ final class ManagedWaf
         return [
             ...$profile,
             'tuning' => $tuning,
-            ...($profile['name'] === 'off' ? ['off_categories' => [], 'off_rules' => [], 'log_only_rules' => []] : ManagedWafTuning::forEdge($domain->waf_tuning)),
+            ...($profile['name'] === 'off' ? ['off_categories' => [], 'off_rules' => [], 'log_only_rules' => [], 'scoped_exclusions' => []] : ManagedWafTuning::forEdge($domain->waf_tuning)),
             'ruleset' => config('security.waf.ruleset'),
             // Exclusions are inert until a per-rule, per-target removal exists.
             'exclusions' => [],
