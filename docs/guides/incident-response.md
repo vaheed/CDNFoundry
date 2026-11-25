@@ -58,6 +58,8 @@ visitor, not to one address: an IPv6 visitor counts under its prefix (the same g
 changes address inside its network keeps its token, and an IPv4 visitor counts per address. The browser string is not part of
 the binding, so a browser update does not lose the token; a cell can bind it as well with `EDGE_CHALLENGE_BIND_USER_AGENT=true`.
 The token it earns works until the profile ends or for an hour, whichever is sooner, and is the only cookie the profile sets.
+When a challenge is active, its internal `POST /.cdnf/challenge` works even if the domain or incident method policy allows
+only `GET` and `HEAD`. This exception accepts only challenge proofs; ordinary requests still obey the method policy.
 A token is valid on the cell that issued it; another cell or another point of presence challenges the visitor again.
 The difficulty is 16 bits by default, and `EDGE_CHALLENGE_BITS` (12 to 24) changes it for a cell. See
 [Configuration](../reference/configuration.md). Requests that are not page loads (scripts, bots, API clients) and have no token are refused.
