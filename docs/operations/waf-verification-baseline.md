@@ -159,7 +159,6 @@ What the matrix shows:
 - **Custom firewall rules are cheap**: 100 never-matching rules cost nothing measurable (3,061 µs, inside the noise of the control), and 1,000 cost about 200 µs. Twenty rate-limit rules that count every request cost about 110 µs with the WAF Off. The leaked-password check and the AI prompt signals cost under 100 µs over a plain POST. The sensitive-data scan of an uncached 10 KB page has no uncached control in this matrix, so its cost is not isolated.
 - Peak memory stayed under 105 MiB except while a 1 MiB body was being inspected.
 
-
 ## Limits of this baseline
 
 - A development host and a generated clean corpus. Neither is a statement about production traffic, and none of the rates above is an SLO.

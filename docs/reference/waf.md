@@ -141,6 +141,35 @@ from counting.
 Watch scanner user agents (913100) without blocking them, and stop rule 920420 (request content type not allowed) for an API
 that posts `application/x-ndjson`.
 
+## Scoped exclusions
+
+`tuning.scoped_exclusions` turns rules or categories off only where a request's method or path matches. Up to 20 entries; each names up to 20 rules (`rules`) and up to 20 categories (`categories`), and at least one scope: a `path_prefix`, `methods`, or both. An entry with no scope is the same as Turn off and is refused. The panel has the same fields under **Turn off only for a path or method**.
+
+| Field | Meaning |
+| --- | --- |
+| `rules`, `categories` | The rules or categories, as in Single rules and Categories, that stop running inside the scope |
+| `path_prefix` | The path and everything below it. Starts with `/`, up to 200 characters, only letters, digits and `._~-`, no empty or dot segments, no percent escapes, no query string |
+| `methods` | Any of `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS` |
+
+How a request is compared:
+
+- The cell compares the **normalized path**: percent escapes are decoded and `.` and `..` segments are resolved before the prefix is compared, so `/editor/../other` is `/other` and `/%65ditor` is `/editor`. The comparison is case sensitive.
+- `/editor` covers `/editor` and `/editor/page`, not `/editorial`. A prefix that ends in a slash, such as `/import/`, covers only what is below it, not `/import`.
+- A listed method must equal the request's method; with no methods the entry applies to every method.
+- Inside the scope the named rules stop for the whole request: its address, headers, cookies and body. Other rules, and the same rules on every other path or method, keep running.
+- The cell passes the matching entries to the scoring pass through the same list as Turn off. It never evaluates a parameter name, so there is no scope smaller than a path and a method. Per-parameter exclusions stay unavailable.
+
+```json
+{"tuning": {"scoped_exclusions": [
+  {"categories": ["xss"], "path_prefix": "/editor"},
+  {"rules": [942100], "path_prefix": "/import/", "methods": ["POST"]}
+]}}
+```
+
+A rich-text editor posts HTML to `/editor`: the cross-site scripting rules stop there, and SQL injection rules still run on it. A bulk import accepts quotes in POST bodies under `/import/`: rule 942100 stops there for POST only.
+
+Limits: the inline fallback that inspects a request when the scoring listener fails does not know the scope, so it runs the unadjusted rules, as it does for Turn off. A saved entry is bounded by the catalog: a rule or category the pinned ruleset does not have is refused. The change is a revisioned domain update; an Off domain carries none.
+
 ## A full tuning object
 
 ```json
@@ -151,7 +180,8 @@ that posts `application/x-ndjson`.
     "inbound_threshold": 7,
     "disabled_categories": ["java"],
     "disabled_rules": [942100],
-    "log_only_rules": [920350, 913100]
+    "log_only_rules": [920350, 913100],
+    "scoped_exclusions": [{"categories": ["xss"], "path_prefix": "/editor"}]
   }
 }
 ```
@@ -163,7 +193,7 @@ every adjustment. Tuning never turns an Off domain on.
 
 | You want to | Use |
 | --- | --- |
-| Stop a false positive on one path | A firewall rule with `skip_managed` on that path |
+| Stop a false positive on one path | A scoped exclusion for the rule or category (the rest of the WAF keeps running there), or a firewall rule with `skip_managed` on that path to skip every managed rule |
 | Stop one rule everywhere | `disabled_rules` |
 | Keep a rule visible but harmless | `log_only_rules` |
 | Block only near-certain attacks while staying in Observe | Observe plus a firewall rule `attack_score < 20` with `block` |

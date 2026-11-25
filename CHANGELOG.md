@@ -11,6 +11,10 @@ single source of truth; `make version-check` enforces it.
 
 - Cells report the WAF engine and Core Rule Set commits they were built from. The Cells list shows whether they match the pinned versions, and the `CellRulesetDiffers` alert fires when they do not. The Service pools list shows the same state for each pool.
 
+- A WAF verification baseline: versioned CRS regression, evasion and 10,300-request clean corpora, a harness that replays them against a real cell at every protection and paranoia level, and a latency and CPU matrix. See [WAF verification baseline](docs/operations/waf-verification-baseline.md).
+- Blocked and scored requests list up to eight matched CRS rule ids in the new `waf_rule_ids` field, and `waf_rule_id` names a matched rule instead of the blocking evaluation `949110`. Apply the ClickHouse migration `2026_11_25_edge_event_waf_rule_ids.sql` before starting updated Vector instances.
+- Managed WAF rules and categories can be turned off only for a path prefix or a method (`tuning.scoped_exclusions`), in the domain WAF dialog and the API.
+
 ### Security
 
 - On cells with more domains than the 100-entry rate-limit floor can serve, domain shares shrink to an equal part instead of oversubscribing the shared dictionary, so one domain's keys cannot evict another's.

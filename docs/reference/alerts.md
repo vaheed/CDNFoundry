@@ -19,7 +19,7 @@ that exist.
 - **Dashboard** is the Grafana dashboard that shows the cause. See
   [Grafana by team](../operations/grafana-by-team.md).
 
-There are 78 alerts.
+There are 79 alerts.
 
 ## Team: noc
 
@@ -52,6 +52,7 @@ There are 78 alerts.
 | `SLOBurnEdge5xxSlow` | warning | 15m | Edge 5xx ratio is burning its error budget 6 times too fast over 6h and 30m | [Runbook](../operations/runbooks.md#edge-5xx-burn) | SLOs |
 | `SLOBurnEdgeAvailabilitySlow` | warning | 15m | Edge availability is burning its error budget 6 times too fast over 6h and 30m | [Runbook](../operations/runbooks.md#edge-availability-burn) | SLOs |
 | `SLOBurnEdgeLatencySlow` | warning | 15m | Edge latency (95 percent under 500 ms) is burning its error budget 6 times too fast over 6h and 30m | [Runbook](../operations/runbooks.md#edge-latency-burn) | SLOs |
+| `WafScoringFailing` | warning | 5m | The managed WAF could not score requests, so inline inspection with unadjusted rules decided them | [Runbook](../operations/runbooks.md#waf-scoring-failing) | WAF |
 
 ## Team: platform
 

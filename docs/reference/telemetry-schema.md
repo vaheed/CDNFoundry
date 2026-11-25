@@ -50,7 +50,8 @@ from the collector's own settings and never reads them from the event.
 | `compression_profile` | low-cardinality string, 24 characters |
 | `compression_fallback` | stable reason, 32 characters |
 | `waf_profile` | `off`, `monitor`, `balanced`, or `strict` |
-| `waf_rule_id` | numeric managed-rule ID; `949110` (the CRS inbound blocking evaluation) on a block, zero otherwise. The engine does not hand the individual matching rules back to the cell; the audit log on the cell lists them |
+| `waf_rule_id` | numeric managed-rule ID of the rule that best names why a request was blocked: the first matching CRS rule outside protocol enforcement (920, 921), or the first match when only those matched. `949110` (the blocking evaluation) only when a block has no matched rule to name, which is the inline fallback after a scoring failure. Zero when nothing blocked |
+| `waf_rule_ids` | up to eight six-digit CRS rule IDs that matched, in match order, joined by commas, for every scored request that added points. IDs only: nothing the request contained. The category of a rule is its first three digits (`941` is cross-site scripting; the catalog is in [Managed WAF](waf.md#categories)). Empty when nothing matched or the request was not scored by the scoring listener. Anything that is not up to eight six-digit IDs is dropped before storage |
 | `waf_score` | On a scored block, the total anomaly points capped at 100. On an inline fallback block, the configured threshold that was reached or exceeded. Zero otherwise; this is not a probability |
 | `waf_action` | `off` (profile off), `monitor` (detection only), `pass` (inspected and allowed), or `block`. A block also sets `security_action=block` and `security_reason=waf_block` |
 | `waf_processing_us` | bounded processing time in microseconds |

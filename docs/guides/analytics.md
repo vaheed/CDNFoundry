@@ -167,10 +167,10 @@ audit** is `audit_logs` in PostgreSQL, shown in the panel. Filter request logs b
 `client_ip`. Examples that work as written (replace the values):
 
 ```sql
--- every request one WAF rule blocked, newest first
+-- every request the WAF blocked mainly because of one rule, newest first; waf_rule_ids lists every rule that matched
 SELECT occurred_at, hostname, path, status, cell, request_id
 FROM cdnf.edge_events
-WHERE domain_id = 42 AND waf_action = 'block' AND waf_rule_id = 949110
+WHERE domain_id = 42 AND waf_action = 'block' AND waf_rule_id = 941100
   AND occurred_at > now() - INTERVAL 1 HOUR
 ORDER BY occurred_at DESC LIMIT 100;
 

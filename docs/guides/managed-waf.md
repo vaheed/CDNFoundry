@@ -188,7 +188,7 @@ in full. Every other case is an explicit result, never a clean one:
 | Body over the limit | `413`, reason `waf_body_limit`, recorded as `exceeded` | Forwarded and recorded as `exceeded`; it has no score |
 | Body unreadable or cut off | `400`, reason `waf_body_unreadable`, recorded as `unreadable` | Forwarded and recorded as `unreadable` |
 | Compressed body (`Content-Encoding` other than `identity`) | `415`, reason `waf_body_encoding`, recorded as `unsupported_enc` | Forwarded and recorded as `unsupported_enc` |
-| Scoring step failed or answered with something that is not a score | Inspected inline instead, with the level's unadjusted defaults. Recorded as `scoring_failed`, with a `waf_inspection_failed` security event. | Same, detection only |
+| Scoring step failed or answered with something that is not a score | Inspected inline instead, with the level's unadjusted defaults. Tuning, log-only rules and scoped exclusions do not apply to it. Recorded as `scoring_failed`, with a `waf_inspection_failed` security event, counted by the `WafScoringFailing` alert. | Same, detection only |
 
 The managed WAF scores the entity as the origin will read it, and a compressed
 body is not that entity. Clients that upload compressed request bodies to a domain
@@ -223,6 +223,9 @@ Libmodsecurity cannot safely remove one chosen rule for one target. An earlier
 design switched the whole request to monitor mode, and an attacker could add a
 literal parameter name to bypass CRS.
 
+To stop a rule or category only where it does not fit, use a
+[scoped exclusion](../reference/waf.md#scoped-exclusions): it applies to a path prefix, a method, or both, and nothing else.
+
 Exclusions saved earlier stay visible and can be deleted, but the edge artifact
 always carries an empty list. The domain page shows the **WAF exclusions** tab
 only while such exclusions exist. To handle a false positive, choose **Observe** for
@@ -234,10 +237,14 @@ The Nginx request event records the selected level, the transaction outcome, the
 body-limit outcome, and a numeric exclusion ID. `waf_action` is `monitor` for
 detection-only domains, `pass` for an inspected request that was allowed, and
 `block` when the engine denied it. A blocked request also records
-`security_action=block`, `security_reason=waf_block`, rule ID `949110` (the CRS
-blocking evaluation), and the inbound threshold it reached as `waf_score`.
-The engine does not return the individual matching rules to the cell, so the
-ID names the deciding rule and the cell's audit log lists the rest. Blocks
+`security_action=block`, `security_reason=waf_block`, and the anomaly points it
+reached as `waf_score`. `waf_rule_ids` lists up to eight CRS rules that
+matched, in match order, and `waf_rule_id` is the one that best names the
+block: the first match outside protocol enforcement. Only rule numbers are
+recorded, never matched data. A rule's category is the first three digits of its
+number. When the scoring listener fails, the inline engine decides, and the
+event then names `949110` (the CRS blocking evaluation) because no matching rule
+is available. Blocks
 appear in the domain's security log and in the **Security** view of analytics,
 and count as `waf` in security-class panels. A domain's own WAF blocks do not
 move it toward a restricted state; see [Security](security.md).
