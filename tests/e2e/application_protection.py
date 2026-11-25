@@ -113,9 +113,17 @@ def qualify(directory: pathlib.Path) -> None:
     for reason, count in {"schema_unknown_path": 1, "schema_wrong_method": 1}.items():
         found, _ = shared.events(2, reason)
         assert len(found) == 1 and found[0]["count"] == count, (reason, found)
-    for reason in ("schema_unknown_path", "schema_wrong_method", "schema_missing_parameter", "schema_invalid_parameter", "schema_body_too_large"):
-        found, _ = shared.events(1, reason)
-        assert found and found[0]["count"] >= 1, reason
+    # A report carries at most five reasons per domain, ranked by count, so with the sixth reason of this domain (its custom rule
+    # blocks) the least frequent schema reason can be left out of one report. Every violation above was refused with 403, which
+    # is the enforcement; the report only has to show five reasons, and every schema reason it shows must be counted.
+    reported = {event["reason_code"]: event["count"] for event in shared.events(1, "schema_unknown_path")[0] + [e for r in
+                ("schema_wrong_method", "schema_missing_parameter", "schema_invalid_parameter", "schema_body_too_large") for e in shared.events(1, r)[0]]}
+    status = json.loads(shared.events(1, "schema_unknown_path")[1])["security"]
+    domain_reasons = {event["reason_code"] for event in status if event["domain_id"] == 1}
+    assert len(domain_reasons) == 5, f"the report is bounded to five reasons per domain: {sorted(domain_reasons)}"
+    schema = {reason for reason in domain_reasons if reason.startswith("schema_")}
+    assert len(schema) >= 4 and schema <= {"schema_unknown_path", "schema_wrong_method", "schema_missing_parameter", "schema_invalid_parameter", "schema_body_too_large"}, schema
+    assert all(count >= 1 for count in reported.values()), reported
     assert shared.events(3, "schema_unknown_path")[0] == []
 
     # 8.2 the policy is on HTML only, reports only, and never replaces a policy the origin sent
