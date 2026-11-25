@@ -29,4 +29,31 @@ final class RulesetPins
 
         return hash_equals($pins['crs'], $reported['crs']) && hash_equals($pins['modsecurity'], $reported['modsecurity']) ? self::MATCHING : self::DIFFERENT;
     }
+
+    public const NO_CELLS = 'none';
+
+    /**
+     * The worst state among the running cells of a pool: different beats unreported beats pinned. A pool with no running cell has none.
+     *
+     * @param  iterable<\App\Models\EdgeCell>  $cells
+     * @return array{state: string, counts: array<string, int>}
+     */
+    public static function summary(iterable $cells): array
+    {
+        $counts = [self::MATCHING => 0, self::DIFFERENT => 0, self::UNREPORTED => 0];
+        foreach ($cells as $cell) {
+            if ($cell->status === 'stopped') {
+                continue;
+            }
+            $counts[self::state(data_get($cell->capacity, 'ruleset_versions'))]++;
+        }
+        $state = match (true) {
+            array_sum($counts) === 0 => self::NO_CELLS,
+            $counts[self::DIFFERENT] > 0 => self::DIFFERENT,
+            $counts[self::UNREPORTED] > 0 => self::UNREPORTED,
+            default => self::MATCHING,
+        };
+
+        return ['state' => $state, 'counts' => $counts];
+    }
 }

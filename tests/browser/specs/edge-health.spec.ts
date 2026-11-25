@@ -40,3 +40,15 @@ test('the cells list states whether each cell runs the pinned rule set', async (
     await expect(page.getByText('Pinned', { exact: true })).toHaveCount(0);
     await expectAccessible(page);
 });
+
+test('the pools list states whether each pool runs the pinned rule set', async ({ page }) => {
+    await signIn(page, 'admin', 'admin@browser.test', adminPassword);
+    await page.goto('/admin/edge-pools');
+    await settle(page);
+    await expect(page.getByRole('columnheader', { name: /Rule set/ })).toBeVisible();
+    // The seeded shared pool holds cells that never reported commits; the reserved pool holds none.
+    await expect(page.getByRole('row').filter({ hasText: 'shared-default' }).getByText('Not reported', { exact: true })).toBeVisible();
+    await expect(page.getByRole('row').filter({ hasText: 'quarantine-pool-for-suspicious-traffic' }).getByText('No cells', { exact: true })).toBeVisible();
+    await expect(page.getByText('Pinned', { exact: true })).toHaveCount(0);
+    await expectAccessible(page);
+});

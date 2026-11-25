@@ -14,6 +14,7 @@ use App\Models\EmergencyMode;
 use App\Models\PlatformDnsSetting;
 use App\Support\EdgeRoutingCompiler;
 use App\Support\FilamentHelp;
+use App\Support\RulesetPins;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\EditAction;
@@ -79,7 +80,7 @@ class EdgePoolResource extends Resource
     {
         $settings = PlatformDnsSetting::query()->find(1);
 
-        return $table->columns([
+        return $table->modifyQueryUsing(fn ($query) => $query->with('cells'))->columns([
             TextColumn::make('name')->searchable()->sortable()->extraCellAttributes(['class' => 'cdn-link-cell']),
             TextColumn::make('status')->label('Status')
                 ->state(fn (EdgePool $record): string => match (true) {
@@ -103,6 +104,22 @@ class EdgePoolResource extends Resource
                     default => 'warning',
                 }),
             TextColumn::make('cells_count')->counts('cells')->label('Edge cells')->alignEnd(),
+            TextColumn::make('ruleset')->label(FilamentHelp::label('Rule set', 'Whether every running cell of this pool runs the WAF engine and rule set commits pinned by this release. One different cell makes the pool Different.'))->badge()
+                ->state(fn (EdgePool $record): string => RulesetPins::summary($record->cells)['state'])
+                ->formatStateUsing(fn (string $state): string => match ($state) {
+                    RulesetPins::MATCHING => 'Pinned',
+                    RulesetPins::DIFFERENT => 'Different',
+                    RulesetPins::UNREPORTED => 'Not reported',
+                    default => 'No cells',
+                })->color(fn (string $state): string => match ($state) {
+                    RulesetPins::MATCHING => 'success',
+                    RulesetPins::DIFFERENT => 'danger',
+                    default => 'gray',
+                })->tooltip(function (EdgePool $record): ?string {
+                    $counts = RulesetPins::summary($record->cells)['counts'];
+
+                    return array_sum($counts) === 0 ? null : "{$counts[RulesetPins::MATCHING]} pinned, {$counts[RulesetPins::DIFFERENT]} different, {$counts[RulesetPins::UNREPORTED]} not reported";
+                }),
             TextColumn::make('updated_at')->since()->sortable(),
             TextColumn::make('cache_profile')->label('Cache')->formatStateUsing(fn (string $state): string => str($state)->headline()->toString())->toggleable(isToggledHiddenByDefault: true),
             TextColumn::make('compression_profile')->label('Compression')->formatStateUsing(fn (string $state): string => str($state)->headline()->toString())->toggleable(isToggledHiddenByDefault: true),

@@ -86,4 +86,27 @@ class CellRulesetVersionTest extends TestCase
             $this->assertSame(RulesetPins::pinned(), $edge->cells()->first()->capacity['ruleset_versions']);
         }
     }
+
+    public function test_a_pool_is_pinned_only_when_every_running_cell_is_and_one_different_cell_makes_it_different(): void
+    {
+        $pool = EdgePool::query()->create(['name' => 'summary-pool']);
+        $edge = Edge::query()->create(['name' => 'summary-pop', 'country_code' => 'IR', 'continent_code' => 'AS', 'enabled' => true, 'registered_at' => now(), 'last_heartbeat_at' => now(), 'active_sequence' => 0, 'capacity' => []]);
+        $cell = fn (int $slot, string $status, ?array $versions) => $edge->cells()->create(['slot' => $slot, 'status' => $status, 'edge_pool_id' => $pool->id, 'capacity' => $versions === null ? [] : ['ruleset_versions' => $versions]]);
+        $summary = fn () => RulesetPins::summary($pool->fresh()->cells);
+
+        $this->assertSame(RulesetPins::NO_CELLS, $summary()['state']);
+
+        $cell(1, 'ready', RulesetPins::pinned());
+        $this->assertSame(RulesetPins::MATCHING, $summary()['state']);
+
+        $cell(2, 'ready', null);
+        $this->assertSame(RulesetPins::UNREPORTED, $summary()['state']);
+
+        $cell(3, 'ready', [...RulesetPins::pinned(), 'crs' => str_repeat('d', 40)]);
+        $this->assertSame(RulesetPins::DIFFERENT, $summary()['state']);
+        $this->assertSame([RulesetPins::MATCHING => 1, RulesetPins::DIFFERENT => 1, RulesetPins::UNREPORTED => 1], $summary()['counts']);
+
+        $pool->cells()->where('slot', 3)->update(['status' => 'stopped']);
+        $this->assertSame(RulesetPins::UNREPORTED, $summary()['state'], 'a stopped cell serves nothing and is not counted');
+    }
 }
