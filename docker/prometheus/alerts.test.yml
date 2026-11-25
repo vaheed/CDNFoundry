@@ -287,3 +287,22 @@ tests:
         summary: A cell runs a WAF engine or rule set that differs from the pinned version, or does not report it
         runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#cell-ruleset-differs
         dashboard_url: /d/cdnf-propagation
+- interval: 1m
+  input_series:
+  - series: cdnfoundry_waf_scoring_failures_recent
+    values: 0 3 3 3 3 3 3 3
+  alert_rule_test:
+  - eval_time: 3m
+    alertname: WafScoringFailing
+    exp_alerts: []
+  - eval_time: 7m
+    alertname: WafScoringFailing
+    exp_alerts:
+    - exp_labels:
+        severity: warning
+        team: noc
+        dashboard: cdnf-waf
+      exp_annotations:
+        summary: The managed WAF could not score requests, so inline inspection with unadjusted rules decided them
+        runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#waf-scoring-failing
+        dashboard_url: /d/cdnf-waf

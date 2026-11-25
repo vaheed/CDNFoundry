@@ -133,6 +133,7 @@ Prometheus also fires an always-on `Watchdog` alert. Alertmanager repeats it eve
 | Alert | Fires when |
 | --- | --- |
 | `Watchdog` | always |
+| `WafScoringFailing` | cells reported requests the managed WAF could not score for 5 minutes. They were inspected inline with unadjusted rules instead. See [the runbook](runbooks.md#waf-scoring-failing). |
 | `EdgeHeartbeatStale` | a registered edge sent no heartbeat for 3 minutes. DNS still publishes it. |
 | `PoolServingLastPublishedSet` | every endpoint of a pool looks unhealthy, so DNS keeps the last published set |
 | `EdgeIdentityCertificateExpiring` | an edge identity certificate expires within 30 days, which means renewal is failing |

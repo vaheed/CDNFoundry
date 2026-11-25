@@ -198,6 +198,14 @@ Every alert links here. To find a runbook from an alert's name, look it up in th
 
 **First action:** Check whether the PoP still serves (Synthetic probes). If it does not, drain it; if it does, restart only the agent.
 
+## WAF scoring failing {#waf-scoring-failing}
+
+**Open:** Fleet → Edges → the edge → Cells, then the cell's container log.
+
+**Likely causes:** The cell's loopback scoring listener is overloaded, restarting or misconfigured, or answered with something that is not a score.
+
+**First action:** Check the cell's CPU and restarts. Traffic is still inspected: each failed request is checked inline with the level's unadjusted rules, so tuning, log-only rules and scoped exclusions do not apply to it until scoring works again. Requests with bodies that cannot be read are refused, not passed.
+
 ## Cell rule set differs {#cell-ruleset-differs}
 
 **Open:** Fleet → Service pools, column **Rule set**, then Fleet → Edges → the edge → Cells, column **Rule set**.

@@ -14,6 +14,7 @@ use App\Models\EdgePoolEndpoint;
 use App\Models\EmergencyMode;
 use App\Models\FleetRollout;
 use App\Models\Operation;
+use App\Models\SecurityEvent;
 use App\Models\TlsCertificate;
 use App\Models\TlsOrder;
 use App\Support\ClientNetwork;
@@ -156,6 +157,9 @@ class MetricsController extends Controller
         $lines[] = '# HELP cdnfoundry_admin_logins_new_network_recent Administrator sign-ins in the last 15 minutes from a network that administrator had not used in the previous 30 days.';
         $lines[] = '# TYPE cdnfoundry_admin_logins_new_network_recent gauge';
         $lines[] = 'cdnfoundry_admin_logins_new_network_recent '.$this->newNetworkAdminLogins();
+        $lines[] = '# HELP cdnfoundry_waf_scoring_failures_recent Requests the managed WAF could not score in the last 15 minutes, so inline inspection with unadjusted rules decided them.';
+        $lines[] = '# TYPE cdnfoundry_waf_scoring_failures_recent gauge';
+        $lines[] = 'cdnfoundry_waf_scoring_failures_recent '.$this->recentScoringFailures();
         $lines[] = 'cdnfoundry_fleet_rollouts_paused '.FleetRollout::query()->where('status', 'paused')->count();
         $lines[] = 'cdnfoundry_tls_certificates_expiring '.TlsCertificate::query()->where('status', 'active')->where('expires_at', '<=', now()->addDays((int) config('services.acme.expiry_alert_days')))->count();
 
@@ -232,5 +236,22 @@ class MetricsController extends Controller
     private function label(string $value): string
     {
         return addcslashes(str_replace(["\n", "\r"], ' ', $value), '"\\');
+    }
+
+    /** Scoring failures cells reported in the last 15 minutes, from the per-minute slots of the hourly event rows. */
+    private function recentScoringFailures(): int
+    {
+        $since = intdiv(now()->timestamp, 60) - 15;
+        $total = 0;
+        SecurityEvent::query()->where('reason_code', 'waf_inspection_failed')->where('occurred_at', '>=', now()->subMinutes(75))
+            ->select(['id', 'details'])->cursor()->each(function (SecurityEvent $event) use ($since, &$total): void {
+                foreach ((array) ($event->details['minutes'] ?? []) as $minute => $count) {
+                    if ((int) $minute >= $since) {
+                        $total += (int) $count;
+                    }
+                }
+            });
+
+        return $total;
     }
 }

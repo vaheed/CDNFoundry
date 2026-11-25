@@ -9,6 +9,14 @@ groups:
           summary: WAF blocks are running at over three times their recent rate
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#waf-block-spike
           dashboard_url: /d/cdnf-waf
+      - alert: WafScoringFailing
+        expr: cdnfoundry_waf_scoring_failures_recent > 0
+        for: 5m
+        labels: { team: noc, severity: warning, dashboard: cdnf-waf }
+        annotations:
+          summary: The managed WAF could not score requests, so inline inspection with unadjusted rules decided them
+          runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#waf-scoring-failing
+          dashboard_url: /d/cdnf-waf
       - alert: RequestFloodOnEdge
         expr: sum by (pop) (rate(cdnf_edge_requests_total[2m])) > 4 * sum by (pop) (rate(cdnf_edge_requests_total[1h] offset 10m)) and sum by (pop) (rate(cdnf_edge_requests_total[2m])) > 500
         for: 3m
