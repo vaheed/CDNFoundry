@@ -4,7 +4,8 @@
 A cell runs with a deliberately small rate-limit dictionary. A victim domain gets an active mitigation and a partly used
 counter; an attacker domain then sends tens of thousands of requests with distinct rate-limit keys, far more than the dictionary
 holds. Without per-domain budgets the dictionary evicts the victim's marker and counter. With them the victim keeps both, and the
-attacker only loses counting for its own extra keys, which is reported as a `rate_limit_state_full` event.
+attacker's extra keys are reported as a `rate_limit_state_full` event and held to the rule's threshold together, in one overflow
+counter, so a key first seen after exhaustion is still limited by the rule.
 """
 
 import http.client
@@ -136,6 +137,12 @@ def main() -> None:
             assert get(ip, "victim.rate.test", "mitigated") == 429, "the victim's mitigation was evicted by another domain"
             assert get(ip, "victim.rate.test", "mid-allowance") == 200
             assert get(ip, "victim.rate.test", "mid-allowance") == 429, "the victim's counter was evicted by another domain"
+
+            # A key first seen after the attacker's share is exhausted is not free: the overflow counter limits all such keys together
+            # to the rule's threshold of 2 per window, while the victim, with its own untouched share, still counts keys normally.
+            late = [get(ip, "attacker.rate.test", f"late-{index}") for index in range(4)]
+            assert 429 in late, f"keys first seen after exhaustion evaded the rule: {late}"
+            assert [get(ip, "victim.rate.test", "fresh") for _ in range(3)] == [200, 200, 429], "the victim lost its own counting"
 
             # The attacker alone pays: its extra keys are uncounted and reported, and the report names its own domain only.
             events = [event for event in security_events(CELL) if event["reason_code"] == "rate_limit_state_full"]

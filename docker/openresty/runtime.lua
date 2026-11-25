@@ -1374,10 +1374,11 @@ local function rate_key_value(limit, request)
     return nil
 end
 
--- Counters take three quarters of a domain's share of rate_rules and mitigation markers the rest, so a flood of new client keys
+-- Counters take 70% of a domain's share of rate_rules and mitigation markers 20%, so a flood of new client keys
 -- can never crowd out the marker that keeps an already mitigated client blocked. An entry lives for two windows, and counters
 -- come in three window lengths and markers in four length classes.
-local RATE_COUNTER_FRACTION, RATE_MARKER_FRACTION = 0.75, 0.25
+-- The last tenth is reserved for the overflow counters below: one entry per rule and window, so it never grows with key cardinality.
+local RATE_COUNTER_FRACTION, RATE_MARKER_FRACTION = 0.70, 0.20
 local MARKER_WIDTHS = {60, 600, 3600, 86400}
 
 local function marker_width(duration)
@@ -1385,6 +1386,18 @@ local function marker_width(duration)
         if duration <= width then return width end
     end
     return MARKER_WIDTHS[#MARKER_WIDTHS]
+end
+
+-- The shared counter for every client key of a rule that has no counter of its own. It is one entry per rule and window, held in
+-- the share's reserved tenth, and it expires with the window. A key it cannot allocate is not counted, which is only possible
+-- when the whole dictionary is out of memory.
+local function rate_overflow_exceeded(dictionary, domain, rule, threshold, period)
+    local count = dictionary:incr("o:" .. domain .. ":" .. tostring(rule.id) .. ":" .. math.floor(ngx.time() / period), 1, 0, period * 2)
+    if not count then
+        record_security_event("rate_limit_state_full")
+        return false
+    end
+    return count > threshold
 end
 
 local function rate_limit_exceeded(config, rule, limit)
@@ -1398,19 +1411,21 @@ local function rate_limit_exceeded(config, rule, limit)
     if dictionary:get("m:" .. id) then return true end
     local counter = "c:" .. id .. ":" .. math.floor(ngx.time() / period)
     local share = domain_budget.share(dictionary, hosts_on_cell())
-    -- A client key the domain has not counted yet takes one entry of the domain's own share. Beyond the share it is not counted,
-    -- and the first refusal in a window is reported, so one domain's key flood costs only that domain its counters.
+    -- A client key the domain has not counted yet takes one entry of the domain's own share. Beyond the share, or when the
+    -- dictionary cannot allocate, the key is counted in the rule's single overflow counter instead, so a flood of new keys
+    -- cannot step outside the rule: all untracked keys together are held to the rule's threshold for the window.
+    local overflow = false
     if not dictionary:get(counter) then
         local limit_per_window = math.max(1, math.floor(share * RATE_COUNTER_FRACTION / (2 * 3)))
         local admitted, used = domain_budget.admit(dictionary, domain, "c" .. period, period, limit_per_window)
         if not admitted then
             if used == limit_per_window + 1 then record_security_event("rate_limit_state_full") end
-            return false
+            overflow = true
         end
     end
+    if overflow then return rate_overflow_exceeded(dictionary, domain, rule, threshold, period) end
     local count = dictionary:incr(counter, 1, 0, period * 2)
-    -- A full dictionary never blocks anyone: no count means no decision.
-    if not count then return false end
+    if not count then return rate_overflow_exceeded(dictionary, domain, rule, threshold, period) end
     if count > threshold then
         -- The mitigation keeps its own share. When that is used up, the counter stays over its threshold, so the client is still
         -- blocked until the window ends; it is not released early and it evicts nothing.
