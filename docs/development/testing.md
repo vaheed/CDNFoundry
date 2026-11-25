@@ -155,6 +155,12 @@ Expensive jobs run separately:
 
 `make dev-waf-e2e` builds the pinned image and runs the real managed-WAF corpus. It verifies off, monitor, balanced, and strict behavior, malformed and oversized bodies, literal expiry-aware exclusions, privacy-safe telemetry, concurrent blocking load, and isolation of non-WAF hosts.
 
+### WAF baseline
+
+`make dev-waf-baseline` builds the WAF image, replays the CRS, evasion and clean corpora against a real cell at every protection and paranoia level, and runs the latency and CPU matrix. It writes `storage/qualification/waf-baseline.json` and `waf-latency.json`; the run takes more than an hour and needs an otherwise idle host. `python3 tests/e2e/waf_baseline.py compare BASELINE RECORD` exits 1 when detection falls or false positives rise. The harness and matrix are unit-tested without Docker in `tests/contract/test_waf_baseline.py` and `test_waf_latency_matrix.py`. See [WAF verification baseline](../operations/waf-verification-baseline.md).
+
+`tests/e2e/waf_scoped_exclusions.py` qualifies path and method scoped exclusions on a real cell, and `ruleset_version_mismatch.py` qualifies rule set version reporting; both run in `make dev-waf-e2e`.
+
 ### Gateway ingress
 
 `python3 tests/e2e/gateway_ingress.py` qualifies the gateway runtime without a browser. It needs the development edge profile and the locally built `cdnfoundry/edge-gateway:qualification` image. `make dev-gateway-e2e` builds that image and runs the script.

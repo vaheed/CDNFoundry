@@ -396,11 +396,36 @@ compares against.
 run on the reference cell is stored with the release record. The version
 mismatch is tested by starting a cell from an image with a changed version label.
 
-**Completion checkpoint, 21 November 2026.**
+**Recorded baseline, 26 November 2026.** Commit `808c527d`, clean tree, development host,
+ModSecurity and CRS at the pinned commits. Full tables, method, limits and the raw
+records are in [WAF verification baseline](operations/waf-verification-baseline.md).
+
+| Level (paranoia 1) | In-scope CRS attacks detected | Ordinary clean requests blocked | CPU per request, cached GET | p99, cached GET |
+| --- | ---: | ---: | ---: | ---: |
+| Off | 0% | 0% | 436 µs | 33 ms |
+| Observe | 94.25% (2,311 stages) | 0% of 9,670 | 2,914 µs | 211 ms |
+| Recommended | 94.25% (93.21% blocked) | 9.18% (8.62% to 9.78%) | 3,361 µs | 230 ms |
+| High | 94.25% (94.20% blocked) | 9.18% (8.62% to 9.78%) | 4,006 µs | 286 ms |
+
+- The whole 9.18% is PUT, PATCH and DELETE (888 of 888), blocked by CRS rule 911100; none
+  of 8,782 GET, HEAD and POST requests was. Paranoia 2 adds 2.8 points and paranoia 4 blocks 66.6%.
+- **The chunked-body case is blocked** on Recommended and High at every paranoia level, as are
+  HTTP/2 without a length and the other framings; the one attack that passes is a script tag in a
+  multipart filename.
+- Cost grows faster than body size: 10 ms of CPU for a 4 KiB body, 81 ms for 64 KiB, and no 1 MiB
+  request completed in 5 seconds at Recommended. Ten log-only rules double the cost of a request
+  (3,361 to 6,400 µs) through the second scoring pass.
+- **Revised target.** "An alert within two heartbeats" is revised: a cell's commits are recorded from
+  its first heartbeat, and the cells list, pools list and metric show a mismatch within one scrape.
+  The alert fires after 2 minutes, because a cell replaced during a rollout must not page anyone.
+  Reason: heartbeats arrive every few seconds and scrapes every 15, so two heartbeats is shorter
+  than the shortest observable interval.
+
+**Completion checkpoint, 26 November 2026.**
 
 | Implementation | Documentation | Automated/runtime | Browser |
 | --- | --- | --- | --- |
-| Benchmark exists; corpus/integrated baseline open | Existing benchmark docs; corpus/budget records open | Historical measurements only; phase matrix open | Version/alert UI gate open |
+| Complete: corpora, harness, comparison, latency matrix, version display on Cells and Service pools lists | Complete: [WAF verification baseline](operations/waf-verification-baseline.md), cell inventory, runbook, testing, changelog | Passed: harness unit tests on a stub cell, full replay of 13 hosts, 24-case latency matrix, version mismatch on a real cell, alert rule test. One development-host record; fleet qualification stays open | Passed: edge-health, screens-rich and every-screen specs (112 passed, 52 skipped by design, 0 failed) |
 
 ---
 

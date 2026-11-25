@@ -22,6 +22,7 @@ prove that customer traffic reaches both failure domains.
 - [Hardware requirements](hardware-requirements.md): sizing guidance and capacity planning.
 - [v2.1.3 release notes](releases/v2.1.3.md): WAF body scoring, per-domain budgets, IPv6 client counting, security reporting, and challenge binding.
 - [Performance audit](performance-audit-2026-11-21.md): measured workloads and component costs, with their limits.
+- [WAF verification baseline](waf-verification-baseline.md): corpora, harness, recorded detection, false positive and latency baseline, and how later changes compare.
 - [Request-rule qualification](request-rules-qualification-2026-11-21.md): runtime and browser evidence for redirects, rewrites, headers, and cache rules.
 - [Fleet host and backup qualification](fleet-bootstrap-qualification.md): verified receipts, host preparation, and the untested host matrix.
 

@@ -182,6 +182,7 @@ const operate = [
       { text: 'Production qualification', link: '/operations/production-qualification' },
       { text: 'Staging qualification 2026-11-15', link: '/operations/staging-qualification-2026-11-15' },
       { text: 'Performance audit 2026-11-21', link: '/operations/performance-audit-2026-11-21' },
+      { text: 'WAF verification baseline', link: '/operations/waf-verification-baseline' },
       { text: 'Request-rule qualification', link: '/operations/request-rules-qualification-2026-11-21' },
       { text: 'Fleet host and backup qualification', link: '/operations/fleet-bootstrap-qualification' },
       { text: 'Hardware requirements', link: '/operations/hardware-requirements' },
