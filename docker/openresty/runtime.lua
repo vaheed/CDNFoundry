@@ -6,6 +6,7 @@ local cache_target = require "cache_key"
 local waf_body = require "waf_body"
 local domain_budget = require "domain_budget"
 local client_keys = require "client_key"
+local ip_list = require "ip_list"
 
 -- The commits of the rule engine and the rule set this image was built from, written at build time. A cell reports them in its
 -- status so the control plane can compare them with the pinned versions. Anything that is not a full commit id is dropped.
@@ -1409,6 +1410,19 @@ local function condition_matches(condition, request)
         return number_matches(operator, request.asn, expected)
     end
     if field == "client_ip" then return address_matches(operator, request.client, expected) end
+    if field == "client_ip_list" then
+        -- The named list is the domain's compiled list from the signed snapshot; a name with no list matches nothing.
+        local lists = request.ip_lists
+        local packed = request.client_packed
+        if packed == nil then
+            packed = packed_address(request.client) or false
+            if packed and #packed == 16 and packed:sub(1, 12) == "\0\0\0\0\0\0\0\0\0\0\255\255" then packed = packed:sub(13) end
+            request.client_packed = packed
+        end
+        local listed = packed ~= false and type(lists) == "table" and ip_list.contains(lists[tostring(expected)], packed) or false
+        if operator == "not_equals" then return not listed end
+        return listed
+    end
     if field == "user_agent" then return text_matches(operator, request.user_agent, expected, true) end
     if field == "referer" then return text_matches(operator, request.referer, expected, true) end
     if field == "referer_host" then return text_matches(operator, request.referer_host, expected, true) end
@@ -2168,6 +2182,7 @@ function M.access()
         referer_host = referer_host(ngx.var.http_referer), file_extension = (ngx.var.uri or "/"):match("%.([%w]+)$"),
         body_size = size, tls_version = ngx.var.https == "on" and (ngx.var.ssl_protocol or "none") or "none",
         cookie_header = ngx.var.http_cookie, headers = ngx.req.get_headers(100),
+        ip_lists = state.ip_lists and state.ip_lists[tostring(config.domain_id)],
     }
     local client_security = security.client_security
     if type(client_security) == "table" and client_security.enabled == true then

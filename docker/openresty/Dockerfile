@@ -102,6 +102,7 @@ COPY docker/openresty/cache_key.lua /etc/cdnfoundry/cache_key.lua
 COPY docker/openresty/waf_body.lua /etc/cdnfoundry/waf_body.lua
 COPY docker/openresty/domain_budget.lua /etc/cdnfoundry/domain_budget.lua
 COPY docker/openresty/client_key.lua /etc/cdnfoundry/client_key.lua
+COPY docker/openresty/ip_list.lua /etc/cdnfoundry/ip_list.lua
 COPY --chmod=755 docker/openresty/entrypoint.sh /usr/local/bin/cdnfoundry-edge-entrypoint
 
 ENTRYPOINT ["/usr/local/bin/cdnfoundry-edge-entrypoint"]

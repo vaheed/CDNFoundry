@@ -1393,6 +1393,10 @@ func compileRuntime(s state, keys map[string]string) (map[string]any, map[string
 	poolCertificates := map[string]map[string]any{}
 	cellHosts := map[string]map[string]any{}
 	cellCertificates := map[string]map[string]any{}
+	combinedLists := map[string]any{}
+	poolLists := map[string]map[string]any{}
+	cellLists := map[string]map[string]any{}
+	cellListRanges := map[string]int{}
 	for _, raw := range s.Domains {
 		var domain struct {
 			SchemaVersion int            `json:"schema_version"`
@@ -1441,6 +1445,16 @@ func compileRuntime(s state, keys map[string]string) (map[string]any, map[string
 		}
 		if err := validateRequestRules(domain.Rules); err != nil {
 			return nil, nil, err
+		}
+		// Lists are carried once per domain beside the hosts, not copied into every hostname of the domain.
+		domainLists := domain.Security["ip_lists"]
+		delete(domain.Security, "ip_lists")
+		listRanges, err := validateIPLists(domainLists)
+		if err != nil {
+			return nil, nil, err
+		}
+		if listRanges > 0 {
+			combinedLists[strconv.FormatUint(domain.DomainID, 10)] = domainLists
 		}
 		if domain.TLS == nil {
 			domain.TLS = map[string]any{}
@@ -1516,6 +1530,16 @@ func compileRuntime(s state, keys map[string]string) (map[string]any, map[string
 					return nil, nil, errors.New("duplicate runtime cell hostname")
 				}
 				cellHosts[cell][name] = compiled
+				if listRanges > 0 && cellLists[cell][strconv.FormatUint(domain.DomainID, 10)] == nil {
+					if cellLists[cell] == nil {
+						cellLists[cell] = map[string]any{}
+					}
+					cellLists[cell][strconv.FormatUint(domain.DomainID, 10)] = domainLists
+					cellListRanges[cell] += listRanges
+					if cellListRanges[cell] > maximumIPListRangesPerCell {
+						return nil, nil, errors.New("ip lists exceed the cell budget")
+					}
+				}
 				if hostCertificateID != "" {
 					cellCertificates[cell][hostCertificateID] = certificates[hostCertificateID]
 				}
@@ -1526,6 +1550,12 @@ func compileRuntime(s state, keys map[string]string) (map[string]any, map[string
 				}
 				if len(domain.Cells) > 0 {
 					continue
+				}
+				if listRanges > 0 {
+					if poolLists[pool] == nil {
+						poolLists[pool] = map[string]any{}
+					}
+					poolLists[pool][strconv.FormatUint(domain.DomainID, 10)] = domainLists
 				}
 				if poolHosts[pool] == nil {
 					poolHosts[pool] = map[string]any{}
@@ -1543,12 +1573,19 @@ func compileRuntime(s state, keys map[string]string) (map[string]any, map[string
 	}
 	pools := map[string]map[string]any{}
 	for name, assigned := range poolHosts {
-		pools[name] = map[string]any{"schema_version": 1, "sequence": s.Sequence, "hosts": assigned, "certificates": poolCertificates[name]}
+		pools[name] = map[string]any{"schema_version": 1, "sequence": s.Sequence, "hosts": assigned, "certificates": poolCertificates[name], "ip_lists": orEmpty(poolLists[name])}
 	}
 	for name, assigned := range cellHosts {
-		pools[name] = map[string]any{"schema_version": 1, "sequence": s.Sequence, "hosts": assigned, "certificates": cellCertificates[name]}
+		pools[name] = map[string]any{"schema_version": 1, "sequence": s.Sequence, "hosts": assigned, "certificates": cellCertificates[name], "ip_lists": orEmpty(cellLists[name])}
 	}
-	return map[string]any{"schema_version": 1, "sequence": s.Sequence, "hosts": hosts, "certificates": certificates}, pools, nil
+	return map[string]any{"schema_version": 1, "sequence": s.Sequence, "hosts": hosts, "certificates": certificates, "ip_lists": combinedLists}, pools, nil
+}
+
+func orEmpty(in map[string]any) map[string]any {
+	if in == nil {
+		return map[string]any{}
+	}
+	return in
 }
 
 func validPoolName(name string) bool {
