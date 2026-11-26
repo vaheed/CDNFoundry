@@ -22,6 +22,7 @@ from managed_waf import IMAGE, NETWORK, ROOT, host, run  # noqa: E402
 
 CELL = "cdnf-e2e-rate-isolation"
 ORIGIN = "cdnf-e2e-rate-origin"
+PRECISE_THRESHOLD = 100
 FLOOD_REQUESTS = int(os.environ.get("CDNF_FLOOD_REQUESTS", "30000"))
 
 
@@ -36,15 +37,20 @@ def domain(name: str, identifier: int, origin_ip: str) -> dict:
     limits.update({"requests_per_second": 100000, "request_burst": 100000, "connections_per_client": 256, "connections_per_domain": 4096})
     config["security"]["rules"] = [{
         "id": 1, "name": None, "priority": 1, "action": "block",
-        "conditions": [{"field": "path", "operator": "starts_with", "value": "/"}],
+        "conditions": [{"field": "path", "operator": "equals", "value": "/"}],
         "rate_limit": {"key": "header", "header_name": "X-Limit-Key", "threshold": 2, "period_seconds": 600, "duration_seconds": 600},
+    }, {
+        # A rule with a threshold large enough to measure: the victim's must still trip at 100 requests, within 5%, after a flood.
+        "id": 2, "name": None, "priority": 2, "action": "block",
+        "conditions": [{"field": "path", "operator": "equals", "value": "/precise"}],
+        "rate_limit": {"key": "header", "header_name": "X-Limit-Key", "threshold": PRECISE_THRESHOLD, "period_seconds": 600, "duration_seconds": 600},
     }]
     return config
 
 
-def get(ip: str, hostname: str, key: str, connection: http.client.HTTPConnection | None = None) -> int:
+def get(ip: str, hostname: str, key: str, connection: http.client.HTTPConnection | None = None, path: str = "/") -> int:
     own = connection or http.client.HTTPConnection(ip, 8080, timeout=10)
-    own.request("GET", "/", headers={"Host": hostname, "X-Limit-Key": key})
+    own.request("GET", path, headers={"Host": hostname, "X-Limit-Key": key})
     response = own.getresponse()
     response.read()
     status = response.status
@@ -147,6 +153,12 @@ def main() -> None:
             late = [get(ip, "attacker.rate.test", f"late-{index}") for index in range(4)]
             assert 429 in late, f"keys first seen after exhaustion evaded the rule: {late}"
             assert [get(ip, "victim.rate.test", "fresh") for _ in range(3)] == [200, 200, 429], "the victim lost its own counting"
+
+            # The victim's threshold is still met within 5% after the flood: 100 requests of one key are allowed, then it is limited.
+            allowed = 0
+            while get(ip, "victim.rate.test", "precise", path="/precise") != 429 and allowed < 2 * PRECISE_THRESHOLD:
+                allowed += 1
+            assert abs(allowed - PRECISE_THRESHOLD) <= PRECISE_THRESHOLD * 0.05, f"the victim's threshold of {PRECISE_THRESHOLD} tripped after {allowed} requests"
 
             # The attacker alone pays: its extra keys are uncounted and reported, and the report names its own domain only.
             events = [event for event in security_events(CELL) if event["reason_code"] == "rate_limit_state_full"]
