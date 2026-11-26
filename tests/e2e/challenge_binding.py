@@ -58,7 +58,7 @@ def leading_zero_bits(digest: bytes) -> int:
 def challenge(ip: str, source: str, user_agent: str = "Browser/1") -> tuple[str, int]:
     status, _, page = request(ip, source, headers={"User-Agent": user_agent})
     assert status == 403 and "Checking your browser" in page, (status, page[:200])
-    seed = re.search(r'const seed="([^"]+)"', page).group(1)
+    seed = re.search(r'var seed="([^"]+)"', page).group(1)
     bits = int(re.search(r",bits=(\d+),", page).group(1))
     return seed, bits
 

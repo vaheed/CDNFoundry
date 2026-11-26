@@ -267,6 +267,19 @@ do
         ngx.log(ngx.ERR, "EDGE_CHALLENGE_BITS must be a whole number from 12 to 24; using 16")
     end
 end
+-- Difficulty rises for a client or domain that shows signs of abuse, never above this cap (EDGE_CHALLENGE_MAX_BITS, from the base
+-- to 24). The default, 17 bits or the base if that is higher, is what the slowest device of the browser suite solves with a 95th
+-- percentile of 3 seconds or less: one worker at about 200,000 hashes a second, where 17 bits takes 2.0 seconds. The cap keeps it so.
+local CHALLENGE_MAX_BITS = math.min(24, math.max(CHALLENGE_BITS, 17))
+do
+    local configured = os.getenv("EDGE_CHALLENGE_MAX_BITS")
+    local bits = tonumber(configured)
+    if bits and bits == math.floor(bits) and bits >= CHALLENGE_BITS and bits <= 24 then
+        CHALLENGE_MAX_BITS = bits
+    elseif configured and configured ~= "" then
+        ngx.log(ngx.ERR, "EDGE_CHALLENGE_MAX_BITS must be a whole number from the base difficulty to 24; using ", CHALLENGE_MAX_BITS)
+    end
+end
 -- A token follows its client across the client's own address changes: it is bound to the client key (an IPv6 address counts under its
 -- prefix), not to the exact address, and by default to the browser family in the User-Agent, so a token copied to a script or to another
 -- browser stops working while a browser update does not. EDGE_CHALLENGE_BIND_USER_AGENT is "family" (default), "exact" (the whole
@@ -414,7 +427,25 @@ local function leading_zero_bits(raw)
     return bits
 end
 
-local function challenge_page(seed, nonce)
+-- The difficulty a seed asks for: the base, two bits more for a client with three or more recent security events on this domain (its
+-- penalty-box evidence), one more while the domain is restricted, and never above the cap. A bit doubles the expected work.
+function CHAL.difficulty(config)
+    local extra = 0
+    local domain = tostring(config.domain_id or config.domain)
+    local clients = ngx.shared.client_events
+    local client = event_client()
+    if clients and client and client ~= "" then
+        local digest, minute = ngx.md5(client), math.floor(ngx.time() / 60)
+        local recent = (clients:get("cs:" .. domain .. ":" .. digest .. ":" .. minute) or 0) + (clients:get("cs:" .. domain .. ":" .. digest .. ":" .. (minute - 1)) or 0)
+        if recent >= 3 then extra = extra + 2 end
+    end
+    local raw = ngx.shared.runtime_limits:get("overlay:" .. domain)
+    local overlay = raw and cjson.decode(raw)
+    if type(overlay) == "table" and overlay.state == "restricted" then extra = extra + 1 end
+    return math.min(CHALLENGE_MAX_BITS, CHALLENGE_BITS + extra)
+end
+
+local function challenge_page(seed, nonce, bits)
     return table.concat({
         '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">',
         '<title>Checking your browser</title><meta name="robots" content="noindex">',
@@ -422,16 +453,36 @@ local function challenge_page(seed, nonce)
         'main{max-width:30rem;padding:1.5rem}h1{font-size:1.25rem;margin:0 0 .5rem}p{margin:.5rem 0}',
         '@media (prefers-color-scheme:dark){body{background:#141414;color:#ececec}}</style></head><body><main>',
         '<h1>Checking your browser</h1>',
-        '<p id="status" role="status" aria-live="polite">This takes a few seconds. The page continues on its own.</p>',
+        '<p id="status" role="status" aria-live="polite"></p>',
         '<noscript><p>This site is handling a flood of requests and needs JavaScript to confirm that a person is visiting. ',
         'Turn JavaScript on and reload, or contact the site owner.</p></noscript>',
-        '<script nonce="', nonce, '">(async()=>{const seed="', seed, '",bits=', tostring(CHALLENGE_BITS), ',status=document.getElementById("status");',
-        'try{const enc=new TextEncoder();const lead=h=>{let n=0;for(const b of h){if(b===0){n+=8;continue}n+=Math.clz32(b)-24;break}return n};',
-        'let c=0;for(;;c++){const h=new Uint8Array(await crypto.subtle.digest("SHA-256",enc.encode(seed+":"+c)));if(lead(h)>=bits)break}',
-        'const r=await fetch("', CHALLENGE_PATH, '",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},credentials:"same-origin",body:"seed="+encodeURIComponent(seed)+"&counter="+c});',
-        'if(r.ok){location.reload()}else{status.textContent="Verification failed. Reload the page to try again."}}',
-        'catch(e){status.textContent="This browser cannot complete the check. Try a current browser over HTTPS."}})();</script></main></body></html>',
+        '<script id="cdnf-solver" nonce="', nonce, '">', CHAL.solver_source(), '</script>',
+        '<script nonce="', nonce, '">(function(){var seed="', seed, '",bits=', tostring(bits), ',status=document.getElementById("status"),done=false,workers=[];',
+        'function fail(text){status.textContent=text}status.textContent="This takes a few seconds. The page continues on its own.";',
+        'function finish(counter){if(done)return;done=true;workers.forEach(function(w){w.terminate()});',
+        'fetch("', CHALLENGE_PATH, '",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},credentials:"same-origin",body:"seed="+encodeURIComponent(seed)+"&counter="+counter})',
+        '.then(function(r){if(r.ok){location.reload()}else{fail("Verification failed. Reload the page to try again.")}},function(){fail("The check could not reach the site. Reload the page to try again.")})}',
+        -- The work is split over a few workers so the page stays responsive and a phone with several cores uses them; if a worker cannot
+        -- start, the page's own thread does the same search in short slices.
+        'function inline(){var next=0,slice=function(){var c=window.cdnfSolver.search(seed,bits,next,1,5000);next+=5000;if(c>=0){finish(c)}else{setTimeout(slice,0)}};slice()}',
+        'try{var count=Math.max(1,Math.min(4,(navigator.hardwareConcurrency||2)-1)),source=document.getElementById("cdnf-solver").textContent,',
+        'url=URL.createObjectURL(new Blob([source],{type:"text/javascript"}));',
+        'for(var i=0;i<count;i++){var worker=new Worker(url);worker.onmessage=function(e){finish(e.data)};',
+        'worker.onerror=function(){if(!done&&workers.length){workers.forEach(function(w){w.terminate()});workers=[];inline()}};',
+        'workers.push(worker);worker.postMessage({seed:seed,bits:bits,start:i,step:count})}}',
+        'catch(e){workers=[];inline()}})();</script></main></body></html>',
     })
+end
+
+-- The solver the challenge page runs, read once from the image. A cell without the file cannot serve a challenge page, so the failure
+-- is logged where an operator will see it.
+function CHAL.solver_source()
+    if CHAL.solver == nil then
+        local file = io.open("/etc/cdnfoundry/challenge_solver.js", "rb")
+        CHAL.solver = file and file:read("*a") or false
+        if file then file:close() else ngx.log(ngx.ERR, "challenge_solver.js is missing; the challenge page cannot solve") end
+    end
+    return CHAL.solver or ""
 end
 
 -- The body a client that does not ask for HTML gets from a challenge refusal: the reason in a form a program can read.
@@ -450,12 +501,12 @@ local function enforce_challenge(config, incident, client, trusted)
         if #raw > 512 then return security_reject(413, "body_too_large") end
         local seed, counter = raw:match("^seed=([%w%%%.%-_]+)&counter=(%d+)$")
         seed = seed and ngx.unescape_uri(seed)
-        local kid, domain, issued, bits, mac = (seed or ""):match("^(%w+)%.(%d+)%.(%d+)%.(%d+)%.(%x+)$")
+        local kid, domain, issued, bits, nonce, mac = (seed or ""):match("^(%w+)%.(%d+)%.(%d+)%.(%d+)%.(%x+)%.(%x+)$")
         local secret = kid and CHAL.verifying(kid)
         local valid = secret and tonumber(domain) == tonumber(config.domain_id or 0) and tonumber(issued) + CHALLENGE_SEED_SECONDS >= ngx.time()
-            and tonumber(issued) <= ngx.time() + 5 and tonumber(bits) == CHALLENGE_BITS and #counter <= 12
-            and constant_time_equal(mac, hmac_sha256_hex("seed|" .. kid .. "|" .. domain .. "|" .. issued .. "|" .. bits .. "|" .. client_binding(client), kid ~= CHAL.LOCAL and secret or nil))
-            and leading_zero_bits(sha256_raw(seed .. ":" .. counter)) >= CHALLENGE_BITS
+            and tonumber(issued) <= ngx.time() + 5 and tonumber(bits) >= CHALLENGE_BITS and tonumber(bits) <= CHALLENGE_MAX_BITS and #counter <= 12
+            and constant_time_equal(mac, hmac_sha256_hex("seed|" .. kid .. "|" .. domain .. "|" .. issued .. "|" .. bits .. "|" .. nonce .. "|" .. client_binding(client), kid ~= CHAL.LOCAL and secret or nil))
+            and leading_zero_bits(sha256_raw(seed .. ":" .. counter)) >= tonumber(bits)
         if not valid then ngx.ctx.reject_json = CHAL.refusal("challenge_invalid", "The challenge answer was not accepted. Load the site in a browser to try again."); return security_reject(403, "challenge_invalid") end
         -- A seed works once: replaying a solved seed, or a seed from another client, is refused.
         local added = ngx.shared.runtime_limits:add("challenge:used:" .. ngx.md5(seed), true, CHALLENGE_SEED_SECONDS)
@@ -483,6 +534,10 @@ local function enforce_challenge(config, incident, client, trusted)
     for _, prefix in ipairs(incident.challenge_bypass_prefixes or {}) do
         if type(prefix) == "string" and prefix ~= "" and uri:sub(1, #prefix) == prefix then return nil end
     end
+    -- Methods the domain chose to let through without a challenge, such as OPTIONS for a browser's preflight request.
+    for _, allowed_method in ipairs(incident.challenge_bypass_methods or {}) do
+        if allowed_method == method then return nil end
+    end
     -- Only a person's page load gets the challenge; every other request without a token is refused, so a script never reaches the origin.
     local accepts_html = (method == "GET" or method == "HEAD") and (ngx.var.http_accept or ""):find("text/html", 1, true)
     if not accepts_html then
@@ -494,10 +549,13 @@ local function enforce_challenge(config, incident, client, trusted)
     local issued = tostring(ngx.time())
     local binding = client_binding(client)
     local signing_id, signing_secret = CHAL.signing()
-    local seed = signing_id .. "." .. tostring(config.domain_id or 0) .. "." .. issued .. "." .. tostring(CHALLENGE_BITS) .. "." .. hmac_sha256_hex("seed|" .. signing_id .. "|" .. tostring(config.domain_id or 0) .. "|" .. issued .. "|" .. tostring(CHALLENGE_BITS) .. "|" .. binding, signing_secret)
+    local bits = CHAL.difficulty(config)
+    -- Two page loads in the same second would otherwise get the same seed, and the second would be refused as a replay of the first.
+    local nonce = resty_string.to_hex(sha256_raw(tostring(ngx.var.request_id) .. tostring(ngx.now()) .. tostring(math.random())):sub(1, 6))
+    local seed = signing_id .. "." .. tostring(config.domain_id or 0) .. "." .. issued .. "." .. tostring(bits) .. "." .. nonce .. "." .. hmac_sha256_hex("seed|" .. signing_id .. "|" .. tostring(config.domain_id or 0) .. "|" .. issued .. "|" .. tostring(bits) .. "|" .. nonce .. "|" .. binding, signing_secret)
     local nonce = ngx.var.request_id or ngx.md5(seed)
-    ngx.ctx.reject_body = challenge_page(seed, nonce)
-    ngx.ctx.reject_csp = "default-src 'none'; script-src 'nonce-" .. nonce .. "'; style-src 'nonce-" .. nonce .. "'; connect-src 'self'; base-uri 'none'; form-action 'none'"
+    ngx.ctx.reject_body = challenge_page(seed, nonce, bits)
+    ngx.ctx.reject_csp = "default-src 'none'; script-src 'nonce-" .. nonce .. "'; style-src 'nonce-" .. nonce .. "'; connect-src 'self'; worker-src blob:; base-uri 'none'; form-action 'none'"
     return security_reject(403, "challenge_required")
 end
 
@@ -3393,6 +3451,10 @@ function M.control()
                 or type(incident.max_body_bytes) ~= "number" or incident.max_body_bytes < 0 or type(incident.challenge) ~= "boolean" then return ngx.exit(400) end
             local known = { GET = true, HEAD = true, OPTIONS = true, POST = true, PUT = true, PATCH = true, DELETE = true }
             for _, name in ipairs(incident.methods) do if not known[name] then return ngx.exit(400) end end
+            if incident.challenge_bypass_methods ~= nil then
+                if type(incident.challenge_bypass_methods) ~= "table" or #incident.challenge_bypass_methods > 7 then return ngx.exit(400) end
+                for _, name in ipairs(incident.challenge_bypass_methods) do if not known[name] then return ngx.exit(400) end end
+            end
             if incident.challenge_bypass_prefixes ~= nil then
                 if type(incident.challenge_bypass_prefixes) ~= "table" or #incident.challenge_bypass_prefixes > 8 then return ngx.exit(400) end
                 for _, prefix in ipairs(incident.challenge_bypass_prefixes) do

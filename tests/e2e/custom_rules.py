@@ -355,7 +355,7 @@ def qualify(directory: pathlib.Path) -> None:
     code, head, body = get("challenge.example", "/members", html)
     assert code == 403 and "Checking your browser" in body, (code, head)
     expect(get("challenge.example", "/members", "Accept: */*"), 403, "challenge_required")
-    seed = re.search(r'const seed="([0-9a-f.]+)"', body).group(1)
+    seed = re.search(r'var seed="([0-9a-f.]+)"', body).group(1)
     code, head, _ = get("challenge.example", "/.cdnf/challenge", method="POST", data=f"seed={seed}&counter={runtime.solve_challenge(seed)}")
     assert code == 204 and "cdnf_chal=" in head, head
     cookie = re.search(r"cdnf_chal=([0-9a-f.]+)", head).group(1)

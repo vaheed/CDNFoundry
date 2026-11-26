@@ -221,7 +221,7 @@ def qualify_incident_profile() -> None:
     # A page load with no token gets the challenge page; anything else with no token is refused outright.
     status, head, body = curl("overlay.example", "/", html)
     assert status == 403 and "Checking your browser" in body and "noscript" in body and 'role="status"' in body and "Content-Security-Policy" in head and "no-store" in head.lower(), (status, head)
-    seed = re.search(r'const seed="([0-9a-f.]+)"', body).group(1)
+    seed = re.search(r'var seed="([0-9a-f.]+)"', body).group(1)
     assert curl("overlay.example", "/", ("Accept: */*",))[0] == 403 and "Checking" not in curl("overlay.example", "/", ("Accept: */*",))[2]
     # Marked API paths are not challenged, and the profile's method and body limits apply.
     assert curl("overlay.example", "/api/status")[0] != 403
