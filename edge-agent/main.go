@@ -86,6 +86,8 @@ type client struct {
 	gatewayStatusURL                   string
 	derivedEnsured                     bool
 	keyUnassigned                      map[string]time.Time
+	challenge                          challengeKeySet
+	challengeFetched                   time.Time
 	statusURLs                         []string
 	cellAssignments                    map[string]string
 	cellTargets                        map[string]cellTarget
@@ -1887,6 +1889,7 @@ func (c *client) runtimeStatus() ([]map[string]any, []map[string]any, []map[stri
 	security := []map[string]any{}
 	controls, _ := c.loadCellControls()
 	emergencyControls, _ := c.loadEmergencyControls()
+	c.refreshChallengeKeys()
 	for _, endpoint := range c.statusURLs {
 		decoded, ok := c.runtimeEndpointStatus(endpoint)
 		if !ok {
@@ -1898,6 +1901,7 @@ func (c *client) runtimeStatus() ([]map[string]any, []map[string]any, []map[stri
 		if restored, reported := decoded.Cell["overlays_restored"].(bool); reported && !restored {
 			c.restoreOverlays(endpoint)
 		}
+		c.pushChallengeKeys(endpoint, decoded.Cell["challenge_keys_version"])
 		if decoded.Cell != nil && len(cells) < 32 {
 			name, _ := decoded.Cell["name"].(string)
 			if desiredDrained, configured := controls[name]; configured {
