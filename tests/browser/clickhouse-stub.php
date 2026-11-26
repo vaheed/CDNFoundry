@@ -11,7 +11,8 @@ if (str_contains($sql, 'cdnf.rule_matches_hourly')) {
 
     return;
 }
-if (str_contains($sql, 'countIf(') && str_contains($sql, 'cdnf.edge_events')) {
+// The impact estimate is one ungrouped row; the security path and user agent breakdowns also count with countIf but group.
+if (str_contains($sql, 'countIf(') && str_contains($sql, 'cdnf.edge_events') && ! str_contains($sql, 'GROUP BY')) {
     echo json_encode(['examined' => '48210', 'matched' => '312'])."\n";
 
     return;
