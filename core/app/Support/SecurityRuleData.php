@@ -25,7 +25,7 @@ final class SecurityRuleData
 
     public const RATE_KEYS = [
         'client_ip' => 'Client IP', 'client_ip_path' => 'Client IP and path', 'header' => 'Header value', 'cookie' => 'Cookie value',
-        'query_arg' => 'Query argument', 'asn' => 'ASN', 'country' => 'Country',
+        'query_arg' => 'Query argument', 'asn' => 'ASN', 'country' => 'Country', 'jwt_subject' => 'JWT subject',
     ];
 
     /** The keys a rule may add as the second half of a combination. A client address and path is already a combination. */
@@ -90,15 +90,17 @@ final class SecurityRuleData
         'prompt_injection_score' => ['kind' => 'score', 'operators' => self::NUMBER],
         'prompt_pii' => ['kind' => 'flag', 'operators' => self::FLAG],
         'schema_violation' => ['kind' => 'violation', 'operators' => self::CHOICE],
+        'jwt_valid' => ['kind' => 'flag', 'operators' => self::FLAG],
     ];
 
     /** Fields that only carry a value when the domain has the named detection set up, keyed to its domains column. */
     public const FIELD_REQUIREMENTS = [
         'prompt_injection_score' => 'ai_protection', 'prompt_pii' => 'ai_protection',
         'schema_violation' => 'api_schema', 'leaked_password' => 'credential_check',
+        'jwt_valid' => 'jwt_validation',
     ];
 
-    public const REQUIREMENT_LABELS = ['ai_protection' => 'AI protection', 'api_schema' => 'API schema', 'credential_check' => 'Credential check'];
+    public const REQUIREMENT_LABELS = ['ai_protection' => 'AI protection', 'api_schema' => 'API schema', 'credential_check' => 'Credential check', 'jwt_validation' => 'JWT validation'];
 
     /** The values of the schema violation field: any violation, or one kind. "none" is a request that fits the schema. */
     public const SCHEMA_VIOLATIONS = ['any', 'none', ...ApiSchemaData::VIOLATIONS];
@@ -108,7 +110,7 @@ final class SecurityRuleData
         'continent' => 'Continent', 'asn' => 'ASN', 'client_ip' => 'Client IP', 'client_ip_list' => 'Client IP list', 'user_agent' => 'User agent', 'referer' => 'Referer', 'referer_host' => 'Referer host', 'referer_present' => 'Referer', 'file_extension' => 'File extension',
         'header' => 'Header', 'cookie_present' => 'Cookie', 'content_type' => 'Content type', 'body_size' => 'Body size (bytes)',
         'tls_version' => 'TLS version', 'attack_score' => 'Attack score', 'attack_score_sqli' => 'Attack score (SQL injection)',
-        'attack_score_xss' => 'Attack score (XSS)', 'attack_score_rce' => 'Attack score (command injection)', 'leaked_password' => 'Leaked password', 'prompt_injection_score' => 'Prompt injection score', 'prompt_pii' => 'Personal data in prompt', 'schema_violation' => 'API schema violation',
+        'attack_score_xss' => 'Attack score (XSS)', 'attack_score_rce' => 'Attack score (command injection)', 'leaked_password' => 'Leaked password', 'prompt_injection_score' => 'Prompt injection score', 'prompt_pii' => 'Personal data in prompt', 'schema_violation' => 'API schema violation', 'jwt_valid' => 'Valid JWT',
     ];
 
     public const OPERATOR_LABELS = [
@@ -133,7 +135,7 @@ final class SecurityRuleData
             if (isset($condition['name'])) {
                 $label .= " {$condition['name']}";
             }
-            if (in_array($field, ['query_present', 'cookie_present', 'referer_present', 'leaked_password', 'prompt_pii'], true)) {
+            if (in_array($field, ['query_present', 'cookie_present', 'referer_present', 'leaked_password', 'prompt_pii', 'jwt_valid'], true)) {
                 $present = ($condition['value'] ?? null) === true;
 
                 return $field === 'query_present' ? ($present ? 'Query string is present' : 'Query string is absent') : $label.($present ? ' is present' : ' is absent');

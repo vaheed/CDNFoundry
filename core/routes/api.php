@@ -28,6 +28,7 @@ use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\AiProtectionController;
 use App\Http\Controllers\AnalyticsController;
 use App\Http\Controllers\ApiSchemaController;
+use App\Http\Controllers\JwtValidationController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CacheController;
 use App\Http\Controllers\ClientReputationSharingController;
@@ -175,6 +176,9 @@ Route::middleware(['auth:sanctum', 'account.active', 'token.scope', 'throttle:ac
     Route::get('/domains/{domain}/security/client-side/scripts', [ClientSecurityController::class, 'sightings']);
     Route::post('/domains/{domain}/security/client-side/scripts/approve', [ClientSecurityController::class, 'approve'])->middleware('idempotent');
     Route::post('/domains/{domain}/security/client-side/scripts/{sighting}/approve', [ClientSecurityController::class, 'approve'])->whereNumber('sighting')->middleware('idempotent');
+    Route::get('/domains/{domain}/security/jwt-validation', [JwtValidationController::class, 'show']);
+    Route::put('/domains/{domain}/security/jwt-validation', [JwtValidationController::class, 'update'])->middleware('idempotent');
+    Route::delete('/domains/{domain}/security/jwt-validation', [JwtValidationController::class, 'destroy'])->middleware('idempotent');
     Route::get('/domains/{domain}/security/api-schema', [ApiSchemaController::class, 'show']);
     Route::put('/domains/{domain}/security/api-schema', [ApiSchemaController::class, 'update'])->middleware('idempotent');
     Route::delete('/domains/{domain}/security/api-schema', [ApiSchemaController::class, 'destroy'])->middleware('idempotent');

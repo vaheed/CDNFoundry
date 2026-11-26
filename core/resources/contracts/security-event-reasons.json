@@ -57,6 +57,7 @@
     "schema_body_too_large",
     "schema_invalid_body",
     "schema_unknown_field",
+    "jwt_invalid",
     "client_temporarily_blocked"
   ],
   "non_escalating": [
@@ -97,6 +98,7 @@
     "schema_invalid_parameter",
     "schema_body_too_large",
     "schema_invalid_body",
-    "schema_unknown_field"
+    "schema_unknown_field",
+    "jwt_invalid"
   ]
 }

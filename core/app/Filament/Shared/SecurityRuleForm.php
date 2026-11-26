@@ -54,6 +54,7 @@ final class SecurityRuleForm
         'prompt_pii' => 'Whether the prompt holds an email address, payment card number, IBAN, or US social security number.',
         'schema_violation' => 'How the request differs from the API schema: an unknown path, a method the path does not allow, a missing or wrongly typed parameter or cookie, a JSON body over the limit, or a JSON body that does not fit its schema.',
         'client_ip_list' => 'Whether the visitor\'s address is inside one of the networks of a list of this domain. Operators: is on, is not on.',
+        'jwt_valid' => 'Whether the request carries a JWT that passes this domain\'s JWT validation. A request to a covered path with no token or a refused one is not valid; other paths never match.',
         'leaked_password' => 'Whether the password sent to one of the login paths is in the list of known leaked passwords.',
     ];
 

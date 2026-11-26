@@ -35,12 +35,13 @@ use Illuminate\Validation\ValidationException;
  * @property array{login_paths: list<array<string, mixed>>}|null $credential_check
  * @property array{kinds: list<string>}|null $sensitive_data_check
  * @property array{endpoints: list<string>, prompt_field: string}|null $ai_protection
+ * @property array{paths: list<string>, issuer: string|null, audience: string|null, leeway_seconds: int, keys: list<array{kid: string|null, alg: string, pem: string, expires_at: string|null}>}|null $jwt_validation
  * @property array{title: string, base_path: string, maximum_body_bytes: int, operations: list<array<string, mixed>>}|null $api_schema
  * @property array{maximum_reports_per_minute: int, baseline_minutes: int, enabled_at: string}|null $client_security
  * @property bool $reputation_sharing
  * @property CarbonImmutable|null $registration_expires_at
  */
-#[Fillable(['name', 'display_name', 'lifecycle_state', 'revision', 'nameservers_verified_at', 'nameservers_verified_by', 'disabled_at', 'deprovision_after', 'proxy_settings', 'active_edge_revision', 'cache_settings', 'cache_epoch', 'cache_development_mode_until', 'tls_mode', 'active_tls_certificate_id', 'security_settings', 'security_state', 'automatic_security_state', 'security_overlay_sequence', 'security_state_changed_at', 'waf_profile', 'waf_tuning', 'security_alert', 'credential_check', 'sensitive_data_check', 'ai_protection', 'api_schema', 'client_security', 'delegation_token', 'delegation_nameservers', 'claim_expires_at'])]
+#[Fillable(['name', 'display_name', 'lifecycle_state', 'revision', 'nameservers_verified_at', 'nameservers_verified_by', 'disabled_at', 'deprovision_after', 'proxy_settings', 'active_edge_revision', 'cache_settings', 'cache_epoch', 'cache_development_mode_until', 'tls_mode', 'active_tls_certificate_id', 'security_settings', 'security_state', 'automatic_security_state', 'security_overlay_sequence', 'security_state_changed_at', 'waf_profile', 'waf_tuning', 'security_alert', 'credential_check', 'sensitive_data_check', 'ai_protection', 'api_schema', 'jwt_validation', 'client_security', 'delegation_token', 'delegation_nameservers', 'claim_expires_at'])]
 class Domain extends Model
 {
     use SoftDeletes;
@@ -410,7 +411,7 @@ class Domain extends Model
             'proxy_settings' => 'array',
             'cache_settings' => 'array',
             'cache_development_mode_until' => 'immutable_datetime',
-            'security_settings' => 'array', 'waf_tuning' => 'array', 'security_alert' => 'array', 'credential_check' => 'array', 'sensitive_data_check' => 'array', 'ai_protection' => 'array', 'api_schema' => 'array', 'client_security' => 'array', 'reputation_sharing' => 'boolean',
+            'security_settings' => 'array', 'waf_tuning' => 'array', 'security_alert' => 'array', 'credential_check' => 'array', 'sensitive_data_check' => 'array', 'ai_protection' => 'array', 'api_schema' => 'array', 'jwt_validation' => 'array', 'client_security' => 'array', 'reputation_sharing' => 'boolean',
             'security_state_changed_at' => 'immutable_datetime',
             'active_edge_revision' => 'integer',
             'revision_changed_at' => 'immutable_datetime',

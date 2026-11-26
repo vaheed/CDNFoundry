@@ -186,6 +186,7 @@ final class SecurityConfig
             'sensitive_data' => SensitiveDataCheckData::forEdge($domain->sensitive_data_check),
             'ai_protection' => AiProtectionData::forEdge($domain->ai_protection),
             'api_schema' => ApiSchemaData::forEdge($domain->api_schema),
+            'jwt_validation' => JwtValidationData::forEdge($domain->jwt_validation),
             'client_security' => ClientSecurityData::forEdge($domain->client_security),
             'ip_lists' => IpListData::compileUsed($domain),
             // How many cells serve the domain, so a rule in shared scope can hold each cell to its share of the threshold.
