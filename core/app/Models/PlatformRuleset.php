@@ -6,8 +6,13 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * @property string $rollout_stage shadow, subset or all
+ */
 class PlatformRuleset extends Model
 {
+    public const STAGES = ['shadow', 'subset', 'all'];
+
     protected $guarded = [];
 
     protected function casts(): array
@@ -23,6 +28,12 @@ class PlatformRuleset extends Model
     public function domains(): BelongsToMany
     {
         return $this->belongsToMany(Domain::class, 'platform_ruleset_domains');
+    }
+
+    /** The domains a ruleset enforces on during its `subset` stage; the rest of its reach only records. */
+    public function enforcedDomains(): BelongsToMany
+    {
+        return $this->belongsToMany(Domain::class, 'platform_ruleset_enforced_domains');
     }
 
     /** Rulesets that are switched on and reach the domain: all domains, or the domain is on the chosen list. */

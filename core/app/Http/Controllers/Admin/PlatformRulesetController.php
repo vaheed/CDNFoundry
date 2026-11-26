@@ -19,7 +19,7 @@ class PlatformRulesetController extends Controller
 
     public function show(PlatformRuleset $ruleset): JsonResponse
     {
-        return response()->json(['data' => [...$ruleset->loadCount(['rules', 'domains'])->toArray(), 'domain_ids' => $ruleset->domains()->pluck('domains.id')->all()]]);
+        return response()->json(['data' => [...$ruleset->loadCount(['rules', 'domains'])->toArray(), 'domain_ids' => $ruleset->domains()->pluck('domains.id')->all(), 'enforced_domain_ids' => $ruleset->enforcedDomains()->pluck('domains.id')->all()]]);
     }
 
     public function store(Request $request): JsonResponse
@@ -81,6 +81,9 @@ class PlatformRulesetController extends Controller
             'applies_to_all' => ['sometimes', 'boolean'],
             'domain_ids' => ['sometimes', 'array', 'max:'.config('security.maximum_platform_ruleset_domains')],
             'domain_ids.*' => ['integer', 'distinct', Rule::exists('domains', 'id')],
+            'rollout_stage' => ['sometimes', Rule::in(PlatformRuleset::STAGES)],
+            'enforced_domain_ids' => ['sometimes', 'array', 'max:'.config('security.maximum_platform_ruleset_domains')],
+            'enforced_domain_ids.*' => ['integer', 'distinct', Rule::exists('domains', 'id')],
         ]);
 
         return $data;
@@ -88,6 +91,6 @@ class PlatformRulesetController extends Controller
 
     private function accepted(PlatformRuleset $ruleset, $operation, int $status = 202): JsonResponse
     {
-        return response()->json(['data' => [...$ruleset->only(['id', 'name', 'enabled', 'applies_to_all']), 'operation_id' => $operation->id, 'status' => $operation->status]], $status);
+        return response()->json(['data' => [...$ruleset->only(['id', 'name', 'enabled', 'applies_to_all', 'rollout_stage']), 'operation_id' => $operation->id, 'status' => $operation->status]], $status);
     }
 }

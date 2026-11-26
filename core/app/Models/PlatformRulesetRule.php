@@ -2,12 +2,13 @@
 
 namespace App\Models;
 
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * @property string $mode
- * @property ?\Carbon\CarbonInterface $expires_at
+ * @property ?CarbonInterface $expires_at
  */
 class PlatformRulesetRule extends Model
 {

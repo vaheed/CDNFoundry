@@ -25,17 +25,31 @@ final class PlatformRulesets
         $rules = [];
         $rulesets = PlatformRuleset::query()->appliedTo($domain)->orderBy('id')->with(['rules' => fn ($rules) => $rules->where('enabled', true)->orderBy('priority')->orderBy('id')])->get();
         foreach ($rulesets as $ruleset) {
+            $recordsOnly = self::recordsOnly($ruleset, $domain);
             foreach ($ruleset->rules as $rule) {
                 /** @var PlatformRulesetRule $rule */
                 $rules[] = [
                     'id' => 'p'.$rule->id, 'ruleset' => $ruleset->name, 'name' => $rule->name, 'conditions' => $rule->conditions,
                     'rate_limit' => $rule->rate_limit, 'action' => $rule->action, 'priority' => $rule->priority,
-                    'mode' => $rule->mode, 'expires_at' => $rule->expires_at?->getTimestamp(),
+                    'mode' => $recordsOnly && in_array($rule->action, SecurityRuleData::SHADOW_ACTIONS, true) ? 'shadow' : $rule->mode, 'expires_at' => $rule->expires_at?->getTimestamp(),
                 ];
             }
         }
 
         return $rules;
+    }
+
+    /**
+     * Whether the ruleset's blocking and challenging rules only record on this domain at the ruleset's rollout stage: always in
+     * `shadow`, and in `subset` on every domain not chosen for enforcement. Allow, skip and log rules act as written.
+     */
+    private static function recordsOnly(PlatformRuleset $ruleset, Domain $domain): bool
+    {
+        return match ($ruleset->rollout_stage) {
+            'shadow' => true,
+            'subset' => ! $ruleset->enforcedDomains()->whereKey($domain->id)->exists(),
+            default => false,
+        };
     }
 
     /** What a domain owner may see: the names of the rulesets that apply, and nothing about their rules. */
@@ -87,23 +101,44 @@ final class PlatformRulesets
         if (count($data['domain_ids'] ?? []) > config('security.maximum_platform_ruleset_domains')) {
             throw ValidationException::withMessages(['domain_ids' => 'A ruleset may list at most '.config('security.maximum_platform_ruleset_domains').' domains.']);
         }
+        self::assertEnforcedDomains($ruleset, $data);
         abort_if($ruleset === null && PlatformRuleset::query()->count() >= config('security.maximum_platform_rulesets'), 409, 'The platform ruleset limit has been reached.');
         $before = $ruleset === null ? [] : self::reach($ruleset);
         $saved = DB::transaction(function () use ($ruleset, $data, $actor, $ipAddress): PlatformRuleset {
-            $values = Arr::only($data, ['name', 'description', 'enabled', 'applies_to_all']);
+            $values = Arr::only($data, ['name', 'description', 'enabled', 'applies_to_all', 'rollout_stage']);
             $ruleset = $ruleset === null ? PlatformRuleset::query()->create([...$values, 'created_by' => $actor?->id]) : tap($ruleset)->update($values);
             if (array_key_exists('domain_ids', $data)) {
                 $ruleset->domains()->sync($data['domain_ids']);
             } elseif ($ruleset->applies_to_all) {
                 $ruleset->domains()->detach();
             }
-            self::audit($actor, $ruleset->wasRecentlyCreated ? 'platform_ruleset.created' : 'platform_ruleset.updated', $ruleset, ['enabled' => $ruleset->enabled, 'applies_to_all' => $ruleset->applies_to_all], $ipAddress);
+            if (array_key_exists('enforced_domain_ids', $data)) {
+                $ruleset->enforcedDomains()->sync($data['enforced_domain_ids']);
+            }
+            self::audit($actor, $ruleset->wasRecentlyCreated ? 'platform_ruleset.created' : 'platform_ruleset.updated', $ruleset, ['enabled' => $ruleset->enabled, 'applies_to_all' => $ruleset->applies_to_all, 'rollout_stage' => $ruleset->rollout_stage], $ipAddress);
 
             return $ruleset;
         });
         $reach = self::reach($saved->refresh());
 
         return [$saved, self::rollOut($before, $reach, $actor, $saved->wasRecentlyCreated ? 'ruleset_created' : 'ruleset_updated')];
+    }
+
+    /** The domains chosen for enforcement must be domains the ruleset reaches, and there is a bounded number of them. */
+    private static function assertEnforcedDomains(?PlatformRuleset $ruleset, array $data): void
+    {
+        $enforced = $data['enforced_domain_ids'] ?? null;
+        if ($enforced === null) {
+            return;
+        }
+        if (count($enforced) > config('security.maximum_platform_ruleset_domains')) {
+            throw ValidationException::withMessages(['enforced_domain_ids' => 'A ruleset may enforce on at most '.config('security.maximum_platform_ruleset_domains').' domains.']);
+        }
+        $all = $data['applies_to_all'] ?? ($ruleset !== null && $ruleset->applies_to_all);
+        $reach = $all ? null : ($data['domain_ids'] ?? ($ruleset === null ? [] : $ruleset->domains()->pluck('domains.id')->all()));
+        if ($reach !== null && array_diff($enforced, array_map('intval', $reach)) !== []) {
+            throw ValidationException::withMessages(['enforced_domain_ids' => 'Every domain chosen for enforcement must be a domain the ruleset applies to.']);
+        }
     }
 
     public static function deleteRuleset(PlatformRuleset $ruleset, ?User $actor, ?string $ipAddress): Operation
