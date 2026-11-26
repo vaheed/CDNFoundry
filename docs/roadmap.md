@@ -1044,11 +1044,23 @@ until its entries expire, then fall back to local protection only.
 in the harness. Policy tests for tenant isolation. A retention test for the
 aggregate.
 
+**Stage 1 record, 26 November 2026** (feasibility model, `reputation_feasibility.py`; a seeded model of the aggregation rule on constructed traffic, not a measurement on real visitors).
+
+| Question | Result |
+| --- | --- |
+| Time to act | One attacker on one domain through three edges reaches a cell on another edge in 125 s at p50 and 179 s at p95 (budget 300 s), assuming 60 s for each of report, aggregation and delivery (the agents' measured refresh is 61.8 s). The report interval is an assumption until the heartbeat path is measured. |
+| NAT | A key with 5% attack traffic is not greylisted. Without any solved challenge a key at 50% attack or more is. A solved challenge exempts the key in this rule, and that exemption is also an escape: an attacker that solves once is never greylisted. The exemption has to be tied to the share of clean traffic, not to one solve. |
+| Poisoning | The acceptance case (one domain attacked through three edges) and a poisoner (one tenant's page makes a victim's browser hit that tenant's own domain through three edges) produce the same signal. Corroboration by distinct edges does not separate them, and corroboration by distinct domains only moves the bar to a poisoner with two domains. No threshold on these signals tells the two apart. |
+| Harm bound | The consequence is a challenge, never a block, so a poisoned victim pays one proof of work per domain (p95 about 2.7 s on the slowest device in Phase 7) until a solve or the entry TTL ends it. The bound comes from the consequence, not from the rule. |
+| State | At most 50 keys per cell report, 200 cells, a 5 minute window: 50,000 rows, about 4.8 MB. Published entries capped and carrying a TTL; address-bearing aggregates kept 7 days at most. |
+
+Finding: feasible as a challenge-only, opt-in, shadow-first signal with bounded state. Not feasible as an enforcement signal, because poisoning cannot be told from a real multi-edge attack on one domain. Admitting stage 2 (shadow summaries, no effect on traffic) is the owner's decision; stage 3 (enforcement) needs the independent multi-tenant evidence the plan already requires, and the exemption rule above has to change first.
+
 **Completion checkpoint, 21 November 2026.**
 
 | Implementation | Documentation | Automated/runtime | Browser |
 | --- | --- | --- | --- |
-| Conditional: feasibility/admission open | Privacy/provenance/opt-in decision open | Poisoning/NAT/TTL matrix not run | Only required if admitted; no placeholder pass |
+| Conditional: stage 1 model run; admission of stage 2 open | Privacy/provenance/opt-in decision open | Stage 1 model run (latency, NAT, poisoning, bounds); TTL expiry on a stopped control plane and real-traffic NAT not run | Only required if admitted; no placeholder pass |
 
 ---
 
