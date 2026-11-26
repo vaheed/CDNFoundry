@@ -866,15 +866,16 @@ new rule options.
 | --- | --- | --- | --- |
 | Fixed limits present; enhancements open | Approximation/error semantics open | Skew/outcome/saturation matrix open | New rule-option gate open |
 
-**Execution record, 26 November 2026** (development host; work in progress, not a completed stage).
+**Execution record, 26 November 2026** (development host).
 
 | Item | Result |
 | --- | --- |
-| Built | Sliding windows, cookie, query-argument, ASN, country and two-part keys, 1 hour and 24 hour periods, outcome counting by response status in the log phase, a shared scope that divides the threshold by `cells_serving`, `Retry-After` and a JSON 429 body, the typed validation and the rule sheet fields. Feature tests passed (23 in the affected classes). |
-| Real-cell run | `rate_limit_semantics.py` passed steady traffic within 5% (steps 1 to 3: windows, keys, responses) and held a boundary burst to the threshold within 10% with the sliding window, where the fixed window let nearly twice through. It failed the credential-stuffing step: the first concurrent attackers let 12 to 15 failed logins through against at most 6 expected. The shared, per-cell and skew steps were not reached. |
-| Not done | The credential-stuffing defect, the three-cell steps, a rerun of the isolation and exhaustion tests after the counter budget divisor changed from 6 to 10, browser tests for the new options, documentation of the error bounds, and control-plane aggregation of long windows into mitigations. |
+| Built | Sliding windows, cookie, query-argument, ASN, country and two-part keys, 1 hour and 24 hour periods, outcome counting by response status in the log phase, a shared scope that divides the threshold by `cells_serving`, `Retry-After` and a JSON 429 body, the typed validation and the rule sheet fields. |
+| Real-cell run | `rate_limit_semantics.py` passed: steady traffic within 5%, a boundary burst held to 100 of 200 by the sliding window (the fixed window let 200 through), 5,000 failed logins from many addresses stopped with at most 6 reaching the origin for one address (1,200 in all), and three cells at threshold 300 admitted 300 when balanced in `shared` mode, 100 when all traffic hit one cell, and 900 in `per_cell` mode. `rate_limit_isolation.py`, `rate_limit_exhaustion.py` (2 of 60 allowed after exhaustion) and `ipv6_rate_limit_keys.py` passed. |
+| Browser | `specs/firewall-rules.spec.ts`: 44 passed in light and dark at desktop and phone width, with the new rate-limit option specs. |
+| Not done | Control-plane aggregation of 1 hour and 24 hour windows into client-key mitigations (the 5-minute acceptance item), and the replayed-abuse run with a successful login from the same NAT address. |
 
-Phase 6 is not complete.
+Phase 6 is not complete: the long-window mitigation item is open.
 
 ---
 
