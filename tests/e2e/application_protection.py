@@ -31,6 +31,13 @@ OPERATIONS = [
     {"path": "/orders/{id}", "method": "GET", "parameters": [{"name": "id", "in": "path", "required": True, "type": "integer"}]},
     {"path": "/orders/{id}", "method": "DELETE", "parameters": [{"name": "id", "in": "path", "required": True, "type": "integer"}]},
 ]
+ORDER_BODY = {"required": True, "schema": {"type": "object", "required": ["sku", "quantity"], "closed": True, "properties": {
+    "sku": {"type": "string", "max_length": 12}, "quantity": {"type": "integer"}, "kind": {"type": "string", "enum": ["pickup", "delivery"]},
+    "lines": {"type": "array", "items": {"type": "object", "required": ["id"], "closed": False, "properties": {"id": {"type": "integer"}}}}}}}
+BODY_SCHEMA = {"base_path": "/api", "maximum_body_bytes": 65536, "operations": [
+    {"path": "/orders", "method": "POST", "parameters": [{"name": "session", "in": "cookie", "required": True, "type": "string"}], "body": ORDER_BODY},
+    {"path": "/orders", "method": "GET", "parameters": []},
+    {"path": "/bulk", "method": "POST", "parameters": [], "body": ORDER_BODY}]}
 SCHEMA = {"base_path": "/api", "maximum_body_bytes": 64, "operations": OPERATIONS}
 CLIENT = {"enabled": True, "report_path": "/.cdnf/csp-report", "policy": "script-src 'none'; connect-src 'none'; report-uri /.cdnf/csp-report",
           "maximum_reports_per_minute": 10, "report_bytes": 4096}
@@ -69,7 +76,12 @@ def qualify(directory: pathlib.Path) -> None:
         "apiunset.example": host(3, violation("any")),
         "page.example": host(4, [], client_security=CLIENT),
         "pageoff.example": host(5, []),
+        "body.example": host(6, violation("any"), api_schema=BODY_SCHEMA),
+        "bodynone.example": host(8, []),
+        "bodylog.example": host(7, violation("invalid_body", "log"), api_schema=BODY_SCHEMA),
     }
+    for name in ("body.example", "bodylog.example", "bodynone.example"):
+        hosts[name]["security"]["limits"]["maximum_request_body_size"] = 65536
     (directory / "active.json").write_text(json.dumps({"schema_version": 1, "sequence": 1, "generation_id": "e2e-application-1", "certificates": {}, "hosts": hosts}, separators=(",", ":")))
     run("openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1", "-subj", "/CN=e2e-application", "-keyout", str(directory / "tls.key"), "-out", str(directory / "tls.crt"))
     for file in directory.iterdir():
@@ -105,6 +117,35 @@ def qualify(directory: pathlib.Path) -> None:
     expect(get("api.example", "/api/orders", "X-Request-Id: a", json_header, method="POST", data=json.dumps({"note": "x" * 100})), 403, blocked)  # body_too_large
     expect(get("api.example", "/api/orders", "X-Request-Id: a", "Content-Type: text/plain", method="POST", data="x" * 100), 200)  # only JSON bodies are limited
     expect(get("apiunset.example", "/api/customers"), 200)  # no schema, no violation
+    # 8.1b JSON bodies are checked against the compiled body schema, and cookie parameters are read from the Cookie header
+    cookie = "Cookie: theme=dark; session=abc"
+    good = json.dumps({"sku": "A-1", "quantity": 2, "kind": "pickup", "lines": [{"id": 1, "extra": True}]})
+    expect(get("body.example", "/api/orders", cookie, json_header, method="POST", data=good), 200)
+    expect(get("body.example", "/api/orders", json_header, method="POST", data=good), 403, blocked)  # missing cookie parameter
+    for label, payload, reason in [
+        ("a missing required field", {"sku": "A-1"}, blocked), ("a wrong type", {"sku": "A-1", "quantity": "two"}, blocked), ("a fraction for an integer", {"sku": "A-1", "quantity": 1.5}, blocked),
+        ("an enum value that is not listed", {"sku": "A-1", "quantity": 1, "kind": "teleport"}, blocked), ("a string over its length", {"sku": "A-" * 20, "quantity": 1}, blocked),
+        ("a wrong type inside an array", {"sku": "A-1", "quantity": 1, "lines": [{"id": "x"}]}, blocked), ("an unknown field of a closed object", {"sku": "A-1", "quantity": 1, "coupon": "x"}, blocked),
+        ("an array where an object is declared", [1, 2], blocked)]:
+        expect(get("body.example", "/api/orders", cookie, json_header, method="POST", data=json.dumps(payload)), 403, reason)
+    expect(get("body.example", "/api/orders", cookie, json_header, method="POST", data="{not json"), 400, "malformed_request_body")  # unreadable JSON never reaches the schema check
+    expect(get("body.example", "/api/orders", cookie, json_header, method="POST"), 403, blocked)  # a required body that is absent
+    expect(get("body.example", "/api/orders", cookie, json_header, method="POST", data=json.dumps({"sku": "A-1", "quantity": 1, "kind": None})), 200)  # null inside is accepted
+    expect(get("body.example", "/api/orders", cookie, "Content-Type: text/plain", method="POST", data="plain"), 200)  # only JSON bodies are checked
+    expect(get("body.example", "/api/orders", cookie, json_header, method="POST", data=json.dumps({"sku": "A-1", "quantity": 1, "lines": [{"id": i} for i in range(1200)]})), 200)  # past the visit budget the rest of a valid body is not checked, never refused
+    expect(get("bodylog.example", "/api/orders", cookie, json_header, method="POST", data=json.dumps({"sku": "A-1", "quantity": 1, "coupon": "x"})), 200)  # unknown_field is not invalid_body
+    expect(get("bodylog.example", "/api/orders", cookie, json_header, method="POST", data=json.dumps({"sku": "A-1"})), 200)
+    assert len(shared.events(7, "custom_rule_log")[0]) == 1 and shared.events(7, "custom_rule_log")[0][0]["count"] == 1
+    for reason in ("schema_invalid_body", "schema_unknown_field"):
+        assert shared.events(7, reason)[0], reason
+    # 8.1c validating a 16 KiB body adds under 1 ms at the median to a request that does not validate it (p99 is not measured here)
+    large = json.dumps({"sku": "A-1", "quantity": 1, "lines": [{"id": i} for i in range(1400)]})
+    assert 16000 < len(large) < 20000, len(large)
+    expect(get("body.example", "/api/bulk", json_header, method="POST", data=large), 200)
+    with_schema = shared.median_ms("body.example", "/api/bulk", large)
+    without = shared.median_ms("bodynone.example", "/api/bulk", large)
+    print(f"16 KiB body median: {with_schema:.2f} ms with the body schema, {without:.2f} ms without")
+    assert with_schema - without < 1.0, (with_schema, without)
     # a log rule on one kind matches only that kind, and each violation is a counted event
     expect(get("apilog.example", "/api/customers"), 200)
     expect(get("apilog.example", "/api/orders", method="PUT"), 200)

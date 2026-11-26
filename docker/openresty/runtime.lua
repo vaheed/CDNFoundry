@@ -113,7 +113,7 @@ local ESCALATION_EXEMPT = {
     platform_rule_rate_limited = true, sensitive_data_card = true, sensitive_data_iban = true,
     sensitive_data_private_key = true, sensitive_data_api_key = true, schema_unknown_path = true,
     schema_wrong_method = true, schema_missing_parameter = true, schema_invalid_parameter = true,
-    schema_body_too_large = true,
+    schema_body_too_large = true, schema_invalid_body = true, schema_unknown_field = true,
 }
 
 -- One client that causes this many escalating events in a minute is blocked on this cell for CLIENT_BAN_SECONDS, whatever the
@@ -1364,9 +1364,97 @@ end
 local SCHEMA_REASONS = {
     unknown_path = "schema_unknown_path", wrong_method = "schema_wrong_method", missing_parameter = "schema_missing_parameter",
     invalid_parameter = "schema_invalid_parameter", body_too_large = "schema_body_too_large",
+    invalid_body = "schema_invalid_body", unknown_field = "schema_unknown_field",
 }
 local SCHEMA_OPERATIONS_MAX = 200
 local SCHEMA_PARAMETERS_MAX = 20
+
+-- Request bodies. A body schema is a bounded tree compiled by the control plane (type, enum, required, properties, items, whether
+-- unknown properties are refused). The cell decodes a JSON body that fits the limit and walks it against the tree with a budget of
+-- visited values, so the cost is bounded whatever the body holds. A body the cell holds in a temporary file is not checked.
+-- The main chunk of this file cannot hold more than 200 locals, so this lives in a field of an existing table.
+REP.schema = {VISIT_BUDGET = 1000, MAXIMUM_DEPTH = 8}
+
+function REP.schema.cookie(header, name)
+    if type(header) == "table" then header = header[1] end
+    if type(header) ~= "string" then return nil end
+    for pair in header:gmatch("[^;]+") do
+        local key, value = pair:match("^%s*([^=%s]+)=(.*)$")
+        if key == name then return value end
+    end
+    return nil
+end
+
+local function schema_kind_fits(kind, value)
+    local actual = type(value)
+    if kind == "string" then return actual == "string" end
+    if kind == "boolean" then return actual == "boolean" end
+    if kind == "number" then return actual == "number" end
+    if kind == "integer" then return actual == "number" and value == math.floor(value) end
+    if kind == "object" then return actual == "table" and (next(value) == nil or value[1] == nil) end
+    if kind == "array" then return actual == "table" and (next(value) == nil or value[1] ~= nil) end
+    return true
+end
+
+-- Returns "invalid_body", "unknown_field" or nil. The walk stops at the first invalid value.
+function REP.schema.walk(node, value, depth, state)
+    state.visited = state.visited + 1
+    -- Past the budget the rest of the body is simply not checked: a large valid body must never be reported as a violation.
+    if state.visited > REP.schema.VISIT_BUDGET or depth > REP.schema.MAXIMUM_DEPTH then return nil end
+    -- A null inside the body is accepted: the compiled tree does not carry nullable, and a false violation costs more than a missed one.
+    if value == cjson.null then return depth == 1 and "invalid_body" or nil end
+    if node.type and not schema_kind_fits(node.type, value) then return "invalid_body" end
+    if type(node.enum) == "table" and #node.enum > 0 then
+        local listed = false
+        for _, allowed in ipairs(node.enum) do
+            if allowed == value then listed = true; break end
+        end
+        if not listed then return "invalid_body" end
+    end
+    if node.type == "string" and node.max_length and #value > node.max_length then return "invalid_body" end
+    if node.type == "array" and type(node.items) == "table" and next(node.items) ~= nil then
+        for _, item in ipairs(value) do
+            local found = REP.schema.walk(node.items, item, depth + 1, state)
+            if found == "invalid_body" then return found end
+            if state.visited > REP.schema.VISIT_BUDGET then break end
+        end
+    elseif node.type == "object" then
+        local properties = type(node.properties) == "table" and node.properties or {}
+        if type(node.required) == "table" then
+            for _, name in ipairs(node.required) do
+                if value[name] == nil then return "invalid_body" end
+            end
+        end
+        for name, child in pairs(value) do
+            local declared = properties[name]
+            if declared == nil then
+                if node.closed == true then state.unknown = true end
+            elseif type(declared) == "table" and next(declared) ~= nil then
+                local found = REP.schema.walk(declared, child, depth + 1, state)
+                if found == "invalid_body" then return found end
+            end
+        end
+    end
+    return nil
+end
+
+function REP.schema.body(body, size, json)
+    if size == 0 then
+        if body.required == true then return "invalid_body" end
+        return nil
+    end
+    if not json or type(body.schema) ~= "table" then return nil end
+    ngx.req.read_body()
+    local raw = ngx.req.get_body_data()
+    if not raw then return nil end
+    local ok, decoded = pcall(cjson.decode, raw)
+    if not ok or decoded == nil then return "invalid_body" end
+    local state = {visited = 0, unknown = false}
+    local found = REP.schema.walk(body.schema, decoded, 1, state)
+    if found then return found end
+    if state.unknown then return "unknown_field" end
+    return nil
+end
 
 local function schema_value_fits(kind, value)
     if kind == "integer" then return value:find("^-?%d+$") ~= nil and #value <= 18 end
@@ -1421,13 +1509,15 @@ local function schema_violation(schema, method, uri, size, content_type)
     end
     local arguments = ngx.req.get_uri_args(100)
     local headers = ngx.req.get_headers(100)
+    local cookies = headers["cookie"]
     local invalid = false
     for index, parameter in ipairs(fitting_method.operation.parameters or {}) do
         if index > SCHEMA_PARAMETERS_MAX then break end
         local actual
         if parameter["in"] == "path" then actual = fitting_method.variables[parameter.name]
         elseif parameter["in"] == "query" then actual = arguments[parameter.name]
-        elseif parameter["in"] == "header" then actual = headers[parameter.name] end
+        elseif parameter["in"] == "header" then actual = headers[parameter.name]
+        elseif parameter["in"] == "cookie" then actual = REP.schema.cookie(cookies, parameter.name) end
         if type(actual) == "table" then actual = actual[1] end
         if actual == nil or actual == true then
             if parameter.required then return "missing_parameter" end
@@ -1437,7 +1527,13 @@ local function schema_violation(schema, method, uri, size, content_type)
     end
     if invalid then return "invalid_parameter" end
     local limit = tonumber(schema.maximum_body_bytes) or 65536
-    if size > limit and type(content_type) == "string" and content_type:lower():find("json", 1, true) then return "body_too_large" end
+    local json = type(content_type) == "string" and content_type:lower():find("json", 1, true) ~= nil
+    if size > limit and json then return "body_too_large" end
+    local body = fitting_method.operation.body
+    if type(body) == "table" then
+        local found = REP.schema.body(body, size, json)
+        if found then return found end
+    end
     return "none"
 end
 
