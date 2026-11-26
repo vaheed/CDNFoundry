@@ -29,6 +29,7 @@ use App\Support\ControlPlane;
 use App\Support\EdgeCertificateAuthority;
 use App\Support\EdgeKeyEnvelope;
 use App\Support\EdgeRejectionReasons;
+use App\Support\LongWindowRateLimits;
 use App\Support\OriginPolicy;
 use App\Support\PlatformSettings;
 use App\Support\PowerDnsClient;
@@ -290,6 +291,8 @@ class EdgeAgentController extends Controller
             'last_status' => ['required', 'integer', 'between:0,599'],
             'last_failed_at' => ['required', 'integer', 'min:0'],
         ], $advisoryDropped);
+        // Heavy keys of long-window shared rules, by cell. Advisory like the lists above: a malformed entry is skipped.
+        $longRate = is_array($request->input('long_rate')) ? array_slice(array_values($request->input('long_rate')), 0, 32 * LongWindowRateLimits::MAXIMUM_REPORTED_KEYS) : [];
         if ($advisoryDropped > 0) {
             Log::warning('edge heartbeat dropped invalid advisory entries', ['edge_id' => $edge->id, 'dropped' => $advisoryDropped]);
         }
@@ -324,6 +327,9 @@ class EdgeAgentController extends Controller
         $reportedNames = collect($data['cells'])->pluck('name');
         $edge->cells()->whereNotIn('name', $reportedNames)->whereNotNull('edge_pool_id')->update(['status' => 'degraded', 'capacity' => null]);
         $edge->cells()->whereNotIn('name', $reportedNames)->whereNull('edge_pool_id')->update(['status' => 'stopped', 'capacity' => null]);
+        foreach (collect($longRate)->filter(fn ($entry): bool => is_array($entry) && is_string($entry['cell'] ?? null) && $knownCells->has($entry['cell']))->groupBy('cell') as $cellName => $entries) {
+            LongWindowRateLimits::record($edge->id, (string) $cellName, $entries->all());
+        }
         $computedReady = $edge->cells()->whereNotNull('edge_pool_id')->where('drained', false)->where('status', 'ready')->exists();
         $listenerReady = $data['listener_ready'] && $computedReady;
         $edge->update([
@@ -530,6 +536,14 @@ class EdgeAgentController extends Controller
             'version' => $delivery['version'],
             'keys' => EdgeKeyEnvelope::seal(json_encode($delivery['keys'], JSON_THROW_ON_ERROR), $edge->identity_certificate, $edge->id, 'challenge-keys'),
         ]]);
+    }
+
+    /** The long-window rate mitigations of the domains this edge serves; the agent gives them to its cells. They name no client value, only a hash. */
+    public function rateMitigations(Request $request): JsonResponse
+    {
+        $edge = $request->attributes->get('edge');
+
+        return response()->json(['data' => LongWindowRateLimits::delivery($edge->id)]);
     }
 
     public function full(Request $request): JsonResponse

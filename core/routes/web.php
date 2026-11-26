@@ -24,6 +24,7 @@ Route::prefix('edge/v1')->middleware(['api', 'control.epoch'])->group(function (
         Route::post('/probes', [EdgeAgentController::class, 'probeResults']);
         Route::get('/gateway/config', [EdgeAgentController::class, 'gatewayConfig']);
         Route::get('/challenge-keys', [EdgeAgentController::class, 'challengeKeys']);
+        Route::get('/rate-mitigations', [EdgeAgentController::class, 'rateMitigations']);
         Route::get('/dns/transfer', [EdgeAgentController::class, 'dnsTransfer']);
         Route::get('/dns/changes', [EdgeAgentController::class, 'dnsChanges']);
         Route::get('/origin-policy', [EdgeAgentController::class, 'originPolicy']);

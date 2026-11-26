@@ -15,6 +15,7 @@ Artisan::command('inspire', function () {
 
 Schedule::command('horizon:snapshot')->everyFiveMinutes()->withoutOverlapping();
 Schedule::command('model:prune', ['--model' => IdempotencyKey::class])->hourly()->withoutOverlapping();
+Schedule::command('cdnf:rate-limits:aggregate')->everyMinute()->withoutOverlapping();
 Schedule::command('cdnf:challenge-keys:maintain')->everyFiveMinutes()->withoutOverlapping();
 Schedule::command('cdnf:dns:deprovision-due')->everyMinute()->withoutOverlapping();
 Schedule::command('cdnf:analytics:publish-zones')->everyMinute()->withoutOverlapping();

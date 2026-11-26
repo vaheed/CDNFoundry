@@ -955,12 +955,6 @@ parameters:
 			path: app/Filament/Domain/Resources/Domains/RelationManagers/SecurityRulesRelationManager.php
 
 		-
-			message: '#^Access to an undefined property App\\Models\\SecurityRule\:\:\$rate_limit\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Filament/Domain/Resources/Domains/RelationManagers/SecurityRulesRelationManager.php
-
-		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
 			identifier: property.notFound
 			count: 3

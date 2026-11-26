@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * @property string $mode
  * @property ?CarbonInterface $expires_at
+ * @property ?array<string, mixed> $rate_limit
  */
 class SecurityRule extends Model
 {
