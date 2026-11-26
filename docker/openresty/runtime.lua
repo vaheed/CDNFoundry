@@ -2902,6 +2902,18 @@ local function security_report()
     return report, dropped
 end
 
+-- Capacity and free space of the dictionaries that hold counters, markers and events.
+local function shared_memory_report()
+    local report = {}
+    for _, name in ipairs({"rate_rules", "security_limits", "client_events", "domain_limits", "traffic_limits", "runtime_limits"}) do
+        local dictionary = ngx.shared[name]
+        if dictionary and dictionary.capacity and dictionary.free_space then
+            report[name] = {capacity_bytes = dictionary:capacity(), free_bytes = dictionary:free_space()}
+        end
+    end
+    return report
+end
+
 function M.passive_failures()
     local expected = os.getenv("EDGE_STATUS_TOKEN") or ""
     local supplied = ngx.req.get_headers()["x-edge-status-token"] or ""
@@ -2979,6 +2991,8 @@ function M.passive_failures()
             status = drained and "drained" or "ready",
             purges_restored = ngx.shared.cache_purges:get("purge:restored") == true,
             overlays_restored = ngx.shared.runtime_limits:get("overlay:restored") == true,
+			-- What each counter dictionary holds, so exhaustion under a flood can be seen and recorded.
+			shared_memory = shared_memory_report(),
 			capacity = {
 				assigned_domain_count = assigned,
 				-- Domains with recent security events that did not fit in this report, so a cut-short report is visible.
