@@ -68,3 +68,18 @@ test('the scripts tab lists what browsers reported, marks the new ones, and appr
     await expect(page.getByText('All new scripts approved')).toBeVisible();
     await expect(rows.filter({ hasText: 'New' })).toHaveCount(0);
 });
+
+test('the platform reputation dialog explains the shadow stage and saves the choice', async ({ page }) => {
+    const modal = await openAction(page, 'overview-action-reputation-sharing', 'Share client signals with platform reputation');
+    await expect(modal.getByText('It changes nothing for your visitors')).toBeVisible();
+    await expect(modal.getByRole('switch', { name: /Take part/ })).toBeVisible();
+    await expectAccessible(page);
+    await modal.getByRole('switch', { name: /Take part/ }).click();
+    await modal.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(page.getByText('Platform reputation is on')).toBeVisible();
+    await page.getByTestId('overview-action-reputation-sharing').click();
+    const again = page.locator('.fi-modal-window:visible');
+    await again.getByRole('switch', { name: /Take part/ }).click();
+    await again.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(page.getByText('Platform reputation is off')).toBeVisible();
+});

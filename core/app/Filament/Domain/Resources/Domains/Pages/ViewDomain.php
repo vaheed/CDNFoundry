@@ -16,6 +16,7 @@ use App\Filament\Domain\Resources\Domains\Widgets\DomainKpiStrip;
 use App\Filament\Domain\Resources\Domains\Widgets\DomainNeedsAttention;
 use App\Http\Controllers\AiProtectionController;
 use App\Http\Controllers\ApiSchemaController;
+use App\Http\Controllers\ClientReputationSharingController;
 use App\Http\Controllers\ClientSecurityController;
 use App\Http\Controllers\CredentialCheckController;
 use App\Http\Controllers\DetectionSettingsController;
@@ -632,6 +633,17 @@ class ViewDomain extends ViewRecord
                     $this->record->refresh();
                     Notification::make()->success()->title('Client-side security saved')->body('Scripts appear in the Scripts and connections tab once browsers report them.')->send();
                 }),
+            Action::make('reputationSharing')->label('Platform reputation')->icon('phosphor-shield-check')->extraAttributes(['data-testid' => 'reputation-sharing-action'])
+                ->modalHeading('Share client signals with platform reputation')
+                ->modalDescription('When on, the platform adds up which client addresses repeatedly trigger blocks on this domain and on other domains that also opted in. In this stage it only records bands for the platform administrators. It changes nothing for your visitors, and no other domain or customer is ever named.')
+                ->schema([
+                    Toggle::make('enabled')->label(FilamentHelp::label('Take part', 'Client addresses that trigger blocks here are reported to the platform for seven days at most. Turn off to stop and delete what was reported.')),
+                ])->fillForm(fn (): array => ['enabled' => $this->domain()->reputation_sharing])
+                ->action(function (array $data): void {
+                    app(ClientReputationSharingController::class)->update(request()->merge(['enabled' => (bool) ($data['enabled'] ?? false)]), $this->domain());
+                    $this->refreshDomain();
+                    Notification::make()->success()->title($this->domain()->reputation_sharing ? 'Platform reputation is on' : 'Platform reputation is off')->send();
+                }),
             Action::make('startIncident')->icon('phosphor-shield-warning')->label('Under attack mode')->color('danger')->extraAttributes(['data-testid' => 'incident-start-action'])
                 ->modalHeading('Turn on under attack mode?')
                 ->modalDescription('For the time you choose, the domain gets tighter request limits, the web application firewall in blocking mode, restricted methods and body size, and a browser challenge. It protects your origin and the cells from request floods; it cannot absorb traffic that saturates a host or link.')
@@ -825,12 +837,12 @@ class ViewDomain extends ViewRecord
         ];
         // Long forms open as a right-side sheet; a form of one or two fields opens as a small centered dialog.
         $sheets = ['importZone', 'proxyDefaults', 'cacheSettings', 'uploadCertificate', 'securitySettings', 'wafProfile', 'credentialCheck', 'sensitiveDataCheck', 'aiProtection', 'apiSchema', 'clientSecurity'];
-        $dialogs = ['moveEdgePool', 'developmentMode', 'purgeCache', 'tlsMode', 'securityAlert', 'startIncident', 'startMaintenance', 'rollbackProxy'];
+        $dialogs = ['moveEdgePool', 'developmentMode', 'purgeCache', 'tlsMode', 'securityAlert', 'reputationSharing', 'startIncident', 'startMaintenance', 'rollbackProxy'];
 
         // Every form names what its button does; a generic "Submit" never shows.
         $submit = ['importZone' => 'Import', 'uploadCertificate' => 'Upload', 'tlsMode' => 'Save', 'developmentMode' => 'Turn on', 'startMaintenance' => 'Start maintenance',
             'moveEdgePool' => 'Move', 'rollbackProxy' => 'Roll back', 'proxyDefaults' => 'Save', 'cacheSettings' => 'Save', 'securitySettings' => 'Save', 'wafProfile' => 'Save',
-            'securityAlert' => 'Save', 'credentialCheck' => 'Save', 'sensitiveDataCheck' => 'Save', 'aiProtection' => 'Save', 'apiSchema' => 'Save', 'clientSecurity' => 'Save'];
+            'securityAlert' => 'Save', 'credentialCheck' => 'Save', 'sensitiveDataCheck' => 'Save', 'aiProtection' => 'Save', 'apiSchema' => 'Save', 'clientSecurity' => 'Save', 'reputationSharing' => 'Save'];
 
         // Before the nameservers are verified only the delegation, the DNS records, and the domain itself can be changed.
         $beforeVerification = ['verifyNameservers', 'forceVerifyNameservers', 'importZone', 'exportZone', 'activate', 'disable', 'deleteDomain'];
