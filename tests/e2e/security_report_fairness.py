@@ -15,11 +15,11 @@ import tempfile
 import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from managed_waf import IMAGE, NETWORK, host, run  # noqa: E402
+from managed_waf import IMAGE, NETWORK, ROOT, host, run  # noqa: E402
 
 CELL = "cdnf-e2e-report-fairness"
 ORIGIN = "cdnf-e2e-report-origin"
-DOMAINS = 130
+DOMAINS = 200
 NOISY = 1
 
 
@@ -93,6 +93,13 @@ def main() -> None:
             assert next(entry for entry in entries if entry["domain_id"] == 501)["count"] >= 50
             # The agent's own status request is not a client connection, so an idle cell reports none.
             assert payload["cell"]["capacity"]["active_connections"] == 0, payload["cell"]["capacity"]["active_connections"]
+            report_file = temporary / "cell-report.json"
+            report_file.write_text(json.dumps(payload))
+            report_file.chmod(0o644)
+            # The agent's own selection, fed the real cell's report, must send all 200 domains within two heartbeats.
+            agent = run("docker", "run", "--rm", "-v", f"{ROOT / 'edge-agent'}:/src:ro", "-v", f"{report_file}:/report.json:ro", "-e", "CDNF_CELL_REPORT=/report.json",
+                        "-e", "GOFLAGS=-mod=mod", "-w", "/src", "golang:1.25", "go", "test", "-run", "TestARealCellReportOf200DomainsIsSentInTwoHeartbeats", "-count=1", "-v", "./...")
+            assert "--- PASS: TestARealCellReportOf200DomainsIsSentInTwoHeartbeats" in agent.stdout, agent.stdout + agent.stderr
             dropped = payload["cell"]["capacity"]["security_domains_dropped"]
             assert dropped == 0, f"every active domain fits in the cell's report, got {dropped} dropped"
         finally:
