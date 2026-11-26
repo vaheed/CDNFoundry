@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\AnalyticsController as AdminAnalyticsController;
 use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\BackupController;
+use App\Http\Controllers\Admin\ChallengeKeyController;
 use App\Http\Controllers\Admin\DnsClusterController;
 use App\Http\Controllers\Admin\DnsOperationController;
 use App\Http\Controllers\Admin\DomainUserController;
@@ -216,6 +217,9 @@ Route::middleware(['auth:sanctum', 'account.active', 'token.scope', 'throttle:ac
     Route::get('/domains/{domain}/usage/export', [UsageController::class, 'export']);
 
     Route::prefix('admin')->middleware('admin')->group(function (): void {
+        Route::get('/challenge-keys', [ChallengeKeyController::class, 'index'])->name('admin.challenge-keys.index');
+        Route::post('/challenge-keys/rotate', [ChallengeKeyController::class, 'rotate'])->middleware('idempotent')->name('admin.challenge-keys.rotate');
+        Route::post('/challenge-keys/{keyId}/revoke', [ChallengeKeyController::class, 'revoke'])->middleware('idempotent')->where('keyId', '[0-9a-f]{16}')->name('admin.challenge-keys.revoke');
         Route::get('/notification-channels', [NotificationChannelController::class, 'index'])->name('admin.notification-channels.index');
         Route::post('/notification-channels', [NotificationChannelController::class, 'store'])->middleware('idempotent')->name('admin.notification-channels.store');
         Route::delete('/notification-channels/{channel}', [NotificationChannelController::class, 'destroy'])->middleware('idempotent')->name('admin.notification-channels.destroy');

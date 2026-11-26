@@ -24,6 +24,7 @@ use App\Models\NameserverAddressProbe;
 use App\Models\Operation;
 use App\Models\TlsCertificate;
 use App\Support\ArtifactSigner;
+use App\Support\ChallengeKeys;
 use App\Support\ControlPlane;
 use App\Support\EdgeCertificateAuthority;
 use App\Support\EdgeKeyEnvelope;
@@ -512,6 +513,23 @@ class EdgeAgentController extends Controller
         abort_unless($assigned && filled($edge->identity_certificate), 404, 'The certificate key is not available to this edge.');
 
         return response()->json(['data' => EdgeKeyEnvelope::seal($record->private_key_ciphertext, $edge->identity_certificate, $edge->id, $record->id)]);
+    }
+
+    /**
+     * The platform's challenge keys, sealed to this edge's identity key. The version lets the agent skip a fetch that changed
+     * nothing; the sealed keys carry each key's secret, whether it signs, and when a verifying-only key ends.
+     */
+    public function challengeKeys(Request $request): JsonResponse
+    {
+        /** @var Edge $edge */
+        $edge = $request->attributes->get('edge');
+        abort_unless(filled($edge->identity_certificate), 404, 'This edge cannot receive challenge keys.');
+        $delivery = ChallengeKeys::delivery();
+
+        return response()->json(['data' => [
+            'version' => $delivery['version'],
+            'keys' => EdgeKeyEnvelope::seal(json_encode($delivery['keys'], JSON_THROW_ON_ERROR), $edge->identity_certificate, $edge->id, 'challenge-keys'),
+        ]]);
     }
 
     public function full(Request $request): JsonResponse
