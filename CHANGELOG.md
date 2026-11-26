@@ -22,6 +22,8 @@ single source of truth; `make version-check` enforces it.
 
 - Rate-limit rules count in sliding windows (`window`), by cookie value, query argument, ASN, country or a combination of two keys (`key_name`, `second_key`, `second_name`), over periods up to 24 hours, and can count only responses with chosen statuses (`count_statuses`) so failed logins are counted and successful ones never are. `scope: shared` divides the threshold by the number of cells serving the domain. A limited request answers 429 with `Retry-After`, and a JSON body for clients that do not ask for HTML. Control-plane aggregation of the 1 hour and 24 hour windows across cells is not part of this release.
 
+- Shadow platform reputation: a domain can opt in (`PUT /api/domains/{id}/reputation-sharing`), cells report their heaviest offending clients, and the control plane keeps a decaying band per client for administrators (`GET /api/admin/client-reputation`). It changes no request. Migration `2026_11_29_000100_create_client_reputation_shadow_tables` is expand-only.
+
 ### Fixed
 
 - Rate-limit rules that count responses now count: the pending count was lost when the request moved to the cache or proxy location, and a key whose mitigation marker found no room in the domain's share was not blocked before the request.

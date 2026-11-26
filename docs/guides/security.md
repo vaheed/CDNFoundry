@@ -487,6 +487,23 @@ any other client.
 real traffic to show that it does not flag real visitors, and a source that can be revoked, and neither exists here. A fingerprint
 or a solved check is not proof of humanity, and these are not offered until that evidence does.
 
+### Platform reputation (shadow)
+
+A domain can opt in to platform reputation in the domain's Security section, or with `PUT /api/domains/{id}/reputation-sharing` and `{"enabled": true}`. In this stage it records and never acts: no cell receives a list, and no request to any domain is challenged or blocked because of it.
+
+What happens when a domain takes part:
+
+- Each cell keeps, for five minutes, how many escalating security events each client caused on each domain and how many requests it saw from that client since the first event. Reasons that show a domain's own rules working (rate-limit, challenge and custom rule outcomes) are not escalating events. A cell reports its 50 heaviest clients in the heartbeat and holds at most 1,000 client and domain pairs per window in a 2 MiB dictionary of its own; a full dictionary only means a client is not listed. A client is an IPv4 address or an IPv6 prefix, the same key the cell counts by.
+- The control plane keeps reports only for domains that opted in. Reports of other domains are dropped when the heartbeat arrives, and turning the opt-in off deletes the domain's reports.
+- Every minute `cdnf:client-reputation:aggregate` adds up the reports of the last five minutes. A client gets a band only when at least two cells report it and its events are at least half of the requests the cells saw from it, so a shared address with a few attackers among many browsers stays clean. The bands are `watch` at 50 events, `elevated` at 200 and `high` at 1,000. The score is the larger of the current window and the earlier score halved every hour, so a band fades by itself and is removed below 50.
+- Bands are kept for 7 days at most, at most 5,000 clients, and reports for an hour. Administrators read them at `GET /api/admin/client-reputation` (cursor pagination, filter `band`). The list holds addresses and counts, never a domain or customer name; a domain owner sees only whether their own domain takes part.
+
+Limits of this stage:
+
+- It cannot tell a real multi-edge attack on one domain from a tenant making a victim's browser hit its own domain through several edges, so it is never an enforcement signal. The planned consequence is a challenge, never a block.
+- Verified crawlers are not excluded yet. This matters only once bands reach cells, which this stage does not do.
+- Counts are per cell; they are added up after the heartbeat, so a band lags an attack by one heartbeat and up to one minute of aggregation.
+
 ### Presets: user agents and hotlinks
 
 Two presets write ordinary firewall rules, so they follow the same order, limits,

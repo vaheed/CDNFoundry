@@ -1056,11 +1056,21 @@ aggregate.
 
 Finding: feasible as a challenge-only, opt-in, shadow-first signal with bounded state. Not feasible as an enforcement signal, because poisoning cannot be told from a real multi-edge attack on one domain. Admitting stage 2 (shadow summaries, no effect on traffic) is the owner's decision; stage 3 (enforcement) needs the independent multi-tenant evidence the plan already requires, and the exemption rule above has to change first.
 
+**Stage 2 record, 27 November 2026** (shadow summaries; admitted by the owner's request to implement this phase).
+
+| Item | Result |
+| --- | --- |
+| Built | The domain opt-in (`domains.reputation_sharing`, API and the domain page's "Platform reputation" dialog), a cell dictionary of offending clients (`client_reputation`, 2 MiB, at most 1,000 client and domain pairs per five minutes) reported as the 50 heaviest in the heartbeat, agent forwarding, intake that drops reports of domains that did not opt in, `cdnf:client-reputation:aggregate` (two or more cells, events at least half of the requests seen, bands at 50, 200 and 1,000, an hourly half-life, 7 day and 5,000 client bounds) and an administrator list. Nothing is published to a cell. |
+| Tests | `ClientReputationShadowTest` (7: sharing across cells, NAT share, opt-in and opt-out deletion, decay, bounds and malformed entries, heartbeat intake and tenant isolation, permissions); Go test for the agent's collection bounds; `client_reputation_report.py` on a real cell image (IPv4 and IPv6 prefix keys, ranking, the 50 bound, 1,500 distinct clients with free memory and no allocation errors). |
+| Not done | Stage 3 (enforcement, the `client_reputation` and `greylisted` rule fields, the greylist dataset): the stage 1 finding stands, poisoning cannot be told from a real multi-edge attack, and the independent multi-tenant evidence does not exist. Verified-crawler exclusion. The two-PoP time-to-act measurement and the TTL expiry on a stopped control plane, which need a published list. An administrator screen for the bands (the API is the only reader). |
+
+Phase 8 is complete for stages 1 and 2 only. Stage 3 is deferred, not partly done.
+
 **Completion checkpoint, 21 November 2026.**
 
 | Implementation | Documentation | Automated/runtime | Browser |
 | --- | --- | --- | --- |
-| Conditional: stage 1 model run; admission of stage 2 open | Privacy/provenance/opt-in decision open | Stage 1 model run (latency, NAT, poisoning, bounds); TTL expiry on a stopped control plane and real-traffic NAT not run | Only required if admitted; no placeholder pass |
+| Stages 1 and 2 complete; stage 3 deferred | Complete: security guide section, CLI reference, changelog | Passed: stage 1 model; stage 2 PHP and Go tests and the real-cell run. Not run: two-PoP timing, TTL expiry with a stopped control plane (no list is published) | See the run recorded below |
 
 ---
 
