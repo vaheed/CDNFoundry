@@ -12,6 +12,7 @@ RASTER = (".png", ".jpg", ".jpeg", ".gif", ".webp")
 SNAPSHOT_DIRS = (
     "tests/browser/specs/__snapshots__/",
     "tests/browser/fleet-specs/__snapshots__/",
+    "tests/browser/challenge-specs/__snapshots__/",
 )
 GENERATED_DIRS = ("docs/public/screenshots/",)
 RELEASE_MARKER = ROOT / "docs/public/screenshots/release.txt"
