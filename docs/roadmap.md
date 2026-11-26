@@ -975,13 +975,14 @@ the token and key design, included in Phase 11.
 | Flood | 2,000 requests from scripted clients that never solve: 0 reached the origin. Clients that implement the solver: 3,000 of 3,500 (the token budget refused 500). One token on 30 other addresses: 0 of 30. |
 | Stage 3 | Not admitted. Verified-crawler ranges need a maintained source, a freshness rule and revocation (a stale list turns a real crawler into a blocked one); a TLS fingerprint and a `bot_score` need a corpus of real traffic that shows under 1% of real visitors flagged, and none exists here. Customers can reach the same result with an IP list of the ranges a search engine publishes and an `allow` rule (documented in the security guide). A synthetic corpus would not be evidence. |
 | Two real edges | `challenge_keys_two_edges.py` on the development stack (real control plane, two real agents, their real cells): both edges held the issued version, a rotation reached both in 61.8 seconds (the agents refresh once a minute), and a revocation reached both; no cell status held a secret. Token portability between cells holding keys is `challenge_keys.py`. |
-| Not done | One run that solves on a cell of one edge and presents the token to a cell of the other through a real domain on the development stack. Real phones were not tested; the slow device is the throttled-thread figure above. |
+| Token across two real edges | `challenge_token_two_edges.py` on the development stack (a real proxied domain served by the shared cell of both edges, through both gateways, under attack mode started by the admin API): one client address solved the challenge on edge A and the token was accepted on edge B (the answer was the development origin's own 502, not the challenge), the reverse direction passed, both tokens carried the same key ID, the same address without the token was still challenged on the other edge, and the token was refused for another address on both edges. The client address was a second loopback address on the host, so both gateways saw one peer. Run time about 15 seconds. |
+| Not done | Real phones were not tested; the slow device is the throttled-thread figure above. |
 
 Phase 7 stages 1 and 2 are complete within the stated limits; stage 3 is deferred, not partly done, and the phase is complete only on that understanding.
 
 | Implementation | Documentation | Automated/runtime | Browser |
 | --- | --- | --- | --- |
-| Stages 1 and 2 complete; stage 3 deferred | Complete for stages 1 and 2 (keys, difficulty, bypass, solver, measured solve time and flood table) | Complete; the single cross-edge token run through a real domain is open | 30 passed (challenge page); incident dialog spec per the run below |
+| Stages 1 and 2 complete; stage 3 deferred | Complete for stages 1 and 2 (keys, difficulty, bypass, solver, measured solve time and flood table) | Complete, including the cross-edge token run through a real domain | 30 passed (challenge page); incident dialog spec per the run below |
 
 ---
 
