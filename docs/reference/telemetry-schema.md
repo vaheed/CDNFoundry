@@ -38,6 +38,7 @@ from the collector's own settings and never reads them from the event.
 | `security_action` | low-cardinality string, 24 characters |
 | `security_reason` | low-cardinality string, 64 characters |
 | `request_rule` | Up to eight comma-separated `redirect:id`, `rewrite:id`, `header:id`, or `cache:id` entries; at most 256 characters. Empty when no rule acted or the value failed validation |
+| `shadow_rule` | Up to eight comma-separated references (`r3` for a domain rule, `5` for a platform rule) of the shadow rules that matched the request; at most 128 characters. Empty when none matched or the value failed validation. The hourly table `rule_matches_hourly` counts these and the enforced `security_rule` by rule and mode |
 | `edge_id` | the edge host: the collector sets it, so a cell name is never an edge identity. 64 characters |
 | `cell` | the serving cell, as the runtime named it (letters, digits, `.`, `_`, `-`; 64 characters). Empty on rows written before the column existed |
 | `client_ip` | string, 45 characters |
@@ -114,6 +115,7 @@ ClickHouse materialized views roll raw events into smaller tables as they arrive
 | Traffic hourly and daily (`edge_traffic_hourly`, `edge_traffic_daily`) | the 1-minute keys plus hostname and TLS version and cipher | 400 days, 3 years |
 | Volume 1-minute and hourly (`edge_volume_1m`, `edge_volume_hourly`) | domain, PoP, region, edge, cell, country. Counters: requests, `bytes_in` (upload) and `bytes_sent` (download). Nothing per hostname, path, or client | 48 hours, 400 days |
 | DNS hourly (`dns_hourly`) | domain, zone, hour, type, response code, geography, cluster | 400 days |
+| Rule matches (`rule_matches_hourly`) | requests per rule reference and mode (`enforce` or `shadow`), per domain and hour | 400 days |
 | DNS daily (`dns_daily`) | the same keys, per day | 3 years |
 | DNS 1-minute (`dns_traffic_1m`) | live DNS view | 48 hours |
 | DNS top names (`dns_top_names`) | the 20 busiest query names for each hour and zone | 400 days |

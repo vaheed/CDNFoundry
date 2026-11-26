@@ -52,6 +52,21 @@ Two optional fields on every custom rule and every platform ruleset rule control
 Measured on a development host with a cell and no control plane: a shadow block counted 60 would-have-blocked requests where the
 same rule enforcing blocked 60, with no response changed, and a rule with an expiry stopped acting 0.07 seconds after it.
 
+## Match counts and the impact estimate
+
+Every rule in the list shows how many requests it matched in the last 24 hours, separately for enforcing and shadow
+matches (`matches_last_24_hours` in `GET /api/domains/{id}/security/rules`). The counts come from an hourly ClickHouse rollup
+(`rule_matches_hourly`) of the request log lines: the rule that acted, or the shadow rules that matched (at most eight per request).
+If ClickHouse cannot answer, the field is `null`, never `0`.
+
+Before saving, `POST /api/domains/{id}/security/rules/estimate` takes the same body as the preview and returns what the rule would
+have matched in the last 24 hours. It counts over the request fields the log stores: hostname, path (without the query string),
+method, country, continent, ASN, user agent, whether a query string was present, and the attack scores. It is always labeled
+`partial`. A condition on a field the log does not store (headers, cookies, query values, the referer, TLS and body fields, the
+client address, detection results) is **unknown**, not assumed to match or not match: its field names are listed in `unknown_fields`,
+`matched` is `null`, and `matched_at_most` is the count over the conditions that can be checked, an upper bound. Without unknown
+fields `matched` is the count itself. The estimate reads the raw log (7 days) in one bounded query; it never replays a request.
+
 ## Operators
 
 | Operator (API) | Panel wording | Value | Works on |

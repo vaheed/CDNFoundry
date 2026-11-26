@@ -40,7 +40,7 @@ erDiagram
 | Cache | domain cache fields and `cache_purges` linked to edge tasks |
 | Request behavior | `request_rules`: domain-owned redirects, rewrites, header and cache rules, ordered by type and priority; optional preset ownership |
 | TLS | `tls_certificates`, `tls_orders`, `acme_accounts`, `acme_challenges` |
-| Security | domain security state, `security_rules`, `platform_rulesets`, `platform_ruleset_rules`, `platform_ruleset_domains`, `waf_exclusions`, `security_events`, `emergency_modes` |
+| Security | domain security state, `security_rules`, `platform_rulesets`, `platform_ruleset_rules`, `platform_ruleset_domains`, `platform_ruleset_enforced_domains`, `waf_exclusions`, `security_events`, `emergency_modes` |
 | Analytics and operations | `usage_rollups`, `generated_reports`, `backups`, `fleet_releases`, `fleet_rollouts`, `fleet_rollout_edges`, `control_nodes`, `control_plane_state`, Laravel jobs and failed jobs |
 | Product policy | `system_settings`: JSONB groups checked against `core/config/platform.php` |
 

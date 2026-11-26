@@ -16,6 +16,8 @@ single source of truth; `make version-check` enforces it.
 - Managed WAF rules and categories can be turned off only for a path prefix or a method (`tuning.scoped_exclusions`), in the domain WAF dialog and the API.
 
 - Custom and platform rules can run in shadow mode, recording `would_block` and `would_challenge` events without changing a response, and can carry an expiry that the cell enforces by its own clock. Rollback keeps both.
+- Rules show how many requests they matched in the last 24 hours, enforcing and shadow separately, from a new hourly ClickHouse rollup. `POST /api/domains/{id}/security/rules/estimate` estimates what a rule would have matched over the stored request fields and labels the result partial. Apply the ClickHouse migration `2026_11_26_edge_event_shadow_rule.sql` before starting updated Vector instances.
+- Platform rulesets roll out in stages: `shadow`, then a chosen subset of domains, then all (`rollout_stage` and `enforced_domain_ids`).
 
 ### Fixed
 

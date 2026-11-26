@@ -413,6 +413,20 @@ it reached.
   They never see a platform rule's conditions.
 - Up to 10 rulesets, 100 rules per ruleset, and 500 listed domains per ruleset.
 
+**Staged rollout.** A ruleset has a `rollout_stage`: `shadow`, `subset` or `all` (the default). In `shadow`, its `block` and
+`challenge` rules only record `platform_rule_would_block` and `platform_rule_would_challenge` on every domain it reaches. In `subset`,
+they act on the domains in `enforced_domain_ids` (each must be a domain the ruleset reaches) and keep recording on the rest. In `all`,
+they act everywhere. `allow`, `skip_managed` and `log` rules act as written at every stage. A rule that is already a shadow rule
+stays one. A stage change is one saved change and one chunked rollout, so the way back to `shadow` is as quick as the way forward.
+Watch the shadow counts on the ruleset's rules before moving on:
+
+```sh
+curl -X PATCH "$CDNF_URL/api/admin/platform-rulesets/$RULESET_ID" \
+  -H "Authorization: Bearer $CDNF_TOKEN" -H "Idempotency-Key: $(uuidgen)" \
+  -H "Content-Type: application/json" \
+  -d '{"rollout_stage": "subset", "enforced_domain_ids": [12]}'
+```
+
 ### Security events
 
 **You need:** view rights on the domain.
