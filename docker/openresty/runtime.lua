@@ -106,6 +106,7 @@ local ESCALATION_EXEMPT = {
     sni_host_mismatch = true, incident_method = true, incident_body_size = true,
     challenge_required = true, challenge_invalid = true, custom_rule_block = true,
     custom_rule_challenge = true, custom_rule_log = true, custom_rule_rate_limited = true,
+    custom_rule_would_block = true, custom_rule_would_challenge = true, platform_rule_would_block = true, platform_rule_would_challenge = true,
     waf_rule_logged = true, waf_inspection_failed = true, rate_limit_state_full = true,
     platform_rule_block = true, platform_rule_challenge = true, platform_rule_log = true,
     platform_rule_rate_limited = true, sensitive_data_card = true, sensitive_data_iban = true,
@@ -1552,6 +1553,23 @@ local function security_has_challenge_rule(rules)
     return false
 end
 
+-- A rule acts until its expiry, by this cell's own clock, so a temporary rule ends on time even when the control plane is down.
+-- The expiry is a Unix time in the signed snapshot; a rule without one never expires.
+local function rule_in_force(rule, now)
+    local expires = rule.expires_at
+    return type(expires) ~= "number" or now < expires
+end
+
+-- What a shadow rule records: the request is counted under would_block or would_challenge for its domain, and its response is not
+-- changed.
+local function shadow_match(rule)
+    if rule.platform then
+        record_security_event(rule.action == "block" and "platform_rule_would_block" or "platform_rule_would_challenge")
+    else
+        record_security_event(rule.action == "block" and "custom_rule_would_block" or "custom_rule_would_challenge")
+    end
+end
+
 -- A rule matches only when every one of its conditions matches. A malformed rule never matches.
 local function rule_matches(rule, request)
     local conditions = rule.conditions
@@ -2210,15 +2228,19 @@ function M.access()
             -- A monitoring WAF already recorded an unusable body when it admitted it.
         end
     end
+    local now = ngx.time()
     for index, rule in ipairs(rules) do
         if index > 1000 then break end
-        if type(rule.rate_limit) ~= "table" and rule_matches(rule, request) then
-            if rule.action == "block" then ngx.var.cdn_security_rule = rule_ref(rule); return security_reject(403, rule.platform and "platform_rule_block" or "custom_rule_block") end
+        if type(rule.rate_limit) ~= "table" and rule_in_force(rule, now) and rule_matches(rule, request) then
+            if rule.mode == "shadow" then
+                -- A shadow rule records what it would have done and changes nothing: the request goes on as if it had not matched.
+                if rule.action == "block" or rule.action == "challenge" then shadow_match(rule) end
+            elseif rule.action == "block" then ngx.var.cdn_security_rule = rule_ref(rule); return security_reject(403, rule.platform and "platform_rule_block" or "custom_rule_block")
             -- A client the domain's own rules allow is trusted: later rules and the challenge do not apply.
-            if rule.action == "allow" then trusted = true; break end
-            if rule.action == "log" then ngx.var.cdn_security_rule = rule_ref(rule); record_security_event(rule.platform and "platform_rule_log" or "custom_rule_log") end
-            if rule.action == "skip_managed" then skip_managed = true end
-            if rule.action == "challenge" and not rule_challenge then rule_challenge = rule end
+            elseif rule.action == "allow" then trusted = true; break
+            elseif rule.action == "log" then ngx.var.cdn_security_rule = rule_ref(rule); record_security_event(rule.platform and "platform_rule_log" or "custom_rule_log")
+            elseif rule.action == "skip_managed" then skip_managed = true
+            elseif rule.action == "challenge" and not rule_challenge then rule_challenge = rule end
         end
     end
     -- Rate-limit rules come after the domain's own rules and before the managed rules. A client an allow rule trusts is not counted.
@@ -2226,10 +2248,12 @@ function M.access()
         ngx.ctx.rate_request = request
         for index, rule in ipairs(rules) do
             if index > 1000 then break end
-            if type(rule.rate_limit) == "table" and rule_matches(rule, request) and rate_limit_exceeded(config, rule, rule.rate_limit) then
-                if rule.action == "block" then ngx.var.cdn_security_rule = rule_ref(rule); return security_reject(429, rule.platform and "platform_rule_rate_limited" or "custom_rule_rate_limited") end
-                if rule.action == "challenge" and not rule_challenge then rule_challenge = rule end
-                if rule.action == "log" then ngx.var.cdn_security_rule = rule_ref(rule); record_security_event(rule.platform and "platform_rule_rate_limited" or "custom_rule_rate_limited") end
+            if type(rule.rate_limit) == "table" and rule_in_force(rule, now) and rule_matches(rule, request) and rate_limit_exceeded(config, rule, rule.rate_limit) then
+                if rule.mode == "shadow" then
+                    if rule.action == "block" or rule.action == "challenge" then shadow_match(rule) end
+                elseif rule.action == "block" then ngx.var.cdn_security_rule = rule_ref(rule); return security_reject(429, rule.platform and "platform_rule_rate_limited" or "custom_rule_rate_limited")
+                elseif rule.action == "challenge" and not rule_challenge then rule_challenge = rule
+                elseif rule.action == "log" then ngx.var.cdn_security_rule = rule_ref(rule); record_security_event(rule.platform and "platform_rule_rate_limited" or "custom_rule_rate_limited") end
             end
         end
     end
