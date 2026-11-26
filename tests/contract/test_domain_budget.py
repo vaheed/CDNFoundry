@@ -164,8 +164,8 @@ class RuntimeUsesBudgets(unittest.TestCase):
         self.assertEqual(self.LUA.count('record_security_event("rate_limit_state_full")'), 3)
 
     def test_a_key_refused_a_counter_is_held_to_the_rule_threshold_by_one_overflow_counter(self):
-        self.assertIn("if overflow then return rate_overflow_exceeded(dictionary, domain, rule, threshold, period) end", self.LUA)
-        self.assertIn("if not count then return rate_overflow_exceeded(dictionary, domain, rule, threshold, period) end", self.LUA)
+        self.assertIn("if overflow then return rate_overflow_exceeded(dictionary, domain, rule, threshold, period), duration end", self.LUA)
+        self.assertIn("if not count then return rate_overflow_exceeded(dictionary, domain, rule, threshold, period), duration end", self.LUA)
         self.assertIn('"o:" .. domain .. ":" .. tostring(rule.id)', self.LUA)
         self.assertIn("return count > threshold", self.LUA)
 

@@ -174,7 +174,7 @@ class RuntimeUsesClientKeys(unittest.TestCase):
         self.assertIn('ngx.md5(client_counting_key) .. ":" .. second', self.LUA)
         self.assertIn('"security:conn:client:" .. tostring(config.domain) .. ":" .. ngx.md5(client_counting_key)', self.LUA)
         self.assertIn('ngx.md5(client_limit_key(client)) .. ":"', self.LUA)
-        self.assertIn('if limit.key == "client_ip" then return request.client_key end', self.LUA)
+        self.assertIn('if kind == "client_ip" then return request.client_key end', self.LUA)
         self.assertNotIn("ngx.md5(client) ..", self.LUA)
 
     def test_nginx_limits_count_under_the_key_not_the_binary_address(self):
