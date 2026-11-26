@@ -200,14 +200,20 @@ For every request under `base_path` the cell sets `schema_violation` to the firs
 | `missing_parameter` | A required path, query, or header parameter is absent |
 | `invalid_parameter` | A parameter does not fit its type (`integer`, `number`, `boolean`) |
 | `body_too_large` | A request with a JSON content type is larger than `maximum_body_bytes` |
+| `invalid_body` | The JSON body is missing when the operation requires one, has the wrong type, lacks a required field, holds a value outside an `enum`, or a string over `maxLength` |
+| `unknown_field` | The body has a field the schema does not declare, in an object that sets `additionalProperties: false` |
 | `none` | The request fits the schema |
 
 Each violation is also counted as a security event (`schema_unknown_path` and so on)
 that never moves the domain toward a stricter automatic state. Nothing is blocked by
 the schema alone: review the events, then add a rule such as `schema_violation equals
-any` with the action block. Request bodies are checked for size only, never for their
-fields, cookie parameters are ignored, and requests outside `base_path` are never
-checked.
+any` with the action block. Requests outside `base_path` are never checked.
+
+**Request bodies.** When an operation has a `requestBody` with an `application/json` (or `+json`) schema, the control plane compiles it into a bounded tree and the cell checks JSON bodies against it. It understands `type` (`string`, `integer`, `number`, `boolean`, `object`, `array`), `enum`, `required`, `properties`, `items`, `maxLength`, `additionalProperties: false` and `$ref` into `#/components/schemas`. It does not interpret `allOf`, `oneOf`, `anyOf` or `not`: such a node accepts any value, so the check can miss a violation but never invents one. A `null` inside the body is accepted. The limits are 5 levels of nesting, 64 fields per body, 32 properties per object, 16 enum values and 2,000 fields in the whole table; a document over a limit or with a recursive or external `$ref` is refused and the previous table stays. In the cell the check decodes at most `maximum_body_bytes` and visits at most 1,000 values: past that the rest of a valid body is not checked and is never reported. A body the cell holds in a temporary file is not checked, and a body that is not valid JSON is refused with 400 before the schema is consulted. On a 16 KiB body the check added 0.2 ms at the median in the real-cell run (see the Phase 9 record in the roadmap).
+
+**Cookie parameters** (`in: cookie`) are read from the `Cookie` header and count as `missing_parameter` or `invalid_parameter` like the other kinds.
+
+Body violations start in shadow: they are events and a rule field, and nothing is blocked until you add a rule on them. Use the rule's shadow mode to see what it would block first.
 
 ### Client-side security
 
