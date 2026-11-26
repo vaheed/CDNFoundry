@@ -2,6 +2,7 @@
 
 namespace App\Filament\Domain\Resources\Domains\RelationManagers;
 
+use App\Exceptions\AnalyticsUnavailableException;
 use App\Filament\Domain\Resources\Domains\RelationManagers\Concerns\SyncsDomainPage;
 use App\Filament\Shared\SecurityRuleForm;
 use App\Jobs\ReconcileEdgeDomain;
@@ -9,11 +10,13 @@ use App\Models\AuditLog;
 use App\Models\Domain;
 use App\Models\Operation;
 use App\Models\SecurityRule;
+use App\Support\AnalyticsStore;
 use App\Support\DomainSecurityRules;
 use App\Support\FilamentHelp;
 use App\Support\PlatformRulesets;
 use App\Support\SecurityPresets;
 use App\Support\SecurityRuleData;
+use Carbon\CarbonImmutable;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\CreateAction;
@@ -49,6 +52,25 @@ class SecurityRulesRelationManager extends RelationManager
         return $schema->columns(1)->components(SecurityRuleForm::fields($this->domain()));
     }
 
+    private ?array $counts = null;
+
+    private bool $countsUnavailable = false;
+
+    /** @return array<string, array{enforce: int, shadow: int}> */
+    private function matchCounts(): array
+    {
+        if ($this->counts === null) {
+            try {
+                $this->counts = app(AnalyticsStore::class)->ruleMatches((int) $this->getOwnerRecord()->getKey(), CarbonImmutable::now('UTC')->subDay());
+            } catch (AnalyticsUnavailableException) {
+                $this->counts = [];
+                $this->countsUnavailable = true;
+            }
+        }
+
+        return $this->counts;
+    }
+
     public function table(Table $table): Table
     {
         return $table->description(function (): ?string {
@@ -66,8 +88,22 @@ class SecurityRulesRelationManager extends RelationManager
                     'block' => 'danger', 'challenge' => 'warning', 'allow' => 'success', default => 'gray',
                 }),
             TextColumn::make('enabled')->label('State')->badge()
-                ->formatStateUsing(fn (bool $state): string => $state ? 'Enabled' : 'Disabled')
-                ->color(fn (bool $state): string => $state ? 'success' : 'gray'),
+                ->state(fn (SecurityRule $record): string => ! $record->enabled ? 'Disabled' : ($record->expires_at !== null && $record->expires_at->isPast() ? 'Ended' : ($record->mode === 'shadow' ? 'Shadow' : 'Enabled')))
+                ->color(fn (string $state): string => match ($state) {
+                    'Enabled' => 'success', 'Shadow' => 'warning', default => 'gray',
+                })
+                ->description(fn (SecurityRule $record): ?string => $record->expires_at === null || $record->expires_at->isPast() ? null : 'Ends '.$record->expires_at->diffForHumans()),
+            TextColumn::make('matches')->label(FilamentHelp::label('Last 24 hours', 'Requests this rule acted on, and requests a shadow rule would have acted on. Hourly counts from the request log; a dash means they could not be read.'))
+                ->state(function (SecurityRule $record): string {
+                    $counts = $this->matchCounts();
+                    if ($this->countsUnavailable) {
+                        return '-';
+                    }
+                    $own = $counts['r'.$record->getKey()] ?? ['enforce' => 0, 'shadow' => 0];
+                    $parts = array_filter([$own['enforce'] > 0 ? number_format($own['enforce']).' acted' : null, $own['shadow'] > 0 ? number_format($own['shadow']).' would act' : null]);
+
+                    return $parts === [] ? '0' : implode(', ', $parts);
+                })->alignEnd(),
         ])->headerActions([
             CreateAction::make()->label('Add rule')->modalHeading('Add rule')->modalSubmitActionLabel('Add rule')->slideOver()->modalWidth(Width::TwoExtraLarge)->createAnother(false)->using(fn (array $data): SecurityRule => $this->createRule($data)),
             ActionGroup::make([

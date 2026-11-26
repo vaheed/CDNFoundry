@@ -16,7 +16,7 @@ async function openRules(page: Page): Promise<void> {
 test('the list reads each rule in words, with its action and order', async ({ page }) => {
     await openRules(page);
     const rows = page.locator('table tbody tr');
-    await expect(rows).toHaveCount(3);
+    await expect(rows).toHaveCount(4);
     await expect(rows.first()).toContainText('Path starts with /admin and Continent does not equal EU');
     await expect(rows.nth(1)).toContainText('Client IP is one of 203.0.113.0/24, 2001:db8:abcd::/48');
     await expect(rows.nth(2)).toContainText('Path starts with /login and Method equals POST and Header x-api-key equals none and Cookie session is absent and Body size (bytes) is less than 4096');
@@ -134,5 +134,42 @@ test('a field whose detection is not set up is listed but cannot be picked', asy
     expect(conditions && action && conditions.y < action.y && action.width > width * 0.6).toBe(true);
     await expect(sheet.getByTestId('rule-reads-as')).toContainText('Reads as');
     await expect(sheet.getByRole('button', { name: 'Add rule', exact: true })).toBeVisible();
+    await expectAccessible(page);
+});
+
+test('a shadow rule shows its badge and end, and the list counts what each rule matched', async ({ page }) => {
+    await openRules(page);
+    const rows = page.locator('table tbody tr');
+    const shadow = rows.filter({ hasText: 'Watch for scripted sign-ups' });
+    await expect(shadow.getByText('Shadow', { exact: true })).toBeVisible();
+    await expect(shadow).toContainText('Ends 2 days from now');
+    await expect(shadow).toContainText('37 would act');
+    await expect(rows.first()).toContainText('1,284 acted');
+    await expect(rows.nth(1)).toContainText('0');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    await expectAccessible(page);
+});
+
+test('the sheet offers shadow mode for block and challenge only, an end time, and a partial estimate', async ({ page }) => {
+    await openRules(page);
+    await page.getByRole('button', { name: 'Add rule' }).click();
+    const sheet = page.locator('.fi-modal-window:visible');
+    await expect(sheet.getByRole('combobox', { name: /^Mode/ })).toHaveCount(0);
+    await sheet.getByRole('combobox', { name: /^Action/ }).selectOption('allow');
+    await settle(page);
+    await expect(sheet.getByRole('combobox', { name: /^Mode/ })).toHaveCount(0);
+    await sheet.getByRole('combobox', { name: /^Action/ }).selectOption('block');
+    await settle(page);
+    await expect(sheet.getByRole('combobox', { name: /^Mode/ })).toBeVisible();
+    await sheet.getByRole('combobox', { name: /^Field/ }).selectOption('path');
+    await settle(page);
+    await sheet.getByRole('textbox', { name: 'Value*' }).fill('/signup');
+    await sheet.getByRole('textbox', { name: 'Value*' }).press('Tab');
+    await settle(page);
+    await sheet.getByText('Details').click();
+    await expect(sheet.getByText('Ends at')).toBeVisible();
+    await sheet.getByRole('button', { name: 'Estimate the last 24 hours' }).click();
+    await settle(page);
+    await expect(sheet.getByTestId('rule-impact-estimate')).toContainText('312 of 48,210 requests in the last 24 hours. Partial');
     await expectAccessible(page);
 });

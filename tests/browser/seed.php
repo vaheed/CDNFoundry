@@ -179,6 +179,10 @@ foreach ([
 ] as [$name, $action, $priority, $conditions]) {
     $rulesDomain->securityRules()->create(['name' => $name, 'action' => $action, 'priority' => $priority, 'conditions' => $conditions, 'fingerprint' => SecurityRuleData::fingerprint($conditions, $action)]);
 }
+// A shadow rule that ends in three days: it records what it would block and acts on nothing.
+$shadowConditions = [['field' => 'path', 'operator' => 'equals', 'value' => '/signup'], ['field' => 'user_agent', 'operator' => 'contains', 'value' => 'python-requests']];
+$rulesDomain->securityRules()->create(['name' => 'Watch for scripted sign-ups', 'action' => 'block', 'priority' => 40, 'conditions' => $shadowConditions, 'mode' => 'shadow', 'expires_at' => now()->addDays(3),
+    'fingerprint' => SecurityRuleData::fingerprint($shadowConditions, 'block')]);
 
 // Redirects on the same domain: a preset, a long name, a prefix move, an IPv6 condition, and a disabled rule.
 foreach (RequestRulePresets::rules($rulesDomain, RequestRulePresets::WWW_TO_APEX, ['status_code' => 301]) as $rule) {
@@ -238,6 +242,7 @@ foreach ([
 ] as [$name, $action, $priority, $conditions, $rate]) {
     $provider->rules()->create(['name' => $name, 'action' => $action, 'priority' => $priority, 'conditions' => $conditions, 'rate_limit' => $rate, 'fingerprint' => SecurityRuleData::fingerprint($conditions, $action, $rate)]);
 }
+PlatformRuleset::query()->create(['name' => 'Staged scanner list', 'description' => 'Records first, then enforces on one site', 'enabled' => true, 'applies_to_all' => false, 'rollout_stage' => 'shadow', 'created_by' => $admin->id]);
 PlatformRuleset::query()->create(['name' => 'Disabled test ruleset', 'enabled' => false, 'applies_to_all' => true, 'created_by' => $admin->id]);
 
 // Log push: the switch is on, and the first assigned domain has a healthy destination and a failing one with a long error.

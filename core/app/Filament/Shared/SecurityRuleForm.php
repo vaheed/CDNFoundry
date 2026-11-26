@@ -2,19 +2,27 @@
 
 namespace App\Filament\Shared;
 
+use App\Exceptions\AnalyticsUnavailableException;
 use App\Models\Domain;
+use App\Support\AnalyticsStore;
 use App\Support\FilamentHelp;
 use App\Support\GeoVocabulary;
 use App\Support\SecurityRuleData;
+use App\Support\SecurityRuleImpact;
+use Filament\Actions\Action;
+use Filament\Forms\Components\DateTimePicker;
+use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Text;
 use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 
 /** The fields of one typed security rule, shared by a domain's firewall rules and the rules of a platform ruleset. */
 final class SecurityRuleForm
@@ -75,7 +83,11 @@ final class SecurityRuleForm
                 Toggle::make('rate_limited')->label(FilamentHelp::label('Only above a request rate', 'Count the requests that match, and apply the action only once a client goes over the limit. Counted separately on each cell, not as one global count across locations.'))->live()
                     ->afterStateHydrated(fn (Toggle $component, mixed $record) => $component->state(filled(is_array($record) ? ($record['rate_limit'] ?? null) : $record?->rate_limit)))->dehydrated(false)->default(false),
                 Group::make(self::rateLimitFields())->statePath('rate_limit')->columns(['default' => 1, 'sm' => 2])->visible(fn (Get $get): bool => (bool) $get('rate_limited')),
+                Select::make('mode')->label(FilamentHelp::label('Mode', 'Enforce applies the action. Shadow evaluates the rule and records what it would have done, and never changes a response. Only block and challenge rules can run in shadow.'))
+                    ->options(SecurityRuleData::MODES)->default('enforce')->native(false)
+                    ->visible(fn (Get $get): bool => in_array($get('action'), SecurityRuleData::SHADOW_ACTIONS, true)),
             ]),
+            ...self::estimate($domain),
             Text::make(function (Get $get): string {
                 $conditions = collect(self::toStored($get('conditions')))->filter(fn ($row): bool => is_array($row) && filled($row['field'] ?? null) && filled($row['operator'] ?? null)
                     && (is_bool($row['value'] ?? null) || filled($row['value'] ?? null)))->values()->all();
@@ -92,8 +104,49 @@ final class SecurityRuleForm
                 TextInput::make('priority')->label(FilamentHelp::label('Order', 'Lower numbers run first. New rules go after the existing ones. Use the move buttons in the list to change it later.'))->numeric()
                     ->default(fn (): int => $domain === null ? 100 : (int) ($domain->securityRules()->max('priority') ?? 90) + 10)
                     ->minValue(-1000000)->maxValue(1000000)->required()->placeholder('100'),
+                DateTimePicker::make('expires_at')->label(FilamentHelp::label('Ends at', 'The rule stops acting at this time, by each cell\'s own clock, even when the control plane is down. Leave empty for a rule that does not end. At most a year ahead.'))
+                    ->seconds(false)->native(false)->minDate(now())->maxDate(now()->addYear())->placeholder('Never'),
                 Toggle::make('enabled')->label('Enabled')->default(true),
             ]),
+        ];
+    }
+
+    /**
+     * A button that counts what the rule as written would have matched in the last 24 hours over the stored request fields.
+     * It is partial by construction and says so; conditions on fields the log does not store are named as unknown.
+     */
+    private static function estimate(?Domain $domain): array
+    {
+        if ($domain === null) {
+            return [];
+        }
+
+        return [
+            Hidden::make('impact_estimate')->dehydrated(false),
+            Actions::make([
+                Action::make('estimateImpact')->label('Estimate the last 24 hours')->icon('phosphor-chart-bar')->color('gray')->size('sm')
+                    ->action(function (Get $get, Set $set) use ($domain): void {
+                        $conditions = collect(self::toStored($get('conditions')))->filter(fn ($row): bool => is_array($row) && filled($row['field'] ?? null) && filled($row['operator'] ?? null)
+                            && (is_bool($row['value'] ?? null) || filled($row['value'] ?? null)))->values()->all();
+                        if ($conditions === []) {
+                            $set('impact_estimate', 'Add a condition first. A rate limit alone has nothing to count against the stored fields.');
+
+                            return;
+                        }
+                        try {
+                            $result = SecurityRuleImpact::estimate($domain, $conditions, app(AnalyticsStore::class));
+                        } catch (AnalyticsUnavailableException) {
+                            $set('impact_estimate', 'Analytics is not answering, so there is no estimate. This does not mean the rule matches nothing.');
+
+                            return;
+                        }
+                        $set('impact_estimate', $result['matched'] === null
+                            ? 'At most '.number_format($result['matched_at_most']).' of '.number_format($result['events_examined']).' requests. Not counted: '.implode(', ', $result['unknown_fields']).' (the log does not store them).'
+                            : number_format($result['matched']).' of '.number_format($result['events_examined']).' requests in the last 24 hours. Partial: only what the log stores.');
+                    }),
+            ]),
+            Text::make(fn (Get $get): string => (string) $get('impact_estimate'))->visible(fn (Get $get): bool => filled($get('impact_estimate')))
+                ->extraAttributes(['data-testid' => 'rule-impact-estimate', 'class' => 'cdn-rule-reads-as']),
         ];
     }
 

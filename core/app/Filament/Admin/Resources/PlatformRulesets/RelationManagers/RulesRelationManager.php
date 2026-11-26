@@ -46,8 +46,11 @@ class RulesRelationManager extends RelationManager
                     'block' => 'danger', 'challenge' => 'warning', 'allow' => 'success', default => 'gray',
                 }),
             TextColumn::make('enabled')->label('State')->badge()
-                ->formatStateUsing(fn (bool $state): string => $state ? 'Enabled' : 'Disabled')
-                ->color(fn (bool $state): string => $state ? 'success' : 'gray'),
+                ->state(fn (PlatformRulesetRule $record): string => ! $record->enabled ? 'Disabled' : ($record->expires_at !== null && $record->expires_at->isPast() ? 'Ended' : ($record->mode === 'shadow' ? 'Shadow' : 'Enabled')))
+                ->color(fn (string $state): string => match ($state) {
+                    'Enabled' => 'success', 'Shadow' => 'warning', default => 'gray',
+                })
+                ->description(fn (PlatformRulesetRule $record): ?string => $record->expires_at === null || $record->expires_at->isPast() ? null : 'Ends '.$record->expires_at->diffForHumans()),
         ])->headerActions([
             CreateAction::make()->label('Add rule')->modalHeading('Add rule')->modalSubmitActionLabel('Add rule')->slideOver()->modalWidth(Width::TwoExtraLarge)->createAnother(false)
                 ->using(fn (array $data): PlatformRulesetRule => PlatformRulesets::saveRule($this->getOwnerRecord(), null, $data, auth()->user(), request()->ip())[0]),

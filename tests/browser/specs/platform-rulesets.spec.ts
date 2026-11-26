@@ -12,7 +12,7 @@ async function openAdmin(page: Page, path: string): Promise<void> {
 test('the list shows each ruleset with its reach, rule count, and state', async ({ page }) => {
     await openAdmin(page, '/admin/platform-rulesets');
     const rows = page.locator('table tbody tr');
-    await expect(rows).toHaveCount(2);
+    await expect(rows).toHaveCount(3);
     const scanner = rows.filter({ hasText: 'Known scanner paths and credential-stuffing endpoints' });
     await expect(scanner).toContainText('1 domain');
     await expect(scanner.getByText('Enabled', { exact: true })).toBeVisible();
@@ -72,5 +72,19 @@ test('a domain owner sees which platform rulesets apply but not their rules', as
     await expect(page.getByText('Applied first by your provider:')).toBeVisible();
     await expect(page.getByText('Known scanner paths and credential-stuffing endpoints')).toBeVisible();
     await expect(page.getByText('/wp-admin')).toHaveCount(0);
+    await expectAccessible(page);
+});
+
+test('a ruleset in shadow shows its rollout stage in the list and a staged form', async ({ page }) => {
+    await openAdmin(page, '/admin/platform-rulesets');
+    const staged = page.locator('table tbody tr').filter({ hasText: 'Staged scanner list' });
+    await expect(staged.getByText('Shadow', { exact: true })).toBeVisible();
+    await page.goto('/admin/platform-rulesets/create');
+    await settle(page);
+    await expect(page.getByRole('combobox', { name: /^Rollout/ })).toBeVisible();
+    await expect(page.getByRole('combobox', { name: /^Enforce on/ })).toHaveCount(0);
+    await page.getByRole('combobox', { name: /^Rollout/ }).selectOption('subset');
+    await settle(page);
+    await expect(page.getByText('Enforce on', { exact: false }).first()).toBeVisible();
     await expectAccessible(page);
 });

@@ -3,6 +3,7 @@
 namespace App\Filament\Admin\Resources\PlatformRulesets\Pages;
 
 use App\Filament\Admin\Resources\PlatformRulesets\PlatformRulesetResource;
+use App\Models\PlatformRuleset;
 use App\Support\PlatformRulesets;
 use Filament\Resources\Pages\EditRecord;
 use Illuminate\Database\Eloquent\Model;
@@ -14,6 +15,7 @@ class EditPlatformRuleset extends EditRecord
     protected function mutateFormDataBeforeFill(array $data): array
     {
         $data['domain_ids'] = $this->record->domains()->pluck('domains.id')->all();
+        $data['enforced_domain_ids'] = PlatformRuleset::query()->findOrFail($this->record->getKey())->enforcedDomains()->pluck('domains.id')->all();
 
         return $data;
     }

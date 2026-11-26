@@ -5,6 +5,17 @@
 // refused with 503, so the screens that expect an unavailable telemetry store still see one.
 
 $sql = (string) file_get_contents('php://input');
+// Per-rule match counts and the impact estimate: fixed numbers for the firewall rules screen.
+if (str_contains($sql, 'cdnf.rule_matches_hourly')) {
+    echo json_encode(['rule_ref' => 'r1', 'mode' => 'enforce', 'requests' => '1284'])."\n".json_encode(['rule_ref' => 'r4', 'mode' => 'shadow', 'requests' => '37'])."\n";
+
+    return;
+}
+if (str_contains($sql, 'countIf(') && str_contains($sql, 'cdnf.edge_events')) {
+    echo json_encode(['examined' => '48210', 'matched' => '312'])."\n";
+
+    return;
+}
 // Security analytics: the same fixed numbers for every domain and range.
 $security = [
     'GROUP BY attack_band' => [['attack_band' => 0, 'requests' => 52000, 'mitigated' => 120], ['attack_band' => 1, 'requests' => 640, 'mitigated' => 640], ['attack_band' => 3, 'requests' => 85, 'mitigated' => 85], ['attack_band' => 5, 'requests' => 410000, 'mitigated' => 0]],
