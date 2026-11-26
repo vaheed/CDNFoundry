@@ -2798,7 +2798,9 @@ local function distinct_clients(domain)
 end
 
 -- At most this many entries go to the agent in one report, and each domain with recent events gets one before any gets a second.
-local SECURITY_REPORT_ENTRIES = 100
+-- The agent sends a heartbeat at most 100 of them, the domains reported longest ago first, so a cell with up to this many noisy
+-- domains is covered over a few heartbeats instead of showing the same first hundred every time.
+local SECURITY_REPORT_ENTRIES = 1000
 local SECURITY_REPORT_REASONS_PER_DOMAIN = 5
 local SECURITY_REPORT_ACTIVE_SECONDS = 600
 

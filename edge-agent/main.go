@@ -74,7 +74,10 @@ type generationMismatchReport struct {
 }
 type client struct {
 	// reportedSecurity holds the security-event totals the control plane last accepted, so a heartbeat carries only what changed.
-	reportedSecurity                   map[securityKey]float64
+	reportedSecurity map[securityKey]float64
+	// reportedSecurityAt is, per domain, the count of the accepted heartbeat that last carried it, so the domain reported longest ago goes first.
+	reportedSecurityAt                 map[int64]uint64
+	securityRound                      uint64
 	base, dir, runtimeDir, statusToken string
 	backupKey                          []byte
 	gatewayBindings                    string
@@ -1690,8 +1693,9 @@ func (c *client) expectedCellIdentity(cell map[string]any, generation string) st
 
 func (c *client) heartbeat(sequence uint64) error {
 	cells, failures, security := c.runtimeStatus()
-	// Only entries whose total changed are sent, and every domain with a change gets a slot before any domain gets a second one.
-	security, _ = fairSecurityEvents(c.pendingSecurityEvents(security), maximumSecurityEntries)
+	// Only entries whose total changed are sent. Every domain with a change gets a slot before any domain gets a second one, and the
+	// domains reported longest ago come first, so a cell with more noisy domains than one heartbeat holds is covered over several.
+	security, _ = fairSecurityEvents(c.pendingSecurityEvents(security), maximumSecurityEntries, c.reportedSecurityAt)
 	listenerReady := false
 	expectedGeneration := ""
 	if manifest, err := readGenerationPointer(c.runtimeDir, "current"); err == nil {

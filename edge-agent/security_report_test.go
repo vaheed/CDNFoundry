@@ -34,7 +34,7 @@ func TestEveryDomainGetsASlotBeforeAnyDomainGetsASecondOne(t *testing.T) {
 	for domain := 2; domain <= 11; domain++ {
 		events = append(events, event(domain, "waf_block", 1, 1))
 	}
-	chosen, dropped := fairSecurityEvents(events, 10)
+	chosen, dropped := fairSecurityEvents(events, 10, nil)
 	seen := map[int64]int{}
 	for _, entry := range chosen {
 		seen[int64(number(entry["domain_id"]))]++
@@ -48,7 +48,7 @@ func TestEveryDomainGetsASlotBeforeAnyDomainGetsASecondOne(t *testing.T) {
 }
 
 func TestTheBusiestReasonOfADomainComesFirst(t *testing.T) {
-	chosen, _ := fairSecurityEvents([]map[string]any{event(1, "quiet", 1, 1), event(1, "loud", 90, 1)}, 1)
+	chosen, _ := fairSecurityEvents([]map[string]any{event(1, "quiet", 1, 1), event(1, "loud", 90, 1)}, 1, nil)
 	if chosen[0]["reason_code"] != "loud" {
 		t.Fatalf("chose %v", chosen[0])
 	}
@@ -87,8 +87,33 @@ func TestAnUnchangedNoisyDomainDoesNotTakeSlotsFromChangedOnes(t *testing.T) {
 	}
 	c.markSecurityReported(noisy)
 	all := append(append([]map[string]any{}, noisy...), event(2, "waf_block", 1, 1), event(3, "waf_block", 1, 1))
-	chosen, dropped := fairSecurityEvents(c.pendingSecurityEvents(all), 2)
+	chosen, dropped := fairSecurityEvents(c.pendingSecurityEvents(all), 2, c.reportedSecurityAt)
 	if len(chosen) != 2 || dropped != 0 {
 		t.Fatalf("both changed domains fit: %d chosen, %d dropped", len(chosen), dropped)
+	}
+}
+
+func TestDomainsReportedLongestAgoGoFirstSoEveryNoisyDomainIsReportedWithinTwoHeartbeats(t *testing.T) {
+	c := &client{}
+	counts := map[int]int{}
+	snapshot := func() []map[string]any {
+		events := []map[string]any{}
+		for domain := 1; domain <= 200; domain++ {
+			// Every total changes before every heartbeat, as under a sustained attack on every domain.
+			counts[domain] += 10
+			events = append(events, event(domain, "waf_block", counts[domain], 1))
+		}
+		return events
+	}
+	reported := map[int64]bool{}
+	for heartbeat := 0; heartbeat < 2; heartbeat++ {
+		chosen, _ := fairSecurityEvents(c.pendingSecurityEvents(snapshot()), maximumSecurityEntries, c.reportedSecurityAt)
+		for _, entry := range chosen {
+			reported[int64(number(entry["domain_id"]))] = true
+		}
+		c.markSecurityReported(chosen)
+	}
+	if len(reported) != 200 {
+		t.Fatalf("200 domains with changing totals must all be reported within two heartbeats, got %d", len(reported))
 	}
 }

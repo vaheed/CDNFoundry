@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """A cell's security report must give every active domain a slot before any domain a second one.
 
-One domain causes hundreds of events while more than a hundred others cause one each. The report is bounded to 100 entries, so the
-noisy domain must take one of them, not all, every other entry must be a different domain, and the cell must say how many
-active domains did not fit.
+One domain causes hundreds of events while more than a hundred others cause one each. The cell's report holds up to 1000 entries,
+so every active domain must be in it exactly once (the noisy one too, not many times), and the cell must say how many active
+domains did not fit. The agent then sends 100 of them per heartbeat, the domains reported longest ago first; that rotation is
+tested in the agent's unit tests.
 """
 
 import http.client
@@ -86,14 +87,14 @@ def main() -> None:
             payload = report()
             entries = payload["security"]
             domains = [entry["domain_id"] for entry in entries]
-            assert len(entries) == 100, f"the report is bounded to 100 entries, got {len(entries)}"
-            assert len(set(domains)) == 100, "a domain took more than one slot while others were left out"
+            assert len(entries) == DOMAINS, f"every active domain has an entry, got {len(entries)} of {DOMAINS}"
+            assert len(set(domains)) == DOMAINS, "a domain took more than one slot while others were left out"
             assert 501 in domains, "the domain with the most events is in the report once"
             assert next(entry for entry in entries if entry["domain_id"] == 501)["count"] >= 50
             # The agent's own status request is not a client connection, so an idle cell reports none.
             assert payload["cell"]["capacity"]["active_connections"] == 0, payload["cell"]["capacity"]["active_connections"]
             dropped = payload["cell"]["capacity"]["security_domains_dropped"]
-            assert dropped == DOMAINS - 100, f"the cell must say how many active domains did not fit, got {dropped}"
+            assert dropped == 0, f"every active domain fits in the cell's report, got {dropped} dropped"
         finally:
             run("docker", "rm", "-f", ORIGIN, CELL, check=False)
     print("e2e security report fairness passed")

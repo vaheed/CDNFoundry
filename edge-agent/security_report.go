@@ -67,9 +67,12 @@ func mergeSecurityEvents(events []map[string]any) []map[string]any {
 	return merged
 }
 
-// fairSecurityEvents chooses at most limit entries: every domain's busiest reason first, in the order the domains appear, then every
-// domain's second busiest, and so on. It returns the chosen entries and how many domains were left out entirely.
-func fairSecurityEvents(events []map[string]any, limit int) ([]map[string]any, int) {
+// fairSecurityEvents chooses at most limit entries: every domain's busiest reason first, then every domain's second busiest, and so
+// on. Domains are taken in the order of when they were last reported (lastSent, a heartbeat counter; a domain never reported counts
+// as 0), oldest first, and in the order they appear among equals. Sustained events on every domain change every running total, so
+// without this the same first domains would take every heartbeat and the rest would never be sent. It returns the chosen entries
+// and how many domains were left out entirely.
+func fairSecurityEvents(events []map[string]any, limit int, lastSent map[int64]uint64) ([]map[string]any, int) {
 	order := []int64{}
 	byDomain := map[int64][]map[string]any{}
 	for _, event := range events {
@@ -79,6 +82,7 @@ func fairSecurityEvents(events []map[string]any, limit int) ([]map[string]any, i
 		}
 		byDomain[domain] = append(byDomain[domain], event)
 	}
+	sort.SliceStable(order, func(i, j int) bool { return lastSent[order[i]] < lastSent[order[j]] })
 	for _, rows := range byDomain {
 		sort.SliceStable(rows, func(i, j int) bool { return number(rows[i]["count"]) > number(rows[j]["count"]) })
 	}
@@ -123,12 +127,19 @@ func (c *client) markSecurityReported(events []map[string]any) {
 	if c.reportedSecurity == nil {
 		c.reportedSecurity = map[securityKey]float64{}
 	}
+	if c.reportedSecurityAt == nil {
+		c.reportedSecurityAt = map[int64]uint64{}
+	}
+	c.securityRound++
 	for _, event := range events {
 		reason, _ := event["reason_code"].(string)
-		c.reportedSecurity[securityKey{int64(number(event["domain_id"])), reason}] = number(event["count"])
+		domain := int64(number(event["domain_id"]))
+		c.reportedSecurity[securityKey{domain, reason}] = number(event["count"])
+		c.reportedSecurityAt[domain] = c.securityRound
 	}
 	// Totals expire on the cell after an hour; forget what the cells have stopped reporting so this map stays bounded.
 	if len(c.reportedSecurity) > 4*maximumMergedSecurityEntries {
 		c.reportedSecurity = map[securityKey]float64{}
+		c.reportedSecurityAt = map[int64]uint64{}
 	}
 }
