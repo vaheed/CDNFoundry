@@ -19,6 +19,7 @@ import os
 import pathlib
 import sys
 import tempfile
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -47,6 +48,27 @@ def domain(name: str, identifier: int, origin_ip: str, rate_rule: dict, cells_se
     return config
 
 
+class Pacer:
+    """A token bucket per cell address. Every test request reaches a cell from one source address, and a cell holds each connecting
+    address to 100 requests per second with a burst of 200, so the test stays under that and a 503 is a test fault, not a result."""
+    RATE, CAPACITY = 85.0, 150.0
+    lock = threading.Lock()
+    buckets: dict[str, list[float]] = {}
+
+    @classmethod
+    def take(cls, ip: str) -> None:
+        while True:
+            with cls.lock:
+                now = time.monotonic()
+                tokens, stamp = cls.buckets.get(ip, [cls.CAPACITY, now])
+                tokens = min(cls.CAPACITY, tokens + (now - stamp) * cls.RATE)
+                if tokens >= 1:
+                    cls.buckets[ip] = [tokens - 1, now]
+                    return
+                cls.buckets[ip] = [tokens, now]
+            time.sleep(0.005)
+
+
 class Client:
     def __init__(self, ip: str):
         self.ip = ip
@@ -54,6 +76,7 @@ class Client:
 
     def get(self, hostname: str, path: str = "/", client: str = "198.51.100.1", headers: dict | None = None, body: bool = False):
         request_headers = {"Host": hostname, "X-Forwarded-For": client, **(headers or {})}
+        Pacer.take(self.ip)
         try:
             self.connection.request("GET", path, headers=request_headers)
             response = self.connection.getresponse()
@@ -63,6 +86,7 @@ class Client:
             self.connection.request("GET", path, headers=request_headers)
             response = self.connection.getresponse()
             data = response.read()
+        assert response.status != 503, "the cell's own per-address limit answered; the test sent too fast"
         return (response.status, dict(response.getheaders()), data) if body else response.status
 
 

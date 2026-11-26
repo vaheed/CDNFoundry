@@ -1631,25 +1631,24 @@ local function rate_limit_exceeded(config, rule, limit)
     end
     local statuses = RATE.counted_statuses(limit)
     if statuses then
-        local pending = ngx.ctx.outcome_rules
-        if not pending then pending = {}; ngx.ctx.outcome_rules = pending end
-        if #pending < 20 then pending[#pending + 1] = {config = config, rule = rule, limit = limit, id = id, statuses = statuses, threshold = threshold, period = period, duration = duration} end
+        -- A key whose mitigation marker did not fit its share stays over its threshold in its counter; an outcome rule has no
+        -- request-path count to notice that, so it reads the counter here and blocks until the window ends.
+        local now = ngx.time()
+        local window = math.floor(now / period)
+        local count = dictionary:get("c:" .. id .. ":" .. window)
+        if count then
+            local estimate = count
+            if limit.window == "sliding" then
+                estimate = count + (dictionary:get("c:" .. id .. ":" .. (window - 1)) or 0) * (1 - (now % period) / period)
+            end
+            if estimate > threshold then return true, math.max(1, math.min(duration, period - now % period)) end
+        end
+        -- ngx.exec replaces ngx.ctx, so the pending counts travel in a request variable: the rule and the key, nothing else.
+        local pending = ngx.var.cdn_rate_outcomes or ""
+        if #pending < 1500 then ngx.var.cdn_rate_outcomes = pending .. tostring(rule.id) .. "|" .. id .. " " end
         return false
     end
     return RATE.rate_count(dictionary, config, rule, limit, id, threshold, period, duration)
-end
-
--- Run when a response is finished: the outcome rules that matched this request count it if its status is one they count.
-function RATE.count_outcomes()
-    local pending = ngx.ctx.outcome_rules
-    if not pending then return end
-    local dictionary = ngx.shared.rate_rules
-    local status = tonumber(ngx.status) or 0
-    for _, entry in ipairs(pending) do
-        if dictionary and entry.statuses[status] then
-            RATE.rate_count(dictionary, entry.config, entry.rule, entry.limit, entry.id, entry.threshold, entry.period, entry.duration)
-        end
-    end
 end
 
 -- The rules a cell runs for a domain: the platform rulesets first, then the domain's own rules. The joined list is built once
@@ -1673,6 +1672,35 @@ local function rules_for(security)
     end
     joined_rules[security] = cached
     return cached
+end
+
+-- Run when a response is finished: the outcome rules that matched this request count it if its status is one they count. The rule
+-- and its settings are read again from the active snapshot by the request's host, so a rule that changed meanwhile counts as changed.
+function RATE.count_outcomes()
+    local pending = ngx.var.cdn_rate_outcomes
+    if not pending or pending == "" then return end
+    local dictionary = ngx.shared.rate_rules
+    local host = (ngx.var.host or ""):lower():gsub("%.$", "")
+    local config = state.hosts[host]
+    if not dictionary or not config or not config.security then return end
+    local status = tonumber(ngx.status) or 0
+    local rules = rules_for(config.security)
+    for entry in pending:gmatch("%S+") do
+        local rule_id, id = entry:match("^([^|]+)|(.+)$")
+        for index, rule in ipairs(rules) do
+            if index > 1000 then break end
+            if tostring(rule.id) == rule_id and type(rule.rate_limit) == "table" then
+                local limit = rule.rate_limit
+                local statuses = RATE.counted_statuses(limit)
+                local period, duration = tonumber(limit.period_seconds), tonumber(limit.duration_seconds)
+                local threshold = RATE.effective_threshold(config, limit)
+                if statuses and statuses[status] and threshold and RATE_PERIODS[period] and duration then
+                    RATE.rate_count(dictionary, config, rule, limit, id, threshold, period, duration)
+                end
+                break
+            end
+        end
+    end
 end
 
 local function security_has_challenge_rule(rules)
