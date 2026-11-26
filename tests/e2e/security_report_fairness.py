@@ -79,10 +79,15 @@ def main() -> None:
                 raise AssertionError(run("docker", "logs", CELL, check=False).stderr)
 
             # Every domain has one refused request, then the first domain goes on to cause hundreds more, last of all.
+            # Nginx allows one client 100 requests a second with a burst of 200 and answers the rest with a plain 503 that is not a security
+            # event, so a tight loop would count however many requests fit in that budget, which depends on the speed of the machine. Pace
+            # the requests below the limit instead.
             for index in range(2, DOMAINS + 1):
                 assert refused_method(ip, f"d{index}.fair.test") == 405
+                time.sleep(0.015)
             for _ in range(300):
-                refused_method(ip, "d1.fair.test")
+                assert refused_method(ip, "d1.fair.test") == 405
+                time.sleep(0.015)
 
             payload = report()
             entries = payload["security"]
@@ -90,7 +95,8 @@ def main() -> None:
             assert len(entries) == DOMAINS, f"every active domain has an entry, got {len(entries)} of {DOMAINS}"
             assert len(set(domains)) == DOMAINS, "a domain took more than one slot while others were left out"
             assert 501 in domains, "the domain with the most events is in the report once"
-            assert next(entry for entry in entries if entry["domain_id"] == 501)["count"] >= 50
+            noisy = next(entry for entry in entries if entry["domain_id"] == 501)
+            assert noisy["count"] >= 50, noisy
             # The agent's own status request is not a client connection, so an idle cell reports none.
             assert payload["cell"]["capacity"]["active_connections"] == 0, payload["cell"]["capacity"]["active_connections"]
             report_file = temporary / "cell-report.json"
