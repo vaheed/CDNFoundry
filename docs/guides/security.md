@@ -282,7 +282,7 @@ count only SQL injection, cross-site scripting, or command injection signs.
 
 ### Rate-limit rules
 
-A rate-limit rule is a firewall rule that also counts. Turn on **Limit the request
+A rate-limit rule is a firewall rule that also counts. Turn on **Only above a request
 rate** in the rule sheet, or send a `rate_limit` object in the API:
 
 ```json
@@ -292,14 +292,29 @@ rate** in the rule sheet, or send a `rate_limit` object in the API:
 ```
 
 - `key` is what one client is: `client_ip`, `client_ip_path` (the address on one
-  path), or `header` with a `header_name` such as `X-Api-Key`. A request without
-  that header is not counted.
-- `threshold` requests per `period_seconds` (10, 60, or 600) is the allowance.
-  The 21st request in the example goes over.
+  path), `header` (with a `key_name` such as `X-Api-Key`), `cookie` (with the
+  cookie name), `query_arg` (with the argument name), `asn` (the client's network),
+  or `country`. A request without that header, cookie or argument is not counted.
+  Header, cookie and argument values are hashed before they become a counter key,
+  so a long or hostile value cannot grow the key. A request whose ASN or country
+  is unknown is counted under one shared "unknown" key. `second_key` (and
+  `second_name`) adds a second part: each combination of the two is its own
+  counter, and a request missing either part is not counted. `header_name` still
+  works as the name of a `header` key.
+- `threshold` requests per `period_seconds` (10, 60, 600, 3600, or 86400) is the
+  allowance. The 21st request in the example goes over.
 - Past the allowance the action applies to that key for `duration_seconds` (10 to
   86400), then the key is released and starts again with a fresh allowance.
 - The action is `block` (answers 429, `custom_rule_rate_limited`), `challenge`, or
   `log`.
+- `window` is `fixed` (the default) or `sliding`. A fixed window counts from zero
+  at each period boundary, so a client that sends a full allowance just before a
+  boundary and another just after it gets nearly twice the threshold. A sliding
+  window adds the previous period's count, weighted by how much of it still
+  overlaps, and holds the same burst to the threshold.
+- `count_statuses` (up to 10 response statuses between 100 and 599) makes the rule
+  count only the responses with those statuses. See [Counting outcomes](#counting-outcomes).
+- `scope` is `per_cell` (the default) or `shared`. See [Across cells](#across-cells).
 - A rate-limit rule with no conditions counts every request of the domain. Only a
   rate-limit rule may have no conditions.
 - Rate-limit rules run after the domain's other firewall rules and before the
@@ -314,9 +329,9 @@ rate** in the rule sheet, or send a `rate_limit` object in the API:
   ways is one client. Rule conditions, geography, and logs still use the real
   address. Operators can change the prefix length and list networks that keep
   per-address counting in [Configuration](../reference/configuration.md).
-- **Counts are per cell.** Each cell counts on its own with fixed time windows,
-  so this is not a global count across locations. Over several cells a client can
-  send up to the threshold on each one.
+- **Counts are per cell.** A cell never waits for another cell, so there is no
+  exact global count across locations. See [Across cells](#across-cells) for what
+  each scope admits.
 - A domain may have 20 rate-limit rules (a platform setting, never above 50). The
   counters live in fixed shared memory on the cell, and **each domain has its own
   share of it**: an equal part of half the dictionary, divided by the hostnames
@@ -333,6 +348,75 @@ rate** in the rule sheet, or send a `rate_limit` object in the API:
   mitigated stays blocked until its duration ends. The per-client request counter of the baseline limits
   works the same way, and the domain-wide counter still applies to every request.
   Measured on a development host: while 700 domains shared a 32 KiB dictionary (past the floor, with no room for their keys), keys first seen afterwards were still limited to the rule's threshold, and with 30,000 distinct keys flooding one domain another domain's threshold of 100 still tripped at 100 requests. Nginx evicts the least recently used entry rather than failing an allocation, so a dictionary out of memory loses old counters, not new keys; the one case that counts nothing is an allocation that fails outright, and it is reported as `rate_limit_state_full`.
+
+#### Limited responses
+
+A request over its limit answers `429` with a `Retry-After` header: the seconds
+until the mitigation ends. A client that does not ask for HTML (no `text/html` in
+`Accept`, such as an API client or a script) also gets a small JSON body:
+
+```json
+{"error": "rate_limited", "message": "Too many requests.", "retry_after": 296}
+```
+
+A browser still gets the normal block page, with the same header. The JSON response is
+`Cache-Control: no-store`.
+
+#### Counting outcomes
+
+A rule with `count_statuses` counts a request only when its response has one of
+those statuses, so a login rule can count the failures (`[401, 403]`) and never the
+successful logins that share a NAT address. The count is made when the response
+is finished, so it never slows the request. Two consequences are stated limits,
+not defects:
+
+- A request is admitted before its own response is counted. When a key reaches the
+  threshold, the requests already in flight for that key still finish and are
+  counted, so a key lets through the threshold plus the requests it had in
+  flight at that moment. A client that waits for each answer lets through the
+  threshold plus one.
+- Only the rule's conditions decide which requests are looked at, so put the path
+  (for example `/login`) and method in the conditions.
+
+Measured on a real cell, with a rule counting status `401` on `/login`, threshold 5,
+over a 10-minute period: 5,000 failed logins from 200 addresses (25 each, 8 attackers
+at a time) let 1,200 reach the origin, 6 per address, and every address was refused
+afterwards. 500 successful logins from one shared address were never counted, and
+three failures after them were below the threshold.
+
+#### Across cells
+
+Counting stays in each cell's own memory and never waits for another cell, which
+is why every figure here is an approximation with a stated bound.
+
+| Scope | Each cell enforces | Balanced traffic over N cells | All traffic on one cell |
+| --- | --- | --- | --- |
+| `per_cell` | the threshold | up to N times the threshold | the threshold |
+| `shared` | the threshold divided by the number of cells serving the domain, rounded up | at most 120% of the threshold | one cell's share of the threshold (underuse) |
+
+Measured with a threshold of 300 over three cells: balanced traffic in `shared`
+scope was admitted at 300, all traffic on one cell at 100 (a third of the
+threshold, the stated underuse), and in `per_cell` scope 900. The cell count is the
+number of cells assigned to the domain (active or being activated) when the
+snapshot is built, so a placement change is applied with the next snapshot, and
+until then cells enforce the previous share. Rounding up means a threshold that
+does not divide evenly can admit up to one extra request per cell. The 120% bound was
+measured only on balanced traffic and a threshold of 300; a small threshold divided
+over many cells is dominated by this rounding, so check it before relying on it.
+
+**Not delivered: control-plane aggregation of long windows.** The 1 hour and 24
+hour periods are counted per cell, like every other period. The control plane does
+not yet add up cells' counts of those periods from heartbeats and send back
+client-key mitigations, so a long-window rule enforces each cell's own share only.
+
+#### How exact the count is
+
+On one cell, for steady traffic a rule trips at its threshold, and a sliding
+window holds a burst on each side of a window boundary to the threshold within
+10%. Measured with a threshold of 100 per 10 seconds: a burst of 100 on each side
+of a boundary let 200 through a fixed window and 100 through a sliding window.
+Counters are held in a shared-memory budget per domain, so a flood of distinct
+keys reaches the overflow counter described below instead of evicting anything.
 
 ### Presets: user agents and hotlinks
 

@@ -20,7 +20,11 @@ single source of truth; `make version-check` enforces it.
 - Named IP lists: up to 5 per domain with 10,000 addresses or networks each, managed in the panel and at `/api/domains/{id}/security/ip-lists`, and used from firewall rules with the field `client_ip_list`. Cells search compiled ranges in 1 to 3 µs at p99, and the agent refuses a corrupt or over-budget list while the previous one keeps matching.
 - Platform rulesets roll out in stages: `shadow`, then a chosen subset of domains, then all (`rollout_stage` and `enforced_domain_ids`).
 
+- Rate-limit rules count in sliding windows (`window`), by cookie value, query argument, ASN, country or a combination of two keys (`key_name`, `second_key`, `second_name`), over periods up to 24 hours, and can count only responses with chosen statuses (`count_statuses`) so failed logins are counted and successful ones never are. `scope: shared` divides the threshold by the number of cells serving the domain. A limited request answers 429 with `Retry-After`, and a JSON body for clients that do not ask for HTML. Control-plane aggregation of the 1 hour and 24 hour windows across cells is not part of this release.
+
 ### Fixed
+
+- Rate-limit rules that count responses now count: the pending count was lost when the request moved to the cache or proxy location, and a key whose mitigation marker found no room in the domain's share was not blocked before the request.
 
 - A cell with more than 100 noisy domains no longer reports the same first hundred forever. A cell lists up to 1000 domain and reason entries, and the agent sends 100 per heartbeat, the domains reported longest ago first, so 200 domains under sustained attack are all reported within two heartbeats.
 

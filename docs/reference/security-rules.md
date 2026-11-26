@@ -380,14 +380,22 @@ are counted; the action applies once one client goes over the limit.
 
 | Setting (API) | Panel | Values |
 | --- | --- | --- |
-| `key` | Count by | `client_ip` (Client IP), `client_ip_path` (Client IP and path), `header` (Header value) |
-| `header_name` | Header name | Required for `header`, such as `X-Api-Key`. Requests without the header are not counted |
-| `threshold` | Requests | 1 to 100,000 |
-| `period_seconds` | Per | `10`, `60`, or `600` |
+| `key` | Count by | `client_ip` (Client IP), `client_ip_path` (Client IP and path), `header` (Header value), `cookie` (Cookie value), `query_arg` (Query argument), `asn` (ASN), `country` (Country) |
+| `key_name` | Header, cookie or argument name | Required for `header`, `cookie` and `query_arg` (1 to 64 characters), such as `X-Api-Key`, `session` or `token`. `header_name` is still accepted for a header. Requests without it are not counted. Values are hashed |
+| `second_key`, `second_name` | And also by | Optional second part of the key: `header`, `cookie`, `query_arg`, `asn`, `country`, or `client_ip`. It differs from the first key (two headers with different names are allowed), and `client_ip_path` already contains the address. A request missing either part is not counted |
+| `threshold` | Requests | 1 to 100,000 (with `count_statuses`, the most counted responses) |
+| `period_seconds` | Per | `10`, `60`, `600`, `3600`, or `86400` |
+| `window` | Window | `fixed` (default) or `sliding` |
+| `scope` | Across cells | `per_cell` (default) or `shared` |
+| `count_statuses` | Count only responses | Up to 10 statuses from 100 to 599. Empty counts every matching request |
 | `duration_seconds` | Then for (seconds) | 10 to 86,400 |
 
-The action is `block` (429), `challenge`, or `log`. Counts are **per cell**, in fixed windows; they are not one count across
-locations. A rate-limit rule may have no conditions, and then counts every request of the domain. A domain has up to 20
+The action is `block` (429 with `Retry-After`, and a JSON body for a client that does not ask for HTML), `challenge`, or `log`.
+Counts are **per cell**: there is no exact count across locations. A fixed window can admit nearly twice the threshold around a
+boundary; a sliding window holds it within 10%. In `shared` scope each cell enforces the threshold divided by the number of
+cells serving the domain, rounded up. Periods of 1 hour and 24 hours are counted per cell; the control plane does not aggregate
+them across cells. [Security guide: rate-limit rules](../guides/security.md#rate-limit-rules) states each error bound with its
+measurement. A rate-limit rule may have no conditions, and then counts every request of the domain. A domain has up to 20
 rate-limit rules by default (never more than 50).
 
 ```json
@@ -403,6 +411,15 @@ rate-limit rules by default (never more than 50).
  "conditions": [{"field": "path", "operator": "starts_with", "value": "/api/"}],
  "rate_limit": {"key": "header", "header_name": "X-Api-Key", "threshold": 600, "period_seconds": 60, "duration_seconds": 60},
  "action": "block", "priority": 30}
+```
+
+```json
+{"name": "Stop credential stuffing",
+ "conditions": [{"field": "path", "operator": "equals", "value": "/login"},
+                {"field": "method", "operator": "equals", "value": "POST"}],
+ "rate_limit": {"key": "client_ip", "threshold": 5, "period_seconds": 600, "duration_seconds": 3600,
+                "window": "sliding", "count_statuses": [401, 403]},
+ "action": "block", "priority": 25}
 ```
 
 ```json
