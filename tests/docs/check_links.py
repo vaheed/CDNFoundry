@@ -266,7 +266,8 @@ def validate_implementation_references(
         *(ROOT / "core" / "config").glob("*.php"),
         ROOT / "compose.dev.yml",
         ROOT / "compose.prod.yml",
-        *(ROOT / "edge-agent").rglob("*.go"),
+        # Variables a Go test reads are test inputs, not operator settings.
+        *(path for path in (ROOT / "edge-agent").rglob("*.go") if not path.name.endswith("_test.go")),
     ]
     for source in implementation_files:
         source_text = source.read_text(encoding="utf-8")
