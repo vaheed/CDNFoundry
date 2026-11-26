@@ -769,6 +769,18 @@ refused, the last valid version stays active, and the failure is alerted.
 for activation, refusal, and last valid state. A memory measurement at maximum
 size.
 
+**Stage 1 evaluation, 26 November 2026** (development host; the cell's own `ip_list.lua` under the edge-runtime image's LuaJIT, `tests/e2e/ip_list_feasibility.py`).
+
+| Question | Finding |
+| --- | --- |
+| Can the existing artifact channel carry a list? | Yes. The domain artifact's `security` object is passed to the cell unchanged by the agent, so a compiled list travels in the signed domain snapshot with the existing signing, size-bound request (16 MB), atomic activation and last-valid retention. No new transport, no runtime download. A separate artifact kind would avoid re-sending a list with unrelated domain changes; it is not needed at the admitted sizes and stays an option if the measured cost below is found too high. |
+| Representation | The control plane compiles a list to sorted, non-overlapping ranges: IPv4 as whole numbers, IPv6 as four 32-bit words per address. A cell answers by binary search. An earlier IPv6 form (hex strings) measured p99 28 to 575 µs and was dropped. |
+| Lookup time, 10,000 ranges | p99 1.3 to 3.1 µs (IPv4, IPv6, and both together), p50 0.7 to 1.2 µs, against the 20 µs bound. The timer overhead is subtracted; maximums of 0.4 to 1.8 ms are single outliers on a loaded host. |
+| Size and load | One list at 10,000 ranges adds 215 KB (IPv4), 614 KB (IPv6) or 414 KB (5,000 of each) of snapshot JSON, decodes and validates in 2.7, 9.1 and 6.0 ms, and holds 0.27, 1.06 and 0.66 MB per worker. Every worker holds its own copy and a cell runs at most 8 workers, so one maximum IPv6 list costs about 8.5 MB per cell. |
+| Admission limits chosen | 10,000 ranges per list, 5 lists per domain, and a per-cell budget of 200,000 ranges across all domains that the agent enforces by refusing the artifact that would exceed it (about 170 MB per cell of IPv6 ranges across 8 workers at the very worst, and 43 MB of IPv4). The cell budget is a ceiling to be confirmed by the stage 3 memory measurement on a real cell, and may be lowered by it. |
+| Refusal | The cell-side validator refuses unsorted, overlapping, odd-length, wrongly sized, negative and over-maximum lists (6 cases tested). The agent will run it before activation so a corrupt list rejects its domain's artifact and the previous state keeps serving. |
+| Justified first dataset | Named IP lists for a domain, usable from rules, because rule lists are capped at 100 values and customers need allow and deny lists in the thousands. Platform datasets (crawler ranges, a larger leaked-password corpus, the greylist) are not admitted in this increment: each needs a source, a measured benefit and a revocation rule of its own. |
+
 **Completion checkpoint, 21 November 2026.**
 
 | Implementation | Documentation | Automated/runtime | Browser |
