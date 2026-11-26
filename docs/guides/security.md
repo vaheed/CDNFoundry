@@ -439,6 +439,54 @@ of a boundary let 200 through a fixed window and 100 through a sliding window.
 Counters are held in a shared-memory budget per domain, so a flood of distinct
 keys reaches the overflow counter described below instead of evicting anything.
 
+### Challenge
+
+The browser challenge is a proof of work a visitor's browser solves on its own. A `challenge` rule asks for it on the requests it
+matches, and [under attack mode](incident-response.md) asks for it for the whole domain. A visitor with a valid token is not asked
+again. Everything below is enforced by the cell from its own memory; nothing waits on the control plane.
+
+**Keys and tokens.** The control plane issues one pool-wide key (rotated every 30 days, with the old key still verifying for 2
+hours), so a token solved on one cell works on every cell that serves the domain, in any point of presence. A token is bound to the
+domain, to the client key (an IPv6 visitor counts under its /64, so a phone that changes address inside its network keeps its token),
+and to the browser family; a token copied to a script or to another browser is refused. Each token has a request budget on each
+cell, 600 a minute by default. See [challenge keys](../reference/security-rules.md).
+
+**Difficulty.** 16 bits for a visitor with no signs of abuse, up to 17 bits by default for an address with three or more recent
+security events on the domain or while the domain is restricted. The cap is a measured limit, not a preference: solving runs in
+up to three Web Workers, and the slowest device of the browser suite, one worker on a CPU six times slower than the test host, does
+about 150,000 hashes a second, which makes 17 bits take 2.7 seconds at the 95th percentile (three times the mean, because the number
+of attempts is geometric). 18 bits would take 5.3 seconds there. On the test host one worker solved 17 bits in 1.13 seconds at the
+95th percentile over 15 solves. A cell can set both limits (`EDGE_CHALLENGE_BITS`, `EDGE_CHALLENGE_MAX_BITS`); a higher setting
+changes these numbers by a factor of two a bit.
+
+**What a flood gets through.** Measured on a real cell with a challenge rule:
+
+| Client | Requests | Reached the origin |
+| --- | --- | --- |
+| Scripted HTTP clients that never solve the check (20 addresses, with and without an HTML `Accept` header) | 2,000 | 0 |
+| Scripted clients that implement the solver, one token each, sending 700 requests inside a minute | 3,500 | 3,000 (the token budget refused 500) |
+| One token passed to 30 other addresses | 30 | 0 |
+| A headless browser | one page load | passes, like any browser (browser suite) |
+
+The challenge stops clients that do not run the proof of work. It does not prove that a person is there: a script that implements
+the solver, or a headless browser, passes, and what bounds them is the token budget (600 requests a minute a token on each cell), the
+limit on challenges issued to one address (30 a minute), and your rate-limit rules. An address that earns tokens faster than it
+should is the case for a rate-limit rule on the client key.
+
+**Page loads and everything else.** Only a page load (GET or HEAD asking for HTML) gets the check page. Any other request without a
+token is refused with a JSON body, `{"error":"challenge_required","message":...}`, so API and mobile clients see the reason instead
+of a page. Under attack mode a domain chooses which path prefixes and methods skip the check.
+
+**Search engines.** The platform does not ship crawler address ranges: a range list needs a maintained source, a freshness rule,
+and a way to withdraw it, and a stale list would turn a real crawler into a blocked one. To let a crawler through, add an
+[IP list](#ip-lists) with the ranges the search engine publishes and an `allow` rule that matches its user agent and that list; an
+`allow` rule also skips the challenge. A user agent that claims to be a crawler from an address outside the list is challenged like
+any other client.
+
+**Not provided.** There is no TLS-fingerprint signal, no bot score, and no crawler verification dataset. Each needs a corpus of
+real traffic to show that it does not flag real visitors, and a source that can be revoked, and neither exists here. A fingerprint
+or a solved check is not proof of humanity, and these are not offered until that evidence does.
+
 ### Presets: user agents and hotlinks
 
 Two presets write ordinary firewall rules, so they follow the same order, limits,

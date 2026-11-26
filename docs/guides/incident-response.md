@@ -60,13 +60,34 @@ the binding, so a browser update does not lose the token; a cell can bind it as 
 The token it earns works until the profile ends or for an hour, whichever is sooner, and is the only cookie the profile sets.
 When a challenge is active, its internal `POST /.cdnf/challenge` works even if the domain or incident method policy allows
 only `GET` and `HEAD`. This exception accepts only challenge proofs; ordinary requests still obey the method policy.
-A token is valid on the cell that issued it; another cell or another point of presence challenges the visitor again.
-The difficulty is 16 bits by default, and `EDGE_CHALLENGE_BITS` (12 to 24) changes it for a cell. See
-[Configuration](../reference/configuration.md). Requests that are not page loads (scripts, bots, API clients) and have no token are refused.
-Paths under `/api/` and `/.well-known/`, and visitors that one of your own allow rules matches, are not challenged. The page
-explains itself to screen readers and tells a visitor without JavaScript what to do. The check needs HTTPS, because browsers
-only offer the cryptography it uses on secure pages. Each address can be issued only a limited number of challenges a minute, so
-the challenge cannot be turned into a flood of its own.
+A token is signed with a key the control plane issues to every edge, so it is valid on any cell that serves the domain, in any
+point of presence, and a key rotation does not ask a visitor with a valid token again (see the
+[challenge keys](../reference/security-rules.md)). Each token also has its own request budget on each cell, 600 a
+minute by default, so one token passed to many machines stops working.
+
+The difficulty is 16 bits for a visitor with no signs of abuse. It rises by two bits for an address that has caused three or
+more security events on the domain in the last two minutes, and by one while the domain is restricted (under attack mode
+restricts it), and never above 17 bits by default. A bit doubles the expected work. The cap is what the slowest device of the
+test matrix solves with a 95th percentile of 3 seconds or less: one worker on a CPU six times slower than a desktop, about
+200,000 hashes a second, takes about 2 seconds at 17 bits. `EDGE_CHALLENGE_BITS` (12 to 24) sets the base and
+`EDGE_CHALLENGE_MAX_BITS` the cap for a cell. See [Configuration](../reference/configuration.md). The work runs in up to
+three Web Workers so the page stays responsive, and on the page's own thread when workers are unavailable. It needs neither HTTPS
+nor the browser's cryptography interface.
+
+Requests that are not page loads (scripts, bots, API clients) and have no token are refused with a JSON body that names the
+reason (`challenge_required`) and says to open the site in a browser first. Visitors that one of your own allow rules matches are
+not challenged. What else skips the challenge is your choice when you turn the profile on: **Requests that skip the browser
+check** lists up to 8 path prefixes (the default is `/api/` and `/.well-known/`, so API clients and certificate validation keep
+working) and any of the methods GET, HEAD, OPTIONS, POST, PUT, PATCH, DELETE (the default is none; OPTIONS lets a browser's
+preflight request through). In the API, send `bypass_prefixes` and `bypass_methods` with `POST /api/domains/{domain}/incident`; an
+empty list lets nothing through, and a prefix that does not start with `/` or holds a space, query string, or fragment is refused
+with 422. The choice ends with the profile. A path that skips the challenge still meets the profile's WAF, limits, and method
+policy. The page explains itself to screen readers and tells a visitor without JavaScript what to do. Each address can be issued
+only a limited number of challenges a minute, so the challenge cannot be turned into a flood of its own.
+
+What the challenge does not prove: a solved check shows that the client did some work, not that a person is behind it. A script
+that implements the solver passes, and so does a headless browser; the token budget and the rate and containment limits are what
+bound them. See [Security guide: challenge](security.md#challenge).
 
 Refusals are recorded as security events with the reasons `incident_method`, `incident_body_size`, `challenge_required`, and
 `challenge_invalid`. They show the profile working and never raise the domain's automatic security state.

@@ -964,15 +964,24 @@ the token and key design, included in Phase 11.
 | --- | --- | --- | --- |
 | Local challenge present; portability/rotation open | Key/failure/accessibility contract open | Cross-cell/rotation/clean-client matrix open | Challenge mobile/visual/accessibility gate open |
 
-**Execution record, 26 November 2026** (development host; stage 1 only, work in progress).
+**Execution record, 26 November 2026** (development host).
 
 | Item | Result |
 | --- | --- |
-| Built | Pool-wide challenge keys issued by the control plane (one signing key, one verifying key during a 2 hour overlap), scheduled rotation after 30 days, administrator rotate and revoke endpoints, keys sealed to each edge's identity key and fetched by the edge agent, key verification and expiry by the cell's own clock, a per-token request budget with the reason `challenge_token_limited`. |
-| Tests run | `ChallengeKeysTest` (7), the full PHP suite, PHPStan, Pint, Go tests in `edge-agent`, `tests/e2e/challenge_keys.py` (portability between cells, rotation without re-challenge, revocation, expiry, prefix and browser-family binding, token budget, malformed sets, no secret in responses or logs) and `challenge_binding.py` passed on real cells. |
-| Not done | A two-edge e2e across PoPs through the real agent and control plane, API/mobile/accessibility qualification and solve-time p95, browser tests of the challenge page, and stage 3 (bot signals). |
+| Stage 1: keys | Pool-wide challenge keys issued by the control plane (one signing key, one verifying key during a 2 hour overlap), rotation after 30 days, administrator rotate and revoke endpoints, keys sealed to each edge and fetched by the agent, verification and expiry by the cell's own clock, a per-token request budget (`challenge_token_limited`). Seeds now carry a random nonce, so two page loads of one client in one second no longer share a seed (the second was refused as a replay). `challenge_keys.py`, `challenge_binding.py`, `ChallengeKeysTest` and the Go tests pass. |
+| Stage 2: behavior | Adaptive difficulty from the client's recent security events and the domain state, capped (17 bits by default, `EDGE_CHALLENGE_MAX_BITS`), inside the signed seed. The solver is plain synchronous JavaScript in up to three Web Workers (about 20 times faster than the earlier per-hash `crypto.subtle` loop, which took 8 to 11 seconds at 16 bits on a throttled thread) and needs no secure context. A domain chooses the path prefixes and methods that skip the challenge when it starts under attack mode (API field, panel dialog, `incident_bypass_*` columns, agent and cell validation). Machine-readable refusals for non-page requests were already present. `challenge_adaptive.py`, `challenge_flood.py`, `IncidentProfileTest`, Go and Lua paths pass. |
+| Solve time | One worker, 17 bits, 15 solves on a real cell: p95 1.13 s. Solver speed on a thread throttled six times: 147,551 hashes a second, so p95 at 17 bits is 2.66 s (3 s or less), and 18 bits would be about 5.3 s, which is why the cap is 17. Chromium's CPU throttle does not slow a worker, so the slow device is derived from the throttled hash rate, not measured end to end; this is stated in the security guide. |
+| Browser | `challenge-specs` (disposable cells, `tests/browser/run-challenge.sh`): 30 passed and 6 skipped (the two timing tests run once) in light and dark at desktop and phone width: page text, accessibility scan, visual snapshots, no horizontal overflow, solving without workers, two tabs, no JavaScript, refused and unreachable states, cookie flags. |
+| Flood | 2,000 requests from scripted clients that never solve: 0 reached the origin. Clients that implement the solver: 3,000 of 3,500 (the token budget refused 500). One token on 30 other addresses: 0 of 30. |
+| Stage 3 | Not admitted. Verified-crawler ranges need a maintained source, a freshness rule and revocation (a stale list turns a real crawler into a blocked one); a TLS fingerprint and a `bot_score` need a corpus of real traffic that shows under 1% of real visitors flagged, and none exists here. Customers can reach the same result with an IP list of the ranges a search engine publishes and an `allow` rule (documented in the security guide). A synthetic corpus would not be evidence. |
+| Two real edges | `challenge_keys_two_edges.py` on the development stack (real control plane, two real agents, their real cells): both edges held the issued version, a rotation reached both in 61.8 seconds (the agents refresh once a minute), and a revocation reached both; no cell status held a secret. Token portability between cells holding keys is `challenge_keys.py`. |
+| Not done | One run that solves on a cell of one edge and presents the token to a cell of the other through a real domain on the development stack. Real phones were not tested; the slow device is the throttled-thread figure above. |
 
-Phase 7 is not complete.
+Phase 7 stages 1 and 2 are complete within the stated limits; stage 3 is deferred, not partly done, and the phase is complete only on that understanding.
+
+| Implementation | Documentation | Automated/runtime | Browser |
+| --- | --- | --- | --- |
+| Stages 1 and 2 complete; stage 3 deferred | Complete for stages 1 and 2 (keys, difficulty, bypass, solver, measured solve time and flood table) | Complete; the single cross-edge token run through a real domain is open | 30 passed (challenge page); incident dialog spec per the run below |
 
 ---
 
