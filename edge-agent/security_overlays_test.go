@@ -186,6 +186,10 @@ func TestAnInvalidIncidentIsRefusedBeforeAnyCellSeesIt(t *testing.T) {
 		"no expiry":       func(i *securityIncident) { i.ExpiresAt = 0 },
 		"negative body":   func(i *securityIncident) { i.MaxBodyBytes = -1 },
 		"relative bypass": func(i *securityIncident) { i.BypassPrefixes = []string{"api/"} },
+		"bypass method":   func(i *securityIncident) { i.BypassMethods = []string{"TRACE"} },
+		"many bypass methods": func(i *securityIncident) {
+			i.BypassMethods = []string{"GET", "HEAD", "OPTIONS", "POST", "PUT", "PATCH", "DELETE", "GET"}
+		},
 		"too many methods": func(i *securityIncident) {
 			i.Methods = []string{"GET", "GET", "GET", "GET", "GET", "GET", "GET", "GET", "GET"}
 		},

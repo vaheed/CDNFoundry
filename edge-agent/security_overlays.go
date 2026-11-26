@@ -27,6 +27,7 @@ type securityIncident struct {
 	MaxBodyBytes   int64    `json:"max_body_bytes"`
 	Challenge      bool     `json:"challenge"`
 	BypassPrefixes []string `json:"challenge_bypass_prefixes,omitempty"`
+	BypassMethods  []string `json:"challenge_bypass_methods,omitempty"`
 }
 
 type securityOverlay struct {
@@ -124,11 +125,16 @@ func validIncident(incident *securityIncident) bool {
 	if incident == nil {
 		return true
 	}
-	if incident.ExpiresAt <= 0 || incident.WAF.Mode != "block" || incident.MaxBodyBytes < 0 || len(incident.Methods) > 8 || len(incident.BypassPrefixes) > 8 {
+	if incident.ExpiresAt <= 0 || incident.WAF.Mode != "block" || incident.MaxBodyBytes < 0 || len(incident.Methods) > 8 || len(incident.BypassPrefixes) > 8 || len(incident.BypassMethods) > 7 {
 		return false
 	}
 	known := map[string]bool{"GET": true, "HEAD": true, "OPTIONS": true, "POST": true, "PUT": true, "PATCH": true, "DELETE": true}
 	for _, method := range incident.Methods {
+		if !known[method] {
+			return false
+		}
+	}
+	for _, method := range incident.BypassMethods {
 		if !known[method] {
 			return false
 		}
