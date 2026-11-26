@@ -70,4 +70,17 @@ function M.new(options)
     end
 end
 
+-- The text of a counting key for a report to the control plane: dotted decimal for IPv4, eight hexadecimal groups for IPv6 (the key
+-- already has the bits beyond its prefix cleared). Anything that is not one of the two binary forms has no text, so it is not reported.
+function M.text(key)
+    if type(key) ~= "string" then return nil end
+    if #key == 4 then return string.format("%d.%d.%d.%d", key:byte(1, 4)) end
+    if #key ~= 16 then return nil end
+    local groups = {}
+    for index = 1, 16, 2 do
+        groups[#groups + 1] = string.format("%x", key:byte(index) * 256 + key:byte(index + 1))
+    end
+    return table.concat(groups, ":")
+end
+
 return M

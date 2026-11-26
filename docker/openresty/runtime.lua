@@ -134,12 +134,57 @@ local function event_client()
     return client_limit_key(ngx.var.remote_addr or "")
 end
 
+-- Offending clients for shared reputation. The cell keeps, for a few minutes, how many escalating events each client caused on each
+-- domain and how many requests it saw from that client since the first one, in a small dictionary of its own. It reports the heaviest
+-- of them in its status; the control plane keeps the reports of domains that opted in and drops the rest. Nothing on the request path
+-- reads this: a full dictionary or a missing one only means the client is not reported.
+local REP = {WINDOW = 300, MAXIMUM_KEYS = 1000, REPORTED = 50}
+
+function REP.event(domain, client)
+    local dictionary = ngx.shared.client_reputation
+    if not dictionary or not client_keys.text(client) then return end
+    local key = tostring(domain) .. "|" .. client_keys.text(client)
+    if dictionary:get("e|" .. key) == nil then
+        local used = dictionary:incr("n|" .. math.floor(ngx.time() / REP.WINDOW), 1, 0, REP.WINDOW * 2)
+        if not used or used > REP.MAXIMUM_KEYS then return end
+    end
+    dictionary:incr("e|" .. key, 1, 0, REP.WINDOW)
+end
+
+-- Counts one finished request from a client that already has events, so the share of events among its requests is known.
+function REP.request()
+    local dictionary = ngx.shared.client_reputation
+    local domain, client = ngx.ctx.security_domain, ngx.ctx.security_client
+    if not dictionary or not domain or not client then return end
+    local text = client_keys.text(client)
+    if not text then return end
+    local key = tostring(domain) .. "|" .. text
+    if dictionary:get("e|" .. key) then dictionary:incr("q|" .. key, 1, 0, REP.WINDOW) end
+end
+
+function REP.report()
+    local dictionary = ngx.shared.client_reputation
+    local entries = {}
+    if not dictionary then return entries end
+    for _, name in ipairs(dictionary:get_keys(2048)) do
+        local domain, client = name:match("^e|(%d+)|(.+)$")
+        local events = domain and dictionary:get(name)
+        if events then
+            entries[#entries + 1] = {domain_id = tonumber(domain), client = client, events = events, requests = dictionary:get("q|" .. domain .. "|" .. client) or 0}
+        end
+    end
+    table.sort(entries, function(a, b) return a.events > b.events end)
+    for index = #entries, REP.REPORTED + 1, -1 do entries[index] = nil end
+    return #entries == 0 and cjson.empty_array or entries
+end
+
 -- Notes who caused an escalating event: distinct-client evidence for the control plane, and a per-client count that contains a
 -- single noisy client. A client the dictionary has no room for is simply not tracked.
 local function note_client_event(domain, reason)
     if ESCALATION_EXEMPT[reason] then return end
     local client = event_client()
     if not client or client == "" then return end
+    REP.event(domain, client)
     local clients = ngx.shared.client_events
     if not clients then return end
     local digest = ngx.md5(client)
@@ -3110,6 +3155,7 @@ end
 function M.finish()
     record_waf_outcome()
     RATE.count_outcomes()
+    REP.request()
     local client_key = ngx.var.cdn_security_client_connection_key
     if client_key and client_key ~= "" then
         local current = ngx.shared.traffic_limits:incr(client_key, -1, 0)
@@ -3268,7 +3314,7 @@ end
 -- Capacity and free space of the dictionaries that hold counters, markers and events.
 local function shared_memory_report()
     local report = {}
-    for _, name in ipairs({"rate_rules", "security_limits", "client_events", "domain_limits", "traffic_limits", "runtime_limits"}) do
+    for _, name in ipairs({"rate_rules", "security_limits", "client_events", "client_reputation", "domain_limits", "traffic_limits", "runtime_limits"}) do
         local dictionary = ngx.shared[name]
         if dictionary and dictionary.capacity and dictionary.free_space then
             report[name] = {capacity_bytes = dictionary:capacity(), free_bytes = dictionary:free_space()}
@@ -3357,6 +3403,7 @@ function M.passive_failures()
             challenge_keys_version = (CHAL.keys() or {}).version,
             rate_mitigations_version = ngx.shared.runtime_limits:get("ratemit:version"),
             long_rate = RATE.long_report(),
+            client_offenders = REP.report(),
 			-- What each counter dictionary holds, so exhaustion under a flood can be seen and recorded.
 			shared_memory = shared_memory_report(),
 			capacity = {

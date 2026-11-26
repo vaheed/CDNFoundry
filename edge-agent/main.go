@@ -91,6 +91,7 @@ type client struct {
 	rateMitigations                    rateMitigationSet
 	rateMitigationsFetched             time.Time
 	longRate                           []map[string]any
+	offenders                          []map[string]any
 	statusURLs                         []string
 	cellAssignments                    map[string]string
 	cellTargets                        map[string]cellTarget
@@ -1770,6 +1771,9 @@ func (c *client) heartbeat(sequence uint64) error {
 		"agent_version": version, "listener_ready": listenerReady, "active_sequence": sequence,
 		"active_generation": expectedGeneration, "cells": cells, "passive_origins": failures, "noisy_domains": security, "gateway": gateway,
 	}
+	if len(c.offenders) > 0 {
+		payload["client_offenders"] = c.offenders
+	}
 	if len(c.longRate) > 0 {
 		payload["long_rate"] = c.longRate
 	}
@@ -1898,6 +1902,7 @@ func (c *client) runtimeStatus() ([]map[string]any, []map[string]any, []map[stri
 	c.refreshChallengeKeys()
 	c.refreshRateMitigations()
 	c.longRate = c.longRate[:0]
+	c.offenders = c.offenders[:0]
 	for _, endpoint := range c.statusURLs {
 		decoded, ok := c.runtimeEndpointStatus(endpoint)
 		if !ok {
@@ -1913,6 +1918,7 @@ func (c *client) runtimeStatus() ([]map[string]any, []map[string]any, []map[stri
 		c.pushRateMitigations(endpoint, decoded.Cell["rate_mitigations_version"])
 		cellName, _ := decoded.Cell["name"].(string)
 		c.collectLongRate(cellName, decoded.Cell["long_rate"])
+		c.collectOffenders(cellName, decoded.Cell["client_offenders"])
 		if decoded.Cell != nil && len(cells) < 32 {
 			name, _ := decoded.Cell["name"].(string)
 			if desiredDrained, configured := controls[name]; configured {
