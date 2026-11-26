@@ -27,8 +27,8 @@ CELLS = {"default": "cdnf-e2e-challenge-default", "tuned": "cdnf-e2e-challenge-t
 HTML = "text/html"
 
 
-def request(ip: str, source: str, method: str = "GET", path: str = "/", headers: dict[str, str] | None = None, body: str = "") -> tuple[int, dict[str, str], str]:
-    lines = [f"{method} {path} HTTP/1.1", "Host: chal.test", "Connection: close", "Accept: " + HTML]
+def request(ip: str, source: str, method: str = "GET", path: str = "/", headers: dict[str, str] | None = None, body: str = "", accept: str = HTML) -> tuple[int, dict[str, str], str]:
+    lines = [f"{method} {path} HTTP/1.1", "Host: chal.test", "Connection: close", "Accept: " + accept]
     merged = {"User-Agent": "Browser/1"} | (headers or {})
     lines += [f"{name}: {value}" for name, value in merged.items()]
     if body:
@@ -75,7 +75,7 @@ def token(ip: str, source: str, user_agent: str = "Browser/1") -> tuple[str, int
     counter = solve(seed, bits)
     status, headers, _ = request(ip, source, "POST", "/.cdnf/challenge", {"User-Agent": user_agent}, f"seed={urllib.parse.quote(seed)}&counter={counter}")
     assert status == 204, status
-    return re.search(r"cdnf_chal=([0-9a-f.]+)", headers["set-cookie"]).group(1), bits
+    return re.search(r"cdnf_chal=([0-9a-z.]+)", headers["set-cookie"]).group(1), bits
 
 
 def start(name: str, runtime: pathlib.Path, temporary: pathlib.Path, subnet: str, environment: dict[str, str]) -> str:

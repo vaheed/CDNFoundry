@@ -105,7 +105,7 @@ local ESCALATION_EXEMPT = {
     domain_quarantined = true, edge_emergency_mode = true, client_temporarily_blocked = true,
     invalid_method = true, unknown_host = true, unknown_sni = true,
     sni_host_mismatch = true, incident_method = true, incident_body_size = true,
-    challenge_required = true, challenge_invalid = true, custom_rule_block = true,
+    challenge_required = true, challenge_invalid = true, challenge_token_limited = true, custom_rule_block = true,
     custom_rule_challenge = true, custom_rule_log = true, custom_rule_rate_limited = true,
     custom_rule_would_block = true, custom_rule_would_challenge = true, platform_rule_would_block = true, platform_rule_would_challenge = true,
     waf_rule_logged = true, waf_inspection_failed = true, rate_limit_state_full = true,
@@ -215,6 +215,13 @@ local function security_reject(status, reason)
             return ngx.exit(ngx.HTTP_OK)
         end
     end
+    if ngx.ctx.reject_json and not body then
+        ngx.status = status
+        ngx.header["Content-Type"] = "application/json"
+        ngx.header["Cache-Control"] = "no-store"
+        ngx.print(ngx.ctx.reject_json)
+        return ngx.exit(ngx.HTTP_OK)
+    end
     if body then
         -- A rejection that explains itself, such as the incident challenge page: the status is the rejection's own.
         ngx.status = status
@@ -261,8 +268,28 @@ do
     end
 end
 -- A token follows its client across the client's own address changes: it is bound to the client key (an IPv6 address counts under its
--- prefix), not to the exact address. Binding to the User-Agent as well is a stricter option, EDGE_CHALLENGE_BIND_USER_AGENT=true.
-local CHALLENGE_BIND_USER_AGENT = os.getenv("EDGE_CHALLENGE_BIND_USER_AGENT") == "true"
+-- prefix), not to the exact address, and by default to the browser family in the User-Agent, so a token copied to a script or to another
+-- browser stops working while a browser update does not. EDGE_CHALLENGE_BIND_USER_AGENT is "family" (default), "exact" (the whole
+-- header, also "true") or "off". The family is a claim the client makes, so this narrows token sharing and is not proof of anything.
+local CHALLENGE_BIND_USER_AGENT = "family"
+do
+    local configured = os.getenv("EDGE_CHALLENGE_BIND_USER_AGENT")
+    if configured == "exact" or configured == "true" then CHALLENGE_BIND_USER_AGENT = "exact"
+    elseif configured == "off" or configured == "false" then CHALLENGE_BIND_USER_AGENT = "off"
+    elseif configured and configured ~= "" and configured ~= "family" then
+        ngx.log(ngx.ERR, "EDGE_CHALLENGE_BIND_USER_AGENT must be family, exact or off; using family")
+    end
+end
+-- The requests one token may make in a minute on one cell. A token handed to many machines runs out quickly; a person does not.
+local CHALLENGE_TOKEN_REQUESTS_PER_MINUTE = 600
+do
+    local configured = tonumber(os.getenv("EDGE_CHALLENGE_TOKEN_REQUESTS_PER_MINUTE"))
+    if configured and configured == math.floor(configured) and configured >= 30 and configured <= 100000 then
+        CHALLENGE_TOKEN_REQUESTS_PER_MINUTE = configured
+    elseif os.getenv("EDGE_CHALLENGE_TOKEN_REQUESTS_PER_MINUTE") then
+        ngx.log(ngx.ERR, "EDGE_CHALLENGE_TOKEN_REQUESTS_PER_MINUTE must be a whole number from 30 to 100000; using 600")
+    end
+end
 local CHALLENGE_SEED_SECONDS = 300
 local CHALLENGE_ISSUES_PER_MINUTE = 30
 local CHALLENGE_TOKEN_SECONDS = 3600
@@ -274,12 +301,54 @@ local function sha256_raw(data)
     return digest:final()
 end
 
--- HMAC-SHA256 with a per-cell key derived from the cell's own secret, so a token or seed from one cell means nothing on another.
-local function hmac_sha256_hex(message)
+-- The platform's challenge keys reach a cell over the private control channel (never in a snapshot) and live in shared memory. A
+-- token or seed names the key that signed it, so any cell holding the key checks it. A cell without keys, or a token signed before
+-- they arrived, falls back to the cell's own derived key, which is valid only on that cell.
+local CHAL = {LOCAL = "local", keys_cache = {}}
+
+local function local_challenge_key()
     if not challenge_key then
         challenge_key = sha256_raw("cdnf-challenge-v1|" .. (os.getenv("EDGE_STATUS_TOKEN") or "") .. "|" .. (os.getenv("EDGE_CELL_NAME") or ""))
     end
-    local key = challenge_key .. string.rep("\0", 64 - #challenge_key)
+    return challenge_key
+end
+
+-- The keys this cell holds, decoded once per stored value. Each key's own end time is checked by this cell's clock.
+function CHAL.keys()
+    local raw = ngx.shared.runtime_limits:get("challenge:keys")
+    if not raw then return nil end
+    local cached = CHAL.keys_cache[raw]
+    if cached == nil then
+        local decoded = cjson.decode(raw)
+        cached = type(decoded) == "table" and type(decoded.keys) == "table" and decoded or false
+        CHAL.keys_cache = {[raw] = cached}
+    end
+    return cached or nil
+end
+
+-- The key a new token or seed is signed with: the active platform key, else the cell's own.
+function CHAL.signing()
+    local held = CHAL.keys()
+    for _, key in ipairs(held and held.keys or {}) do
+        if key.signing == true and (key.not_after == nil or key.not_after > ngx.time()) then return key.id, key.secret end
+    end
+    return CHAL.LOCAL, nil
+end
+
+-- The raw key that checks a token or seed naming `kid`, or nil when this cell does not hold it, it has ended, or it was revoked.
+function CHAL.verifying(kid)
+    if kid == CHAL.LOCAL then return local_challenge_key() end
+    local held = CHAL.keys()
+    for _, key in ipairs(held and held.keys or {}) do
+        if key.id == kid and (key.not_after == nil or key.not_after > ngx.time()) then return key.secret end
+    end
+    return nil
+end
+
+-- HMAC-SHA256. The key is a platform key (64 hex characters) or the cell's own derived key.
+local function hmac_sha256_hex(message, secret_hex)
+    local raw = secret_hex and (secret_hex:gsub("%x%x", function(pair) return string.char(tonumber(pair, 16)) end)) or local_challenge_key()
+    local key = raw .. string.rep("\0", 64 - #raw)
     local ipad, opad = {}, {}
     for i = 1, 64 do
         local byte = key:byte(i)
@@ -296,20 +365,41 @@ local function constant_time_equal(a, b)
     return difference == 0
 end
 
--- A token and a seed are bound to one domain and one client key, and to the user agent only when the cell is set to bind it.
+-- The browser family a User-Agent claims. Anything that is not a recognised browser is "other", which includes scripts.
+function CHAL.user_agent_family(agent)
+    agent = (agent or ""):lower()
+    if agent:find("edg/", 1, true) or agent:find("edga/", 1, true) or agent:find("edgios/", 1, true) then return "edge" end
+    if agent:find("opr/", 1, true) or agent:find("opera", 1, true) then return "opera" end
+    if agent:find("firefox/", 1, true) or agent:find("fxios/", 1, true) then return "firefox" end
+    if agent:find("chrome/", 1, true) or agent:find("crios/", 1, true) or agent:find("chromium/", 1, true) then return "chrome" end
+    if agent:find("safari/", 1, true) and agent:find("version/", 1, true) then return "safari" end
+    return "other"
+end
+
+-- A token and a seed are bound to one domain and one client key, and to the user agent family or the whole header per the cell's setting.
 local function client_binding(client)
     local key = tostring(client_limit_key(client))
-    local material = CHALLENGE_BIND_USER_AGENT and (key .. "|" .. (ngx.var.http_user_agent or "")) or key
+    local material = key
+    if CHALLENGE_BIND_USER_AGENT == "exact" then
+        material = key .. "|" .. (ngx.var.http_user_agent or "")
+    elseif CHALLENGE_BIND_USER_AGENT == "family" then
+        material = key .. "|" .. CHAL.user_agent_family(ngx.var.http_user_agent)
+    end
     return resty_string.to_hex(sha256_raw(material)):sub(1, 16)
 end
 
+-- A token is `key id . domain . expiry . binding . mac`. The key id picks the platform key (or this cell's own) that signed it, and the
+-- mac covers the key id, so a token cannot be moved to another key.
 local function valid_challenge_token(config, client)
     local token = ngx.var.cookie_cdnf_chal
     if type(token) ~= "string" or #token > 200 then return false end
-    local domain, expires, binding, mac = token:match("^(%d+)%.(%d+)%.(%x+)%.(%x+)$")
-    if not domain or tonumber(domain) ~= tonumber(config.domain_id or 0) or tonumber(expires) <= ngx.time() then return false end
+    local kid, domain, expires, binding, mac = token:match("^(%w+)%.(%d+)%.(%d+)%.(%x+)%.(%x+)$")
+    if not kid or tonumber(domain) ~= tonumber(config.domain_id or 0) or tonumber(expires) <= ngx.time() then return false end
     if binding ~= client_binding(client) then return false end
-    return constant_time_equal(mac, hmac_sha256_hex("token|" .. domain .. "|" .. expires .. "|" .. binding))
+    local secret = CHAL.verifying(kid)
+    if not secret then return false end
+    local valid = constant_time_equal(mac, hmac_sha256_hex("token|" .. kid .. "|" .. domain .. "|" .. expires .. "|" .. binding, kid ~= CHAL.LOCAL and secret or nil))
+    return valid, mac
 end
 
 local function leading_zero_bits(raw)
@@ -344,6 +434,11 @@ local function challenge_page(seed, nonce)
     })
 end
 
+-- The body a client that does not ask for HTML gets from a challenge refusal: the reason in a form a program can read.
+function CHAL.refusal(reason, message)
+    return cjson.encode({error = reason, message = message})
+end
+
 -- Returns nil when the request may continue; otherwise it has answered and the caller returns the result.
 local function enforce_challenge(config, incident, client, trusted)
     local method = ngx.req.get_method()
@@ -355,35 +450,51 @@ local function enforce_challenge(config, incident, client, trusted)
         if #raw > 512 then return security_reject(413, "body_too_large") end
         local seed, counter = raw:match("^seed=([%w%%%.%-_]+)&counter=(%d+)$")
         seed = seed and ngx.unescape_uri(seed)
-        local domain, issued, bits, mac = (seed or ""):match("^(%d+)%.(%d+)%.(%d+)%.(%x+)$")
-        local valid = domain and tonumber(domain) == tonumber(config.domain_id or 0) and tonumber(issued) + CHALLENGE_SEED_SECONDS >= ngx.time()
+        local kid, domain, issued, bits, mac = (seed or ""):match("^(%w+)%.(%d+)%.(%d+)%.(%d+)%.(%x+)$")
+        local secret = kid and CHAL.verifying(kid)
+        local valid = secret and tonumber(domain) == tonumber(config.domain_id or 0) and tonumber(issued) + CHALLENGE_SEED_SECONDS >= ngx.time()
             and tonumber(issued) <= ngx.time() + 5 and tonumber(bits) == CHALLENGE_BITS and #counter <= 12
-            and constant_time_equal(mac, hmac_sha256_hex("seed|" .. domain .. "|" .. issued .. "|" .. bits .. "|" .. client_binding(client)))
+            and constant_time_equal(mac, hmac_sha256_hex("seed|" .. kid .. "|" .. domain .. "|" .. issued .. "|" .. bits .. "|" .. client_binding(client), kid ~= CHAL.LOCAL and secret or nil))
             and leading_zero_bits(sha256_raw(seed .. ":" .. counter)) >= CHALLENGE_BITS
-        if not valid then return security_reject(403, "challenge_invalid") end
+        if not valid then ngx.ctx.reject_json = CHAL.refusal("challenge_invalid", "The challenge answer was not accepted. Load the site in a browser to try again."); return security_reject(403, "challenge_invalid") end
         -- A seed works once: replaying a solved seed, or a seed from another client, is refused.
         local added = ngx.shared.runtime_limits:add("challenge:used:" .. ngx.md5(seed), true, CHALLENGE_SEED_SECONDS)
         if not added then return security_reject(403, "challenge_invalid") end
         local expires = math.min(tonumber(incident.expires_at), ngx.time() + CHALLENGE_TOKEN_SECONDS)
         local binding = client_binding(client)
-        local token = tostring(config.domain_id or 0) .. "." .. tostring(expires) .. "." .. binding .. "." .. hmac_sha256_hex("token|" .. tostring(config.domain_id or 0) .. "|" .. tostring(expires) .. "|" .. binding)
+        local signing_id, signing_secret = CHAL.signing()
+        local token = signing_id .. "." .. tostring(config.domain_id or 0) .. "." .. tostring(expires) .. "." .. binding .. "." .. hmac_sha256_hex("token|" .. signing_id .. "|" .. tostring(config.domain_id or 0) .. "|" .. tostring(expires) .. "|" .. binding, signing_secret)
         ngx.header["Set-Cookie"] = "cdnf_chal=" .. token .. "; Path=/; Max-Age=" .. tostring(expires - ngx.time()) .. "; HttpOnly; SameSite=Lax" .. (ngx.var.https == "on" and "; Secure" or "")
         ngx.header["Cache-Control"] = "no-store"
         ngx.status = 204
         return ngx.exit(ngx.HTTP_NO_CONTENT)
     end
-    if trusted or valid_challenge_token(config, client) then return nil end
+    if trusted then return nil end
+    local token_valid, token_mac = valid_challenge_token(config, client)
+    if token_valid then
+        -- Each token has its own request budget on this cell, so one token passed to many machines stops working.
+        local exceeded, retry_after = CHAL.token_over_budget(config, token_mac)
+        if exceeded then
+            ngx.ctx.retry_after = retry_after
+            return security_reject(429, "challenge_token_limited")
+        end
+        return nil
+    end
     for _, prefix in ipairs(incident.challenge_bypass_prefixes or {}) do
         if type(prefix) == "string" and prefix ~= "" and uri:sub(1, #prefix) == prefix then return nil end
     end
     -- Only a person's page load gets the challenge; every other request without a token is refused, so a script never reaches the origin.
     local accepts_html = (method == "GET" or method == "HEAD") and (ngx.var.http_accept or ""):find("text/html", 1, true)
-    if not accepts_html then return security_reject(403, "challenge_required") end
+    if not accepts_html then
+        ngx.ctx.reject_json = CHAL.refusal("challenge_required", "This site is asking visitors to complete a browser check. Open it in a browser first.")
+        return security_reject(403, "challenge_required")
+    end
     local issues = ngx.shared.runtime_limits:incr("challenge:issue:" .. ngx.md5(client_limit_key(client)) .. ":" .. math.floor(ngx.time() / 60), 1, 0, 120)
     if not issues or issues > CHALLENGE_ISSUES_PER_MINUTE then return security_reject(429, "client_rate_exceeded") end
     local issued = tostring(ngx.time())
     local binding = client_binding(client)
-    local seed = tostring(config.domain_id or 0) .. "." .. issued .. "." .. tostring(CHALLENGE_BITS) .. "." .. hmac_sha256_hex("seed|" .. tostring(config.domain_id or 0) .. "|" .. issued .. "|" .. tostring(CHALLENGE_BITS) .. "|" .. binding)
+    local signing_id, signing_secret = CHAL.signing()
+    local seed = signing_id .. "." .. tostring(config.domain_id or 0) .. "." .. issued .. "." .. tostring(CHALLENGE_BITS) .. "." .. hmac_sha256_hex("seed|" .. signing_id .. "|" .. tostring(config.domain_id or 0) .. "|" .. issued .. "|" .. tostring(CHALLENGE_BITS) .. "|" .. binding, signing_secret)
     local nonce = ngx.var.request_id or ngx.md5(seed)
     ngx.ctx.reject_body = challenge_page(seed, nonce)
     ngx.ctx.reject_csp = "default-src 'none'; script-src 'nonce-" .. nonce .. "'; style-src 'nonce-" .. nonce .. "'; connect-src 'self'; base-uri 'none'; form-action 'none'"
@@ -1649,6 +1760,19 @@ local function rate_limit_exceeded(config, rule, limit)
         return false
     end
     return RATE.rate_count(dictionary, config, rule, limit, id, threshold, period, duration)
+end
+
+-- Counts one request of a valid challenge token against that token's budget for the minute. The token is named by its mac, so the
+-- counter is the domain's own bounded entry; past the budget the token is refused until the minute ends.
+function CHAL.token_over_budget(config, mac)
+    local dictionary = ngx.shared.rate_rules
+    if not dictionary or type(mac) ~= "string" then return false end
+    local id = tostring(config.domain_id or config.domain) .. ":challenge-token:" .. mac:sub(1, 32)
+    if dictionary:get("m:" .. id) then
+        local left = dictionary.ttl and dictionary:ttl("m:" .. id)
+        return true, left and left > 0 and math.ceil(left) or 60
+    end
+    return RATE.rate_count(dictionary, config, {id = "challenge-token"}, {window = "fixed"}, id, CHALLENGE_TOKEN_REQUESTS_PER_MINUTE, 60, 60)
 end
 
 -- The rules a cell runs for a domain: the platform rulesets first, then the domain's own rules. The joined list is built once
@@ -3143,6 +3267,7 @@ function M.passive_failures()
             status = drained and "drained" or "ready",
             purges_restored = ngx.shared.cache_purges:get("purge:restored") == true,
             overlays_restored = ngx.shared.runtime_limits:get("overlay:restored") == true,
+            challenge_keys_version = (CHAL.keys() or {}).version,
 			-- What each counter dictionary holds, so exhaustion under a flood can be seen and recorded.
 			shared_memory = shared_memory_report(),
 			capacity = {
@@ -3184,8 +3309,21 @@ function M.control()
     local command = cjson.decode(raw)
     if type(command) ~= "table" or type(command.task_id) ~= "string" or #command.task_id > 64
         or (command.action ~= "drain" and command.action ~= "undrain" and command.action ~= "restart" and command.action ~= "cache_purge" and command.action ~= "cache_purges_restored" and command.action ~= "emergency_mode"
-            and command.action ~= "security_overlay" and command.action ~= "security_overlays_restored") then
+            and command.action ~= "security_overlay" and command.action ~= "security_overlays_restored" and command.action ~= "challenge_keys") then
         return ngx.exit(400)
+    end
+    if command.action == "challenge_keys" then
+        if type(command.version) ~= "number" or command.version < 1 or command.version % 1 ~= 0 or type(command.keys) ~= "table"
+            or #command.keys < 1 or #command.keys > 4 then return ngx.exit(400) end
+        local signing, seen = 0, {}
+        for _, key in ipairs(command.keys) do
+            if type(key) ~= "table" or type(key.id) ~= "string" or not key.id:match("^%x+$") or #key.id ~= 16 or seen[key.id]
+                or type(key.secret) ~= "string" or not key.secret:match("^%x+$") or #key.secret ~= 64 or type(key.signing) ~= "boolean"
+                or (key.not_after ~= nil and key.not_after ~= cjson.null and (type(key.not_after) ~= "number" or key.not_after <= 0)) then return ngx.exit(400) end
+            seen[key.id] = true
+            if key.signing then signing = signing + 1 end
+        end
+        if signing ~= 1 then return ngx.exit(400) end
     end
     if command.action == "emergency_mode" then
         if type(command.active) ~= "boolean" or type(command.actions) ~= "table" or #command.actions > 12
@@ -3255,6 +3393,17 @@ function M.control()
             ngx.shared.cache_purges:set("purge:restored", true)
         elseif command.action == "security_overlays_restored" then
             dictionary:set("overlay:restored", true)
+        elseif command.action == "challenge_keys" then
+            -- An older version is an obsolete message. The keys live only in shared memory and are never logged.
+            local current = cjson.decode(dictionary:get("challenge:keys") or "null")
+            if type(current) ~= "table" or command.version >= (tonumber(current.version) or 0) then
+                local keys = {}
+                for _, key in ipairs(command.keys) do
+                    keys[#keys + 1] = {id = key.id, secret = key.secret, signing = key.signing, not_after = (type(key.not_after) == "number") and key.not_after or nil}
+                end
+                local ok, err = dictionary:safe_set("challenge:keys", cjson.encode({version = command.version, keys = keys}))
+                if not ok then ngx.log(ngx.ERR, "challenge keys not stored: ", err); return ngx.exit(507) end
+            end
         elseif command.action == "security_overlay" then
             -- A lower sequence is an obsolete message; a normal state removes the overlay.
             local key = "overlay:" .. tostring(command.domain_id)

@@ -363,6 +363,10 @@ no value and never match. Operators: `equals`, `not_equals`, `in_list`, `not_in_
 
 `allow` does not skip the managed WAF; add `skip_managed` for that. A solved challenge lasts one hour.
 
+**Challenge keys.** The control plane issues one pool-wide challenge key, so a token solved on one cell is accepted on every other cell that holds the key, in any PoP. Each edge agent fetches the keys over its identity-bound channel; they are sealed to that edge and never appear in a snapshot, a status report or a log. The active key signs. The scheduled `cdnf:challenge-keys:maintain` command replaces it after 30 days, and the old key keeps verifying for 2 hours (a token lives 1 hour), so a rotation re-challenges no client whose token is still valid. At most two keys are valid at once. An administrator can rotate or revoke a key with `POST /api/admin/challenge-keys/rotate` and `POST /api/admin/challenge-keys/{keyId}/revoke`; a revoked key stops working when the cell receives the next set, and a replaced key stops by the cell's own clock even when the control plane is unreachable. Until a cell holds platform keys it uses a key of its own, and its tokens mean nothing on other cells.
+
+**Token budget.** A token has its own request budget on each cell, 600 requests a minute by default (`EDGE_CHALLENGE_TOKEN_REQUESTS_PER_MINUTE`, 30 to 100000). A token shared by many machines is refused with 429, `Retry-After` and the reason `challenge_token_limited`; the budget is per cell, so it is not a global quota.
+
 ## Order
 
 1. Platform rulesets set by the administrator.

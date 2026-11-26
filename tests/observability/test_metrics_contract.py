@@ -261,7 +261,7 @@ class SecurityClassContractTest(unittest.TestCase):
             "domain_restricted", "edge_emergency_mode", "header_too_large", "invalid_method", "malformed_request_body", "origin_capacity_exceeded",
             "origin_circuit_open", "sni_host_mismatch", "unknown_host", "waf_body_limit", "waf_block", "cache_abuse_detected",
             # The incident profile's refusals are plain blocks.
-            "incident_method", "incident_body_size", "challenge_required", "challenge_invalid",
+            "incident_method", "incident_body_size", "challenge_required", "challenge_invalid", "challenge_token_limited",
             # A domain's own custom rule blocking a request is a plain block.
             "custom_rule_block", "custom_rule_rate_limited", "platform_rule_block",
             # A client the cell is temporarily containing is a plain block.

@@ -400,6 +400,7 @@ this fixture at a staging or production cell. These are not deployment settings.
 | `EDGE_CHALLENGE_BITS` | cells | Difficulty of the browser challenge's proof of work in leading zero bits, from 12 (a few thousand hashes) to 24 (millions, noticeable on a phone). Default `16`. A value outside the range is logged and the default applies |
 | `EDGE_ACCESS_LOG_STDOUT` | cells | `true` also writes every access-log line to the container log (buffered, flushed each second), for qualification and diagnosis. Default `false`: Vector is the only destination. The copy cost dockerd about half a core at 4,600 requests per second on one cell, and the operational log collector parsed every line only to drop it. A cell that cannot resolve Vector at startup writes the copy whatever this setting says |
 | `EDGE_CHALLENGE_BIND_USER_AGENT` | cells | `true` also binds a challenge token to the visitor's User-Agent, so a changed browser string asks for the challenge again. Default `false`: the token follows the client key |
+| `EDGE_CHALLENGE_TOKEN_REQUESTS_PER_MINUTE` | cells | The most requests one challenge token may make in a minute on one cell, from 30 to 100000. Default `600`. Past it the token gets 429 with `Retry-After` and the reason `challenge_token_limited`. A value outside the range is logged and the default applies |
 
 ### Cached IP data and custom MMDB sources
 
