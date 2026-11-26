@@ -186,6 +186,7 @@ final class SecurityConfig
             'ai_protection' => AiProtectionData::forEdge($domain->ai_protection),
             'api_schema' => ApiSchemaData::forEdge($domain->api_schema),
             'client_security' => ClientSecurityData::forEdge($domain->client_security),
+            'ip_lists' => IpListData::compileUsed($domain),
             'platform_rules' => PlatformRulesets::forDomain($domain),
             'rules' => self::withUnixExpiry($domain->securityRules()->where('enabled', true)->orderBy('priority')->orderBy('id')
                 ->get(['id', 'name', 'preset', 'conditions', 'rate_limit', 'action', 'priority', 'mode', 'expires_at'])

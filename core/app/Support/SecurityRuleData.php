@@ -58,6 +58,7 @@ final class SecurityRuleData
         'continent' => ['kind' => 'continent', 'operators' => self::CHOICE],
         'asn' => ['kind' => 'asn', 'operators' => self::NUMBER],
         'client_ip' => ['kind' => 'address', 'operators' => self::CHOICE],
+        'client_ip_list' => ['kind' => 'iplist', 'operators' => ['equals', 'not_equals']],
         'user_agent' => ['kind' => 'text', 'operators' => self::TEXT],
         'referer' => ['kind' => 'text', 'operators' => self::TEXT],
         'referer_host' => ['kind' => 'host', 'operators' => self::CHOICE],
@@ -91,7 +92,7 @@ final class SecurityRuleData
 
     public const FIELD_LABELS = [
         'hostname' => 'Hostname', 'path' => 'Path', 'query_present' => 'Query string', 'method' => 'Method', 'country' => 'Country',
-        'continent' => 'Continent', 'asn' => 'ASN', 'client_ip' => 'Client IP', 'user_agent' => 'User agent', 'referer' => 'Referer', 'referer_host' => 'Referer host', 'referer_present' => 'Referer', 'file_extension' => 'File extension',
+        'continent' => 'Continent', 'asn' => 'ASN', 'client_ip' => 'Client IP', 'client_ip_list' => 'Client IP list', 'user_agent' => 'User agent', 'referer' => 'Referer', 'referer_host' => 'Referer host', 'referer_present' => 'Referer', 'file_extension' => 'File extension',
         'header' => 'Header', 'cookie_present' => 'Cookie', 'content_type' => 'Content type', 'body_size' => 'Body size (bytes)',
         'tls_version' => 'TLS version', 'attack_score' => 'Attack score', 'attack_score_sqli' => 'Attack score (SQL injection)',
         'attack_score_xss' => 'Attack score (XSS)', 'attack_score_rce' => 'Attack score (command injection)', 'leaked_password' => 'Leaked password', 'prompt_injection_score' => 'Prompt injection score', 'prompt_pii' => 'Personal data in prompt', 'schema_violation' => 'API schema violation',
@@ -123,6 +124,9 @@ final class SecurityRuleData
                 $present = ($condition['value'] ?? null) === true;
 
                 return $field === 'query_present' ? ($present ? 'Query string is present' : 'Query string is absent') : $label.($present ? ' is present' : ' is absent');
+            }
+            if ($field === 'client_ip_list') {
+                return 'Client IP '.(($condition['operator'] ?? '') === 'not_equals' ? 'is not on' : 'is on').' list '.($condition['value'] ?? '');
             }
             $value = $condition['value'] ?? '';
             $value = is_array($value) ? implode(', ', $value) : (string) $value;
@@ -262,6 +266,7 @@ final class SecurityRuleData
                 throw ValidationException::withMessages(["$path.$index.field" => self::FIELD_LABELS[$condition['field']]." needs $needs. Set up $needs under Security first."]);
             }
         }
+        IpListData::assertListsExist($domain, $conditions, $path);
     }
 
     /** Refuses removing a detection while rules of the domain still use one of its fields. */
@@ -341,6 +346,7 @@ final class SecurityRuleData
             'bytes' => self::integer($value, 0, 1073741824, $path),
             'score' => self::integer($value, 1, 99, $path),
             'address' => self::address($value, $path),
+            'iplist' => is_string($value) && IpListData::validName($value) ? $value : throw ValidationException::withMessages([$path => 'The value must be the name of an IP list: lower case letters, digits, hyphens and underscores.']),
         };
     }
 

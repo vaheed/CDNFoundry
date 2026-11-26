@@ -160,6 +160,9 @@ final class PlatformRulesets
     public static function saveRule(PlatformRuleset $ruleset, ?PlatformRulesetRule $rule, array $input, ?User $actor, ?string $ipAddress): array
     {
         $data = SecurityRuleData::validate($input);
+        if (collect($data['conditions'])->contains(fn (array $condition): bool => $condition['field'] === 'client_ip_list')) {
+            throw ValidationException::withMessages(['conditions' => 'A platform rule cannot use a domain\'s IP list.']);
+        }
         abort_if($rule === null && $ruleset->rules()->count() >= config('security.maximum_platform_rules_per_ruleset'), 409, 'The ruleset already holds the maximum number of rules.');
         if ($ruleset->rules()->where('fingerprint', $data['fingerprint'])->when($rule, fn ($query) => $query->whereKeyNot($rule->id))->exists()) {
             throw ValidationException::withMessages(['conditions' => 'The ruleset already has a rule with the same conditions and action.']);

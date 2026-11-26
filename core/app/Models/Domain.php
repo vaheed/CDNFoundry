@@ -335,6 +335,12 @@ class Domain extends Model
         return $this->hasMany(ClientScriptSighting::class);
     }
 
+    /** @return HasMany<IpList, $this> */
+    public function ipLists(): HasMany
+    {
+        return $this->hasMany(IpList::class);
+    }
+
     public function securityRules(): HasMany
     {
         return $this->hasMany(SecurityRule::class);

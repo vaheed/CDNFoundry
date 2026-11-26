@@ -9,6 +9,9 @@ return [
         'ruleset' => env('WAF_RULESET_VERSION', 'owasp-crs/4.30.0-modsecurity/3.0.17'),
     ],
     'maximum_rules_per_domain' => 1000,
+    // Named IP lists: entries per list, lists per domain, and the most entries one request may add or remove. Cells hold the compiled ranges
+    // of every list in memory in each worker, so these are the admission limits the cell memory budget was measured against.
+    'ip_lists' => ['maximum_entries' => 10000, 'maximum_lists_per_domain' => 5, 'maximum_change_entries' => 1000],
     'maximum_import_rules' => 500,
     // Platform rulesets: how many exist, how many rules each holds, and how many domains a ruleset may list.
     'maximum_platform_rulesets' => 10,
