@@ -27,6 +27,8 @@ use Illuminate\Validation\ValidationException;
  * Detection settings added after the schema snapshot that static analysis reads; each is a validated typed array or null.
  *
  * @property CarbonImmutable|null $incident_expires_at
+ * @property list<string>|null $incident_bypass_prefixes
+ * @property list<string>|null $incident_bypass_methods
  * @property-read int|null $failing_destinations_count
  * @property-read int|null $new_scripts_count
  * @property array{threshold: int, period_minutes: int}|null $security_alert
@@ -390,7 +392,7 @@ class Domain extends Model
     protected function casts(): array
     {
         return [
-            'incident_started_at' => 'immutable_datetime', 'incident_expires_at' => 'immutable_datetime',
+            'incident_started_at' => 'immutable_datetime', 'incident_expires_at' => 'immutable_datetime', 'incident_bypass_prefixes' => 'array', 'incident_bypass_methods' => 'array',
             'delegation_nameservers' => 'array',
             'claim_expires_at' => 'immutable_datetime',
             'lifecycle_state' => DomainLifecycleState::class,

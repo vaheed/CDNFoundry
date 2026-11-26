@@ -637,10 +637,16 @@ class ViewDomain extends ViewRecord
                 ->modalDescription('For the time you choose, the domain gets tighter request limits, the web application firewall in blocking mode, restricted methods and body size, and a browser challenge. It protects your origin and the cells from request floods; it cannot absorb traffic that saturates a host or link.')
                 ->modalSubmitActionLabel('Turn on')
                 ->schema([Select::make('duration_minutes')->label(FilamentHelp::label('Duration', 'How long the protections stay on. They turn off by themselves at the end; you can end them sooner.'))
-                    ->options([15 => '15 minutes', 30 => '30 minutes', 60 => '1 hour', 180 => '3 hours', 720 => '12 hours', 1440 => '24 hours'])->default(60)->required()])
+                    ->options([15 => '15 minutes', 30 => '30 minutes', 60 => '1 hour', 180 => '3 hours', 720 => '12 hours', 1440 => '24 hours'])->default(60)->required(),
+                    Section::make('Requests that skip the browser check')->collapsed()->compact()->schema([
+                        TagsInput::make('bypass_prefixes')->label(FilamentHelp::label('Paths', 'Requests whose path starts with one of these reach the origin without the browser check, so API clients and certificate validation keep working. Up to 8, each starting with /.'))
+                            ->default(IncidentProfile::CHALLENGE_BYPASS_PREFIXES)->placeholder('/api/')->helperText('Type a path and press Enter.'),
+                        Select::make('bypass_methods')->label(FilamentHelp::label('Methods', 'Requests with these methods skip the browser check, for example OPTIONS so a browser can send its preflight request.'))
+                            ->multiple()->options(array_combine(IncidentProfile::BYPASS_METHODS, IncidentProfile::BYPASS_METHODS))->placeholder('None'),
+                    ])])
                 ->visible(fn (): bool => ! IncidentProfile::active($this->record))
                 ->action(function (array $data): void {
-                    StartIncidentProfile::execute($this->record, auth()->user(), (int) $data['duration_minutes'], request()->ip());
+                    StartIncidentProfile::execute($this->record, auth()->user(), (int) $data['duration_minutes'], request()->ip(), $data['bypass_prefixes'] ?? null, $data['bypass_methods'] ?? null);
                     $this->refreshDomain(includeTabs: true);
                     Notification::make()->warning()->title('Under attack mode is on')->body('The protections are on their way to the cells and end on their own.')->send();
                 }),

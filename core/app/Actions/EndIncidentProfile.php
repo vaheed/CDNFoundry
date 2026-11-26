@@ -20,7 +20,7 @@ class EndIncidentProfile
                 return false;
             }
             $startedAt = $locked->incident_started_at;
-            $locked->forceFill(['incident_started_at' => null, 'incident_expires_at' => null, 'incident_started_by' => null])->save();
+            $locked->forceFill(['incident_started_at' => null, 'incident_expires_at' => null, 'incident_started_by' => null, 'incident_bypass_prefixes' => null, 'incident_bypass_methods' => null])->save();
             ChangeAutomaticSecurityState::execute($locked, 'normal', 'incident_ended', ['reason' => $reason, 'actor_id' => $actor?->getKey()], force: true);
             AuditLog::record($actor, 'security.incident_ended', $locked, [
                 'reason' => $reason, 'started_at' => $startedAt?->toIso8601String(), 'overlay_sequence' => $locked->security_overlay_sequence,

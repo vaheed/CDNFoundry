@@ -56,6 +56,39 @@ class IncidentProfileTest extends TestCase
         $this->assertDatabaseHas('audit_logs', ['action' => 'security.incident_started']);
     }
 
+    public function test_a_domain_chooses_what_skips_the_challenge_and_the_choice_ends_with_the_profile(): void
+    {
+        Queue::fake();
+        [$user, $domain] = $this->owner();
+        $edge = Edge::query()->create(['name' => 'bypass-pop', 'country_code' => 'DE', 'continent_code' => 'EU']);
+        $cell = $edge->cells()->create(['slot' => 1, 'status' => 'ready']);
+        DomainEdgeCell::query()->create(['domain_id' => $domain->id, 'edge_id' => $edge->id, 'replica' => 1, 'active_cell_id' => $cell->id, 'desired_revision' => 1, 'state' => 'active']);
+
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/incident", ['duration_minutes' => 30, 'bypass_prefixes' => ['/v1/', '/hooks/'], 'bypass_methods' => ['options']])
+            ->assertCreated()->assertJsonPath('data.challenge_bypass_prefixes', ['/v1/', '/hooks/'])->assertJsonPath('data.challenge_bypass_methods', ['OPTIONS']);
+        $incident = EdgeTask::query()->where('type', 'security_overlay')->firstOrFail()->payload['incident'];
+        $this->assertSame(['/v1/', '/hooks/'], $incident['challenge_bypass_prefixes']);
+        $this->assertSame(['OPTIONS'], $incident['challenge_bypass_methods']);
+
+        $this->deleteJson("/api/domains/{$domain->id}/incident")->assertOk();
+        $this->assertNull($domain->refresh()->incident_bypass_prefixes);
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/incident", ['duration_minutes' => 30])->assertCreated()
+            ->assertJsonPath('data.challenge_bypass_prefixes', ['/api/', '/.well-known/'])->assertJsonPath('data.challenge_bypass_methods', []);
+    }
+
+    public function test_an_empty_list_lets_nothing_through_and_a_bad_prefix_or_method_is_refused(): void
+    {
+        Queue::fake();
+        [$user, $domain] = $this->owner();
+        foreach ([['bypass_prefixes' => ['api/']], ['bypass_prefixes' => ['/a b']], ['bypass_prefixes' => ['/a?x=1']], ['bypass_prefixes' => array_map(fn (int $n): string => "/p{$n}/", range(1, 9))],
+            ['bypass_methods' => ['TRACE']], ['bypass_prefixes' => [str_repeat('/a', 70)]]] as $bad) {
+            $this->actingAs($user)->postJson("/api/domains/{$domain->id}/incident", ['duration_minutes' => 30] + $bad)->assertUnprocessable();
+        }
+        $this->assertNull($domain->refresh()->incident_expires_at, 'a refused start leaves nothing on');
+
+        $this->postJson("/api/domains/{$domain->id}/incident", ['duration_minutes' => 30, 'bypass_prefixes' => []])->assertCreated()->assertJsonPath('data.challenge_bypass_prefixes', []);
+    }
+
     public function test_it_ends_early_in_one_call_and_leaves_a_readable_trail_of_two_overlays(): void
     {
         Queue::fake();

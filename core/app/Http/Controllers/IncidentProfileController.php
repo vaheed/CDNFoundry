@@ -23,8 +23,12 @@ class IncidentProfileController extends Controller
     public function start(Request $request, Domain $domain): JsonResponse
     {
         Gate::authorize('update', $domain);
-        $validated = $request->validate(['duration_minutes' => ['required', 'integer', 'between:'.IncidentProfile::MINIMUM_MINUTES.','.IncidentProfile::MAXIMUM_MINUTES]]);
-        $started = StartIncidentProfile::execute($domain, $request->user(), (int) $validated['duration_minutes'], $request->ip());
+        $validated = $request->validate([
+            'duration_minutes' => ['required', 'integer', 'between:'.IncidentProfile::MINIMUM_MINUTES.','.IncidentProfile::MAXIMUM_MINUTES],
+            'bypass_prefixes' => ['sometimes', 'nullable', 'array', 'max:'.IncidentProfile::MAXIMUM_BYPASS_PREFIXES], 'bypass_prefixes.*' => ['string', 'max:128'],
+            'bypass_methods' => ['sometimes', 'nullable', 'array', 'max:7'], 'bypass_methods.*' => ['string', 'max:7'],
+        ]);
+        $started = StartIncidentProfile::execute($domain, $request->user(), (int) $validated['duration_minutes'], $request->ip(), $validated['bypass_prefixes'] ?? null, $validated['bypass_methods'] ?? null);
 
         return response()->json(['data' => $this->present($started)], 201);
     }
@@ -48,6 +52,9 @@ class IncidentProfileController extends Controller
             'expires_at' => $domain->incident_expires_at?->toIso8601String(),
             'started_by' => $domain->incident_started_by,
             'overlay_sequence' => (int) $domain->security_overlay_sequence,
+            'challenge_bypass_prefixes' => IncidentProfile::payload($domain)['challenge_bypass_prefixes'] ?? null,
+            'challenge_bypass_methods' => IncidentProfile::payload($domain)['challenge_bypass_methods'] ?? null,
+            'default_bypass_prefixes' => IncidentProfile::CHALLENGE_BYPASS_PREFIXES, 'bypass_methods' => IncidentProfile::BYPASS_METHODS,
             'protections' => IncidentProfile::protections(),
             'minimum_minutes' => IncidentProfile::MINIMUM_MINUTES, 'maximum_minutes' => IncidentProfile::MAXIMUM_MINUTES,
         ];
