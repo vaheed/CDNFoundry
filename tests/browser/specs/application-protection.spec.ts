@@ -1,3 +1,4 @@
+import { generateKeyPairSync } from 'node:crypto';
 import { expect, test, type Page } from '@playwright/test';
 import { adminPassword, expectAccessible, settle, signIn, userPassword } from './helpers';
 
@@ -82,4 +83,26 @@ test('the platform reputation dialog explains the shadow stage and saves the cho
     await again.getByRole('switch', { name: /Take part/ }).click();
     await again.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.getByText('Platform reputation is off')).toBeVisible();
+});
+
+test('the JWT sheet refuses a private key, saves a public key, and can be turned off', async ({ page }) => {
+    const modal = await openAction(page, 'overview-action-jwt-validation', 'Check bearer tokens on your API paths');
+    await expect(modal.getByText('Nothing is blocked until you add a rule')).toBeVisible();
+    await expect(modal.getByPlaceholder('https://login.example.com')).toBeVisible();
+    expect(await modal.locator('[x-tooltip]').count()).toBeGreaterThanOrEqual(4);
+    await expectAccessible(page);
+    const pair = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const publicKey = pair.publicKey.export({ type: 'spki', format: 'pem' }).toString();
+    const privateKey = pair.privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
+    const key = modal.getByPlaceholder(/BEGIN PUBLIC KEY/);
+    await key.fill(privateKey);
+    await modal.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(page.getByText('The settings were not saved')).toBeVisible();
+    await key.fill(publicKey);
+    await modal.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(page.getByText('JWT validation saved')).toBeVisible();
+    await page.getByTestId('overview-action-jwt-validation').click();
+    await page.locator('.fi-modal-window:visible').getByTestId('settings-turn-off').click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Turn off', exact: true }).click();
+    await expect(page.getByText('JWT validation turned off')).toBeVisible();
 });

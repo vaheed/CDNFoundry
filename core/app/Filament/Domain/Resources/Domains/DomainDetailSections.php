@@ -213,6 +213,7 @@ class DomainDetailSections
             self::row('Sensitive data', $sensitive === null ? 'Off' : collect($sensitive['kinds'])->map(fn (string $kind): string => ['card' => 'Cards', 'iban' => 'IBANs', 'private_key' => 'Private keys', 'api_key' => 'API keys'][$kind] ?? $kind)->implode(', '), 'text', action: self::action('sensitiveDataCheck', $setUp($sensitive))),
             self::row('AI protection', $ai === null ? 'Off' : $plural(count($ai['endpoints']), 'endpoint'), 'text', action: self::action('aiProtection', $setUp($ai))),
             self::row('API schema', $schema === null ? 'Off' : ($schema['title'] ?: 'Untitled').', '.$plural(count($schema['operations']), 'operation'), 'text', action: self::action('apiSchema', $setUp($schema))),
+            self::row('JWT validation', $domain->jwt_validation === null ? 'Off' : $plural(count($domain->jwt_validation['keys']), 'key').', '.$plural(count($domain->jwt_validation['paths']), 'path'), 'text', action: self::action('jwtValidation', $setUp($domain->jwt_validation))),
             self::row('Client-side', $domain->client_security === null ? 'Off' : 'Reporting scripts', 'text', action: self::action('clientSecurity', $setUp($domain->client_security))),
             self::row('Platform reputation', $domain->reputation_sharing ? 'Shadow, no effect on traffic' : 'Off', 'text', action: self::action('reputationSharing', $domain->reputation_sharing ? 'Edit' : 'Set up')),
             self::row('Recent events', $events ?: null, 'list', collapse: 3),

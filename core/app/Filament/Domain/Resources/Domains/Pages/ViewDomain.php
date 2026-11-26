@@ -16,6 +16,7 @@ use App\Filament\Domain\Resources\Domains\Widgets\DomainKpiStrip;
 use App\Filament\Domain\Resources\Domains\Widgets\DomainNeedsAttention;
 use App\Http\Controllers\AiProtectionController;
 use App\Http\Controllers\ApiSchemaController;
+use App\Http\Controllers\JwtValidationController;
 use App\Http\Controllers\ClientReputationSharingController;
 use App\Http\Controllers\ClientSecurityController;
 use App\Http\Controllers\CredentialCheckController;
@@ -39,6 +40,7 @@ use App\Models\EdgePool;
 use App\Models\EdgeRevision;
 use App\Models\Operation;
 use App\Support\ApiSchemaData;
+use App\Support\JwtValidationData;
 use App\Support\BindZone;
 use App\Support\CachePolicy;
 use App\Support\CredentialCheckData;
@@ -618,6 +620,33 @@ class ViewDomain extends ViewRecord
                     $this->record->refresh();
                     Notification::make()->success()->title('API schema saved')->body('Violations appear in Security events. Add a rule on API schema violation to block them.')->send();
                 }),
+            Action::make('jwtValidation')->label('JWT validation')->icon('phosphor-identification-badge')->extraAttributes(['data-testid' => 'jwt-validation-action'])
+                ->modalHeading('Check bearer tokens on your API paths')
+                ->modalDescription('Upload the public keys your tokens are signed with. The cell checks the signature, expiry, issuer and audience of the token in the Authorization header on the paths you list, and sets Valid JWT for rules. Keys are never fetched at request time, and the token is never stored or logged. Nothing is blocked until you add a rule.')
+                ->extraModalFooterActions(fn (): array => $this->turnOffAction('jwt_validation', JwtValidationController::class, 'JWT validation turned off', 'Turn off'))
+                ->schema([
+                    TagsInput::make('paths')->label(FilamentHelp::label('Paths', 'Requests whose path starts with one of these are checked. Up to '.JwtValidationData::MAXIMUM_PATHS.', each starting with /.'))->required()->placeholder('/api')->helperText('Type a path and press Enter.'),
+                    TextInput::make('issuer')->label(FilamentHelp::label('Issuer', 'The iss claim a token must carry. Leave empty to accept any issuer.'))->maxLength(253)->placeholder('https://login.example.com'),
+                    TextInput::make('audience')->label(FilamentHelp::label('Audience', 'The aud claim a token must carry, alone or in a list. Leave empty to accept any audience.'))->maxLength(253)->placeholder('orders-api'),
+                    TextInput::make('leeway_seconds')->label(FilamentHelp::label('Clock allowance (seconds)', 'How far exp and nbf may differ from the cell clock before a token is refused.'))->numeric()->minValue(0)->maxValue(JwtValidationData::MAXIMUM_LEEWAY)->required()->placeholder('30'),
+                    Repeater::make('keys')->label(FilamentHelp::label('Public keys', 'Add the new key before retiring the old one. Set Valid until on the old key and the cell stops using it at that time. Up to '.JwtValidationData::MAXIMUM_KEYS.'.'))
+                        ->minItems(1)->maxItems(JwtValidationData::MAXIMUM_KEYS)->addActionLabel('Add key')->itemLabel(fn (array $state): ?string => ($state['kid'] ?? '') !== '' ? $state['kid'] : null)->schema([
+                            TextInput::make('kid')->label(FilamentHelp::label('Key ID', 'The kid in the token header. Leave empty to try this key for tokens with no kid.'))->maxLength(64)->placeholder('2026-11'),
+                            Select::make('alg')->label('Algorithm')->options(['RS256' => 'RS256', 'ES256' => 'ES256'])->default('RS256')->required(),
+                            Textarea::make('pem')->label(FilamentHelp::label('Public key', 'A PEM public key that starts with BEGIN PUBLIC KEY. A private key is refused.'))->required()->rows(5)->placeholder("-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"),
+                            TextInput::make('expires_at')->label(FilamentHelp::label('Valid until', 'Optional end time such as 2026-12-31 23:59. The cell stops using the key then, by its own clock.'))->placeholder('2026-12-31 23:59'),
+                        ]),
+                ])->fillForm(fn (): array => $this->domain()->jwt_validation ?? ['paths' => ['/api'], 'leeway_seconds' => JwtValidationData::DEFAULT_LEEWAY, 'keys' => [['kid' => '', 'alg' => 'RS256', 'pem' => '', 'expires_at' => '']]])
+                ->action(function (Action $action, array $data): void {
+                    try {
+                        app(JwtValidationController::class)->update(request()->merge($data), $this->domain());
+                    } catch (ValidationException $exception) {
+                        Notification::make()->danger()->title('The settings were not saved')->body(collect($exception->errors())->flatten()->first())->persistent()->send();
+                        $action->halt();
+                    }
+                    $this->record->refresh();
+                    Notification::make()->success()->title('JWT validation saved')->body('Add a rule on Valid JWT to log, challenge, or block requests with no valid token.')->send();
+                }),
             Action::make('clientSecurity')->label('Client-side security')->icon('phosphor-browsers')->extraAttributes(['data-testid' => 'client-security-action'])
                 ->modalHeading('Watch the scripts your pages load')
                 ->modalDescription('The cell adds a report-only Content-Security-Policy to your HTML pages. Browsers then report each script and connection to the cell, which keeps the page, the type, and the origin of what was loaded. Nothing is blocked and no page content is stored. Anyone can send a report, so treat the list as a hint, not proof.')
@@ -836,13 +865,13 @@ class ViewDomain extends ViewRecord
             }),
         ];
         // Long forms open as a right-side sheet; a form of one or two fields opens as a small centered dialog.
-        $sheets = ['importZone', 'proxyDefaults', 'cacheSettings', 'uploadCertificate', 'securitySettings', 'wafProfile', 'credentialCheck', 'sensitiveDataCheck', 'aiProtection', 'apiSchema', 'clientSecurity'];
+        $sheets = ['importZone', 'proxyDefaults', 'cacheSettings', 'uploadCertificate', 'securitySettings', 'wafProfile', 'credentialCheck', 'sensitiveDataCheck', 'aiProtection', 'apiSchema', 'jwtValidation', 'clientSecurity'];
         $dialogs = ['moveEdgePool', 'developmentMode', 'purgeCache', 'tlsMode', 'securityAlert', 'reputationSharing', 'startIncident', 'startMaintenance', 'rollbackProxy'];
 
         // Every form names what its button does; a generic "Submit" never shows.
         $submit = ['importZone' => 'Import', 'uploadCertificate' => 'Upload', 'tlsMode' => 'Save', 'developmentMode' => 'Turn on', 'startMaintenance' => 'Start maintenance',
             'moveEdgePool' => 'Move', 'rollbackProxy' => 'Roll back', 'proxyDefaults' => 'Save', 'cacheSettings' => 'Save', 'securitySettings' => 'Save', 'wafProfile' => 'Save',
-            'securityAlert' => 'Save', 'credentialCheck' => 'Save', 'sensitiveDataCheck' => 'Save', 'aiProtection' => 'Save', 'apiSchema' => 'Save', 'clientSecurity' => 'Save', 'reputationSharing' => 'Save'];
+            'securityAlert' => 'Save', 'credentialCheck' => 'Save', 'sensitiveDataCheck' => 'Save', 'aiProtection' => 'Save', 'apiSchema' => 'Save', 'jwtValidation' => 'Save', 'clientSecurity' => 'Save', 'reputationSharing' => 'Save'];
 
         // Before the nameservers are verified only the delegation, the DNS records, and the domain itself can be changed.
         $beforeVerification = ['verifyNameservers', 'forceVerifyNameservers', 'importZone', 'exportZone', 'activate', 'disable', 'deleteDomain'];
