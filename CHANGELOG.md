@@ -15,6 +15,10 @@ single source of truth; `make version-check` enforces it.
 - Blocked and scored requests list up to eight matched CRS rule ids in the new `waf_rule_ids` field, and `waf_rule_id` names a matched rule instead of the blocking evaluation `949110`. Apply the ClickHouse migration `2026_11_25_edge_event_waf_rule_ids.sql` before starting updated Vector instances.
 - Managed WAF rules and categories can be turned off only for a path prefix or a method (`tuning.scoped_exclusions`), in the domain WAF dialog and the API.
 
+### Fixed
+
+- A cell with more than 100 noisy domains no longer reports the same first hundred forever. A cell lists up to 1000 domain and reason entries, and the agent sends 100 per heartbeat, the domains reported longest ago first, so 200 domains under sustained attack are all reported within two heartbeats.
+
 ### Security
 
 - On cells with more domains than the 100-entry rate-limit floor can serve, domain shares shrink to an equal part instead of oversubscribing the shared dictionary, so one domain's keys cannot evict another's.

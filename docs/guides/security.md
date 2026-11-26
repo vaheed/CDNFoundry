@@ -332,6 +332,7 @@ rate** in the rule sheet, or send a `rate_limit` object in the API:
   evict another domain's counters or mitigations, and a client that is already
   mitigated stays blocked until its duration ends. The per-client request counter of the baseline limits
   works the same way, and the domain-wide counter still applies to every request.
+  Measured on a development host: while 700 domains shared a 32 KiB dictionary (past the floor, with no room for their keys), keys first seen afterwards were still limited to the rule's threshold, and with 30,000 distinct keys flooding one domain another domain's threshold of 100 still tripped at 100 requests. Nginx evicts the least recently used entry rather than failing an allocation, so a dictionary out of memory loses old counters, not new keys; the one case that counts nothing is an allocation that fails outright, and it is reported as `rate_limit_state_full`.
 
 ### Presets: user agents and hotlinks
 

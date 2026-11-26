@@ -615,6 +615,23 @@ domains. Shared memory usage recorded under the flood.
 | --- | --- | --- | --- |
 | Prefix/budget/containment/reporting present; overflow open | Remaining overflow semantics open | Historical fairness passes; saturation matrix open | Changed limit/containment UI requires suite |
 
+**Execution record, 26 November 2026** (development host; edge-runtime image built from this checkout; not a fleet result).
+
+| Item | Result |
+| --- | --- |
+| Overflow (stage 2) | Already shipped in Phase 0 and not implemented again. Re-qualified: `rate_limit_isolation.py` passed with a new check that the victim's threshold of 100 trips at 100 requests (limit 5%) after a 30,000-key flood on another domain. New `rate_limit_exhaustion.py` passed: 700 domains (past the 650-domain floor) on a 32 KiB dictionary, then 60 fresh keys on one domain allowed 2 (threshold 2, 10 workers), `rate_limit_state_full` reported, no allocation error in the log. The same test also passes on the previous image, so it shows the overflow counter holds under saturation, not that a failed allocation was reached: Nginx evicts the least recently used entry instead of failing, and a failed allocation could not be provoked. A worker-local fallback was written, found untestable and removed. |
+| Reporting (stage 3) | Found a defect: a cell listed only 100 entries, always the most recently active domains, and the agent re-sent every domain whose running total had changed, so with 200 domains under sustained attack the same first domains took every heartbeat. The cell now lists up to 1000 entries and the agent sends 100 per heartbeat, the domains reported longest ago first. The Go test with 200 domains and totals that change before every heartbeat reports all 200 within two heartbeats. `security_report_fairness.py` (130 domains) passed against the new limit. |
+| Not scaled to the stated figures | The 1,000,000-address /64 flood and the 1,000,000-key flood were not run: the e2e uses 600 addresses in one /64 and 30,000 keys. The 500-distinct-client case is covered by the control plane's feature tests, not a real cell at that count. The 200-domain heartbeat is proven by the agent's unit test, not by a real cell and agent. `client_containment.py` and `ipv6_rate_limit_keys.py` passed. |
+| Browser | No UI changed. The suite was not run. |
+
+**Completion checkpoint, 26 November 2026.**
+
+| Implementation | Documentation | Automated/runtime | Browser |
+| --- | --- | --- | --- |
+| Complete for overflow and reporting; the penalty box and breadth escalation were already present | Current: security guide, edge agent reference, changelog | Partly passed: the runs above. Open: million-key floods, a real-cell 200-domain heartbeat, fleet qualification | Not applicable to this change; not run |
+
+Phase 3 is not complete: the stated scale figures are open.
+
 ---
 
 ## Phase 4: Policy lifecycle
