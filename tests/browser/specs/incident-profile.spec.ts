@@ -33,6 +33,32 @@ test('turn on under attack mode and read its banner', async ({ page }) => {
     await page.locator('.fi-modal-window:visible').getByRole('button', { name: 'Confirm', exact: true }).click();
 });
 
+test('the start dialog lets the domain choose what skips the browser check', async ({ page }) => {
+    await signIn(page, 'admin', 'admin@browser.test', adminPassword);
+    await page.goto('/admin/domains?tableSearch=alpha-browser');
+    await settle(page);
+    await page.getByText('alpha-browser.example').first().click();
+    await settle(page);
+    await page.getByTestId('incident-start-action').click();
+    const modal = page.locator('.fi-modal-window:visible');
+    // Optional, so it starts collapsed; the defaults are the paths API clients and certificate validation need.
+    await modal.getByText('Requests that skip the browser check').click();
+    await expect(modal.getByText('/api/', { exact: true })).toBeVisible();
+    await expect(modal.getByText('/.well-known/', { exact: true })).toBeVisible();
+    await expect(modal.getByText('Type a path and press Enter.')).toBeVisible();
+    const methods = modal.getByRole('button', { name: 'Methods' });
+    await expect(methods).toBeVisible();
+    await expectAccessible(page);
+    await methods.click();
+    await page.getByRole('option', { name: 'OPTIONS' }).click();
+    await modal.getByRole('heading', { name: 'Turn on under attack mode?' }).click();
+    await modal.getByRole('button', { name: 'Turn on', exact: true }).click();
+    const banner = page.getByTestId('incident-banner');
+    await expect(banner).toBeVisible();
+    await page.getByTestId('incident-banner-end').click();
+    await page.locator('.fi-modal-window:visible').getByRole('button', { name: 'Confirm', exact: true }).click();
+});
+
 // Ending the profile is proven on the server (IncidentProfilePanelTest, IncidentProfileTest) and the Start path above runs in a
 // real browser. The banner clearing after End has not yet been confirmed in a browser run: the run that tried it shared its app
 // with another run, so its result is not trusted. Re-enable this once a run on a free stack passes.
