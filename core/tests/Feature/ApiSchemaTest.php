@@ -7,8 +7,10 @@ use App\Models\Domain;
 use App\Models\User;
 use App\Support\ApiSchemaData;
 use App\Support\SecurityConfig;
+use App\Support\SecurityRuleData;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 class ApiSchemaTest extends TestCase
@@ -171,7 +173,7 @@ class ApiSchemaTest extends TestCase
             try {
                 ApiSchemaData::validate(['document' => $document]);
                 $this->fail("$label was accepted");
-            } catch (\Illuminate\Validation\ValidationException $exception) {
+            } catch (ValidationException $exception) {
                 $this->assertArrayHasKey('document', $exception->errors(), $label);
             }
         }
@@ -180,7 +182,7 @@ class ApiSchemaTest extends TestCase
     public function test_the_body_violations_are_rule_values_and_event_reasons(): void
     {
         $this->assertContains('invalid_body', ApiSchemaData::VIOLATIONS);
-        $this->assertContains('unknown_field', \App\Support\SecurityRuleData::SCHEMA_VIOLATIONS);
+        $this->assertContains('unknown_field', SecurityRuleData::SCHEMA_VIOLATIONS);
         $this->assertContains('schema_invalid_body', SecurityConfig::reasonCodes());
         $this->assertContains('schema_unknown_field', SecurityConfig::reasonCodes());
     }

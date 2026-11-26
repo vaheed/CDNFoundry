@@ -150,7 +150,6 @@ final class ApiSchemaData
         return ['base_path' => $stored['base_path'], 'maximum_body_bytes' => $stored['maximum_body_bytes'], 'operations' => $stored['operations']];
     }
 
-
     /**
      * The JSON request body of an operation as a bounded typed tree, or null when it declares none. A `$ref` is followed only inside
      * #/components/schemas and never more than the depth bound, so a cycle is refused. Combinators (allOf, oneOf, anyOf, not) are

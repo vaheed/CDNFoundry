@@ -7,6 +7,7 @@ use App\Models\Domain;
 use App\Models\User;
 use App\Support\JwtValidationData;
 use App\Support\SecurityConfig;
+use App\Support\SecurityRuleData;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
@@ -110,8 +111,8 @@ class JwtValidationTest extends TestCase
         $stranger = User::factory()->create();
         $this->actingAs($stranger)->getJson("/api/domains/{$domain->id}/security/jwt-validation")->assertNotFound();
         $this->actingAs($stranger)->putJson("/api/domains/{$domain->id}/security/jwt-validation", $this->settings())->assertNotFound();
-        $this->assertArrayHasKey('jwt_valid', \App\Support\SecurityRuleData::FIELDS);
-        $this->assertArrayHasKey('jwt_subject', \App\Support\SecurityRuleData::RATE_KEYS);
+        $this->assertArrayHasKey('jwt_valid', SecurityRuleData::FIELDS);
+        $this->assertArrayHasKey('jwt_subject', SecurityRuleData::RATE_KEYS);
         $this->assertContains('jwt_invalid', SecurityConfig::reasonCodes());
     }
 
