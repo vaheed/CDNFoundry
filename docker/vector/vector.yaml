@@ -139,6 +139,9 @@ transforms:
       .waf_rule_ids = slice!(to_string(.waf_rule_ids) ?? "", 0, 63)
       if !match(.waf_rule_ids, r'^[0-9]{6}(,[0-9]{6}){0,7}$') { .waf_rule_ids = "" }
       .security_rule = slice!(to_string(.security_rule) ?? "", 0, 24)
+      # The shadow rules that matched, as references like the one above joined by commas (r3,5), at most eight; anything else is dropped.
+      .shadow_rule = slice!(to_string(.shadow_rule) ?? "", 0, 128)
+      if !match(.shadow_rule, r'^r?[0-9]{1,20}(,r?[0-9]{1,20}){0,7}$') { .shadow_rule = "" }
       # The request rules that acted, as "type:id" joined by commas (rewrite:3,cache:7), at most eight; anything else is dropped.
       .request_rule = slice!(to_string(.request_rule) ?? "", 0, 256)
       if !match(.request_rule, r'^(redirect|rewrite|header|cache):[0-9]{1,20}(,(redirect|rewrite|header|cache):[0-9]{1,20}){0,7}$') { .request_rule = "" }

@@ -74,8 +74,14 @@ def main() -> None:
             "-keyout", str(temporary / "tls.key"), "-out", str(temporary / "tls.crt"))
         for item in (temporary / "tls.key", temporary / "tls.crt"):
             item.chmod(0o644)
+        # The same nginx configuration as the image's, with the access log going to the container's output instead of Vector.
+        main_conf = run("docker", "run", "--rm", "--entrypoint", "cat", IMAGE, "/usr/local/openresty/nginx/conf/nginx.conf").stdout
+        logged = main_conf.replace("access_log syslog:server=vector:9000,facility=local7,tag=cdnfoundry_edge,nohostname edge_json;", "access_log /dev/stdout edge_json;")
+        assert logged != main_conf
+        (temporary / "nginx.conf").write_text(logged)
+        (temporary / "nginx.conf").chmod(0o644)
         try:
-            run("docker", "run", "-d", "--name", CELL, "--network", NETWORK,
+            run("docker", "run", "-d", "--name", CELL, "-v", f"{temporary / 'nginx.conf'}:/usr/local/openresty/nginx/conf/nginx.conf:ro", "--network", NETWORK,
                 "-e", "EDGE_RUNTIME_FILE=/var/lib/cdnfoundry/runtime/active.json", "-e", "EDGE_STATUS_TOKEN=e2e",
                 "-v", f"{runtime}:/var/lib/cdnfoundry/runtime/active.json:ro",
                 "-v", f"{temporary / 'tls.crt'}:/run/edge/tls.crt:ro", "-v", f"{temporary / 'tls.key'}:/run/edge/tls.key:ro",
@@ -102,6 +108,16 @@ def main() -> None:
             would = events("custom_rule_would_block", 701)
             assert abs(would - blocked) <= max(1, blocked * 0.01), f"shadow counted {would}, enforcement blocked {blocked}"
             assert events("custom_rule_block", 701) == 0 and events("custom_rule_would_block", 702) == 0
+
+            # The access log names the shadow rule on each request it matched, which feeds the per-rule match counts; an enforced
+            # request names it as the rule that acted instead.
+            logs = run("docker", "logs", CELL, check=False)
+            entries = [json.loads(line) for line in (logs.stdout + logs.stderr).splitlines() if line.startswith("{")]
+            shadowed = [entry for entry in entries if entry.get("hostname") == "shadow.rules.test" and entry.get("path", "").startswith("/blocked")]
+            assert shadowed and all(entry["shadow_rule"] == "r1" and entry["security_rule"] == "" for entry in shadowed), shadowed[:2]
+            acted = [entry for entry in entries if entry.get("hostname") == "enforce.rules.test" and entry.get("status") == 403]
+            assert acted and all(entry["security_rule"] == "r1" and entry["shadow_rule"] == "" for entry in acted), acted[:2]
+            assert all(entry["shadow_rule"] == "" for entry in entries if entry.get("hostname") == "shadow.rules.test" and entry.get("path", "").startswith("/open"))
 
             # A shadow rate limit counts and records but never limits.
             statuses = [get(ip, "shadowrate.rules.test", "/blocked/x") for _ in range(6)]

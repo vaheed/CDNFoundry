@@ -1563,6 +1563,12 @@ end
 -- What a shadow rule records: the request is counted under would_block or would_challenge for its domain, and its response is not
 -- changed.
 local function shadow_match(rule)
+    -- The request's log line names the shadow rules that matched (at most eight), so match counts cover shadow rules too.
+    local noted = ngx.var.cdn_shadow_rule or ""
+    local reference = rule_ref(rule)
+    if #noted < 64 and not (("," .. noted .. ","):find("," .. reference .. ",", 1, true)) then
+        ngx.var.cdn_shadow_rule = noted == "" and reference or (noted .. "," .. reference)
+    end
     if rule.platform then
         record_security_event(rule.action == "block" and "platform_rule_would_block" or "platform_rule_would_challenge")
     else

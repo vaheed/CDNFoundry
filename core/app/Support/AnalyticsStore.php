@@ -403,6 +403,36 @@ final class AnalyticsStore
             ['from' => $from->format('Y-m-d H:i:s.u'), 'to' => $to->format('Y-m-d H:i:s.u')]);
     }
 
+    /**
+     * Hourly match counts per rule reference and mode (enforce or shadow) since the given time, from the rollup.
+     *
+     * @return array<string, array{enforce: int, shadow: int}>
+     */
+    public function ruleMatches(int $domainId, CarbonImmutable $from): array
+    {
+        $rows = $this->query('SELECT rule_ref, mode, sum(requests) AS requests FROM cdnf.rule_matches_hourly WHERE domain_id = {domain:UInt64} AND interval_start >= {from:DateTime} GROUP BY rule_ref, mode LIMIT 2000',
+            ['domain' => $domainId, 'from' => $from->utc()->startOfHour()->format('Y-m-d H:i:s')]);
+        $counts = [];
+        foreach ($rows as $row) {
+            if (! isset($row['rule_ref'], $row['mode']) || ! in_array($row['mode'], ['enforce', 'shadow'], true)) {
+                continue;
+            }
+            $counts[$row['rule_ref']] ??= ['enforce' => 0, 'shadow' => 0];
+            $counts[$row['rule_ref']][$row['mode']] = (int) $row['requests'];
+        }
+
+        return $counts;
+    }
+
+    /** Counts the stored request events of a domain that satisfy a SQL condition, with the number of events examined. */
+    public function countEvents(int $domainId, CarbonImmutable $from, string $condition, array $parameters): array
+    {
+        $rows = $this->query("SELECT count() AS examined, countIf({$condition}) AS matched FROM cdnf.edge_events WHERE domain_id = {domain:UInt64} AND event_type = 'request' AND occurred_at >= {from:DateTime64}",
+            [...$parameters, 'domain' => $domainId, 'from' => $from->utc()->format('Y-m-d H:i:s.u')]);
+
+        return ['examined' => (int) ($rows[0]['examined'] ?? 0), 'matched' => (int) ($rows[0]['matched'] ?? 0)];
+    }
+
     public function metadata(array $range): array
     {
         $delay = app(PlatformSettings::class)->integer('telemetry', 'finalization_delay_minutes');

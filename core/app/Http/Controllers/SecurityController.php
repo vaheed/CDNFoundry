@@ -2,15 +2,19 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\AnalyticsUnavailableException;
 use App\Jobs\ReconcileEdgeDomain;
 use App\Models\AuditLog;
 use App\Models\Domain;
 use App\Models\Operation;
 use App\Models\SecurityRule;
+use App\Support\AnalyticsStore;
 use App\Support\DomainSecurityRules;
 use App\Support\PlatformRulesets;
 use App\Support\SecurityConfig;
 use App\Support\SecurityRuleData;
+use App\Support\SecurityRuleImpact;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
@@ -52,7 +56,30 @@ class SecurityController extends Controller
     {
         Gate::authorize('view', $domain);
 
-        return response()->json(['data' => $domain->securityRules()->orderBy('priority')->orderBy('id')->cursorPaginate(100)]);
+        $counts = $this->matchCounts($domain);
+
+        return response()->json(['data' => $domain->securityRules()->orderBy('priority')->orderBy('id')->cursorPaginate(100)
+            ->through(fn ($rule): array => [...$rule->toArray(), 'matches_last_24_hours' => $counts === null ? null : ($counts['r'.$rule->getKey()] ?? ['enforce' => 0, 'shadow' => 0])])]);
+    }
+
+    /** Per-rule match counts of the last 24 hours from the hourly rollup; null when analytics cannot answer, never a made-up zero. */
+    private function matchCounts(Domain $domain): ?array
+    {
+        try {
+            return app(AnalyticsStore::class)->ruleMatches($domain->id, CarbonImmutable::now('UTC')->subDay());
+        } catch (AnalyticsUnavailableException) {
+            return null;
+        }
+    }
+
+    /** What a rule would have matched in the last 24 hours over the stored request fields; always labeled partial. */
+    public function estimateRule(Request $request, Domain $domain): JsonResponse
+    {
+        Gate::authorize('update', $domain);
+        $data = SecurityRuleData::validate($request->all());
+        SecurityRuleData::assertFieldsAvailable($domain, $data['conditions']);
+
+        return response()->json(['data' => SecurityRuleImpact::estimate($domain, $data['conditions'], app(AnalyticsStore::class))]);
     }
 
     public function storeRule(Request $request, Domain $domain): JsonResponse

@@ -132,6 +132,7 @@ for authentication, pagination, response, and retry behaviour.
 | `DELETE` | `/domains/{domain}/security/presets/user-agent` | Required | Supported | `delete.domains.domain.security.presets.user-agent` |
 | `PUT` | `/domains/{domain}/security/presets/user-agent` | Required | Supported | `put.domains.domain.security.presets.user-agent` |
 | `GET` | `/domains/{domain}/security/presets` | Required | No | `get.domains.domain.security.presets` |
+| `POST` | `/domains/{domain}/security/rules/estimate` | Required | No | `post.domains.domain.security.rules.estimate` |
 | `POST` | `/domains/{domain}/security/rules/import` | Required | Supported | `post.domains.domain.security.rules.import` |
 | `PUT` | `/domains/{domain}/security/rules/order` | Required | Supported | `put.domains.domain.security.rules.order` |
 | `POST` | `/domains/{domain}/security/rules/preview` | Required | No | `post.domains.domain.security.rules.preview` |

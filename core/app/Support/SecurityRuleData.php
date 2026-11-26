@@ -157,7 +157,7 @@ final class SecurityRuleData
             'action' => ['required', Rule::in(self::ACTIONS)],
             'priority' => ['required', 'integer', 'between:-1000000,1000000'],
             'enabled' => ['sometimes', 'boolean'],
-            'mode' => ['sometimes', Rule::in(array_keys(self::MODES))],
+            'mode' => ['nullable', Rule::in(array_keys(self::MODES))],
             'expires_at' => ['nullable', 'date', 'after:now', 'before:+1 year'],
             'note' => ['nullable', 'string', 'max:250'],
         ])->validate();
