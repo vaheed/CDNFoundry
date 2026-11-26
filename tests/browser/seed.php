@@ -179,6 +179,10 @@ foreach ([
 ] as [$name, $action, $priority, $conditions]) {
     $rulesDomain->securityRules()->create(['name' => $name, 'action' => $action, 'priority' => $priority, 'conditions' => $conditions, 'fingerprint' => SecurityRuleData::fingerprint($conditions, $action)]);
 }
+// Named IP lists on the same domain: a short one, and one with a long name, a long description, IPv4 and IPv6 networks.
+$rulesDomain->ipLists()->create(['name' => 'office', 'description' => 'Office networks', 'entries' => \App\Support\IpListData::normalize(['203.0.113.0/24', '198.51.100.9', '2001:db8:abcd::/48']), 'entry_count' => 3]);
+$partners = \App\Support\IpListData::normalize(array_map(fn (int $i): string => '192.0.2.'.$i, range(1, 200)));
+$rulesDomain->ipLists()->create(['name' => 'partner-networks-and-payment-providers-eu', 'description' => 'Networks of the payment providers and partner agencies that call the webhook endpoints from fixed addresses', 'entries' => $partners, 'entry_count' => count($partners)]);
 // A shadow rule that ends in three days: it records what it would block and acts on nothing.
 $shadowConditions = [['field' => 'path', 'operator' => 'equals', 'value' => '/signup'], ['field' => 'user_agent', 'operator' => 'contains', 'value' => 'python-requests']];
 $rulesDomain->securityRules()->create(['name' => 'Watch for scripted sign-ups', 'action' => 'block', 'priority' => 40, 'conditions' => $shadowConditions, 'mode' => 'shadow', 'expires_at' => now()->addDays(3),

@@ -53,6 +53,7 @@ final class SecurityRuleForm
         'prompt_injection_score' => '1 (two or more known injection phrases), 29 (one phrase), or 99 (none), from fixed phrase patterns on the prompt of your AI endpoints. Pattern based: it does not understand the prompt.',
         'prompt_pii' => 'Whether the prompt holds an email address, payment card number, IBAN, or US social security number.',
         'schema_violation' => 'How the request differs from the API schema: an unknown path, a method the path does not allow, a missing or wrongly typed parameter, or a JSON body over the limit.',
+        'client_ip_list' => 'Whether the visitor\'s address is inside one of the networks of a list of this domain. Operators: is on, is not on.',
         'leaked_password' => 'Whether the password sent to one of the login paths is in the list of known leaked passwords.',
     ];
 
@@ -73,7 +74,7 @@ final class SecurityRuleForm
 
         return [
             Section::make('When')->description('Every condition must match. Up to five.')->compact()->schema([
-                self::conditionRepeater($unavailable)
+                self::conditionRepeater($unavailable, null, $domain === null ? null : $domain->ipLists()->orderBy('name')->pluck('name', 'name')->all())
                     ->minItems(fn (Get $get): int => $get('rate_limited') ? 0 : 1)->required(fn (Get $get): bool => ! $get('rate_limited')),
             ]),
             Section::make('Then')->compact()->schema([
@@ -156,7 +157,7 @@ final class SecurityRuleForm
      * @param  array<string, string>  $unavailable  field => the detection it needs
      * @param  array<string, string>|null  $labels  field => label of the fields to offer, or null for every field
      */
-    public static function conditionRepeater(array $unavailable = [], ?array $labels = null): Repeater
+    public static function conditionRepeater(array $unavailable = [], ?array $labels = null, ?array $ipLists = null): Repeater
     {
         return Repeater::make('conditions')->hiddenLabel()
             ->maxItems(SecurityRuleData::MAXIMUM_CONDITIONS)->defaultItems(1)
@@ -167,7 +168,7 @@ final class SecurityRuleForm
                 return filled($stored['field'] ?? null) && filled($stored['operator'] ?? null) && (is_bool($stored['value'] ?? null) || filled($stored['value'] ?? null))
                     ? SecurityRuleData::describe([$stored]) : 'New condition';
             })
-            ->schema(self::conditionFields($unavailable, $labels ?? SecurityRuleData::FIELD_LABELS))->columns(['default' => 1, 'sm' => 2])
+            ->schema(self::conditionFields($unavailable, $labels ?? array_diff_key(SecurityRuleData::FIELD_LABELS, $ipLists === null ? ['client_ip_list' => 1] : []), $ipLists ?? []))->columns(['default' => 1, 'sm' => 2])
             ->formatStateUsing(fn (mixed $state): array => self::toForm($state))->dehydrateStateUsing(fn (mixed $state): array => self::toStored($state));
     }
 
@@ -189,7 +190,7 @@ final class SecurityRuleForm
      * Every kind of value has its own input and its own state key, so one input can never reset the value another kind holds.
      * The stored condition has the single key `value`; these two methods move it between that and the form's keys.
      */
-    private const VALUE_KEYS = ['value', 'value_number', 'value_list', 'value_country', 'value_continent', 'value_method', 'value_tls', 'value_violation', 'value_flag'];
+    private const VALUE_KEYS = ['value', 'value_number', 'value_list', 'value_country', 'value_continent', 'value_method', 'value_tls', 'value_violation', 'value_iplist', 'value_flag'];
 
     public static function valueKey(?string $field, ?string $operator): string
     {
@@ -203,6 +204,7 @@ final class SecurityRuleForm
             $kind === 'method' => 'value_method',
             $kind === 'tls' => 'value_tls',
             $kind === 'violation' => 'value_violation',
+            $kind === 'iplist' => 'value_iplist',
             $list && in_array($kind, ['text', 'address', 'host', 'extension', 'asn', 'score'], true) => 'value_list',
             in_array($kind, ['asn', 'bytes', 'score'], true) => 'value_number',
             default => 'value',
@@ -240,7 +242,7 @@ final class SecurityRuleForm
      * @param  array<string, string>  $unavailable  field => the detection it needs
      * @param  array<string, string>  $labels  field => label of the fields to offer
      */
-    private static function conditionFields(array $unavailable, array $labels): array
+    private static function conditionFields(array $unavailable, array $labels, array $ipLists = []): array
     {
         $kind = fn (Get $get): ?string => SecurityRuleData::FIELDS[$get('field')]['kind'] ?? null;
         $list = fn (Get $get): bool => in_array($get('operator'), ['in_list', 'not_in_list'], true);
@@ -252,7 +254,7 @@ final class SecurityRuleForm
                 ->disableOptionWhen(fn (string $value): bool => isset($unavailable[$value]))
                 ->afterStateUpdated(fn (callable $set) => $set('operator', 'equals')),
             Select::make('operator')->label('Operator')->required()->live()->placeholder('Choose how to compare')
-                ->options(fn (Get $get): array => collect(SecurityRuleData::FIELDS[$get('field')]['operators'] ?? [])->mapWithKeys(fn (string $operator): array => [$operator => SecurityRuleData::OPERATOR_LABELS[$operator]])->all()),
+                ->options(fn (Get $get): array => collect(SecurityRuleData::FIELDS[$get('field')]['operators'] ?? [])->mapWithKeys(fn (string $operator): array => [$operator => $get('field') === 'client_ip_list' ? ($operator === 'equals' ? 'is on' : 'is not on') : SecurityRuleData::OPERATOR_LABELS[$operator]])->all()),
             TextInput::make('name')->label('Name')->maxLength(64)->required()->placeholder(fn (Get $get): string => $get('field') === 'cookie_present' ? 'session' : 'X-Api-Key')
                 ->visible(fn (Get $get): bool => (SecurityRuleData::FIELDS[$get('field')]['named'] ?? false) === true)->columnSpanFull(),
             TextInput::make('value')->label('Value')->required()->maxLength(512)->visible($uses('value'))->columnSpanFull()
@@ -276,6 +278,8 @@ final class SecurityRuleForm
                 ->visible($uses('value_tls'))->placeholder('Choose a version')->columnSpanFull(),
             Select::make('value_violation')->label('Violation')->options(self::violationOptions())->multiple($list)->required()
                 ->visible($uses('value_violation'))->placeholder('Choose a violation')->columnSpanFull(),
+            Select::make('value_iplist')->label('List')->options($ipLists)->required()->visible($uses('value_iplist'))->placeholder($ipLists === [] ? 'Create a list first' : 'Choose a list')
+                ->helperText('Lists are managed on the IP lists tab.')->columnSpanFull(),
             Toggle::make('value_flag')->label(FilamentHelp::label('Present', 'On matches requests that have it. Off matches requests that do not.'))->default(true)->visible($uses('value_flag'))->columnSpanFull(),
             Text::make(fn (Get $get): ?string => self::HELP[$get('field')] ?? null)->visible(fn (Get $get): bool => isset(self::HELP[$get('field')]))
                 ->color('neutral')->columnSpanFull(),
