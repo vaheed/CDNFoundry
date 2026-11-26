@@ -1127,11 +1127,23 @@ starts in shadow mode (Phase 4).
 validation. E2E per check. Harness measurements of false positives and latency.
 Browser tests of the schema and JWT screens.
 
-**Completion checkpoint, 21 November 2026.**
+**Record, 27 November 2026** (stages 1 and 2; admitted by the owner's request to implement this phase).
+
+| Item | Result |
+| --- | --- |
+| Stage 1: bodies and cookies | The API schema compiles each operation's JSON `requestBody` into a bounded tree (5 levels, 64 fields per body, 32 properties per object, 16 enum values, 2,000 fields in all; `$ref` only inside `#/components/schemas`, cycles refused) and the cell checks JSON bodies for type, `required`, `enum`, `maxLength`, nested objects and arrays, and unknown fields of objects that set `additionalProperties: false`. Cookie parameters are read from the `Cookie` header. New violations `invalid_body` and `unknown_field` and the events `schema_invalid_body` and `schema_unknown_field` start as events and a rule field only. Combinators (`allOf`, `oneOf`, `anyOf`) are not interpreted and accept any value; `null` inside a body is accepted; the cell visits at most 1,000 values and does not check the rest of a larger valid body. |
+| Stage 1: measured | `application_protection.py` on a real cell: every body violation kind refused through a rule, valid bodies, `text/plain` bodies, a 1,400-line valid body and cookie parameters pass, and a 16 KiB body added 0.2 ms at the median (7.76 ms with the schema against 7.58 ms without). The 0.5% false-positive rate on an API clean corpus and p99 under 1 ms were not measured: no API corpus exists in the repository, and the run measures the median only. |
+| Stage 2: JWT | `jwt_validation` on the domain (up to 8 public keys, RS256 and ES256, paths, issuer, audience, allowance, per-key end time), the rule field `jwt_valid`, the event `jwt_invalid` and the counting key `jwt_subject`. `jwt_validation.py` on a real cell: valid RS256 and ES256 tokens (named and unnamed key ID, audience as a list, inside the clock allowance) pass; absent, expired, not yet valid, no expiry, wrong issuer, wrong audience, a foreign key (also with a known key ID), `none`, HS256, an RS256 token naming an ES256 key, an unknown key ID, a critical header, a tampered payload, a short ES256 signature, malformed and oversized tokens, and a non-bearer scheme are refused; a key retired by its end time stopped working within the cell's own clock with no control plane; a rate limit by subject counted one subject and left another alone; no token, subject or claim reached the logs. `JwtValidationTest` covers validation (private keys, weak keys, wrong curves, duplicates, bounds), signing, the edge payload, permissions and the rule dependency. IPv6 clients were not exercised separately: nothing in the check reads the address. |
+| Stage 3 | Deferred, not partly done: endpoint discovery and YAML documents have no demonstrated demand and would add a YAML parser to the control plane. |
+| Account takeover | No change in this phase: the login outcome counting of Phase 6 and the leaked-password check of Phase 5 already cover it, and the check keeps passwords out of logs and events. The corpus size is the Phase 5 result. |
+
+Phase 9 is complete for stages 1 and 2 within the limits above.
+
+**Completion checkpoint, 27 November 2026.**
 
 | Implementation | Documentation | Automated/runtime | Browser |
 | --- | --- | --- | --- |
-| Basic checks present; bounded schema/JWT scope open | Schema limits and conditional admission open | Body/key/rotation/privacy matrix open | Schema/JWT UI gate open if scope admitted |
+| Stages 1 and 2 complete; stage 3 deferred | Complete: security guide (API schema bodies, JWT validation), changelog | Passed: `ApiSchemaTest`, `JwtValidationTest`, `application_protection.py`, `jwt_validation.py`. Not measured: false-positive rate on a corpus, p99 latency | See the run recorded below |
 
 ---
 

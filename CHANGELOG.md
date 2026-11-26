@@ -26,6 +26,8 @@ single source of truth; `make version-check` enforces it.
 
 - The API schema checks JSON request bodies (type, required, enum, string length, unknown fields, nested objects and arrays) and cookie parameters. The new violations are `invalid_body` and `unknown_field`, and the events `schema_invalid_body` and `schema_unknown_field`. The schema is bounded in depth, fields and enum values, and nothing is blocked unless a rule says so.
 
+- JWT validation at the edge for chosen paths: RS256 and ES256 public keys uploaded by the customer (no key fetching), expiry, not-before, issuer and audience checks, per-key end times, the rule field `jwt_valid`, the event `jwt_invalid` and the rate-limit key `jwt_subject`. Migration `2026_11_29_000200_add_jwt_validation_to_domains` is expand-only.
+
 ### Fixed
 
 - Rate-limit rules that count responses now count: the pending count was lost when the request moved to the cache or proxy location, and a key whose mitigation marker found no room in the domain's share was not blocked before the request.

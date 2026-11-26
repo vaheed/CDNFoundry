@@ -215,6 +215,18 @@ any` with the action block. Requests outside `base_path` are never checked.
 
 Body violations start in shadow: they are events and a rule field, and nothing is blocked until you add a rule on them. Use the rule's shadow mode to see what it would block first.
 
+### JWT validation
+
+`PUT /api/domains/{domain}/security/jwt-validation` (or "JWT validation" in the domain's Security section) makes the cell check the bearer token on the paths you list. It takes `paths` (up to 8 prefixes), up to 8 public keys (`keys`, each with `alg`, `pem`, an optional `kid` and an optional `expires_at`), an optional `issuer` and `audience`, and `leeway_seconds` (default 30, at most 300).
+
+- **Keys.** Only public keys in PEM form are accepted: RS256 with an RSA key of 2,048 to 8,192 bits, and ES256 with a P-256 key. A private key, a shared-secret algorithm such as HS256, and `none` are refused. The cell never fetches a key, so there is no JWKS call on the request path. The API returns each key's SHA-256 fingerprint and never the key text.
+- **What passes.** The `Authorization: Bearer` token is at most 4,096 bytes, its `alg` is RS256 or ES256 and matches a key (the `kid` picks the key, and a token with no `kid` is tried against every key of that algorithm), the signature verifies, `exp` is present and not past (with the allowance), `nbf` is not in the future, and `iss` and `aud` match when set (`aud` may be a list). A header with `crit` is refused.
+- **Rotation.** Add the new key, then set `expires_at` on the old one. The cell stops using a key at that time by its own clock, so a retired key does not become valid again if the control plane is unreachable.
+- **Rule field and key.** `jwt_valid` is true for a covered request with a valid token and false for one with none or a refused one. It never matches on a path that is not covered. A refused token is also counted as the event `jwt_invalid`, which never moves the domain toward a stricter state. The rate-limit counting key `jwt_subject` counts by a hash of the token's `sub` claim, and a request without one is not counted.
+- **Shadow first.** Nothing is blocked by the setting alone. Add a rule on Valid JWT, in shadow mode first, and read the would-block events before it enforces. The token and its claims are never logged or stored.
+
+Not covered: HS256 and other shared-secret algorithms, JWE, remote key sets, `jku` and `x5u` headers, and a token in a cookie or query string. An invalid candidate is refused when saved and the previous settings stay active.
+
 ### Client-side security
 
 `PUT /api/domains/{domain}/security/client-side` turns on script reporting.
