@@ -29,6 +29,29 @@ API (`POST /api/domains/{domain}/security/rules`). A complete rule in the API lo
 `name`, `note`, `priority`, and `enabled` are optional in the panel: a new rule is placed after the existing ones and is
 enabled. In the API, `priority` is required (lower numbers run first).
 
+## Shadow mode and expiry
+
+Two optional fields on every custom rule and every platform ruleset rule control its life:
+
+```json
+{"mode": "shadow", "expires_at": "2026-12-01T00:00:00Z"}
+```
+
+- `mode` is `enforce` (the default) or `shadow`. A shadow rule is evaluated like any other, including its rate limit, but it never
+  changes a response: the request carries on as if the rule had not matched. The cell records what the rule would have done as the
+  events `custom_rule_would_block` and `custom_rule_would_challenge` (`platform_rule_would_*` for a platform rule). Only `block` and
+  `challenge` rules can be shadow rules; `log`, `allow` and `skip_managed` have no effect to preview. Those events never count
+  toward tightening a domain's automatic security state. A shadow rate-limit rule still counts requests and sets its mitigation
+  marker, so its would-have counts follow the real thresholds. To enforce a shadow rule, save it again with `mode` set to `enforce`;
+  this is one revision and one queued update like any other rule change.
+- `expires_at` is a time within the next year. The signed snapshot carries it as a Unix time and **the cell compares it with its own
+  clock** on every request, so a temporary rule ends on time even when the control plane or the agent is down. The rule stays in the
+  list, inert, until you delete it. A rollback restores a rule with its mode and its expiry, and does not restore a rule whose expiry
+  had passed at the revision.
+
+Measured on a development host with a cell and no control plane: a shadow block counted 60 would-have-blocked requests where the
+same rule enforcing blocked 60, with no response changed, and a rule with an expiry stopped acting 0.07 seconds after it.
+
 ## Operators
 
 | Operator (API) | Panel wording | Value | Works on |

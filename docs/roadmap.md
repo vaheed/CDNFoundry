@@ -697,6 +697,23 @@ the estimate.
 | --- | --- | --- | --- |
 | Lifecycle scope open | Behavior and operator guide open | Shadow/expiry/rollback matrix open | Rule lifecycle gate open |
 
+**Execution record, 26 November 2026** (development host; edge-runtime image built from this checkout).
+
+| Stage | Result |
+| --- | --- |
+| 1. Shadow and expiry | Delivered for custom and platform rules: `mode` and `expires_at` through the migration (with database checks that only block and challenge rules can be shadow rules), validation, API, the signed snapshot and the cell. Rollback restores both. Feature tests (7, plus the rollback case) passed. E2E `shadow_and_expiring_rules.py` passed on a cell with no control plane: shadow counted 60 against 60 enforced blocks, no response changed, a shadow rate limit never limited, and an expiring rule stopped 0.07 s after its expiry (limit 2 s). |
+| 2. Match counts and impact estimate | Not started. Needs a ClickHouse rollup keyed by rule id and the shadow reason, a rule-list column and an estimate query over stored request fields only. |
+| 3. Staged rollout and propagation | Not started: staged platform rulesets (shadow, subset, all) and the measured save-to-enforcement time on a two-edge stack. |
+| Browser | Not started: the rule dialog has no mode or expiry field and the list has no shadow badge yet. This is a failed checkpoint for the phase. |
+
+**Completion checkpoint, 26 November 2026.**
+
+| Implementation | Documentation | Automated/runtime | Browser |
+| --- | --- | --- | --- |
+| Open: stage 1 done through API and runtime; stages 2 and 3 and the UI not done | Current for stage 1 (rule reference) | Stage 1 passed as above; propagation, counts and rollback proof by the harness open | Open: no UI for the new fields |
+
+Phase 4 is not complete.
+
 ---
 
 ## Phase 5: Signed security datasets
