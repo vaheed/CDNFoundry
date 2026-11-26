@@ -29,7 +29,7 @@ anyone who must keep traffic and data on their own network.
 - **HTTPS:** managed ACME DNS-01 and uploaded certificates, renewal, and edge distribution.
 - **Cache:** domain policies, development mode, URL and full purges, gzip and Brotli.
 - **Request rules:** redirects, URL rewrites, request and response header changes, and cache overrides with presets.
-- **Security:** typed firewall rules, managed ModSecurity/OWASP CRS WAF, rate and connection limits, browser challenges, and incident controls. Challenge verification works on GET-only domains.
+- **Security:** typed firewall rules, managed ModSecurity/OWASP CRS WAF, connection limits, and incident controls. Rate limits count in sliding windows by address, cookie, query value, ASN, country, or a two-part key, can count only failed responses, and can be shared across the cells that serve a domain. Browser challenges use keys issued by the control plane, so a token solved on one cell is accepted on every cell that serves the domain; keys rotate and can be revoked. Difficulty adapts to the client's recent behavior within a cap, and under attack mode lets each domain choose the paths and methods that skip the challenge. Challenge verification works on GET-only domains.
 - **Geolocation:** signed IPFire country and ASN data refreshed daily, with custom MMDB sources supported.
 - **Visibility:** domain analytics, redacted logs, revision acknowledgements, and operation status.
 
