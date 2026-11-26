@@ -22,7 +22,20 @@ final class ApiSchemaData
 
     public const MAXIMUM_BODY_BYTES = 1048576;
 
-    public const VIOLATIONS = ['unknown_path', 'wrong_method', 'missing_parameter', 'invalid_parameter', 'body_too_large'];
+    public const VIOLATIONS = ['unknown_path', 'wrong_method', 'missing_parameter', 'invalid_parameter', 'body_too_large', 'invalid_body', 'unknown_field'];
+
+    /** Levels of nesting in a body schema, nodes in one operation's body schema and in the whole table, properties and enum values per node. */
+    public const MAXIMUM_BODY_DEPTH = 5;
+
+    public const MAXIMUM_BODY_NODES = 64;
+
+    public const MAXIMUM_TABLE_NODES = 2000;
+
+    public const MAXIMUM_PROPERTIES = 32;
+
+    public const MAXIMUM_ENUM_VALUES = 16;
+
+    private const BODY_TYPES = ['string', 'integer', 'number', 'boolean', 'object', 'array'];
 
     private const METHODS = ['get', 'put', 'post', 'delete', 'patch', 'head'];
 
@@ -74,6 +87,7 @@ final class ApiSchemaData
         }
 
         $operations = [];
+        $nodes = 0;
         foreach ($paths as $path => $item) {
             $path = (string) $path;
             if (! preg_match('#^/[A-Za-z0-9._~!$&\'()*+,;=:@%/{}-]{0,199}$#', $path) || str_contains($path, '//') || self::brokenTemplate($path)) {
@@ -105,7 +119,17 @@ final class ApiSchemaData
                 }
                 $parameters = array_values($merged);
                 usort($parameters, fn (array $a, array $b): int => [$a['in'], $a['name']] <=> [$b['in'], $b['name']]);
-                $operations[] = ['path' => $path, 'method' => strtoupper($method), 'parameters' => $parameters];
+                $operation = ['path' => $path, 'method' => strtoupper($method), 'parameters' => $parameters];
+                $body = self::body($document, $item[$method]['requestBody'] ?? null, "the $method operation of $path");
+                if ($body !== null) {
+                    $operation['body'] = $body;
+                    $nodes += $body['nodes'];
+                    unset($operation['body']['nodes']);
+                    if ($nodes > self::MAXIMUM_TABLE_NODES) {
+                        throw self::refuse('document', 'The body schemas are larger than '.self::MAXIMUM_TABLE_NODES.' fields in all. Describe fewer or smaller bodies.');
+                    }
+                }
+                $operations[] = $operation;
             }
         }
         if ($operations === []) {
@@ -124,6 +148,96 @@ final class ApiSchemaData
         }
 
         return ['base_path' => $stored['base_path'], 'maximum_body_bytes' => $stored['maximum_body_bytes'], 'operations' => $stored['operations']];
+    }
+
+
+    /**
+     * The JSON request body of an operation as a bounded typed tree, or null when it declares none. A `$ref` is followed only inside
+     * #/components/schemas and never more than the depth bound, so a cycle is refused. Combinators (allOf, oneOf, anyOf, not) are
+     * not interpreted: the node accepts any value, which can only make the check miss a violation, never invent one.
+     *
+     * @return array{required: bool, schema: array<string, mixed>, nodes: int}|null
+     */
+    private static function body(array $document, mixed $request, string $where): ?array
+    {
+        if (! is_array($request)) {
+            return null;
+        }
+        $content = $request['content'] ?? null;
+        $schema = null;
+        foreach (is_array($content) ? $content : [] as $type => $media) {
+            if (is_string($type) && preg_match('#^application/(.+\+)?json(;.*)?$#i', $type) && is_array($media) && isset($media['schema'])) {
+                $schema = $media['schema'];
+                break;
+            }
+        }
+        if (! is_array($schema)) {
+            return null;
+        }
+        $nodes = 0;
+        $tree = self::node($document, $schema, 1, $nodes, $where);
+
+        return ['required' => ($request['required'] ?? false) === true, 'schema' => $tree, 'nodes' => $nodes];
+    }
+
+    /** @return array<string, mixed> */
+    private static function node(array $document, mixed $schema, int $depth, int &$nodes, string $where): array
+    {
+        if (! is_array($schema) || array_is_list($schema) && $schema !== []) {
+            throw self::refuse('document', "A body schema of $where must be an object.");
+        }
+        if (isset($schema['$ref'])) {
+            if (! is_string($schema['$ref']) || ! preg_match('#^\#/components/schemas/([A-Za-z0-9._-]+)$#', $schema['$ref'], $match) || ! is_array($document['components']['schemas'][$match[1]] ?? null)) {
+                throw self::refuse('document', 'Only references to #/components/schemas/Name inside the document are accepted. Remove external references.');
+            }
+            $schema = $document['components']['schemas'][$match[1]];
+        }
+        if ($depth > self::MAXIMUM_BODY_DEPTH) {
+            throw self::refuse('document', "A body schema of $where is nested deeper than ".self::MAXIMUM_BODY_DEPTH.' levels or refers to itself.');
+        }
+        if (++$nodes > self::MAXIMUM_BODY_NODES) {
+            throw self::refuse('document', "The body schema of $where has more than ".self::MAXIMUM_BODY_NODES.' fields.');
+        }
+        $node = [];
+        $type = $schema['type'] ?? null;
+        if (is_string($type) && in_array($type, self::BODY_TYPES, true)) {
+            $node['type'] = $type;
+        }
+        if (isset($schema['enum'])) {
+            $values = $schema['enum'];
+            if (! is_array($values) || ! array_is_list($values) || count($values) > self::MAXIMUM_ENUM_VALUES || array_filter($values, fn ($value): bool => ! is_scalar($value)) !== []) {
+                throw self::refuse('document', "An enum in the body schema of $where must be a list of at most ".self::MAXIMUM_ENUM_VALUES.' strings, numbers or booleans.');
+            }
+            $node['enum'] = $values;
+        }
+        if (($node['type'] ?? null) === 'string' && is_int($schema['maxLength'] ?? null) && $schema['maxLength'] >= 0) {
+            $node['max_length'] = min($schema['maxLength'], 1048576);
+        }
+        if (($node['type'] ?? null) === 'array' && isset($schema['items'])) {
+            $node['items'] = self::node($document, $schema['items'], $depth + 1, $nodes, $where);
+        }
+        if (($node['type'] ?? null) === 'object' || (! isset($node['type']) && isset($schema['properties']))) {
+            $node['type'] = 'object';
+            $properties = $schema['properties'] ?? [];
+            if (! is_array($properties) || ($properties !== [] && array_is_list($properties)) || count($properties) > self::MAXIMUM_PROPERTIES) {
+                throw self::refuse('document', "An object in the body schema of $where must have at most ".self::MAXIMUM_PROPERTIES.' properties.');
+            }
+            $compiled = [];
+            foreach ($properties as $name => $property) {
+                $name = (string) $name;
+                if (! preg_match('/^[A-Za-z0-9_.@$-]{1,64}$/', $name)) {
+                    throw self::refuse('document', "The property name $name in the body schema of $where is not supported.");
+                }
+                $compiled[$name] = self::node($document, $property, $depth + 1, $nodes, $where);
+            }
+            $required = array_values(array_filter($schema['required'] ?? [], fn ($name): bool => is_string($name) && isset($compiled[$name])));
+            sort($required);
+            $node['properties'] = $compiled === [] ? (object) [] : $compiled;
+            $node['required'] = $required;
+            $node['closed'] = ($schema['additionalProperties'] ?? true) === false;
+        }
+
+        return $node;
     }
 
     private static function basePath(mixed $value): string
@@ -180,13 +294,13 @@ final class ApiSchemaData
                 throw self::refuse('document', "A parameter of $path needs a name and a location (in).");
             }
             $location = $parameter['in'];
-            if ($location === 'cookie') {
-                continue;
-            }
-            if (! in_array($location, ['query', 'header', 'path'], true)) {
+            if (! in_array($location, ['query', 'header', 'path', 'cookie'], true)) {
                 throw self::refuse('document', "The parameter {$parameter['name']} of $path has an unknown location.");
             }
             $name = $location === 'header' ? strtolower($parameter['name']) : $parameter['name'];
+            if ($location === 'cookie' && ! preg_match('/^[A-Za-z0-9_.-]{1,64}$/', $name)) {
+                throw self::refuse('document', "The cookie name {$parameter['name']} of $path is not supported.");
+            }
             if (! preg_match('/^[A-Za-z0-9_.\[\]-]{1,64}$/', $name)) {
                 throw self::refuse('document', "The parameter name {$parameter['name']} of $path is not supported.");
             }

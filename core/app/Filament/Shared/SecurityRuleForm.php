@@ -52,7 +52,7 @@ final class SecurityRuleForm
         'attack_score_rce' => 'The same 1 to 99 score counting only command injection signs.',
         'prompt_injection_score' => '1 (two or more known injection phrases), 29 (one phrase), or 99 (none), from fixed phrase patterns on the prompt of your AI endpoints. Pattern based: it does not understand the prompt.',
         'prompt_pii' => 'Whether the prompt holds an email address, payment card number, IBAN, or US social security number.',
-        'schema_violation' => 'How the request differs from the API schema: an unknown path, a method the path does not allow, a missing or wrongly typed parameter, or a JSON body over the limit.',
+        'schema_violation' => 'How the request differs from the API schema: an unknown path, a method the path does not allow, a missing or wrongly typed parameter or cookie, a JSON body over the limit, or a JSON body that does not fit its schema.',
         'client_ip_list' => 'Whether the visitor\'s address is inside one of the networks of a list of this domain. Operators: is on, is not on.',
         'leaked_password' => 'Whether the password sent to one of the login paths is in the list of known leaked passwords.',
     ];
@@ -61,7 +61,7 @@ final class SecurityRuleForm
     private static function violationOptions(): array
     {
         return ['any' => 'Any violation', 'none' => 'No violation', 'unknown_path' => 'Unknown path', 'wrong_method' => 'Wrong method', 'missing_parameter' => 'Missing parameter',
-            'invalid_parameter' => 'Wrongly typed parameter', 'body_too_large' => 'JSON body too large'];
+            'invalid_parameter' => 'Wrongly typed parameter', 'body_too_large' => 'JSON body too large', 'invalid_body' => 'Invalid JSON body', 'unknown_field' => 'Unknown body field'];
     }
 
     /**

@@ -127,4 +127,61 @@ class ApiSchemaTest extends TestCase
         $domain->securityRules()->delete();
         $this->actingAs($user)->deleteJson($url)->assertAccepted();
     }
+
+    public function test_a_json_body_schema_is_compiled_into_a_bounded_tree_and_cookie_parameters_are_kept(): void
+    {
+        $document = $this->document(['components' => ['schemas' => ['Line' => ['type' => 'object', 'required' => ['id'], 'properties' => ['id' => ['type' => 'integer']]]]],
+            'paths' => ['/orders' => ['post' => [
+                'parameters' => [['name' => 'session', 'in' => 'cookie', 'required' => true, 'schema' => ['type' => 'string']]],
+                'requestBody' => ['required' => true, 'content' => ['application/json' => ['schema' => ['type' => 'object', 'required' => ['sku', 'ghost'], 'additionalProperties' => false,
+                    'properties' => ['sku' => ['type' => 'string', 'maxLength' => 12], 'kind' => ['type' => 'string', 'enum' => ['pickup', 'delivery']],
+                        'lines' => ['type' => 'array', 'items' => ['$ref' => '#/components/schemas/Line']], 'any' => ['oneOf' => [['type' => 'string']]]]]]]],
+            ]]]]);
+        $table = ApiSchemaData::validate(['document' => $document]);
+        $operation = $table['operations'][0];
+        $this->assertSame([['name' => 'session', 'in' => 'cookie', 'required' => true, 'type' => 'string']], $operation['parameters']);
+        $this->assertTrue($operation['body']['required']);
+        $schema = $operation['body']['schema'];
+        $this->assertSame(['sku'], $schema['required'], 'a required name that is not a property is dropped');
+        $this->assertTrue($schema['closed']);
+        $this->assertSame(['pickup', 'delivery'], $schema['properties']['kind']['enum']);
+        $this->assertSame(12, $schema['properties']['sku']['max_length']);
+        $this->assertSame(['id'], $schema['properties']['lines']['items']['required']);
+        $this->assertSame([], (array) $schema['properties']['any'], 'a combinator accepts any value');
+        $this->assertFalse(isset($operation['body']['nodes']));
+    }
+
+    public function test_body_schemas_that_are_too_deep_recursive_wide_or_external_are_refused(): void
+    {
+        $deep = ['type' => 'string'];
+        for ($level = 0; $level < ApiSchemaData::MAXIMUM_BODY_DEPTH + 1; $level++) {
+            $deep = ['type' => 'object', 'properties' => ['a' => $deep]];
+        }
+        $wide = ['type' => 'object', 'properties' => array_combine(array_map(fn ($i) => "f$i", range(1, ApiSchemaData::MAXIMUM_PROPERTIES + 1)), array_fill(0, ApiSchemaData::MAXIMUM_PROPERTIES + 1, ['type' => 'string']))];
+        $cases = [
+            'nested' => [$deep, []],
+            'recursive' => [['$ref' => '#/components/schemas/Node'], ['schemas' => ['Node' => ['type' => 'object', 'properties' => ['next' => ['$ref' => '#/components/schemas/Node']]]]]],
+            'wide' => [$wide, []],
+            'external' => [['$ref' => 'https://example.test/schema.json'], []],
+            'enum' => [['type' => 'string', 'enum' => array_map('strval', range(1, ApiSchemaData::MAXIMUM_ENUM_VALUES + 1))], []],
+            'odd name' => [['type' => 'object', 'properties' => ['a b' => ['type' => 'string']]], []],
+        ];
+        foreach ($cases as $label => [$schema, $components]) {
+            $document = $this->document(['components' => $components, 'paths' => ['/orders' => ['post' => ['requestBody' => ['content' => ['application/json' => ['schema' => $schema]]]]]]]);
+            try {
+                ApiSchemaData::validate(['document' => $document]);
+                $this->fail("$label was accepted");
+            } catch (\Illuminate\Validation\ValidationException $exception) {
+                $this->assertArrayHasKey('document', $exception->errors(), $label);
+            }
+        }
+    }
+
+    public function test_the_body_violations_are_rule_values_and_event_reasons(): void
+    {
+        $this->assertContains('invalid_body', ApiSchemaData::VIOLATIONS);
+        $this->assertContains('unknown_field', \App\Support\SecurityRuleData::SCHEMA_VIOLATIONS);
+        $this->assertContains('schema_invalid_body', SecurityConfig::reasonCodes());
+        $this->assertContains('schema_unknown_field', SecurityConfig::reasonCodes());
+    }
 }

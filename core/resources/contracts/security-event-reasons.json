@@ -55,6 +55,8 @@
     "schema_missing_parameter",
     "schema_invalid_parameter",
     "schema_body_too_large",
+    "schema_invalid_body",
+    "schema_unknown_field",
     "client_temporarily_blocked"
   ],
   "non_escalating": [
@@ -93,6 +95,8 @@
     "schema_wrong_method",
     "schema_missing_parameter",
     "schema_invalid_parameter",
-    "schema_body_too_large"
+    "schema_body_too_large",
+    "schema_invalid_body",
+    "schema_unknown_field"
   ]
 }
