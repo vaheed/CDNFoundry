@@ -873,9 +873,15 @@ new rule options.
 | Built | Sliding windows, cookie, query-argument, ASN, country and two-part keys, 1 hour and 24 hour periods, outcome counting by response status in the log phase, a shared scope that divides the threshold by `cells_serving`, `Retry-After` and a JSON 429 body, the typed validation and the rule sheet fields. |
 | Real-cell run | `rate_limit_semantics.py` passed: steady traffic within 5%, a boundary burst held to 100 of 200 by the sliding window (the fixed window let 200 through), 5,000 failed logins from many addresses stopped with at most 6 reaching the origin for one address (1,200 in all), and three cells at threshold 300 admitted 300 when balanced in `shared` mode, 100 when all traffic hit one cell, and 900 in `per_cell` mode. `rate_limit_isolation.py`, `rate_limit_exhaustion.py` (2 of 60 allowed after exhaustion) and `ipv6_rate_limit_keys.py` passed. |
 | Browser | `specs/firewall-rules.spec.ts`: 44 passed in light and dark at desktop and phone width, with the new rate-limit option specs. |
-| Not done | Control-plane aggregation of 1 hour and 24 hour windows into client-key mitigations (the 5-minute acceptance item), and the replayed-abuse run with a successful login from the same NAT address. |
+| Long windows | `shared` rules of 1 hour and 24 hours are added up by the control plane from heartbeat reports (`cdnf:rate-limits:aggregate`, every minute) and returned as client-key mitigations through the agent. `rate_limit_long_window.py` on three real cells: 40 requests on each of three cells (120 in all, threshold 90, cell count 1) were admitted until the mitigation arrived, then refused on all three while another client was not; a restarted cell was given the mitigations again; a mitigation ended by the cell's clock; an older version and malformed commands were refused; 60 heavy clients reported 50 keys. `LongWindowRateLimitsTest` covers the heartbeat intake, the aggregation, the bounds and delivery to the serving edges only; Go tests cover the agent. The chain is one heartbeat, one minute of aggregation and a 30 second delivery cycle, so the 5-minute bound holds by construction; it was not timed through a full control plane with real edges. |
+| Credential stuffing | 500 successful logins from one NAT address were never counted, and 5 failures from it were then blocked (`rate_limit_semantics.py`). |
+| Not done | Browser tests cover the rule options (rate-limit sheet); no UI was added for the aggregation. A timed run of the long-window chain through the full development stack is not recorded. |
 
-Phase 6 is not complete: the long-window mitigation item is open.
+Phase 6 is complete within the limits stated in the security guide: counts are per cell, `shared` is an approximation, and long-window aggregation adds mitigations only.
+
+| Implementation | Documentation | Automated/runtime | Browser |
+| --- | --- | --- | --- |
+| Complete | Complete (windows, keys, outcome counting, shared scope, long windows with error bounds) | Complete: semantics, isolation, exhaustion, IPv6 keys, long-window e2e, PHP and Go tests | 44 passed (`firewall-rules.spec.ts`) |
 
 ---
 

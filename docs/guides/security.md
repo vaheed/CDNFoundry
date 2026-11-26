@@ -404,10 +404,31 @@ does not divide evenly can admit up to one extra request per cell. The 120% boun
 measured only on balanced traffic and a threshold of 300; a small threshold divided
 over many cells is dominated by this rounding, so check it before relying on it.
 
-**Not delivered: control-plane aggregation of long windows.** The 1 hour and 24
-hour periods are counted per cell, like every other period. The control plane does
-not yet add up cells' counts of those periods from heartbeats and send back
-client-key mitigations, so a long-window rule enforces each cell's own share only.
+**Long windows across cells.** A `shared` rule with a period of 1 hour or 24 hours
+is also added up by the control plane, so a stale cell count or a placement change
+cannot let every cell admit the whole threshold for hours. Each cell lists the
+heaviest keys of its current window in its status (the hash of the key, never the
+client value; at most 50 keys, and only keys at 5% of the threshold or more). The
+edge agent sends them with its heartbeat, `cdnf:rate-limits:aggregate` adds up the
+latest count of every cell each minute, and a key whose total reaches the threshold
+becomes a mitigation. The agent fetches the mitigations of the domains its edge
+serves every 30 seconds and gives each cell the keys with the time they have left;
+the cell sets the same marker it sets for a key over its own threshold, so the rule's
+action applies until it ends by the cell's own clock. A cell that restarts reports no
+version and is given them again.
+
+The bounds, measured on three real cells with a threshold of 90 and a cell count of 1
+(each cell admitting the whole threshold): 40 requests on each cell, 120 in all, were
+admitted on every cell until a mitigation arrived, after which the key was refused on
+all three while another client was not; 60 heavy clients reported 50 keys, heaviest
+first. A key is caught within 5 minutes of crossing the threshold across cells (one
+heartbeat, one minute of aggregation, one 30 second delivery cycle). Counts of a window
+that has ended are not carried into the next, `per_cell` rules and periods under 1
+hour are not aggregated, a domain holds at most 100 such mitigations and an edge is
+given at most 500, and a key under 5% of the threshold on every cell is never reported.
+This adds mitigations only; it does not make the count exact and it never waits on a
+request. The hash is the MD5 of the client key, which is not secret for an IPv4
+address.
 
 #### How exact the count is
 

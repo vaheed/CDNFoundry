@@ -397,8 +397,15 @@ are counted; the action applies once one client goes over the limit.
 The action is `block` (429 with `Retry-After`, and a JSON body for a client that does not ask for HTML), `challenge`, or `log`.
 Counts are **per cell**: there is no exact count across locations. A fixed window can admit nearly twice the threshold around a
 boundary; a sliding window holds it within 10%. In `shared` scope each cell enforces the threshold divided by the number of
-cells serving the domain, rounded up. Periods of 1 hour and 24 hours are counted per cell; the control plane does not aggregate
-them across cells. [Security guide: rate-limit rules](../guides/security.md#rate-limit-rules) states each error bound with its
+cells serving the domain, rounded up. Rules of the `shared` scope with a period of 1 hour or 24 hours are also added up by the
+control plane: each cell reports the heaviest keys of its current window (a hash, at most 50 keys a cell, only keys at 5% of the
+threshold or more), the control plane adds the latest count of every cell, and a key whose total reaches the threshold is blocked
+on every cell serving the domain for the rule's duration. This only adds mitigations and never delays a request, and it corrects a
+stale cell count. It does not make the count exact: a key is caught about one heartbeat, one minute of aggregation and one
+delivery cycle (30 seconds) late, within 5 minutes, counts of a window that has ended are not carried into the next, a domain
+holds at most 100 such mitigations, and a key under 5% of the threshold on every cell is not reported. The hash is the MD5 of the
+client key, which for an IPv4 address is not secret; it keeps the address out of the report, not out of reach of someone who tries
+every address. [Security guide: rate-limit rules](../guides/security.md#rate-limit-rules) states each error bound with its
 measurement. A rate-limit rule may have no conditions, and then counts every request of the domain. A domain has up to 20
 rate-limit rules by default (never more than 50).
 
