@@ -958,6 +958,16 @@ the token and key design, included in Phase 11.
 | --- | --- | --- | --- |
 | Local challenge present; portability/rotation open | Key/failure/accessibility contract open | Cross-cell/rotation/clean-client matrix open | Challenge mobile/visual/accessibility gate open |
 
+**Execution record, 26 November 2026** (development host; stage 1 only, work in progress).
+
+| Item | Result |
+| --- | --- |
+| Built | Pool-wide challenge keys issued by the control plane (one signing key, one verifying key during a 2 hour overlap), scheduled rotation after 30 days, administrator rotate and revoke endpoints, keys sealed to each edge's identity key and fetched by the edge agent, key verification and expiry by the cell's own clock, a per-token request budget with the reason `challenge_token_limited`. |
+| Tests run | `ChallengeKeysTest` (7), the full PHP suite, PHPStan, Pint, Go tests in `edge-agent`, `tests/e2e/challenge_keys.py` (portability between cells, rotation without re-challenge, revocation, expiry, prefix and browser-family binding, token budget, malformed sets, no secret in responses or logs) and `challenge_binding.py` passed on real cells. |
+| Not done | A two-edge e2e across PoPs through the real agent and control plane, API/mobile/accessibility qualification and solve-time p95, browser tests of the challenge page, and stage 3 (bot signals). |
+
+Phase 7 is not complete.
+
 ---
 
 ## Phase 8: Client reputation and shared threat intelligence
