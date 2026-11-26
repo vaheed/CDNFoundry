@@ -202,6 +202,19 @@ local function security_reject(status, reason)
     ngx.var.cdn_security_reason = reason
     ngx.var.cdn_security_action = "block"
     local body = ngx.ctx.reject_body
+    local retry_after = status == 429 and tonumber(ngx.ctx.retry_after) or nil
+    if retry_after then
+        ngx.header["Retry-After"] = tostring(math.max(1, math.ceil(retry_after)))
+        -- A client that does not ask for HTML (an API client, a script) gets the reason in a form it can read.
+        local accept = ngx.var.http_accept or ""
+        if not body and not accept:find("text/html", 1, true) then
+            ngx.status = 429
+            ngx.header["Content-Type"] = "application/json"
+            ngx.header["Cache-Control"] = "no-store"
+            ngx.print('{"error":"rate_limited","message":"Too many requests.","retry_after":' .. tostring(math.max(1, math.ceil(retry_after))) .. '}')
+            return ngx.exit(ngx.HTTP_OK)
+        end
+    end
     if body then
         -- A rejection that explains itself, such as the incident challenge page: the status is the rejection's own.
         ngx.status = status
@@ -1458,20 +1471,59 @@ local function condition_matches(condition, request)
     return false
 end
 
--- Rate-limit rules count the requests that match a rule by a key, per cell, in fixed windows. A key over its threshold is
--- mitigated for the rule's duration without counting further, and is released when the duration ends.
-local RATE_PERIODS = {[10] = true, [60] = true, [600] = true}
+-- Rate-limit rules count the requests that match a rule by a key, per cell. A key over its threshold is mitigated for the rule's
+-- duration without counting further, and is released when the duration ends.
+--
+-- A window is fixed (the count restarts at each period boundary) or sliding (the count of the previous period, weighted by how much of
+-- it still lies inside the last period, is added to the current one). A rule can count requests or only the responses with chosen
+-- statuses, which are counted when the response is finished. In `shared` scope each cell holds the threshold divided by the number of
+-- cells serving the domain. Counting is always local to the cell: no request waits for another cell.
+local RATE = {}
+local RATE_PERIODS = {[10] = true, [60] = true, [600] = true, [3600] = true, [86400] = true}
+RATE.CLASSES = 5
+RATE.NAME_PATTERN = "^[%w!#$%%&'*+.^_`|~-]+$"
+
+function RATE.cookie_value(header, name)
+    if type(header) ~= "string" or name == "" then return nil end
+    local count = 0
+    for pair in header:sub(1, 8192):gmatch("[^;]+") do
+        count = count + 1
+        if count > 100 then break end
+        local key, value = pair:match("^%s*([^=%s]+)=(.*)$")
+        if key == name then return value end
+    end
+    return nil
+end
+
+-- The value of one key part for this request, or nil when the request has none.
+function RATE.rate_key_part(kind, name, request)
+    if kind == "client_ip" then return request.client_key end
+    if kind == "client_ip_path" then return tostring(request.client_key) .. "|" .. tostring(request.path) end
+    if kind == "asn" then return "asn:" .. tostring(request.asn or 0) end
+    if kind == "country" then return "cc:" .. tostring(request.country or "unknown") end
+    if type(name) ~= "string" or #name > 64 or not name:find(RATE.NAME_PATTERN) then return nil end
+    if kind == "header" then return header_value(request, name:lower()) end
+    if kind == "cookie" then return RATE.cookie_value(request.cookie_header, name) end
+    if kind == "query_arg" then
+        local value = ngx.var["arg_" .. name]
+        if type(value) == "string" then return value end
+        return nil
+    end
+    return nil
+end
 
 local function rate_key_value(limit, request)
-    if limit.key == "client_ip" then return request.client_key end
-    if limit.key == "client_ip_path" then return tostring(request.client_key) .. "|" .. tostring(request.path) end
-    if limit.key == "header" then return header_value(request, tostring(limit.header_name or ""):lower()) end
-    return nil
+    local first = RATE.rate_key_part(limit.key, limit.key_name or limit.header_name, request)
+    if first == nil or first == "" then return nil end
+    if limit.second_key == nil then return first end
+    local second = RATE.rate_key_part(limit.second_key, limit.second_name, request)
+    if second == nil or second == "" then return nil end
+    return tostring(first) .. "\0" .. tostring(second)
 end
 
 -- Counters take 70% of a domain's share of rate_rules and mitigation markers 20%, so a flood of new client keys
 -- can never crowd out the marker that keeps an already mitigated client blocked. An entry lives for two windows, and counters
--- come in three window lengths and markers in four length classes.
+-- come in five window lengths and markers in four length classes.
 -- The last tenth is reserved for the overflow counters below: one entry per rule and window, so it never grows with key cardinality.
 local RATE_COUNTER_FRACTION, RATE_MARKER_FRACTION = 0.70, 0.20
 local MARKER_WIDTHS = {60, 600, 3600, 86400}
@@ -1495,33 +1547,47 @@ local function rate_overflow_exceeded(dictionary, domain, rule, threshold, perio
     return count > threshold
 end
 
-local function rate_limit_exceeded(config, rule, limit)
-    local dictionary = ngx.shared.rate_rules
-    local value = dictionary and rate_key_value(limit, ngx.ctx.rate_request)
-    if not value or value == "" then return false end
-    local threshold, period, duration = tonumber(limit.threshold), tonumber(limit.period_seconds), tonumber(limit.duration_seconds)
-    if not threshold or threshold < 1 or not RATE_PERIODS[period] or not duration or duration < 10 or duration > 86400 then return false end
+-- The threshold this cell enforces: the rule's own, or in shared scope its share of it among the cells serving the domain.
+function RATE.effective_threshold(config, limit)
+    local threshold = tonumber(limit.threshold)
+    if not threshold then return nil end
+    if limit.scope == "shared" then
+        local security = config.security or {}
+        local cells = math.max(1, math.floor(tonumber(security.cells_serving) or 1))
+        threshold = math.max(1, math.ceil(threshold / cells))
+    end
+    return threshold
+end
+
+-- Counts one request (or one counted response) for a key and returns whether the key is now over its threshold, with the seconds
+-- the mitigation lasts. `id` names the key; the share and the counters are the domain's.
+function RATE.rate_count(dictionary, config, rule, limit, id, threshold, period, duration)
     local domain = tostring(config.domain_id or config.domain)
-    local id = domain .. ":" .. tostring(rule.id) .. ":" .. ngx.md5(tostring(value))
-    if dictionary:get("m:" .. id) then return true end
-    local counter = "c:" .. id .. ":" .. math.floor(ngx.time() / period)
+    local now = ngx.time()
+    local window = math.floor(now / period)
+    local counter = "c:" .. id .. ":" .. window
     local share = domain_budget.share(dictionary, hosts_on_cell())
     -- A client key the domain has not counted yet takes one entry of the domain's own share. Beyond the share, or when the
     -- dictionary cannot allocate, the key is counted in the rule's single overflow counter instead, so a flood of new keys
     -- cannot step outside the rule: all untracked keys together are held to the rule's threshold for the window.
     local overflow = false
     if not dictionary:get(counter) then
-        local limit_per_window = math.max(1, math.floor(share * RATE_COUNTER_FRACTION / (2 * 3)))
+        local limit_per_window = math.max(1, math.floor(share * RATE_COUNTER_FRACTION / (2 * RATE.CLASSES)))
         local admitted, used = domain_budget.admit(dictionary, domain, "c" .. period, period, limit_per_window)
         if not admitted then
             if used == limit_per_window + 1 then record_security_event("rate_limit_state_full") end
             overflow = true
         end
     end
-    if overflow then return rate_overflow_exceeded(dictionary, domain, rule, threshold, period) end
+    if overflow then return rate_overflow_exceeded(dictionary, domain, rule, threshold, period), duration end
     local count = dictionary:incr(counter, 1, 0, period * 2)
-    if not count then return rate_overflow_exceeded(dictionary, domain, rule, threshold, period) end
-    if count > threshold then
+    if not count then return rate_overflow_exceeded(dictionary, domain, rule, threshold, period), duration end
+    local estimate = count
+    if limit.window == "sliding" then
+        local previous = dictionary:get("c:" .. id .. ":" .. (window - 1)) or 0
+        estimate = count + previous * (1 - (now % period) / period)
+    end
+    if estimate > threshold then
         -- The mitigation keeps its own share. When that is used up, the counter stays over its threshold, so the client is still
         -- blocked until the window ends; it is not released early and it evicts nothing.
         local width = marker_width(duration)
@@ -1531,9 +1597,59 @@ local function rate_limit_exceeded(config, rule, limit)
             dictionary:set("m:" .. id, true, duration)
             dictionary:delete(counter)
         end
-        return true
+        return true, duration
     end
     return false
+end
+
+-- The statuses a rule counts, as a set, or nil when it counts every matching request.
+function RATE.counted_statuses(limit)
+    local list = limit.count_statuses
+    if type(list) ~= "table" or #list == 0 then return nil end
+    local set = {}
+    for index, status in ipairs(list) do
+        if index > 10 then break end
+        set[tonumber(status)] = true
+    end
+    return set
+end
+
+-- Whether the key of this request is over the rule's threshold, and for how many more seconds it stays mitigated. A rule that counts
+-- outcomes only looks at the mitigation here and registers the request to be counted when its response is finished.
+local function rate_limit_exceeded(config, rule, limit)
+    local dictionary = ngx.shared.rate_rules
+    local value = dictionary and rate_key_value(limit, ngx.ctx.rate_request)
+    if not value or value == "" then return false end
+    local period, duration = tonumber(limit.period_seconds), tonumber(limit.duration_seconds)
+    local threshold = RATE.effective_threshold(config, limit)
+    if not threshold or threshold < 1 or not RATE_PERIODS[period] or not duration or duration < 10 or duration > 86400 then return false end
+    local domain = tostring(config.domain_id or config.domain)
+    local id = domain .. ":" .. tostring(rule.id) .. ":" .. ngx.md5(tostring(value))
+    if dictionary:get("m:" .. id) then
+        local left = dictionary.ttl and dictionary:ttl("m:" .. id)
+        return true, left and left > 0 and math.ceil(left) or duration
+    end
+    local statuses = RATE.counted_statuses(limit)
+    if statuses then
+        local pending = ngx.ctx.outcome_rules
+        if not pending then pending = {}; ngx.ctx.outcome_rules = pending end
+        if #pending < 20 then pending[#pending + 1] = {config = config, rule = rule, limit = limit, id = id, statuses = statuses, threshold = threshold, period = period, duration = duration} end
+        return false
+    end
+    return RATE.rate_count(dictionary, config, rule, limit, id, threshold, period, duration)
+end
+
+-- Run when a response is finished: the outcome rules that matched this request count it if its status is one they count.
+function RATE.count_outcomes()
+    local pending = ngx.ctx.outcome_rules
+    if not pending then return end
+    local dictionary = ngx.shared.rate_rules
+    local status = tonumber(ngx.status) or 0
+    for _, entry in ipairs(pending) do
+        if dictionary and entry.statuses[status] then
+            RATE.rate_count(dictionary, entry.config, entry.rule, entry.limit, entry.id, entry.threshold, entry.period, entry.duration)
+        end
+    end
 end
 
 -- The rules a cell runs for a domain: the platform rulesets first, then the domain's own rules. The joined list is built once
@@ -2269,10 +2385,17 @@ function M.access()
         ngx.ctx.rate_request = request
         for index, rule in ipairs(rules) do
             if index > 1000 then break end
-            if type(rule.rate_limit) == "table" and rule_in_force(rule, now) and rule_matches(rule, request) and rate_limit_exceeded(config, rule, rule.rate_limit) then
+            local limited, retry_after
+            if type(rule.rate_limit) == "table" and rule_in_force(rule, now) and rule_matches(rule, request) then
+                limited, retry_after = rate_limit_exceeded(config, rule, rule.rate_limit)
+            end
+            if limited then
                 if rule.mode == "shadow" then
                     if rule.action == "block" or rule.action == "challenge" then shadow_match(rule) end
-                elseif rule.action == "block" then ngx.var.cdn_security_rule = rule_ref(rule); return security_reject(429, rule.platform and "platform_rule_rate_limited" or "custom_rule_rate_limited")
+                elseif rule.action == "block" then
+                    ngx.var.cdn_security_rule = rule_ref(rule)
+                    ngx.ctx.retry_after = retry_after
+                    return security_reject(429, rule.platform and "platform_rule_rate_limited" or "custom_rule_rate_limited")
                 elseif rule.action == "challenge" and not rule_challenge then rule_challenge = rule
                 elseif rule.action == "log" then ngx.var.cdn_security_rule = rule_ref(rule); record_security_event(rule.platform and "platform_rule_rate_limited" or "custom_rule_rate_limited") end
             end
@@ -2747,6 +2870,7 @@ end
 
 function M.finish()
     record_waf_outcome()
+    RATE.count_outcomes()
     local client_key = ngx.var.cdn_security_client_connection_key
     if client_key and client_key ~= "" then
         local current = ngx.shared.traffic_limits:incr(client_key, -1, 0)
