@@ -2647,24 +2647,6 @@ parameters:
 			path: app/Support/PlatformRulesets.php
 
 		-
-			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,Illuminate\\Database\\Eloquent\\Model\>\:\:map\(\) contains unresolvable type\.$#'
-			identifier: argument.unresolvableType
-			count: 1
-			path: app/Support/PlatformRulesets.php
-
-		-
-			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,Illuminate\\Database\\Eloquent\\Model\>\:\:map\(\) expects callable\(Illuminate\\Database\\Eloquent\\Model, int\)\: array\{id\: lowercase\-string&non\-falsy\-string, ruleset\: string, name\: string\|null, conditions\: mixed, rate_limit\: mixed, action\: string, priority\: int\}, Closure\(App\\Models\\PlatformRulesetRule\)\: array\{id\: lowercase\-string&non\-falsy\-string, ruleset\: string, name\: string\|null, conditions\: mixed, rate_limit\: mixed, action\: string, priority\: int\} given\.$#'
-			identifier: argument.type
-			count: 1
-			path: app/Support/PlatformRulesets.php
-
-		-
-			message: '#^Parameter \#1 \$callback of method Illuminate\\Support\\Collection\<int,App\\Models\\PlatformRuleset\>\:\:flatMap\(\) contains unresolvable type\.$#'
-			identifier: argument.unresolvableType
-			count: 1
-			path: app/Support/PlatformRulesets.php
-
-		-
 			message: '#^Access to an undefined property App\\Models\\SystemSetting\:\:\$values\.$#'
 			identifier: property.notFound
 			count: 6

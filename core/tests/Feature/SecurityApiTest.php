@@ -256,6 +256,24 @@ class SecurityApiTest extends TestCase
         $this->assertSame(100, $domain->securityRules()->count());
     }
 
+    public function test_a_rollback_restores_a_rule_in_shadow_mode_and_with_its_expiry(): void
+    {
+        [$user, $domain] = $this->ownedDomain();
+        $expires = now()->addHours(3)->startOfSecond();
+        $shadow = $this->ruleBody('client_ip', '192.0.2.1', 'block', 10) + ['mode' => 'shadow', 'expires_at' => $expires->toIso8601String()];
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules/import", ['replace_existing' => true, 'rules' => [$shadow]])->assertAccepted();
+        (new ReconcileEdgeDomain($domain->id))->handle();
+        $revision = $domain->refresh()->revision;
+
+        $this->actingAs($user)->deleteJson("/api/domains/{$domain->id}/security/rules/".$domain->securityRules()->firstOrFail()->id)->assertAccepted();
+        $this->assertSame(0, $domain->securityRules()->count());
+        $this->actingAs($user)->postJson("/api/domains/{$domain->id}/rollback", ['revision' => $revision])->assertAccepted();
+
+        $restored = $domain->securityRules()->firstOrFail();
+        $this->assertSame('shadow', $restored->mode, 'a rollback must not turn a shadow rule into an enforcing one');
+        $this->assertSame($expires->getTimestamp(), $restored->expires_at->getTimestamp());
+    }
+
     public function test_admin_quarantine_recovery_and_failed_target_preserve_active_placement(): void
     {
         Queue::fake();

@@ -106,7 +106,7 @@ class SecurityController extends Controller
         $duplicate = $domain->securityRules()->where('fingerprint', $data['fingerprint'])->value('id');
 
         return response()->json(['data' => [
-            'rule' => Arr::only($data, ['name', 'conditions', 'rate_limit', 'action', 'priority', 'enabled', 'note']),
+            'rule' => Arr::only($data, ['name', 'conditions', 'rate_limit', 'action', 'priority', 'enabled', 'mode', 'expires_at', 'note']),
             'position' => $data['enabled'] ? $position : null, 'duplicate_of' => $duplicate,
             'rules_in_use' => $domain->securityRules()->count(), 'maximum_rules' => config('security.maximum_rules_per_domain'),
         ]]);

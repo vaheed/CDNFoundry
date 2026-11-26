@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\Domain;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -186,9 +187,16 @@ final class SecurityConfig
             'api_schema' => ApiSchemaData::forEdge($domain->api_schema),
             'client_security' => ClientSecurityData::forEdge($domain->client_security),
             'platform_rules' => PlatformRulesets::forDomain($domain),
-            'rules' => $domain->securityRules()->where('enabled', true)->orderBy('priority')->orderBy('id')
-                ->get(['id', 'name', 'preset', 'conditions', 'rate_limit', 'action', 'priority'])->toArray(),
+            'rules' => self::withUnixExpiry($domain->securityRules()->where('enabled', true)->orderBy('priority')->orderBy('id')
+                ->get(['id', 'name', 'preset', 'conditions', 'rate_limit', 'action', 'priority', 'mode', 'expires_at'])
+                ->toArray()),
         ];
+    }
+
+    /** Rules as the cell reads them: the expiry is a Unix time, so the cell compares it with its own clock without parsing dates. */
+    public static function withUnixExpiry(array $rules): array
+    {
+        return array_map(fn (array $rule): array => [...$rule, 'expires_at' => isset($rule['expires_at']) ? CarbonImmutable::parse($rule['expires_at'])->getTimestamp() : null], $rules);
     }
 
     /**

@@ -5,13 +5,17 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * @property string $mode
+ * @property ?\Carbon\CarbonInterface $expires_at
+ */
 class SecurityRule extends Model
 {
     protected $guarded = [];
 
     protected function casts(): array
     {
-        return ['enabled' => 'boolean', 'conditions' => 'array', 'rate_limit' => 'array'];
+        return ['enabled' => 'boolean', 'conditions' => 'array', 'rate_limit' => 'array', 'expires_at' => 'datetime'];
     }
 
     public function domain(): BelongsTo

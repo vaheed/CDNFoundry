@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\Domain;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -29,6 +30,11 @@ final class SecurityRuleData
     public const RATE_ACTIONS = ['block', 'challenge', 'log'];
 
     public const RATE_LIMIT_RULES_CEILING = 50;
+
+    /** A shadow rule is evaluated and recorded as would_block or would_challenge, and never acts. Only these actions have a would-be effect. */
+    public const MODES = ['enforce' => 'Enforce', 'shadow' => 'Shadow'];
+
+    public const SHADOW_ACTIONS = ['block', 'challenge'];
 
     public const HTTP_METHODS = ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'];
 
@@ -151,6 +157,8 @@ final class SecurityRuleData
             'action' => ['required', Rule::in(self::ACTIONS)],
             'priority' => ['required', 'integer', 'between:-1000000,1000000'],
             'enabled' => ['sometimes', 'boolean'],
+            'mode' => ['sometimes', Rule::in(array_keys(self::MODES))],
+            'expires_at' => ['nullable', 'date', 'after:now', 'before:+1 year'],
             'note' => ['nullable', 'string', 'max:250'],
         ])->validate();
 
@@ -160,6 +168,11 @@ final class SecurityRuleData
         }
         $data['conditions'] = $conditions;
         $data['enabled'] = (bool) ($data['enabled'] ?? true);
+        $data['mode'] = $data['mode'] ?? 'enforce';
+        if ($data['mode'] === 'shadow' && ! in_array($data['action'], self::SHADOW_ACTIONS, true)) {
+            throw ValidationException::withMessages(['mode' => 'Only a block or challenge rule can run in shadow mode.']);
+        }
+        $data['expires_at'] = isset($data['expires_at']) ? CarbonImmutable::parse($data['expires_at'])->utc()->startOfSecond() : null;
         $data['name'] = isset($data['name']) && trim($data['name']) !== '' ? trim($data['name']) : null;
         $data['rate_limit'] = $rateLimited ? self::rateLimit($data['rate_limit'], $data['action']) : null;
         $data['fingerprint'] = self::fingerprint($conditions, $data['action'], $data['rate_limit']);
@@ -179,7 +192,8 @@ final class SecurityRuleData
     public static function row(array $rule): array
     {
         return [...$rule, 'conditions' => json_encode($rule['conditions'], JSON_THROW_ON_ERROR),
-            'rate_limit' => ($rule['rate_limit'] ?? null) === null ? null : json_encode($rule['rate_limit'], JSON_THROW_ON_ERROR)];
+            'rate_limit' => ($rule['rate_limit'] ?? null) === null ? null : json_encode($rule['rate_limit'], JSON_THROW_ON_ERROR),
+            'expires_at' => ($rule['expires_at'] ?? null)?->toDateTimeString()];
     }
 
     /**

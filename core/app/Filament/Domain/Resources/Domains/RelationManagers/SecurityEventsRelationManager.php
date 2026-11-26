@@ -102,6 +102,8 @@ class SecurityEventsRelationManager extends RelationManager
             'custom_rule_rate_limited', 'platform_rule_rate_limited' => 'Rate limit exceeded',
             'custom_rule_challenge', 'platform_rule_challenge', 'challenge_required' => 'Challenge required',
             'custom_rule_log', 'platform_rule_log' => 'Rule logged the request',
+            'custom_rule_would_block', 'platform_rule_would_block' => 'Shadow rule would have blocked',
+            'custom_rule_would_challenge', 'platform_rule_would_challenge' => 'Shadow rule would have challenged',
             '' => 'Logged',
             default => ucfirst(str_replace('_', ' ', $reason)),
         };

@@ -22,11 +22,20 @@ final class PlatformRulesets
     /** The rules of every ruleset that applies to the domain, in the order a cell runs them. Rule ids carry a prefix so they never meet a domain rule's id. */
     public static function forDomain(Domain $domain): array
     {
-        return PlatformRuleset::query()->appliedTo($domain)->orderBy('id')->with(['rules' => fn ($rules) => $rules->where('enabled', true)->orderBy('priority')->orderBy('id')])->get()
-            ->flatMap(fn (PlatformRuleset $ruleset) => $ruleset->rules->map(fn (PlatformRulesetRule $rule): array => [
-                'id' => 'p'.$rule->id, 'ruleset' => $ruleset->name, 'name' => $rule->name, 'conditions' => $rule->conditions,
-                'rate_limit' => $rule->rate_limit, 'action' => $rule->action, 'priority' => $rule->priority,
-            ]))->values()->all();
+        $rules = [];
+        $rulesets = PlatformRuleset::query()->appliedTo($domain)->orderBy('id')->with(['rules' => fn ($rules) => $rules->where('enabled', true)->orderBy('priority')->orderBy('id')])->get();
+        foreach ($rulesets as $ruleset) {
+            foreach ($ruleset->rules as $rule) {
+                /** @var PlatformRulesetRule $rule */
+                $rules[] = [
+                    'id' => 'p'.$rule->id, 'ruleset' => $ruleset->name, 'name' => $rule->name, 'conditions' => $rule->conditions,
+                    'rate_limit' => $rule->rate_limit, 'action' => $rule->action, 'priority' => $rule->priority,
+                    'mode' => $rule->mode, 'expires_at' => $rule->expires_at?->getTimestamp(),
+                ];
+            }
+        }
+
+        return $rules;
     }
 
     /** What a domain owner may see: the names of the rulesets that apply, and nothing about their rules. */

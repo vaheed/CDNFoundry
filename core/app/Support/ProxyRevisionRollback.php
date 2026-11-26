@@ -9,6 +9,7 @@ use App\Models\EdgeRevision;
 use App\Models\SecurityRule;
 use App\Models\User;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
@@ -119,11 +120,14 @@ final class ProxyRevisionRollback
             'allowed_methods' => $security['allowed_methods'] ?? [], 'trusted_proxy_cidrs' => $security['trusted_proxy_cidrs'] ?? [],
             'limits' => $security['configured_limits'] ?? $security['limits'] ?? [],
         ]);
+        // A rule that had expired by the time of the revision is not brought back; one still running keeps its mode and its expiry.
+        $liveRules = array_filter($security['rules'] ?? [], fn (array $rule): bool => ! isset($rule['expires_at']) || (int) $rule['expires_at'] > time());
         $rules = array_map(function (array $rule): array {
-            $valid = SecurityRuleData::validate($rule);
+            $expiresAt = isset($rule['expires_at']) ? CarbonImmutable::createFromTimestampUTC((int) $rule['expires_at']) : null;
+            $valid = SecurityRuleData::validate(Arr::except($rule, ['expires_at']));
 
-            return SecurityRuleData::row(['preset' => in_array($rule['preset'] ?? null, [SecurityPresets::USER_AGENT, SecurityPresets::HOTLINK], true) ? $rule['preset'] : null, 'name' => $valid['name'], 'conditions' => $valid['conditions'], 'rate_limit' => $valid['rate_limit'], 'fingerprint' => $valid['fingerprint'], 'action' => $valid['action'], 'priority' => $valid['priority']]);
-        }, $security['rules'] ?? []);
+            return SecurityRuleData::row(['preset' => in_array($rule['preset'] ?? null, [SecurityPresets::USER_AGENT, SecurityPresets::HOTLINK], true) ? $rule['preset'] : null, 'name' => $valid['name'], 'conditions' => $valid['conditions'], 'rate_limit' => $valid['rate_limit'], 'fingerprint' => $valid['fingerprint'], 'action' => $valid['action'], 'priority' => $valid['priority'], 'mode' => $valid['mode'], 'expires_at' => $expiresAt]);
+        }, array_values($liveRules));
 
         $requestRules = [];
         foreach (RequestRuleData::SNAPSHOT_KEYS as $type => $key) {
