@@ -714,7 +714,6 @@ the estimate.
 
 Phase 4 is complete except for the stated limits above.
 
-
 ---
 
 ## Phase 5: Signed security datasets
@@ -777,15 +776,26 @@ size.
 | Representation | The control plane compiles a list to sorted, non-overlapping ranges: IPv4 as whole numbers, IPv6 as four 32-bit words per address. A cell answers by binary search. An earlier IPv6 form (hex strings) measured p99 28 to 575 µs and was dropped. |
 | Lookup time, 10,000 ranges | p99 1.3 to 3.1 µs (IPv4, IPv6, and both together), p50 0.7 to 1.2 µs, against the 20 µs bound. The timer overhead is subtracted; maximums of 0.4 to 1.8 ms are single outliers on a loaded host. |
 | Size and load | One list at 10,000 ranges adds 215 KB (IPv4), 614 KB (IPv6) or 414 KB (5,000 of each) of snapshot JSON, decodes and validates in 2.7, 9.1 and 6.0 ms, and holds 0.27, 1.06 and 0.66 MB per worker. Every worker holds its own copy and a cell runs at most 8 workers, so one maximum IPv6 list costs about 8.5 MB per cell. |
-| Admission limits chosen | 10,000 ranges per list, 5 lists per domain, and a per-cell budget of 200,000 ranges across all domains that the agent enforces by refusing the artifact that would exceed it (about 170 MB per cell of IPv6 ranges across 8 workers at the very worst, and 43 MB of IPv4). The cell budget is a ceiling to be confirmed by the stage 3 memory measurement on a real cell, and may be lowered by it. |
+| Admission limits chosen | 10,000 ranges per list, 5 lists per domain, and a per-cell budget across all domains that the agent enforces by refusing the artifact that would exceed it. The first estimate of 200,000 ranges was disproved by the stage 3 measurement on a real cell (73 to 92 MB per worker, so up to about 730 MB per cell) and lowered to 100,000 ranges. |
 | Refusal | The cell-side validator refuses unsorted, overlapping, odd-length, wrongly sized, negative and over-maximum lists (6 cases tested). The agent will run it before activation so a corrupt list rejects its domain's artifact and the previous state keeps serving. |
 | Justified first dataset | Named IP lists for a domain, usable from rules, because rule lists are capped at 100 values and customers need allow and deny lists in the thousands. Platform datasets (crawler ranges, a larger leaked-password corpus, the greylist) are not admitted in this increment: each needs a source, a measured benefit and a revocation rule of its own. |
 
-**Completion checkpoint, 21 November 2026.**
+**Execution record, 27 November 2026** (development host).
+
+| Stage | Result |
+| --- | --- |
+| 1. Feasibility and admission limits | Done, recorded above. |
+| 2. One typed dataset with provenance, expiry and revocation | Delivered for named IP lists: `ip_lists` (JSONB entries with a database bound of 10,000 and a name check), validation and canonical form (`IpListData`), API (`PUT`, `PATCH`, `GET`, `DELETE` under `/security/ip-lists`, idempotent, `202` only when an enabled rule uses the list), the `client_ip_list` rule field, compiled ranges in the signed snapshot only for lists an enabled rule uses, agent validation before activation, and the cell lookup. Provenance is the audit log entry of every change (who, list, entry count, revision); revocation is deleting the entry or the list, which reaches the cells as one revision; a list has no expiry of its own, the rule that uses it can expire (Phase 4). Feature tests (9) and agent tests (4, plus the full agent suite) passed. |
+| 3. Max-size lookup, memory, rotation, refusal | `ip_list_feasibility.py`: lookup p99 1.3 to 3.1 µs at 10,000 ranges. `ip_lists_cell.py` on a real cell: matching agreed with an independent reference on 600 random IPv4 and IPv6 clients for a deny list and an allow list; a changed list took effect in 0.5 s; a torn runtime file left the previous list matching; a cell with 100,000 IPv6 ranges (the cell budget, 8.1 MB of runtime file) grew each worker by about 46 MB against 64 MB allowed. Corrupt, unordered, oversized and over-budget lists are refused by the agent (14 cases tested) and the previous state keeps serving. |
+| Not delivered | Platform datasets (crawler ranges, a larger leaked-password corpus, the greylist): not admitted in this increment, each needs a source, a measured benefit and a revocation rule. Per-cell dataset versions in the heartbeat. Rotation of a list is a normal list change; there is no separate rotation mechanism. A rollback restores rules, not lists. |
+
+**Completion checkpoint, 27 November 2026.**
 
 | Implementation | Documentation | Automated/runtime | Browser |
 | --- | --- | --- | --- |
-| Dataset admission/delivery scope open | Type/budget/expiry contract open | Signature/expiry/max-size matrix open | List/version UI requires suite |
+| Named IP lists done end to end; platform datasets and heartbeat dataset versions not delivered | Current: security guide, rule reference, API reference, changelog, data model | Passed: PHP suite, agent suite, real-cell matching, change, torn-file and memory runs | Passed for the IP lists spec (3 specs in light and dark, desktop and phone, 12 passed, with accessibility checks) and the firewall rules specs (44 passed in the same run); the rest of the suite was not rerun |
+
+Phase 5 is complete for named IP lists only.
 
 ---
 

@@ -17,6 +17,7 @@ single source of truth; `make version-check` enforces it.
 
 - Custom and platform rules can run in shadow mode, recording `would_block` and `would_challenge` events without changing a response, and can carry an expiry that the cell enforces by its own clock. Rollback keeps both.
 - Rules show how many requests they matched in the last 24 hours, enforcing and shadow separately, from a new hourly ClickHouse rollup. `POST /api/domains/{id}/security/rules/estimate` estimates what a rule would have matched over the stored request fields and labels the result partial. Apply the ClickHouse migration `2026_11_26_edge_event_shadow_rule.sql` before starting updated Vector instances.
+- Named IP lists: up to 5 per domain with 10,000 addresses or networks each, managed in the panel and at `/api/domains/{id}/security/ip-lists`, and used from firewall rules with the field `client_ip_list`. Cells search compiled ranges in 1 to 3 µs at p99, and the agent refuses a corrupt or over-budget list while the previous one keeps matching.
 - Platform rulesets roll out in stages: `shadow`, then a chosen subset of domains, then all (`rollout_stage` and `enforced_domain_ids`).
 
 ### Fixed

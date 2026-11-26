@@ -159,6 +159,18 @@ Operators: `equals`, `not_equals`, `in_list`, `not_in_list`. "equals" with a net
 | Client IP equals 203.0.113.0/24 | `{"field": "client_ip", "operator": "equals", "value": "203.0.113.0/24"}` |
 | Client IP is one of 203.0.113.0/24, 2001:db8:abcd::/48 | `{"field": "client_ip", "operator": "in_list", "value": ["203.0.113.0/24", "2001:db8:abcd::/48"]}` |
 
+#### `client_ip_list`
+
+The visitor's address against a named IP list of the domain (see [IP lists](../guides/security.md#ip-lists)). The value is the
+list's name. Operators: `equals` (the visitor is on the list) and `not_equals` (the visitor is not on it). A rule whose list does not
+exist is refused when it is saved; if the list is deleted afterwards, which needs the rule to be gone first, nothing matches it.
+Platform rulesets cannot use a domain's list.
+
+| Reads as | JSON |
+| --- | --- |
+| Client IP is on list office | `{"field": "client_ip_list", "operator": "equals", "value": "office"}` |
+| Client IP is not on list office | `{"field": "client_ip_list", "operator": "not_equals", "value": "office"}` |
+
 #### `country` and `continent`
 
 From the edge's own location database, never an outside service. Countries are two-letter codes (`DE`, `IR`, `US`);
@@ -516,5 +528,7 @@ Each recipe is a complete rule. Paste the JSON into the API, or build the same c
 | One import | 500 rules | 422 |
 | The same conditions and action twice | refused | 422 |
 | A detection field without its detection | refused | 422 |
+| An IP list that does not exist | refused | 422 |
+| IP lists | 10,000 entries per list, 5 lists per domain | 422, 409 |
 
 `POST .../security/rules/preview` checks a rule, returns it normalized with the position it would take, and saves nothing.

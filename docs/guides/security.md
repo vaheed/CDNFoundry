@@ -354,6 +354,54 @@ tab. In the API they are `PUT` and `DELETE` on
 - A preset rule that you edit by hand becomes an ordinary rule, and the preset no
   longer lists it. Deleting a preset removes only its own rules.
 
+### IP lists
+
+**You need:** edit rights on the domain.
+
+An IP list is a named set of up to 10,000 IPv4 or IPv6 addresses and networks. A domain may have 5. A firewall rule tests the visitor
+against a list with the field **Client IP list** (`client_ip_list`), so an allow list, a deny list or a challenge list of thousands of
+addresses is one rule instead of a hundred-value condition.
+
+<DocTabs :labels="['Panel', 'API']">
+<template #tab-1>
+
+Open the domain, then **IP lists → Add list**. Name it (lower case letters, digits, hyphens and underscores, fixed once saved) and
+enter one address or network per line. A line that is not an address or network is named and nothing is saved. Then add a firewall rule
+with the field **Client IP list**, the operator **is on** or **is not on**, and the list.
+
+</template>
+<template #tab-2>
+
+```sh
+curl -X PUT "$CDNF_URL/api/domains/$DOMAIN_ID/security/ip-lists/office" \
+  -H "Authorization: Bearer $CDNF_TOKEN" -H "Idempotency-Key: $(uuidgen)" \
+  -H "Content-Type: application/json" \
+  -d '{"description": "Office networks", "entries": ["203.0.113.0/24", "2001:db8:abcd::/48"]}'
+
+curl -X PATCH "$CDNF_URL/api/domains/$DOMAIN_ID/security/ip-lists/office" \
+  -H "Authorization: Bearer $CDNF_TOKEN" -H "Idempotency-Key: $(uuidgen)" \
+  -H "Content-Type: application/json" \
+  -d '{"add": ["198.51.100.9"], "remove": ["203.0.113.0/24"]}'
+```
+
+`GET .../security/ip-lists` lists them and `GET .../security/ip-lists/{name}` returns the entries. `PUT` creates or replaces a list.
+`PATCH` adds and removes at most 1,000 entries at a time. `DELETE` removes a list that no rule uses (409 otherwise).
+
+</template>
+</DocTabs>
+
+**Expected result:** entries are stored as canonical networks (host bits cleared, duplicates and IPv4-mapped IPv6 addresses merged). A
+list that no enabled rule uses is only stored: it costs the edge nothing and answers `200`. A change to a list that an enabled rule uses
+is one revision and one queued update, and answers `202` with an operation ID.
+
+- The control plane compiles a list into sorted address ranges and sends it inside the domain's signed snapshot, only while an enabled
+  rule uses it. The cell searches the ranges in logarithmic time; it never downloads or parses anything.
+- The agent checks every list before it activates a snapshot. A corrupt, unordered, oversized or over-budget list rejects that
+  domain's update and the previous lists keep matching. One cell may hold 100,000 ranges across all its domains.
+- A rollback restores a rule, not a list: lists keep their current entries.
+- Measured on a development host: a lookup in a 10,000-range list takes 1 to 3 microseconds at the 99th percentile, and one such
+  list adds 0.3 to 1 MB to a worker's memory.
+
 ### Platform rulesets
 
 **You need:** an administrator account.
