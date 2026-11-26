@@ -29,6 +29,7 @@ use App\Support\ControlPlane;
 use App\Support\EdgeCertificateAuthority;
 use App\Support\EdgeKeyEnvelope;
 use App\Support\EdgeRejectionReasons;
+use App\Support\ClientReputation;
 use App\Support\LongWindowRateLimits;
 use App\Support\OriginPolicy;
 use App\Support\PlatformSettings;
@@ -293,6 +294,8 @@ class EdgeAgentController extends Controller
         ], $advisoryDropped);
         // Heavy keys of long-window shared rules, by cell. Advisory like the lists above: a malformed entry is skipped.
         $longRate = is_array($request->input('long_rate')) ? array_slice(array_values($request->input('long_rate')), 0, 32 * LongWindowRateLimits::MAXIMUM_REPORTED_KEYS) : [];
+        // Clients with the most escalating events, by cell, for domains that opted in. Advisory too; the control plane drops the rest.
+        $offenders = is_array($request->input('client_offenders')) ? array_slice(array_values($request->input('client_offenders')), 0, 32 * ClientReputation::MAXIMUM_REPORTED_CLIENTS) : [];
         if ($advisoryDropped > 0) {
             Log::warning('edge heartbeat dropped invalid advisory entries', ['edge_id' => $edge->id, 'dropped' => $advisoryDropped]);
         }
@@ -329,6 +332,9 @@ class EdgeAgentController extends Controller
         $edge->cells()->whereNotIn('name', $reportedNames)->whereNull('edge_pool_id')->update(['status' => 'stopped', 'capacity' => null]);
         foreach (collect($longRate)->filter(fn ($entry): bool => is_array($entry) && is_string($entry['cell'] ?? null) && $knownCells->has($entry['cell']))->groupBy('cell') as $cellName => $entries) {
             LongWindowRateLimits::record($edge->id, (string) $cellName, $entries->all());
+        }
+        foreach (collect($offenders)->filter(fn ($entry): bool => is_array($entry) && is_string($entry['cell'] ?? null) && $knownCells->has($entry['cell']))->groupBy('cell') as $cellName => $entries) {
+            ClientReputation::record($edge->id, (string) $cellName, $entries->all());
         }
         $computedReady = $edge->cells()->whereNotNull('edge_pool_id')->where('drained', false)->where('status', 'ready')->exists();
         $listenerReady = $data['listener_ready'] && $computedReady;

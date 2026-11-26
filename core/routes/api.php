@@ -4,6 +4,8 @@ use App\Http\Controllers\Admin\AnalyticsController as AdminAnalyticsController;
 use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\BackupController;
 use App\Http\Controllers\Admin\ChallengeKeyController;
+use App\Http\Controllers\Admin\ClientReputationController;
+use App\Http\Controllers\ClientReputationSharingController;
 use App\Http\Controllers\Admin\DnsClusterController;
 use App\Http\Controllers\Admin\DnsOperationController;
 use App\Http\Controllers\Admin\DomainUserController;
@@ -72,6 +74,8 @@ Route::middleware(['auth:sanctum', 'account.active', 'token.scope', 'throttle:ac
     Route::post('/me/tokens', [TokenController::class, 'store'])->middleware('idempotent');
     Route::delete('/me/tokens/{token}', [TokenController::class, 'destroy'])->middleware('idempotent');
     Route::get('/operations/{operation}', [OperationController::class, 'show']);
+    Route::get('/domains/{domain}/reputation-sharing', [ClientReputationSharingController::class, 'show']);
+    Route::put('/domains/{domain}/reputation-sharing', [ClientReputationSharingController::class, 'update'])->middleware('idempotent');
     Route::get('/domains/{domain}/incident', [IncidentProfileController::class, 'show']);
     Route::post('/domains/{domain}/incident', [IncidentProfileController::class, 'start'])->middleware('idempotent');
     Route::delete('/domains/{domain}/incident', [IncidentProfileController::class, 'end'])->middleware('idempotent');
@@ -217,6 +221,7 @@ Route::middleware(['auth:sanctum', 'account.active', 'token.scope', 'throttle:ac
     Route::get('/domains/{domain}/usage/export', [UsageController::class, 'export']);
 
     Route::prefix('admin')->middleware('admin')->group(function (): void {
+        Route::get('/client-reputation', [ClientReputationController::class, 'index'])->name('admin.client-reputation.index');
         Route::get('/challenge-keys', [ChallengeKeyController::class, 'index'])->name('admin.challenge-keys.index');
         Route::post('/challenge-keys/rotate', [ChallengeKeyController::class, 'rotate'])->middleware('idempotent')->name('admin.challenge-keys.rotate');
         Route::post('/challenge-keys/{keyId}/revoke', [ChallengeKeyController::class, 'revoke'])->middleware('idempotent')->where('keyId', '[0-9a-f]{16}')->name('admin.challenge-keys.revoke');
