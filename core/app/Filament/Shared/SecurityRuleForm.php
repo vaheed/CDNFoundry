@@ -192,9 +192,9 @@ final class SecurityRuleForm
             TextInput::make('threshold')->label(FilamentHelp::label('Requests', 'The most requests one client may send in the period before the action applies. With "Count only responses" it is the most counted responses.'))->numeric()->required()->minValue(1)->maxValue(100000)->placeholder('100'),
             Select::make('period_seconds')->label('Per')->options(SecurityRuleData::RATE_PERIODS)->default(60)->required()->placeholder('Choose a period'),
             Select::make('window')->label(FilamentHelp::label('Window', 'Fixed counts from zero at each period boundary, so a burst on each side of a boundary can carry nearly twice the threshold. Sliding weights the previous period, which holds such a burst to the threshold within 10%.'))
-                ->options(SecurityRuleData::RATE_WINDOWS)->default('fixed')->required()->native(false),
+                ->options(SecurityRuleData::RATE_WINDOWS)->default('fixed')->required(),
             Select::make('scope')->label(FilamentHelp::label('Across cells', 'Counting is always on each cell, never waiting for another. "Each cell counts on its own" admits up to the threshold on every cell serving the domain. "Threshold shared among the cells" gives each cell its share, so balanced traffic stays near the threshold and traffic on one cell is held to its share.'))
-                ->options(SecurityRuleData::RATE_SCOPES)->default('per_cell')->required()->native(false),
+                ->options(SecurityRuleData::RATE_SCOPES)->default('per_cell')->required(),
             TagsInput::make('count_statuses')->label(FilamentHelp::label('Count only responses', 'Leave empty to count every matching request. Type response statuses, such as 401 and 403, to count only those answers, so that successful requests from the same address are never counted.'))
                 ->placeholder('401')->helperText('Type a status and press Enter. Up to 10.')->columnSpanFull(),
             TextInput::make('duration_seconds')->label(FilamentHelp::label('Then for (seconds)', 'How long the action keeps applying to that client after it goes over the limit. The client is released when the time is up.'))

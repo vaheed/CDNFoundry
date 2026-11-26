@@ -15,7 +15,8 @@ async function openRules(page: Page): Promise<void> {
 
 test('the list reads each rule in words, with its action and order', async ({ page }) => {
     await openRules(page);
-    const rows = page.locator('table tbody tr');
+    // The save spec below adds a rate-limit rule to the shared seed, so the seeded rows are counted without it.
+    const rows = page.locator('table tbody tr').filter({ hasNotText: 'responses with status' });
     await expect(rows).toHaveCount(4);
     await expect(rows.first()).toContainText('Path starts with /admin and Continent does not equal EU');
     await expect(rows.nth(1)).toContainText('Client IP is one of 203.0.113.0/24, 2001:db8:abcd::/48');
@@ -172,4 +173,77 @@ test('the sheet offers shadow mode for block and challenge only, an end time, an
     await settle(page);
     await expect(sheet.getByTestId('rule-impact-estimate')).toContainText('312 of 48,210 requests in the last 24 hours. Partial');
     await expectAccessible(page);
+});
+
+test('a rate limit offers window, scope, response counting and combined keys, each named for what it does', async ({ page }) => {
+    await openRules(page);
+    await page.getByRole('button', { name: 'Add rule' }).click();
+    const sheet = page.locator('.fi-modal-window:visible');
+    await sheet.getByText('Only above a request rate').click();
+    await settle(page);
+
+    // Periods reach 24 hours, and the keys include cookie, query argument, network and country.
+    const periods = (await sheet.getByRole('combobox', { name: /^Per/ }).locator('option').allTextContents()).map((text) => text.trim());
+    expect(periods).toEqual(expect.arrayContaining(['1 hour', '24 hours']));
+    const keys = (await sheet.getByRole('combobox', { name: /^Count by/ }).locator('option').allTextContents()).map((text) => text.trim());
+    expect(keys).toEqual(expect.arrayContaining(['Cookie value', 'Query argument', 'ASN', 'Country']));
+
+    // The window defaults to fixed and offers sliding; the scope defaults to each cell on its own.
+    const window = sheet.getByRole('combobox', { name: /^Window/ });
+    await expect(window).toHaveValue('fixed');
+    await window.selectOption('sliding');
+    await expect(window).toHaveValue('sliding');
+    const scope = sheet.getByRole('combobox', { name: /^Across cells/ });
+    await expect(scope).toHaveValue('per_cell');
+    expect((await scope.locator('option').allTextContents()).map((text) => text.trim()).filter((text) => text !== 'Select an option')).toEqual(['Each cell counts on its own', 'Threshold shared among the cells']);
+
+    // A cookie key asks for the cookie name, a query-argument key for the argument name.
+    const key = sheet.getByRole('combobox', { name: /^Count by/ });
+    await key.selectOption('cookie');
+    await settle(page);
+    await expect(sheet.getByRole('textbox', { name: 'Cookie name*' })).toHaveAttribute('placeholder', 'session');
+    await key.selectOption('query_arg');
+    await settle(page);
+    await expect(sheet.getByRole('textbox', { name: 'Argument name*' })).toHaveAttribute('placeholder', 'token');
+
+    // A second key shows its own name field only when it needs one.
+    await expect(sheet.getByRole('textbox', { name: 'Second name*' })).toHaveCount(0);
+    await sheet.getByRole('combobox', { name: /^And also by/ }).selectOption('header');
+    await settle(page);
+    await expect(sheet.getByRole('textbox', { name: 'Second name*' })).toHaveAttribute('placeholder', 'user');
+    await sheet.getByRole('combobox', { name: /^And also by/ }).selectOption('country');
+    await settle(page);
+    await expect(sheet.getByRole('textbox', { name: 'Second name*' })).toHaveCount(0);
+
+    // Response counting is a list of statuses with an example and a hint.
+    const statuses = sheet.getByRole('combobox', { name: /^Count only responses/ });
+    await expect(statuses).toHaveAttribute('placeholder', '401');
+    await expect(sheet.getByText('Type a status and press Enter. Up to 10.')).toBeVisible();
+    await expectAccessible(page);
+});
+
+test('a rate limit rule is saved with its window, scope and counted statuses, and the list reads it back', async ({ page }) => {
+    await openRules(page);
+    await page.getByRole('button', { name: 'Add rule' }).click();
+    const sheet = page.locator('.fi-modal-window:visible');
+    // A rate-limit rule may have no conditions, so the empty one the sheet starts with is removed.
+    await sheet.getByRole('button', { name: 'Delete' }).first().click();
+    await sheet.getByText('Only above a request rate').click();
+    await settle(page);
+    await sheet.getByRole('combobox', { name: /^Action/ }).selectOption('block');
+    await sheet.getByRole('combobox', { name: /^Count by/ }).selectOption('cookie');
+    await settle(page);
+    await sheet.getByRole('textbox', { name: 'Cookie name*' }).fill('sid');
+    await sheet.getByRole('spinbutton', { name: /^Requests/ }).fill('5');
+    await sheet.getByRole('combobox', { name: /^Per/ }).selectOption('600');
+    await sheet.getByRole('combobox', { name: /^Window/ }).selectOption('sliding');
+    await sheet.getByRole('combobox', { name: /^Across cells/ }).selectOption('shared');
+    const statuses = sheet.getByRole('combobox', { name: /^Count only responses/ });
+    await statuses.fill('401');
+    await statuses.press('Enter');
+    await statuses.fill('403');
+    await statuses.press('Enter');
+    await sheet.getByRole('button', { name: 'Add rule', exact: true }).click();
+    await settle(page);
+    await expect(page.locator('table tbody tr').filter({ hasText: '5 responses with status 401, 403 per 10 minutes per cookie value sid, sliding, shared among the cells' })).toHaveCount(1);
 });
