@@ -88,6 +88,9 @@ type client struct {
 	keyUnassigned                      map[string]time.Time
 	challenge                          challengeKeySet
 	challengeFetched                   time.Time
+	rateMitigations                    rateMitigationSet
+	rateMitigationsFetched             time.Time
+	longRate                           []map[string]any
 	statusURLs                         []string
 	cellAssignments                    map[string]string
 	cellTargets                        map[string]cellTarget
@@ -1767,6 +1770,9 @@ func (c *client) heartbeat(sequence uint64) error {
 		"agent_version": version, "listener_ready": listenerReady, "active_sequence": sequence,
 		"active_generation": expectedGeneration, "cells": cells, "passive_origins": failures, "noisy_domains": security, "gateway": gateway,
 	}
+	if len(c.longRate) > 0 {
+		payload["long_rate"] = c.longRate
+	}
 	if versions := runtimeVersions(); len(versions) == 4 {
 		payload["runtime_versions"] = versions
 	}
@@ -1890,6 +1896,8 @@ func (c *client) runtimeStatus() ([]map[string]any, []map[string]any, []map[stri
 	controls, _ := c.loadCellControls()
 	emergencyControls, _ := c.loadEmergencyControls()
 	c.refreshChallengeKeys()
+	c.refreshRateMitigations()
+	c.longRate = c.longRate[:0]
 	for _, endpoint := range c.statusURLs {
 		decoded, ok := c.runtimeEndpointStatus(endpoint)
 		if !ok {
@@ -1902,6 +1910,9 @@ func (c *client) runtimeStatus() ([]map[string]any, []map[string]any, []map[stri
 			c.restoreOverlays(endpoint)
 		}
 		c.pushChallengeKeys(endpoint, decoded.Cell["challenge_keys_version"])
+		c.pushRateMitigations(endpoint, decoded.Cell["rate_mitigations_version"])
+		cellName, _ := decoded.Cell["name"].(string)
+		c.collectLongRate(cellName, decoded.Cell["long_rate"])
 		if decoded.Cell != nil && len(cells) < 32 {
 			name, _ := decoded.Cell["name"].(string)
 			if desiredDrained, configured := controls[name]; configured {
