@@ -113,7 +113,7 @@ local ESCALATION_EXEMPT = {
     platform_rule_rate_limited = true, sensitive_data_card = true, sensitive_data_iban = true,
     sensitive_data_private_key = true, sensitive_data_api_key = true, schema_unknown_path = true,
     schema_wrong_method = true, schema_missing_parameter = true, schema_invalid_parameter = true,
-    schema_body_too_large = true, schema_invalid_body = true, schema_unknown_field = true,
+    schema_body_too_large = true, schema_invalid_body = true, schema_unknown_field = true, jwt_invalid = true,
 }
 
 -- One client that causes this many escalating events in a minute is blocked on this cell for CLIENT_BAN_SECONDS, whatever the
@@ -1456,6 +1456,86 @@ function REP.schema.body(body, size, json)
     return nil
 end
 
+-- JWT validation for the paths a domain covers. The keys are the customer's public keys in the signed snapshot; the cell never
+-- fetches one. A token passes when its algorithm is one the key allows, the signature verifies, and exp, nbf, iss and aud fit. The
+-- result is the jwt_valid rule field and a hashed subject for rate limits; the token and its claims are never logged or stored.
+REP.jwt = {MAXIMUM_TOKEN = 4096, ALGORITHMS = {RS256 = true, ES256 = true}, cache = setmetatable({}, {__mode = "k"})}
+
+function REP.jwt.decode(segment)
+    if type(segment) ~= "string" or segment == "" or #segment > 4096 or segment:find("[^%w_%-]") then return nil end
+    local text = segment:gsub("%-", "+"):gsub("_", "/")
+    text = text .. string.rep("=", (4 - #text % 4) % 4)
+    return ngx.decode_base64(text)
+end
+
+function REP.jwt.covers(config, path)
+    for _, prefix in ipairs(config.paths or {}) do
+        if path == prefix or path:sub(1, #prefix) == prefix and (prefix:sub(-1) == "/" or path:sub(#prefix + 1, #prefix + 1) == "/") then return true end
+    end
+    return false
+end
+
+-- The parsed public keys of one configuration, kept for as long as the configuration table lives.
+function REP.jwt.keys(config)
+    local cached = REP.jwt.cache[config]
+    if cached then return cached end
+    local parsed = {}
+    local pkey = require "resty.openssl.pkey"
+    for index, entry in ipairs(config.keys or {}) do
+        if index > 8 then break end
+        local loaded = pkey.new(entry.pem)
+        if loaded then parsed[#parsed + 1] = {key = loaded, alg = entry.alg, kid = entry.kid, expires_at = tonumber(entry.expires_at)} end
+    end
+    REP.jwt.cache[config] = parsed
+    return parsed
+end
+
+function REP.jwt.verify(key, alg, input, signature)
+    if alg == "ES256" then
+        if #signature ~= 64 then return false end
+        return key:verify(signature, input, "sha256", nil, {ecdsa_use_raw = true}) == true
+    end
+    return key:verify(signature, input, "sha256") == true
+end
+
+-- Returns whether the request carries a valid token, and the md5 of its subject claim when it has one.
+function REP.jwt.check(config, authorization)
+    if type(authorization) ~= "string" then return false end
+    local token = authorization:match("^[Bb][Ee][Aa][Rr][Ee][Rr] +([%w_%-%.]+)$")
+    if not token or #token > REP.jwt.MAXIMUM_TOKEN then return false end
+    local head, body, signature = token:match("^([^%.]+)%.([^%.]+)%.([^%.]+)$")
+    if not head then return false end
+    local header = cjson.decode(REP.jwt.decode(head) or "")
+    local claims = cjson.decode(REP.jwt.decode(body) or "")
+    local raw_signature = REP.jwt.decode(signature)
+    if type(header) ~= "table" or type(claims) ~= "table" or not raw_signature or header.crit ~= nil then return false end
+    local alg = header.alg
+    if type(alg) ~= "string" or not REP.jwt.ALGORITHMS[alg] then return false end
+    local now = ngx.time()
+    local verified = false
+    for _, candidate in ipairs(REP.jwt.keys(config)) do
+        local live = candidate.expires_at == nil or now < candidate.expires_at
+        local named = header.kid == nil or candidate.kid == header.kid
+        if live and named and candidate.alg == alg and REP.jwt.verify(candidate.key, alg, head .. "." .. body, raw_signature) then verified = true; break end
+    end
+    if not verified then return false end
+    local leeway = tonumber(config.leeway_seconds) or 30
+    if type(claims.exp) ~= "number" or claims.exp + leeway <= now then return false end
+    if claims.nbf ~= nil and (type(claims.nbf) ~= "number" or claims.nbf - leeway > now) then return false end
+    if type(config.issuer) == "string" and claims.iss ~= config.issuer then return false end
+    if type(config.audience) == "string" then
+        local audience = claims.aud
+        local listed = audience == config.audience
+        if type(audience) == "table" then
+            for _, value in ipairs(audience) do
+                if value == config.audience then listed = true; break end
+            end
+        end
+        if not listed then return false end
+    end
+    return true, type(claims.sub) == "string" and ngx.md5(claims.sub) or nil
+end
+
 local function schema_value_fits(kind, value)
     if kind == "integer" then return value:find("^-?%d+$") ~= nil and #value <= 18 end
     if kind == "number" then return value:find("^-?%d+%.?%d*$") ~= nil and #value <= 32 end
@@ -1732,6 +1812,7 @@ local function condition_matches(condition, request)
         if request.asn == 0 then return operator == "not_equals" end
         return number_matches(operator, request.asn, expected)
     end
+    if field == "jwt_valid" then return request.jwt_valid ~= nil and request.jwt_valid == (expected == true) end
     if field == "client_ip" then return address_matches(operator, request.client, expected) end
     if field == "client_ip_list" then
         -- The named list is the domain's compiled list from the signed snapshot; a name with no list matches nothing.
@@ -1809,6 +1890,7 @@ end
 function RATE.rate_key_part(kind, name, request)
     if kind == "client_ip" then return request.client_key end
     if kind == "client_ip_path" then return tostring(request.client_key) .. "|" .. tostring(request.path) end
+    if kind == "jwt_subject" then return request.jwt_subject and ("jwt:" .. request.jwt_subject) or nil end
     if kind == "asn" then return "asn:" .. tostring(request.asn or 0) end
     if kind == "country" then return "cc:" .. tostring(request.country or "unknown") end
     if type(name) ~= "string" or #name > 64 or not name:find(RATE.NAME_PATTERN) then return nil end
@@ -2693,6 +2775,11 @@ function M.access()
     end
     request.schema_violation = schema_violation(security.api_schema, method, request.path, size, request.content_type)
     if SCHEMA_REASONS[request.schema_violation or ""] then record_security_event(SCHEMA_REASONS[request.schema_violation]) end
+    local jwt_config = security.jwt_validation
+    if type(jwt_config) == "table" and REP.jwt.covers(jwt_config, request.path) then
+        request.jwt_valid, request.jwt_subject = REP.jwt.check(jwt_config, ngx.var.http_authorization)
+        if not request.jwt_valid then record_security_event("jwt_invalid") end
+    end
     local sensitive = security.sensitive_data
     if type(sensitive) == "table" and type(sensitive.kinds) == "table" and #sensitive.kinds > 0 then
         ngx.var.cdn_sensitive_kinds = table.concat(sensitive.kinds, ",")
