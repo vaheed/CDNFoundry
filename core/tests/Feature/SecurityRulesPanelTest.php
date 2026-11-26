@@ -90,10 +90,10 @@ class SecurityRulesPanelTest extends TestCase
         $this->manager($domain)->callTableAction('create', data: [
             'name' => 'Login attempts', 'action' => 'block', 'priority' => 10, 'enabled' => true, 'rate_limited' => true,
             'conditions' => [['field' => 'path', 'operator' => 'equals', 'value' => '/login']],
-            'rate_limit' => ['key' => 'header', 'header_name' => 'X-Api-Key', 'threshold' => 20, 'period_seconds' => 60, 'duration_seconds' => 300],
+            'rate_limit' => ['key' => 'header', 'key_name' => 'X-Api-Key', 'threshold' => 20, 'period_seconds' => 60, 'duration_seconds' => 300],
         ])->assertHasNoTableActionErrors();
         $rule = $domain->securityRules()->firstOrFail();
-        $this->assertSame(['key' => 'header', 'threshold' => 20, 'period_seconds' => 60, 'duration_seconds' => 300, 'header_name' => 'x-api-key'], $rule->rate_limit);
+        $this->assertSame(['key' => 'header', 'threshold' => 20, 'period_seconds' => 60, 'duration_seconds' => 300, 'window' => 'fixed', 'scope' => 'per_cell', 'key_name' => 'x-api-key'], $rule->rate_limit);
         $this->assertSame('20 requests per 1 minute per header value x-api-key, then block for 5 min', SecurityRuleData::describeRateLimit($rule->rate_limit, 'block'));
 
         // An allow action is not offered for a rate limit, and switching the limit off clears it.

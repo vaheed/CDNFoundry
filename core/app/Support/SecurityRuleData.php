@@ -23,9 +23,22 @@ final class SecurityRuleData
     /** Hard ceiling for values in one in_list condition; the platform setting can only lower it. */
     public const LIST_VALUES_CEILING = 100;
 
-    public const RATE_KEYS = ['client_ip' => 'Client IP', 'client_ip_path' => 'Client IP and path', 'header' => 'Header value'];
+    public const RATE_KEYS = [
+        'client_ip' => 'Client IP', 'client_ip_path' => 'Client IP and path', 'header' => 'Header value', 'cookie' => 'Cookie value',
+        'query_arg' => 'Query argument', 'asn' => 'ASN', 'country' => 'Country',
+    ];
 
-    public const RATE_PERIODS = [10 => '10 seconds', 60 => '1 minute', 600 => '10 minutes'];
+    /** The keys a rule may add as the second half of a combination. A client address and path is already a combination. */
+    public const RATE_SECOND_KEYS = ['header', 'cookie', 'query_arg', 'asn', 'country', 'client_ip'];
+
+    /** Keys that need the name of the header, cookie or query argument. */
+    public const RATE_NAMED_KEYS = ['header', 'cookie', 'query_arg'];
+
+    public const RATE_WINDOWS = ['fixed' => 'Fixed window', 'sliding' => 'Sliding window'];
+
+    public const RATE_SCOPES = ['per_cell' => 'Each cell counts on its own', 'shared' => 'Threshold shared among the cells'];
+
+    public const RATE_PERIODS = [10 => '10 seconds', 60 => '1 minute', 600 => '10 minutes', 3600 => '1 hour', 86400 => '24 hours'];
 
     public const RATE_ACTIONS = ['block', 'challenge', 'log'];
 
@@ -214,22 +227,51 @@ final class SecurityRuleData
         } catch (ValidationException $exception) {
             throw ValidationException::withMessages(collect($exception->errors())->mapWithKeys(fn (array $messages, string $key): array => ["rate_limit.$key" => $messages])->all());
         }
-        $rate = ['key' => $data['key'], 'threshold' => (int) $data['threshold'], 'period_seconds' => (int) $data['period_seconds'], 'duration_seconds' => (int) $data['duration_seconds']];
-        if ($data['key'] === 'header') {
-            if (! is_string($data['header_name'] ?? null) || ! preg_match('/^[A-Za-z0-9!#$%&\'*+.^_`|~-]{1,64}$/', $data['header_name'])) {
-                throw ValidationException::withMessages(['rate_limit.header_name' => 'The header name must be 1 to 64 header name characters.']);
+        $rate = ['key' => $data['key'], 'threshold' => (int) $data['threshold'], 'period_seconds' => (int) $data['period_seconds'], 'duration_seconds' => (int) $data['duration_seconds'],
+            'window' => $data['window'] ?? 'fixed', 'scope' => $data['scope'] ?? 'per_cell'];
+        $name = $data['key_name'] ?? $data['header_name'] ?? null;
+        if (in_array($data['key'], self::RATE_NAMED_KEYS, true)) {
+            $rate['key_name'] = self::keyName($data['key'], $name, 'rate_limit.key_name');
+        }
+        if (isset($data['second_key']) && $data['second_key'] !== '') {
+            if ($data['second_key'] === $data['key'] && ! in_array($data['key'], self::RATE_NAMED_KEYS, true)) {
+                throw ValidationException::withMessages(['rate_limit.second_key' => 'The second key must differ from the first.']);
             }
-            $rate['header_name'] = strtolower($data['header_name']);
+            if ($data['key'] === 'client_ip_path' && $data['second_key'] === 'client_ip') {
+                throw ValidationException::withMessages(['rate_limit.second_key' => 'The client address is already part of the first key.']);
+            }
+            $rate['second_key'] = $data['second_key'];
+            if (in_array($data['second_key'], self::RATE_NAMED_KEYS, true)) {
+                $rate['second_name'] = self::keyName($data['second_key'], $data['second_name'] ?? null, 'rate_limit.second_name');
+            }
+        }
+        $statuses = array_values(array_unique(array_map('intval', $data['count_statuses'] ?? [])));
+        if ($statuses !== []) {
+            sort($statuses);
+            $rate['count_statuses'] = $statuses;
         }
 
         return $rate;
+    }
+
+    private static function keyName(string $key, mixed $name, string $path): string
+    {
+        $pattern = $key === 'header' ? '/^[A-Za-z0-9!#$%&\'*+.^_`|~-]{1,64}$/' : '/^[A-Za-z0-9_.-]{1,64}$/';
+        if (! is_string($name) || ! preg_match($pattern, $name)) {
+            throw ValidationException::withMessages([$path => 'The name must be 1 to 64 '.($key === 'header' ? 'header name' : ($key === 'cookie' ? 'cookie name' : 'query argument name')).' characters.']);
+        }
+
+        return $key === 'header' ? strtolower($name) : $name;
     }
 
     private static function validateRateLimit(array $input): array
     {
         return Validator::make($input, [
             'key' => ['required', Rule::in(array_keys(self::RATE_KEYS))],
-            'header_name' => ['nullable', 'string'],
+            'header_name' => ['nullable', 'string'], 'key_name' => ['nullable', 'string'],
+            'second_key' => ['nullable', Rule::in(self::RATE_SECOND_KEYS)], 'second_name' => ['nullable', 'string'],
+            'window' => ['nullable', Rule::in(array_keys(self::RATE_WINDOWS))], 'scope' => ['nullable', Rule::in(array_keys(self::RATE_SCOPES))],
+            'count_statuses' => ['nullable', 'array', 'max:10'], 'count_statuses.*' => ['integer', 'between:100,599'],
             'threshold' => ['required', 'integer', 'between:1,100000'],
             'period_seconds' => ['required', 'integer', Rule::in(array_keys(self::RATE_PERIODS))],
             'duration_seconds' => ['required', 'integer', 'between:10,86400'],
@@ -239,10 +281,17 @@ final class SecurityRuleData
     /** One readable clause for a rate limit: "100 requests per 1 minute per Client IP, then Block for 300 seconds". */
     public static function describeRateLimit(array $rate, string $action): string
     {
-        $key = strtolower(self::RATE_KEYS[$rate['key']] ?? $rate['key']).(isset($rate['header_name']) ? " {$rate['header_name']}" : '');
+        $part = fn (string $key, ?string $name): string => strtolower(self::RATE_KEYS[$key] ?? $key).($name !== null ? " $name" : '');
+        $key = $part($rate['key'], $rate['key_name'] ?? $rate['header_name'] ?? null);
+        if (isset($rate['second_key'])) {
+            $key .= ' and '.$part($rate['second_key'], $rate['second_name'] ?? null);
+        }
         $minutes = $rate['duration_seconds'] % 60 === 0 ? ($rate['duration_seconds'] / 60).' min' : $rate['duration_seconds'].' s';
+        $what = isset($rate['count_statuses']) ? 'responses with status '.implode(', ', $rate['count_statuses']) : 'requests';
+        $window = ($rate['window'] ?? 'fixed') === 'sliding' ? ', sliding' : '';
+        $scope = ($rate['scope'] ?? 'per_cell') === 'shared' ? ', shared among the cells' : '';
 
-        return "{$rate['threshold']} requests per ".self::RATE_PERIODS[$rate['period_seconds']]." per $key, then ".strtolower(self::ACTION_LABELS[$action] ?? $action)." for $minutes";
+        return "{$rate['threshold']} $what per ".self::RATE_PERIODS[$rate['period_seconds']]." per $key$window$scope, then ".strtolower(self::ACTION_LABELS[$action] ?? $action)." for $minutes";
     }
 
     /** @return array<string, string> field => the detection it needs, for every field this domain cannot use yet */

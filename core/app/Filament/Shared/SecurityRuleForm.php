@@ -174,13 +174,29 @@ final class SecurityRuleForm
 
     private static function rateLimitFields(): array
     {
+        $named = fn (?string $key): bool => in_array($key, SecurityRuleData::RATE_NAMED_KEYS, true);
+
         return [
-            Select::make('key')->label(FilamentHelp::label('Count by', 'What one client is: its address, its address on one path, or the value of a header such as an API key.'))
+            Select::make('key')->label(FilamentHelp::label('Count by', 'What one client is: its address, its address on one path, the value of a header such as an API key, a cookie or a query argument, its network (ASN), or its country.'))
                 ->options(SecurityRuleData::RATE_KEYS)->default('client_ip')->required()->live()->placeholder('Choose what to count by'),
-            TextInput::make('header_name')->label('Header name')->maxLength(64)->required()->placeholder('X-Api-Key')
-                ->visible(fn (Get $get): bool => $get('key') === 'header'),
-            TextInput::make('threshold')->label(FilamentHelp::label('Requests', 'The most requests one client may send in the period before the action applies.'))->numeric()->required()->minValue(1)->maxValue(100000)->placeholder('100'),
+            Hidden::make('header_name')->dehydrated(false),
+            TextInput::make('key_name')->label(fn (Get $get): string => match ($get('key')) {
+                'cookie' => 'Cookie name', 'query_arg' => 'Argument name', default => 'Header name',
+            })->maxLength(64)->required()->placeholder(fn (Get $get): string => match ($get('key')) {
+                'cookie' => 'session', 'query_arg' => 'token', default => 'X-Api-Key',
+            })->formatStateUsing(fn (mixed $state, Get $get): mixed => $state ?? $get('header_name'))->visible(fn (Get $get): bool => $named($get('key'))),
+            Select::make('second_key')->label(FilamentHelp::label('And also by', 'Counts each combination of the two keys separately, for example a header and a query argument. A request that lacks either part is not counted.'))
+                ->options(array_intersect_key(SecurityRuleData::RATE_KEYS, array_flip(SecurityRuleData::RATE_SECOND_KEYS)))->live()->placeholder('Nothing else'),
+            TextInput::make('second_name')->label('Second name')->maxLength(64)->required()->placeholder('user')
+                ->visible(fn (Get $get): bool => $named($get('second_key'))),
+            TextInput::make('threshold')->label(FilamentHelp::label('Requests', 'The most requests one client may send in the period before the action applies. With "Count only responses" it is the most counted responses.'))->numeric()->required()->minValue(1)->maxValue(100000)->placeholder('100'),
             Select::make('period_seconds')->label('Per')->options(SecurityRuleData::RATE_PERIODS)->default(60)->required()->placeholder('Choose a period'),
+            Select::make('window')->label(FilamentHelp::label('Window', 'Fixed counts from zero at each period boundary, so a burst on each side of a boundary can carry nearly twice the threshold. Sliding weights the previous period, which holds such a burst to the threshold within 10%.'))
+                ->options(SecurityRuleData::RATE_WINDOWS)->default('fixed')->required()->native(false),
+            Select::make('scope')->label(FilamentHelp::label('Across cells', 'Counting is always on each cell, never waiting for another. "Each cell counts on its own" admits up to the threshold on every cell serving the domain. "Threshold shared among the cells" gives each cell its share, so balanced traffic stays near the threshold and traffic on one cell is held to its share.'))
+                ->options(SecurityRuleData::RATE_SCOPES)->default('per_cell')->required()->native(false),
+            TagsInput::make('count_statuses')->label(FilamentHelp::label('Count only responses', 'Leave empty to count every matching request. Type response statuses, such as 401 and 403, to count only those answers, so that successful requests from the same address are never counted.'))
+                ->placeholder('401')->helperText('Type a status and press Enter. Up to 10.')->columnSpanFull(),
             TextInput::make('duration_seconds')->label(FilamentHelp::label('Then for (seconds)', 'How long the action keeps applying to that client after it goes over the limit. The client is released when the time is up.'))
                 ->numeric()->required()->minValue(10)->maxValue(86400)->default(300)->placeholder('300'),
         ];

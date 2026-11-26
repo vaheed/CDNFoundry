@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\Domain;
+use App\Models\DomainEdgeCell;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -187,6 +188,8 @@ final class SecurityConfig
             'api_schema' => ApiSchemaData::forEdge($domain->api_schema),
             'client_security' => ClientSecurityData::forEdge($domain->client_security),
             'ip_lists' => IpListData::compileUsed($domain),
+            // How many cells serve the domain, so a rule in shared scope can hold each cell to its share of the threshold.
+            'cells_serving' => max(1, $domain->exists ? DomainEdgeCell::query()->where('domain_id', $domain->id)->where(fn ($cells) => $cells->whereNotNull('active_cell_id')->orWhereNotNull('target_cell_id'))->count() : 1),
             'platform_rules' => PlatformRulesets::forDomain($domain),
             'rules' => self::withUnixExpiry($domain->securityRules()->where('enabled', true)->orderBy('priority')->orderBy('id')
                 ->get(['id', 'name', 'preset', 'conditions', 'rate_limit', 'action', 'priority', 'mode', 'expires_at'])

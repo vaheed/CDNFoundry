@@ -157,20 +157,20 @@ class SecurityApiTest extends TestCase
         $rate = ['key' => 'client_ip_path', 'threshold' => 100, 'period_seconds' => 60, 'duration_seconds' => 300];
         $body = ['name' => 'Login brute force', 'conditions' => [['field' => 'path', 'operator' => 'equals', 'value' => '/login']], 'action' => 'block', 'priority' => 10, 'rate_limit' => $rate];
         $id = $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", $body)->assertCreated()->json('data.id');
-        $this->assertSame($rate, $domain->securityRules()->findOrFail($id)->rate_limit);
+        $this->assertSame([...$rate, 'window' => 'fixed', 'scope' => 'per_cell'], $domain->securityRules()->findOrFail($id)->rate_limit);
 
         // Counting every request of the domain is a rate-limit rule with no conditions; any other rule needs a condition.
         $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", ['conditions' => [], 'action' => 'log', 'priority' => 20, 'rate_limit' => ['key' => 'header', 'header_name' => 'X-Api-Key', 'threshold' => 5, 'period_seconds' => 10, 'duration_seconds' => 10]])
             ->assertCreated();
-        $this->assertSame('x-api-key', $domain->securityRules()->where('priority', 20)->firstOrFail()->rate_limit['header_name']);
+        $this->assertSame('x-api-key', $domain->securityRules()->where('priority', 20)->firstOrFail()->rate_limit['key_name']);
         $this->actingAs($user)->postJson("/api/domains/{$domain->id}/security/rules", ['conditions' => [], 'action' => 'block', 'priority' => 21])->assertUnprocessable()->assertJsonValidationErrors('conditions');
 
         $bad = [
             ['rate_limit' => [...$rate, 'period_seconds' => 30], 'field' => 'rate_limit.period_seconds'],
             ['rate_limit' => [...$rate, 'threshold' => 0], 'field' => 'rate_limit.threshold'],
             ['rate_limit' => [...$rate, 'duration_seconds' => 5], 'field' => 'rate_limit.duration_seconds'],
-            ['rate_limit' => [...$rate, 'key' => 'country'], 'field' => 'rate_limit.key'],
-            ['rate_limit' => [...$rate, 'key' => 'header'], 'field' => 'rate_limit.header_name'],
+            ['rate_limit' => [...$rate, 'key' => 'path'], 'field' => 'rate_limit.key'],
+            ['rate_limit' => [...$rate, 'key' => 'header'], 'field' => 'rate_limit.key_name'],
             ['rate_limit' => $rate, 'action' => 'allow', 'field' => 'action'],
             ['rate_limit' => $rate, 'action' => 'skip_managed', 'field' => 'action'],
         ];
