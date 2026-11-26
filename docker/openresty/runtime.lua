@@ -1670,6 +1670,34 @@ function RATE.effective_threshold(config, limit)
     return threshold
 end
 
+-- Long-window rules of the shared scope also leave the heaviest keys of each window in a small dictionary of their own. The agent
+-- reports them, the control plane adds them up across cells and sends back a mitigation for a key over the rule's threshold. A
+-- key below 5% of the threshold is not recorded, so the dictionary holds heavy keys only, and it evicts its least recent entry when
+-- it is full: nothing here can use more memory than the dictionary, and a request never waits for it.
+function RATE.note_long(id, period, window, count, threshold)
+    if count < math.max(2, math.ceil(threshold * 0.05)) then return end
+    local long = ngx.shared.rate_long
+    if long then long:set(id .. ":" .. period .. ":" .. window, count, period * 2) end
+end
+
+-- The heaviest keys of the current windows, at most 50, for the status report.
+function RATE.long_report()
+    local long = ngx.shared.rate_long
+    local entries = {}
+    if not long then return entries end
+    local now = ngx.time()
+    for _, key in ipairs(long:get_keys(1024)) do
+        local domain, rule, hash, period, window = key:match("^(%d+):(%d+):(%x+):(%d+):(%d+)$")
+        if domain and #hash == 32 and math.floor(now / tonumber(period)) == tonumber(window) then
+            local count = long:get(key)
+            if count then entries[#entries + 1] = {domain_id = tonumber(domain), rule_id = tonumber(rule), hash = hash, window = tonumber(window), count = count} end
+        end
+    end
+    table.sort(entries, function(a, b) return a.count > b.count end)
+    for index = #entries, 51, -1 do entries[index] = nil end
+    return entries
+end
+
 -- Counts one request (or one counted response) for a key and returns whether the key is now over its threshold, with the seconds
 -- the mitigation lasts. `id` names the key; the share and the counters are the domain's.
 function RATE.rate_count(dictionary, config, rule, limit, id, threshold, period, duration)
@@ -1693,6 +1721,7 @@ function RATE.rate_count(dictionary, config, rule, limit, id, threshold, period,
     if overflow then return rate_overflow_exceeded(dictionary, domain, rule, threshold, period), duration end
     local count = dictionary:incr(counter, 1, 0, period * 2)
     if not count then return rate_overflow_exceeded(dictionary, domain, rule, threshold, period), duration end
+    if period >= 3600 and limit.scope == "shared" and not rule.platform then RATE.note_long(id, period, window, count, threshold) end
     local estimate = count
     if limit.window == "sliding" then
         local previous = dictionary:get("c:" .. id .. ":" .. (window - 1)) or 0
@@ -3268,6 +3297,8 @@ function M.passive_failures()
             purges_restored = ngx.shared.cache_purges:get("purge:restored") == true,
             overlays_restored = ngx.shared.runtime_limits:get("overlay:restored") == true,
             challenge_keys_version = (CHAL.keys() or {}).version,
+            rate_mitigations_version = ngx.shared.runtime_limits:get("ratemit:version"),
+            long_rate = RATE.long_report(),
 			-- What each counter dictionary holds, so exhaustion under a flood can be seen and recorded.
 			shared_memory = shared_memory_report(),
 			capacity = {
@@ -3309,7 +3340,7 @@ function M.control()
     local command = cjson.decode(raw)
     if type(command) ~= "table" or type(command.task_id) ~= "string" or #command.task_id > 64
         or (command.action ~= "drain" and command.action ~= "undrain" and command.action ~= "restart" and command.action ~= "cache_purge" and command.action ~= "cache_purges_restored" and command.action ~= "emergency_mode"
-            and command.action ~= "security_overlay" and command.action ~= "security_overlays_restored" and command.action ~= "challenge_keys") then
+            and command.action ~= "security_overlay" and command.action ~= "security_overlays_restored" and command.action ~= "challenge_keys" and command.action ~= "rate_mitigations") then
         return ngx.exit(400)
     end
     if command.action == "challenge_keys" then
@@ -3324,6 +3355,15 @@ function M.control()
             if key.signing then signing = signing + 1 end
         end
         if signing ~= 1 then return ngx.exit(400) end
+    end
+    if command.action == "rate_mitigations" then
+        if type(command.version) ~= "number" or command.version < 0 or command.version % 1 ~= 0 or type(command.items) ~= "table" or #command.items > 500 then return ngx.exit(400) end
+        for _, item in ipairs(command.items) do
+            if type(item) ~= "table" or type(item.domain_id) ~= "number" or item.domain_id < 1 or item.domain_id % 1 ~= 0
+                or type(item.rule_id) ~= "number" or item.rule_id < 1 or item.rule_id % 1 ~= 0
+                or type(item.hash) ~= "string" or #item.hash ~= 32 or not item.hash:match("^%x+$")
+                or type(item.seconds) ~= "number" or item.seconds < 1 or item.seconds > 86400 then return ngx.exit(400) end
+        end
     end
     if command.action == "emergency_mode" then
         if type(command.active) ~= "boolean" or type(command.actions) ~= "table" or #command.actions > 12
@@ -3393,6 +3433,17 @@ function M.control()
             ngx.shared.cache_purges:set("purge:restored", true)
         elseif command.action == "security_overlays_restored" then
             dictionary:set("overlay:restored", true)
+        elseif command.action == "rate_mitigations" then
+            -- Each item becomes the same marker a cell sets when a key goes over its own threshold, so the rule's action applies to
+            -- that key until the marker ends by this cell's own clock. A lower version is an obsolete message.
+            local held = tonumber(dictionary:get("ratemit:version")) or 0
+            if command.version >= held then
+                local rates = ngx.shared.rate_rules
+                for _, item in ipairs(command.items) do
+                    rates:set("m:" .. item.domain_id .. ":" .. item.rule_id .. ":" .. item.hash:lower(), true, item.seconds)
+                end
+                dictionary:set("ratemit:version", command.version)
+            end
         elseif command.action == "challenge_keys" then
             -- An older version is an obsolete message. The keys live only in shared memory and are never logged.
             local current = cjson.decode(dictionary:get("challenge:keys") or "null")
