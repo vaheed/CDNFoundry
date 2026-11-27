@@ -5440,6 +5440,7 @@
                                 "rate_limits",
                                 "edge_runtime",
                                 "origin_safety",
+                                "origin_monitoring",
                                 "public_headers",
                                 "proxy_defaults"
                             ]
@@ -5488,6 +5489,7 @@
                                 "rate_limits",
                                 "edge_runtime",
                                 "origin_safety",
+                                "origin_monitoring",
                                 "public_headers",
                                 "proxy_defaults"
                             ]
