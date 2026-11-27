@@ -728,11 +728,23 @@ newest first, from the same 7-day event store. `GET
 blocked requests in the range. Both are computed from stored events when asked, with
 bounded queries, and are never on the serving path.
 
-**Not built.** The bot and reputation breakdowns and the false-positive candidates
-(blocks followed by solved challenges or allows from the same key) are not built:
-the first two depend on signals the cells do not log, and the third needs the client
-key on every allowed request, which would add bytes to every log line. The rules
-match counts are in the rule list.
+**Possible false positives.** **Possible false positives** on the tab (and `GET
+/api/domains/{domain}/security/false-positive-candidates`) lists the client keys
+that a rule or the managed firewall blocked and that then solved a challenge, so a
+person proved to be a browser and the rule may be too broad. A challenge prompt is
+not a block here. Each row shows the blocked and solved counts, the rule or reason
+that blocked the client most, and the time from the first block to the last solve.
+A solved challenge is the only allowed request that carries a client key in the
+log (reason `challenge_solved`, one short line per visitor per token lifetime), so
+allowed traffic costs no extra bytes. The list covers up to 24 hours and 20 keys.
+It is a list of candidates to review, not proof: a key is one client on one edge,
+so the same person can appear once for each edge, and it shows only while a
+challenge rule or an incident challenge is active.
+
+**Not built.** The bot and reputation breakdowns are not built: the cells do not
+log bot signals, and reputation runs in shadow mode. The false-positives endpoint
+names both as unavailable in `meta.unavailable`. The rule match counts are in the
+rule list.
 
 ### Security alerts
 

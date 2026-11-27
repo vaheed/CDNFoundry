@@ -7,6 +7,10 @@ single source of truth; `make version-check` enforces it.
 
 ## [Unreleased]
 
+### Added
+
+- Possible false positives: the domain security tab and `GET /api/domains/{domain}/security/false-positive-candidates` list client keys that a rule blocked and that then solved a challenge. Cells now log a solved challenge as an allowed request with reason `challenge_solved` and the client key of the challenged request.
+
 ### Changed
 
 - Fleet shows a service-level plan for `apply-config`: for each changed host, the services and the minimum safe action (none, firewall, file, reload, restart, recreate, node-wide), computed from digests of the files, environment keys and Compose service hashes the host last ran. It prints no value. Execution still activates a changed host as a whole.
