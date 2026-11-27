@@ -74,7 +74,23 @@ test('the trace explains the stage and lists the signals a request does not reco
     await expect(sheet.getByRole('heading', { name: 'Why this request was mitigated' })).toBeVisible();
     await expect(sheet).toContainText('Managed WAF');
     await expect(sheet).toContainText('Reputation band');
-    await expect(sheet).toContainText('Dataset versions');
+    await expect(sheet).toContainText('Platform datasets');
+    await expectAccessible(page);
+    await sheet.getByRole('button', { name: 'Close', exact: true }).last().click();
+    await expect(sheet).toBeHidden();
+});
+
+test('the episodes sheet lists an attack with its top sources', async ({ page }) => {
+    await openEvents(page);
+    await page.getByRole('button', { name: 'Attack episodes' }).click();
+    const sheet = page.locator('.fi-modal-window:visible');
+    await expect(sheet.getByRole('heading', { name: 'Attack episodes, last 24 hours' })).toBeVisible();
+    const row = sheet.getByTestId('attack-episodes').locator('tbody tr');
+    await expect(row).toHaveCount(1);
+    await expect(row).toContainText('150');
+    await expect(row).toContainText('0a1b2c3d4e5f (120)');
+    await expect(row).toContainText('/wp-login.php (140)');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
     await expectAccessible(page);
     await sheet.getByRole('button', { name: 'Close', exact: true }).last().click();
     await expect(sheet).toBeHidden();

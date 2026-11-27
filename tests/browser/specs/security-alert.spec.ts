@@ -15,7 +15,7 @@ async function openDialog(page: Page) {
 
 test('the dialog explains the alert, shows an example, and offers three periods', async ({ page }) => {
     const modal = await openDialog(page);
-    await expect(modal.getByText('at most once an hour')).toBeVisible();
+    await expect(modal.getByText('once for each attack')).toBeVisible();
     await expect(modal.getByRole('spinbutton', { name: /^Blocked requests/ })).toHaveAttribute('placeholder', '500');
     const periods = await modal.getByRole('combobox', { name: /^Within/ }).locator('option').allTextContents();
     expect(periods.join('|')).toContain('5 minutes');

@@ -537,7 +537,7 @@ class ViewDomain extends ViewRecord
                 }),
             Action::make('securityAlert')->label('Security alert')->icon('phosphor-bell-ringing')->extraAttributes(['data-testid' => 'security-alert-action'])
                 ->modalHeading('Alert on mitigated requests')
-                ->modalDescription('Send one notification when your rules and the managed firewall block this many requests in a period. It is sent at most once an hour.')
+                ->modalDescription('Send one notification when your rules and the managed firewall block this many requests in a period. It is sent once for each attack, and again only after five quiet minutes.')
                 ->extraModalFooterActions(fn (): array => $this->turnOffAction('security_alert', SecurityAlertController::class, 'Security alert removed', 'Remove alert'))
                 ->schema([
                     TextInput::make('threshold')->label(FilamentHelp::label('Blocked requests', 'The number of blocked or challenged requests, counted over every location, that triggers the alert. Requests that a rule only logs do not count.'))

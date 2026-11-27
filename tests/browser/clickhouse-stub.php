@@ -35,6 +35,21 @@ foreach ($security as $marker => $rows) {
         return;
     }
 }
+// The attack episodes sheet: two blocked minutes make one episode, with its top client keys, paths, and rules.
+if (str_contains($sql, 'GROUP BY minute')) {
+    foreach ([[40, 60], [39, 90]] as [$minutesAgo, $blocked]) {
+        echo json_encode(['minute' => gmdate('Y-m-d H:i:00', time() - $minutesAgo * 60), 'blocked' => $blocked])."\n";
+    }
+
+    return;
+}
+foreach (['client_key AS value' => ['0a1b2c3d4e5f', 120], 'path AS value' => ['/wp-login.php', 140], 'security_rule AS value' => ['r1', 150]] as $marker => [$value, $blocked]) {
+    if (str_contains($sql, $marker)) {
+        echo json_encode(['value' => $value, 'blocked' => $blocked])."\n";
+
+        return;
+    }
+}
 if (! str_contains($sql, 'FROM cdnf.edge_events') || ! str_contains($sql, "security_rule != ''")) {
     http_response_code(503);
     echo 'unavailable';

@@ -6,9 +6,11 @@ use App\Exceptions\AnalyticsUnavailableException;
 use App\Filament\Shared\SecurityRuleForm;
 use App\Models\Domain;
 use App\Support\AnalyticsStore;
+use App\Support\AttackEpisodes;
 use App\Support\DomainSecurityRules;
 use App\Support\FilamentHelp;
 use App\Support\MitigationRules;
+use App\Support\SecurityAlertData;
 use Carbon\CarbonImmutable;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
@@ -74,8 +76,15 @@ class SecurityEventsRelationManager extends RelationManager
                     TextInput::make('asn')->label('ASN')->numeric()->placeholder('64500'),
                     TextInput::make('user_agent')->label('User agent contains')->placeholder('sqlmap'),
                     TextInput::make('request_id')->label('Request ID')->placeholder('4fa1c2d9e0b34a7d'),
+                    TextInput::make('client_key')->label(FilamentHelp::label('Client key', 'The 12-character key in a request\'s trace. It follows one client across the cells of one edge, and differs on every edge. It is not the client address.'))->maxLength(12)->placeholder('0a1b2c3d4e5f'),
                 ])->columns(2),
             ])->filtersFormWidth('lg')->deferFilters(false)
+            ->headerActions([
+                Action::make('episodes')->label('Attack episodes')->icon('phosphor-chart-line-up')->modalHeading('Attack episodes, last 24 hours')
+                    ->modalDescription('Blocked requests grouped into one episode per attack. Client keys are not addresses and are different on every edge.')
+                    ->slideOver()->modalWidth(Width::FiveExtraLarge)->modalSubmitAction(false)->modalCancelActionLabel('Close')
+                    ->modalContent(fn () => view('filament.domain.security-episodes', $this->episodeData())),
+            ])
             ->recordActions([
                 Action::make('trace')->label('Trace')->icon('phosphor-list-magnifying-glass')->modalHeading('Why this request was mitigated')
                     ->modalDescription('Built from what the event stores. Signals the cell does not log are listed as not recorded.')
@@ -143,6 +152,20 @@ class SecurityEventsRelationManager extends RelationManager
 
         return (new Paginator(collect($rows)->mapWithKeys(fn (array $row): array => [$row['event_id'] => $row]), $perPage, $page, ['pageName' => $this->getTablePaginationPageName()]))
             ->hasMorePagesWhen($result['next_cursor'] !== null);
+    }
+
+    /** @return array{state: string, episodes: array<int, array<string, mixed>>, minimum: int, quiet: int} */
+    private function episodeData(): array
+    {
+        $now = CarbonImmutable::now('UTC');
+        $data = ['state' => 'ready', 'episodes' => [], 'minimum' => AttackEpisodes::MINIMUM_BLOCKED, 'quiet' => SecurityAlertData::EPISODE_QUIET_MINUTES];
+        try {
+            $data['episodes'] = AttackEpisodes::describe($this->domain(), ['from' => $now->subDay(), 'to' => $now, 'raw' => true], app(AnalyticsStore::class));
+        } catch (AnalyticsUnavailableException) {
+            $data['state'] = 'unavailable';
+        }
+
+        return $data;
     }
 
     /** The rule sheet's values for a request: its path, country, network, and user agent as conditions, and a safe default action. */
