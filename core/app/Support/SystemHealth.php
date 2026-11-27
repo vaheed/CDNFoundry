@@ -160,8 +160,9 @@ final class SystemHealth
         $enabledClusters = DnsCluster::query()->where('enabled', true)->count();
         $badClusters = DnsCluster::query()->where('enabled', true)->where(fn ($query) => $query->where('last_health_status', '!=', 'healthy')->orWhereNull('last_health_at'))->count();
         $dnsDrift = DnsDeployment::query()->drifted()->count();
+        $customerRejected = DnsDeployment::query()->customerRejected()->count();
         $components['authoritative_dns'] = $this->state($enabledClusters === 0 ? 'degraded' : (($badClusters + $dnsDrift) > 0 ? 'degraded' : 'healthy'), ['enabled_clusters' => $enabledClusters, 'unhealthy_clusters' => $badClusters, 'drifted_deployments' => $dnsDrift]);
-        $components['dns_deployments'] = $this->state($dnsDrift > 0 ? 'degraded' : 'healthy', ['drifted' => $dnsDrift]);
+        $components['dns_deployments'] = $this->state($dnsDrift > 0 ? 'degraded' : 'healthy', ['drifted' => $dnsDrift, 'customer_rejected' => $customerRejected]);
 
         $expiring = TlsCertificate::query()->where('status', 'active')->where('expires_at', '<=', now()->addDays((int) config('services.acme.expiry_alert_days')))->count();
         $failedOrders = TlsOrder::query()->where('status', 'failed')->count();

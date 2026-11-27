@@ -86,7 +86,12 @@ class MetricsController extends Controller
         $lines[] = '# HELP cdnfoundry_status_summary One line naming what is wrong; the label is the sentence.';
         $lines[] = '# TYPE cdnfoundry_status_summary gauge';
         $lines[] = sprintf('cdnfoundry_status_summary{state="%s",summary="%s"} 1', $problems === [] ? 'healthy' : 'degraded', $problems === [] ? 'Healthy: every component reports in' : 'Degraded: '.implode(', ', $problems));
+        $lines[] = '# HELP cdnfoundry_dns_deployments_drifted DNS deployments that make the platform unhealthy: platform failures past their grace period, failed retirements and stale pending rows.';
+        $lines[] = '# TYPE cdnfoundry_dns_deployments_drifted gauge';
         $lines[] = 'cdnfoundry_dns_deployments_drifted '.DnsDeployment::query()->drifted()->count();
+        $lines[] = '# HELP cdnfoundry_dns_deployments_customer_rejected Zones PowerDNS refused because of the customer\'s record content; customer health, not a platform fault.';
+        $lines[] = '# TYPE cdnfoundry_dns_deployments_customer_rejected gauge';
+        $lines[] = 'cdnfoundry_dns_deployments_customer_rejected '.DnsDeployment::query()->customerRejected()->count();
         $lines[] = 'cdnfoundry_edges_stale '.Edge::query()->where('enabled', true)->where(fn ($query) => $query->whereNull('last_heartbeat_at')->orWhere('last_heartbeat_at', '<', now()->subSeconds(app(PlatformSettings::class)->integer('edge_runtime', 'heartbeat_fresh_seconds'))))->count();
         $enabledEdges = Edge::query()->where('enabled', true)->get(['capacity']);
         $lines[] = 'cdnfoundry_edge_gateways_unready '.$enabledEdges->filter(fn (Edge $edge): bool => ! ($edge->capacity['gateway']['ready'] ?? false))->count();
