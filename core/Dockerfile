@@ -1,6 +1,6 @@
 FROM php:8.5-fpm-alpine@sha256:51414d5291758fe27f58a64c7e8a078465d32cc7dcef7bda803f5b36019802e0 AS php-dependencies
 
-RUN apk add --no-cache --upgrade 'curl>=8.22.0-r0' 'libcurl>=8.22.0-r0' 'libcrypto3>=3.5.8-r0' 'libssl3>=3.5.8-r0' 'musl-utils>=1.2.6-r3' 'openssl>=3.5.8-r0' 'libexpat>=2.10.0-r0' 'bind-tools>=9.20.29-r0' icu-libs 'libpq>=18.7-r0' libzip libmaxminddb nginx supervisor su-exec postgresql-client restic \
+RUN apk add --no-cache --upgrade 'curl>=8.22.0-r0' 'libcurl>=8.22.0-r0' 'libcrypto3>=3.5.8-r0' 'libssl3>=3.5.8-r0' 'musl-utils>=1.2.6-r3' 'openssl>=3.5.8-r0' 'libexpat>=2.10.0-r0' 'libxml2>=2.13.9-r5' 'bind-tools>=9.20.29-r0' icu-libs 'libpq>=18.7-r0' libzip libmaxminddb nginx supervisor su-exec postgresql-client restic \
     && apk add --no-cache --virtual .build-deps $PHPIZE_DEPS icu-dev postgresql-dev libzip-dev \
     && docker-php-ext-install intl pcntl pdo_pgsql zip \
     && apk del .build-deps
