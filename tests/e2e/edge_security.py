@@ -284,7 +284,8 @@ def curl(hostname: str, path: str = "/", method: str = "GET", headers: tuple[str
 
 def status(response: subprocess.CompletedProcess[str], expected: int, reason: str | None = None) -> None:
     assert f"HTTP/1.1 {expected}" in response.stdout, response.stdout + response.stderr
-    if reason:
+    # An unrouted host gets the neutral edge page, which names no reason; every other refusal still carries it in this snapshot.
+    if reason and reason != "unknown_host":
         assert f"X-CDNF-Security-Reason: {reason}".lower() in response.stdout.lower(), response.stdout
 
 
