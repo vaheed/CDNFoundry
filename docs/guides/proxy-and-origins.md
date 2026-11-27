@@ -131,13 +131,39 @@ edge UUIDs) to choose recipients.
 </DocTabs>
 
 **Expected result:** an operation is queued ("Origin test queued" in the panel).
-When it finishes, the origin health shows status, address, latency, HTTP status,
-or a stable failure reason. Read it with
-`GET .../origin/health`.
+When it finishes, the origin health shows the result of that test with its
+address, latency, HTTP status, or a stable failure reason. Read it with
+`GET .../origin/health`. See [Origin health states](#origin-health-states).
 
 **If it fails:** tests need an active domain with verified nameservers and update
 permission. Pending, disabled, and deprovisioning domains cannot start probes.
 The test route is rate limited. Request a fresh test after DNS changes.
+
+### Origin health states
+
+Each proxied record shows one state per origin role (`primary` and `backup`),
+computed from separate signals that never overwrite each other: the scheduled
+check (`active`), the last manual test (`manual`) and failures reported from
+traffic (`passive`). Each signal records its observer, time and the checksum of
+the origin configuration it measured.
+
+| State | Meaning |
+| --- | --- |
+| `healthy` | Every fresh signal succeeded |
+| `unhealthy` | Every fresh signal failed |
+| `degraded` | Fresh signals disagree, for example a healthy scheduled check and a passive failure |
+| `pending` | Scheduled checks are on and the first result is not due yet |
+| `unknown` | Scheduled checks are on and no result arrived within three intervals |
+| `stale` | Evidence exists and none is fresh: the origin was edited, or it aged out |
+| `disabled` | Scheduled checks are off and there is no other evidence; the panel shows "Health check disabled" |
+
+Evidence expires: a passive failure after 15 minutes, a manual test after 24
+hours, a scheduled result after three intervals (at least 15 minutes). Editing
+an origin makes earlier evidence stale at once and queues the next scheduled
+check immediately. Turning scheduled checks off clears the scheduled result and
+leaves passive detection and runtime failover unchanged: health state is
+reporting only and never decides where a request goes. Absent evidence is never
+shown as unhealthy. Passive failures are attributed to the primary origin.
 
 How a test works:
 

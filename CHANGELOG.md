@@ -9,6 +9,7 @@ single source of truth; `make version-check` enforces it.
 
 ### Changed
 
+- Origin health is one state per origin role (`healthy`, `unhealthy`, `degraded`, `pending`, `unknown`, `stale`, `disabled`) computed from separate scheduled, manual and passive signals, in the panel and in `origin_health` of the record and `GET .../origin/health` (`status` is kept, `state` and `roles` are new). A passive failure no longer replaces a test result, evidence expires, and an edited origin makes it stale. Apply the migration `2026_11_30_000200_add_origin_signals_to_dns_records`.
 - New origins default to **Verify origin TLS: off**, in the domain panel and the API (`verify_tls` may be omitted on create). HTTPS without verification encrypts but does not authenticate the origin. An explicit value is always kept, an omitted value on update keeps the stored one, and stored origins are unchanged.
 
 ### Added
