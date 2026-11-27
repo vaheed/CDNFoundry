@@ -77,7 +77,7 @@ class SecurityEventsPanelTest extends TestCase
 
         $this->manager($domain)->assertTableActionExists('trace', record: $event['event_id'])->callTableAction('trace', $event['event_id'])->assertHasNoTableActionErrors();
         $html = view('filament.domain.security-event-trace', ['trace' => DecisionTrace::of($event)])->render();
-        foreach (['Managed WAF', '942100', 'r7', 'Reputation band', 'Dataset versions'] as $text) {
+        foreach (['Managed WAF', '942100', 'r7', 'Reputation band', 'Platform datasets', 'Not recorded'] as $text) {
             $this->assertStringContainsString($text, $html);
         }
     }
