@@ -242,6 +242,23 @@ class GrafanaContractTest(unittest.TestCase):
             if re.search(r"\bavg(?:_over_time)?\s*(?:by\s*\([^)]*\)\s*)?\(\s*(?:histogram_quantile|quantile\w*)\b", text, re.I) or re.search(r"\b(avg|avg_over_time)\s*\(\s*[\w:]*(?:p50|p95|p99|quantile)[\w:]*", text, re.I):
                 self.fail(f"{name}: averages an already calculated percentile")
 
+    def test_the_logs_explorer_has_one_template_per_class_that_filters_parsed_fields_and_adds_no_label(self) -> None:
+        sys.path.insert(0, str(ROOT / "docker/grafana"))
+        from log_templates import FIELDS, TEMPLATES
+
+        dashboard = self.by_uid["cdnf-logs-explorer"]
+        panels = {panel["title"]: panel for panel in resolved(dashboard, self.models)}
+        variables = {variable["name"] for variable in dashboard["templating"]["list"]}
+        self.assertTrue({variable for variable, _, _ in FIELDS} | {"environment", "host", "free_text", "service", "level"} <= variables)
+        for key, title, _, _, _ in TEMPLATES:
+            self.assertIn(title, panels, key)
+            expression = targets(panels[title])[0]["expr"]
+            self.assertEqual({"environment", "host", "service", "level"}, set(re.findall(r"([a-z_]+)=~", expression.split("}")[0])), f"{title}: it may select only by the four labels")
+            self.assertIn("| json", expression, f"{title}: identifiers are parsed fields")
+            for variable, parsed, _ in FIELDS:
+                self.assertIn(f'{parsed}=~".*${variable}.*"', expression, f"{title}: {variable}")
+        self.assertGreaterEqual(len(TEMPLATES), 16)
+
     def test_no_panel_turns_an_absent_series_into_zero(self) -> None:
         """`or vector(0)` shows 0 for a source that is not reporting. A panel keeps a zero only while its source exists:
         `or (0 * max(<source>))` is 0 when the source reports and has no value when it does not."""

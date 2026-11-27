@@ -4,6 +4,7 @@ from __future__ import annotations
 from dashboard_lib import *  # noqa: F403
 from dashboards_common import *  # noqa: F403
 from dashboards_noc import ALERT_TABLE_EXPR, ALERT_TRANSFORMS, firing_alerts
+from log_templates import FIELDS, TEMPLATES, template_logql
 
 SLOS = {
     "edge_availability": "Edge availability", "edge_5xx": "Edge 5xx ratio", "edge_latency": "Edge latency", "purge_propagation": "Purge propagation",
@@ -269,13 +270,24 @@ def logs_explorer() -> dict:
     saved = ("**Saved queries.** Each runs in the panels below.\n\n"
              "| Service | LogQL |\n|---|---|\n"
              + "\n".join(f"| {name} | `{{service=\"{name}\"}}` |" for name in ("core", "edge-agent", "edge-gateway", "dnsdist", "pdns-auth", "loki", "vector")) + "\n")
+    def textbox(name: str, label: str) -> dict:
+        return {"name": name, "label": label, "type": "textbox", "query": "", "current": {"text": "", "value": ""}, "hide": 0, "options": [{"selected": True, "text": "", "value": ""}], "skipUrlSync": False}
+
+    def label_var(name: str, label: str) -> dict:
+        return {"name": name, "label": label, "type": "query", "datasource": LOKI, "query": {"label": name, "refId": name, "stream": "", "type": 1}, "definition": f"label_values({name})", "includeAll": True, "multi": True, "allValue": ".+",
+                "current": {"selected": True, "text": ["All"], "value": ["$__all"]}, "refresh": 2, "hide": 0, "options": [], "sort": 1}
+
+    filters = [label_var("environment", "Environment"), label_var("host", "Host"), *[textbox(variable, label) for variable, _, label in FIELDS], textbox("free_text", "Free text")]
+    templates = [logs(title, f"{what} Narrow it with the filters above; identifiers are read from the structured line, not from labels.", [loki(template_logql(key))], w=12, h=9) for key, title, what, _service, _filter in TEMPLATES]
+    template_rows = [templates[i:i + 2] for i in range(0, len(templates), 2)]
     rows = [
         [text("Saved queries", "LogQL for each service. Pick a service and level above, or paste one of these into Explore.", saved, w=24, h=6)],
         [logs("Logs", "Operational logs for the selected services and levels. Use the Live button for a live tail.", [loki('{service=~"$service", level=~"$level"}')], h=12)],
+        *template_rows,
         [timeseries("Log volume by level", "Lines per second by level.", [loki('sum by (level) (count_over_time({service=~"$service"} [$__auto]))', legend="{{level}}")], "short", stack=True, w=12),
          timeseries("Error lines by service", "Error and critical lines per interval, by service.", [loki('sum by (service) (count_over_time({service=~"$service", level=~"error|critical"} [$__auto]))', legend="{{service}}")], "short", threshold="zero_warn", w=12)],
     ]
-    return dashboard("cdnf-logs-explorer", "Logs explorer", "cdnf-oncall", "Saved LogQL for each service, with level and service filters and live tail.", rows, runbook="operational-error-logs", extra_variables=[service, level])
+    return dashboard("cdnf-logs-explorer", "Logs explorer", "cdnf-oncall", "Saved LogQL for each service, with level and service filters and live tail.", rows, runbook="operational-error-logs", extra_variables=[service, level, *filters])
 
 
 def request_trace() -> dict:

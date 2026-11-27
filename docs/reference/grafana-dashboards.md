@@ -541,6 +541,22 @@ Refreshes every 30s.
 | Panel | What it shows |
 | --- | --- |
 | Logs | Operational logs for the selected services and levels. Use the Live button for a live tail. |
+| All errors and critical events | Every error and critical line, from every service. Narrow it with the filters above; identifiers are read from the structured line, not from labels. |
+| Control plane | Application, gateway and web logs of the control plane. Narrow it with the filters above; identifiers are read from the structured line, not from labels. |
+| Jobs and scheduler | Queue workers, the scheduler, notifications and log push. Narrow it with the filters above; identifiers are read from the structured line, not from labels. |
+| Edge agent | The agent's tasks, enrollment, heartbeats and artifact delivery. Narrow it with the filters above; identifiers are read from the structured line, not from labels. |
+| Gateway and cells | The PoP gateway, its control listener and every cell. Narrow it with the filters above; identifiers are read from the structured line, not from labels. |
+| Origin connectivity and TLS | Origin connection, timeout, destination and TLS verification lines. Narrow it with the filters above; identifiers are read from the structured line, not from labels. |
+| DNS and zone synchronization | PowerDNS, DNSdist and zone reconciliation. Narrow it with the filters above; identifiers are read from the structured line, not from labels. |
+| Certificate issuance and renewal | ACME orders, DNS-01 validation and renewal. Narrow it with the filters above; identifiers are read from the structured line, not from labels. |
+| WAF runtime | ModSecurity and managed ruleset lines from the cells. Narrow it with the filters above; identifiers are read from the structured line, not from labels. |
+| Challenge failures | Browser challenge refusals and verification failures. Narrow it with the filters above; identifiers are read from the structured line, not from labels. |
+| Shared rate-limit and reputation | Rate reports, reputation bands and their aggregation. Narrow it with the filters above; identifiers are read from the structured line, not from labels. |
+| Configuration deployment and revision mismatch | Snapshots, artifacts, revisions and acknowledgements. Narrow it with the filters above; identifiers are read from the structured line, not from labels. |
+| Telemetry delivery | Vector, the log collector, Loki and ClickHouse delivery, buffers and drops. Narrow it with the filters above; identifiers are read from the structured line, not from labels. |
+| Database and queue | PostgreSQL, the cache, queues and connection errors. Narrow it with the filters above; identifiers are read from the structured line, not from labels. |
+| Backup, rollback and recovery | Backups, restores and rollbacks the control plane records. Fleet runs on the operator host and does not log to Loki. Narrow it with the filters above; identifiers are read from the structured line, not from labels. |
+| Request and operation correlation | Every service's lines for one request, operation or task. Fill an identifier above. Narrow it with the filters above; identifiers are read from the structured line, not from labels. |
 | Log volume by level | Lines per second by level. |
 | Error lines by service | Error and critical lines per interval, by service. |
 

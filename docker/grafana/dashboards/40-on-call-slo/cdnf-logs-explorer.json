@@ -237,6 +237,806 @@
         "type": "loki",
         "uid": "loki"
       },
+      "description": "Every error and critical line, from every service. Narrow it with the filters above; identifiers are read from the structured line, not from labels.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 18
+      },
+      "id": 3,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{environment=~\"$environment\", host=~\"$host\", service=~\".+\", level=~\"error|critical\"} |~ \"(?i)$free_text\" | json | domain_id=~\".*$domain.*\" | edge_id=~\".*$edge.*\" | cell=~\".*$cell.*\" | request_id=~\".*$request_id.*\" | operation_id=~\".*$operation_id.*\" | task_id=~\".*$task_id.*\" | revision_id=~\".*$revision.*\" | event=~\".*$event_type.*\"",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "All errors and critical events",
+      "type": "logs"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "description": "Application, gateway and web logs of the control plane. Narrow it with the filters above; identifiers are read from the structured line, not from labels.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 18
+      },
+      "id": 4,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{environment=~\"$environment\", host=~\"$host\", service=~\"core|web|caddy|migrate|telemetry-gateway\", level=~\"$level\"} |~ \"(?i)$free_text\" | json | domain_id=~\".*$domain.*\" | edge_id=~\".*$edge.*\" | cell=~\".*$cell.*\" | request_id=~\".*$request_id.*\" | operation_id=~\".*$operation_id.*\" | task_id=~\".*$task_id.*\" | revision_id=~\".*$revision.*\" | event=~\".*$event_type.*\"",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Control plane",
+      "type": "logs"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "description": "Queue workers, the scheduler, notifications and log push. Narrow it with the filters above; identifiers are read from the structured line, not from labels.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 27
+      },
+      "id": 5,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{environment=~\"$environment\", host=~\"$host\", service=~\"horizon|scheduler|notifier|log-pusher\", level=~\"$level\"} |~ \"(?i)$free_text\" | json | domain_id=~\".*$domain.*\" | edge_id=~\".*$edge.*\" | cell=~\".*$cell.*\" | request_id=~\".*$request_id.*\" | operation_id=~\".*$operation_id.*\" | task_id=~\".*$task_id.*\" | revision_id=~\".*$revision.*\" | event=~\".*$event_type.*\"",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Jobs and scheduler",
+      "type": "logs"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "description": "The agent's tasks, enrollment, heartbeats and artifact delivery. Narrow it with the filters above; identifiers are read from the structured line, not from labels.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 27
+      },
+      "id": 6,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{environment=~\"$environment\", host=~\"$host\", service=~\"edge-agent\", level=~\"$level\"} |~ \"(?i)$free_text\" | json | domain_id=~\".*$domain.*\" | edge_id=~\".*$edge.*\" | cell=~\".*$cell.*\" | request_id=~\".*$request_id.*\" | operation_id=~\".*$operation_id.*\" | task_id=~\".*$task_id.*\" | revision_id=~\".*$revision.*\" | event=~\".*$event_type.*\"",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Edge agent",
+      "type": "logs"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "description": "The PoP gateway, its control listener and every cell. Narrow it with the filters above; identifiers are read from the structured line, not from labels.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 36
+      },
+      "id": 7,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{environment=~\"$environment\", host=~\"$host\", service=~\"edge-gateway|edge-control|cell-0[1-8]\", level=~\"$level\"} |~ \"(?i)$free_text\" | json | domain_id=~\".*$domain.*\" | edge_id=~\".*$edge.*\" | cell=~\".*$cell.*\" | request_id=~\".*$request_id.*\" | operation_id=~\".*$operation_id.*\" | task_id=~\".*$task_id.*\" | revision_id=~\".*$revision.*\" | event=~\".*$event_type.*\"",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Gateway and cells",
+      "type": "logs"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "description": "Origin connection, timeout, destination and TLS verification lines. Narrow it with the filters above; identifiers are read from the structured line, not from labels.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 36
+      },
+      "id": 8,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{environment=~\"$environment\", host=~\"$host\", service=~\"edge-agent|edge-gateway|cell-0[1-8]\", level=~\"$level\"} |~ \"(?i)origin|upstream|tls|handshake|destination\" |~ \"(?i)$free_text\" | json | domain_id=~\".*$domain.*\" | edge_id=~\".*$edge.*\" | cell=~\".*$cell.*\" | request_id=~\".*$request_id.*\" | operation_id=~\".*$operation_id.*\" | task_id=~\".*$task_id.*\" | revision_id=~\".*$revision.*\" | event=~\".*$event_type.*\"",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Origin connectivity and TLS",
+      "type": "logs"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "description": "PowerDNS, DNSdist and zone reconciliation. Narrow it with the filters above; identifiers are read from the structured line, not from labels.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 45
+      },
+      "id": 9,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{environment=~\"$environment\", host=~\"$host\", service=~\"pdns-auth|pdns-primary|pdns-migrate|dnsdist|core|horizon\", level=~\"$level\"} |~ \"(?i)zone|dns|pdns|serial|catalog\" |~ \"(?i)$free_text\" | json | domain_id=~\".*$domain.*\" | edge_id=~\".*$edge.*\" | cell=~\".*$cell.*\" | request_id=~\".*$request_id.*\" | operation_id=~\".*$operation_id.*\" | task_id=~\".*$task_id.*\" | revision_id=~\".*$revision.*\" | event=~\".*$event_type.*\"",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "DNS and zone synchronization",
+      "type": "logs"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "description": "ACME orders, DNS-01 validation and renewal. Narrow it with the filters above; identifiers are read from the structured line, not from labels.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 45
+      },
+      "id": 10,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{environment=~\"$environment\", host=~\"$host\", service=~\"core|horizon|scheduler\", level=~\"$level\"} |~ \"(?i)certificate|acme|dns-01|renewal|order\" |~ \"(?i)$free_text\" | json | domain_id=~\".*$domain.*\" | edge_id=~\".*$edge.*\" | cell=~\".*$cell.*\" | request_id=~\".*$request_id.*\" | operation_id=~\".*$operation_id.*\" | task_id=~\".*$task_id.*\" | revision_id=~\".*$revision.*\" | event=~\".*$event_type.*\"",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Certificate issuance and renewal",
+      "type": "logs"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "description": "ModSecurity and managed ruleset lines from the cells. Narrow it with the filters above; identifiers are read from the structured line, not from labels.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 54
+      },
+      "id": 11,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{environment=~\"$environment\", host=~\"$host\", service=~\"cell-0[1-8]|edge-gateway\", level=~\"$level\"} |~ \"(?i)waf|modsecurity|crs|ruleset\" |~ \"(?i)$free_text\" | json | domain_id=~\".*$domain.*\" | edge_id=~\".*$edge.*\" | cell=~\".*$cell.*\" | request_id=~\".*$request_id.*\" | operation_id=~\".*$operation_id.*\" | task_id=~\".*$task_id.*\" | revision_id=~\".*$revision.*\" | event=~\".*$event_type.*\"",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "WAF runtime",
+      "type": "logs"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "description": "Browser challenge refusals and verification failures. Narrow it with the filters above; identifiers are read from the structured line, not from labels.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 54
+      },
+      "id": 12,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{environment=~\"$environment\", host=~\"$host\", service=~\"cell-0[1-8]|edge-gateway|edge-agent\", level=~\"$level\"} |~ \"(?i)challenge\" |~ \"(?i)$free_text\" | json | domain_id=~\".*$domain.*\" | edge_id=~\".*$edge.*\" | cell=~\".*$cell.*\" | request_id=~\".*$request_id.*\" | operation_id=~\".*$operation_id.*\" | task_id=~\".*$task_id.*\" | revision_id=~\".*$revision.*\" | event=~\".*$event_type.*\"",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Challenge failures",
+      "type": "logs"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "description": "Rate reports, reputation bands and their aggregation. Narrow it with the filters above; identifiers are read from the structured line, not from labels.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 10,
+        "x": 0,
+        "y": 63
+      },
+      "id": 13,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{environment=~\"$environment\", host=~\"$host\", service=~\"edge-agent|core|horizon|cell-0[1-8]\", level=~\"$level\"} |~ \"(?i)rate.?limit|reputation|containment|report\" |~ \"(?i)$free_text\" | json | domain_id=~\".*$domain.*\" | edge_id=~\".*$edge.*\" | cell=~\".*$cell.*\" | request_id=~\".*$request_id.*\" | operation_id=~\".*$operation_id.*\" | task_id=~\".*$task_id.*\" | revision_id=~\".*$revision.*\" | event=~\".*$event_type.*\"",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Shared rate-limit and reputation",
+      "type": "logs"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "description": "Snapshots, artifacts, revisions and acknowledgements. Narrow it with the filters above; identifiers are read from the structured line, not from labels.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 14,
+        "x": 10,
+        "y": 63
+      },
+      "id": 14,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{environment=~\"$environment\", host=~\"$host\", service=~\"edge-agent|core|horizon\", level=~\"$level\"} |~ \"(?i)revision|snapshot|artifact|mismatch|activation\" |~ \"(?i)$free_text\" | json | domain_id=~\".*$domain.*\" | edge_id=~\".*$edge.*\" | cell=~\".*$cell.*\" | request_id=~\".*$request_id.*\" | operation_id=~\".*$operation_id.*\" | task_id=~\".*$task_id.*\" | revision_id=~\".*$revision.*\" | event=~\".*$event_type.*\"",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Configuration deployment and revision mismatch",
+      "type": "logs"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "description": "Vector, the log collector, Loki and ClickHouse delivery, buffers and drops. Narrow it with the filters above; identifiers are read from the structured line, not from labels.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 72
+      },
+      "id": 15,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{environment=~\"$environment\", host=~\"$host\", service=~\"vector|log-collector|loki|clickhouse|clickhouse-migrate\", level=~\"$level\"} |~ \"(?i)buffer|dropped|sink|insert|delivery|discard\" |~ \"(?i)$free_text\" | json | domain_id=~\".*$domain.*\" | edge_id=~\".*$edge.*\" | cell=~\".*$cell.*\" | request_id=~\".*$request_id.*\" | operation_id=~\".*$operation_id.*\" | task_id=~\".*$task_id.*\" | revision_id=~\".*$revision.*\" | event=~\".*$event_type.*\"",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Telemetry delivery",
+      "type": "logs"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "description": "PostgreSQL, the cache, queues and connection errors. Narrow it with the filters above; identifiers are read from the structured line, not from labels.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 72
+      },
+      "id": 16,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{environment=~\"$environment\", host=~\"$host\", service=~\"control-db|pdns-db|cache|redis|horizon|core\", level=~\"$level\"} |~ \"(?i)database|postgres|queue|deadlock|connection|redis|migration\" |~ \"(?i)$free_text\" | json | domain_id=~\".*$domain.*\" | edge_id=~\".*$edge.*\" | cell=~\".*$cell.*\" | request_id=~\".*$request_id.*\" | operation_id=~\".*$operation_id.*\" | task_id=~\".*$task_id.*\" | revision_id=~\".*$revision.*\" | event=~\".*$event_type.*\"",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Database and queue",
+      "type": "logs"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "description": "Backups, restores and rollbacks the control plane records. Fleet runs on the operator host and does not log to Loki. Narrow it with the filters above; identifiers are read from the structured line, not from labels.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 81
+      },
+      "id": 17,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{environment=~\"$environment\", host=~\"$host\", service=~\"core|horizon|scheduler|migrate\", level=~\"$level\"} |~ \"(?i)backup|restore|rollback|recovery\" |~ \"(?i)$free_text\" | json | domain_id=~\".*$domain.*\" | edge_id=~\".*$edge.*\" | cell=~\".*$cell.*\" | request_id=~\".*$request_id.*\" | operation_id=~\".*$operation_id.*\" | task_id=~\".*$task_id.*\" | revision_id=~\".*$revision.*\" | event=~\".*$event_type.*\"",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Backup, rollback and recovery",
+      "type": "logs"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "description": "Every service's lines for one request, operation or task. Fill an identifier above. Narrow it with the filters above; identifiers are read from the structured line, not from labels.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 81
+      },
+      "id": 18,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{environment=~\"$environment\", host=~\"$host\", service=~\".+\", level=~\"$level\"} |~ \"(?i)$free_text\" | json | domain_id=~\".*$domain.*\" | edge_id=~\".*$edge.*\" | cell=~\".*$cell.*\" | request_id=~\".*$request_id.*\" | operation_id=~\".*$operation_id.*\" | task_id=~\".*$task_id.*\" | revision_id=~\".*$revision.*\" | event=~\".*$event_type.*\"",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Request and operation correlation",
+      "type": "logs"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
       "description": "Lines per second by level.",
       "fieldConfig": {
         "defaults": {
@@ -287,9 +1087,9 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 18
+        "y": 90
       },
-      "id": 3,
+      "id": 19,
       "options": {
         "legend": {
           "calcs": [],
@@ -376,9 +1176,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 18
+        "y": 90
       },
-      "id": 4,
+      "id": 20,
       "options": {
         "legend": {
           "calcs": [],
@@ -727,6 +1527,241 @@
         ],
         "query": "debug,info,warning,error,critical",
         "type": "custom"
+      },
+      {
+        "allValue": ".+",
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "definition": "label_values(environment)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Environment",
+        "multi": true,
+        "name": "environment",
+        "options": [],
+        "query": {
+          "label": "environment",
+          "refId": "environment",
+          "stream": "",
+          "type": 1
+        },
+        "refresh": 2,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".+",
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "definition": "label_values(host)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Host",
+        "multi": true,
+        "name": "host",
+        "options": [],
+        "query": {
+          "label": "host",
+          "refId": "host",
+          "stream": "",
+          "type": 1
+        },
+        "refresh": 2,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "hide": 0,
+        "label": "Domain ID",
+        "name": "domain",
+        "options": [
+          {
+            "selected": true,
+            "text": "",
+            "value": ""
+          }
+        ],
+        "query": "",
+        "skipUrlSync": false,
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "hide": 0,
+        "label": "Edge ID",
+        "name": "edge",
+        "options": [
+          {
+            "selected": true,
+            "text": "",
+            "value": ""
+          }
+        ],
+        "query": "",
+        "skipUrlSync": false,
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "hide": 0,
+        "label": "Cell",
+        "name": "cell",
+        "options": [
+          {
+            "selected": true,
+            "text": "",
+            "value": ""
+          }
+        ],
+        "query": "",
+        "skipUrlSync": false,
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "hide": 0,
+        "label": "Request ID",
+        "name": "request_id",
+        "options": [
+          {
+            "selected": true,
+            "text": "",
+            "value": ""
+          }
+        ],
+        "query": "",
+        "skipUrlSync": false,
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "hide": 0,
+        "label": "Operation ID",
+        "name": "operation_id",
+        "options": [
+          {
+            "selected": true,
+            "text": "",
+            "value": ""
+          }
+        ],
+        "query": "",
+        "skipUrlSync": false,
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "hide": 0,
+        "label": "Task ID",
+        "name": "task_id",
+        "options": [
+          {
+            "selected": true,
+            "text": "",
+            "value": ""
+          }
+        ],
+        "query": "",
+        "skipUrlSync": false,
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "hide": 0,
+        "label": "Revision",
+        "name": "revision",
+        "options": [
+          {
+            "selected": true,
+            "text": "",
+            "value": ""
+          }
+        ],
+        "query": "",
+        "skipUrlSync": false,
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "hide": 0,
+        "label": "Event type",
+        "name": "event_type",
+        "options": [
+          {
+            "selected": true,
+            "text": "",
+            "value": ""
+          }
+        ],
+        "query": "",
+        "skipUrlSync": false,
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "hide": 0,
+        "label": "Free text",
+        "name": "free_text",
+        "options": [
+          {
+            "selected": true,
+            "text": "",
+            "value": ""
+          }
+        ],
+        "query": "",
+        "skipUrlSync": false,
+        "type": "textbox"
       }
     ]
   },
