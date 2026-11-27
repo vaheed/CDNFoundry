@@ -19,7 +19,7 @@ that exist.
 - **Dashboard** is the Grafana dashboard that shows the cause. See
   [Grafana by team](../operations/grafana-by-team.md).
 
-There are 79 alerts.
+There are 81 alerts.
 
 ## Team: noc
 
@@ -58,6 +58,7 @@ There are 79 alerts.
 
 | Alert | Severity | Fires after | What it means | Runbook | Dashboard |
 | --- | --- | --- | --- | --- | --- |
+| `CDNFoundryServingDimensionUnhealthy` | critical | 5m | The serving components of the platform are unhealthy | [Runbook](../operations/runbooks.md#component-unhealthy) | Control plane |
 | `ControlBackupStale` | critical | 30m | No recent verified control backup, or the backup repository failed its integrity check | [Runbook](../operations/runbooks.md#backup-stale) | Backups and recovery |
 | `ControlNodeUnreachable` | critical | 2m | A control node is unreachable from the node that watches it | [Runbook](../operations/runbooks.md#control-node-lost) | Control plane |
 | `ControlPlaneMetricsUnavailable` | critical | 2m | CDNFoundry operational metrics are unavailable | [Runbook](../operations/runbooks.md#control-plane-metrics-unavailable) | Control plane |
@@ -71,6 +72,7 @@ There are 79 alerts.
 | `SLOBurnPurgePropagationFast` | critical | 2m | Purge propagation (applied within 30 s) is burning its error budget 14.4 times too fast over 1h and 5m | [Runbook](../operations/runbooks.md#propagation-burn) | SLOs |
 | `SLOBurnTelemetryDeliveryFast` | critical | 2m | Telemetry delivery is burning its error budget 14.4 times too fast over 1h and 5m | [Runbook](../operations/runbooks.md#telemetry-delivery-burn) | SLOs |
 | `CDNFoundryComponentUnhealthy` | warning | 5m | A CDNFoundry dependency or reconciliation component is degraded | [Runbook](../operations/runbooks.md#component-unhealthy) | Control plane |
+| `CDNFoundryDnsDeploymentsDrifted` | warning | 10m | DNS deployments are failing for platform reasons, not because of a customer's records | [Runbook](../operations/runbooks.md#component-unhealthy) | Control plane |
 | `CDNFoundryFailedOperations` | warning | 1m | CDNFoundry has failed operations requiring inspection | [Runbook](../operations/runbooks.md#failed-operations) | Control plane |
 | `CDNFoundryQueueBacklog` | warning | 5m | A bounded CDNFoundry worker lane has excessive depth or age | [Runbook](../operations/runbooks.md#queue-backlog) | Control plane |
 | `ConfigPropagationSlow` | warning | 2m | A published edge configuration has waited over five minutes to be applied by a PoP | [Runbook](../operations/runbooks.md#stale-edge-map-or-endpoint-mismatch) | Config & purge propagation |
