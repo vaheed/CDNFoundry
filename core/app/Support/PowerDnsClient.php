@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Exceptions\ZoneContentRejectedException;
 use App\Models\DnsCluster;
 use App\Models\DnsZoneChange;
 use Illuminate\Http\Client\PendingRequest;
@@ -62,9 +63,14 @@ class PowerDnsClient
             ->map(fn (array $rrset): array => ['name' => $rrset['name'], 'type' => $rrset['type'], 'changetype' => 'DELETE', 'records' => []]);
         $replacements = collect($rrsets)->map(fn (array $rrset): array => [...$rrset, 'changetype' => 'REPLACE']);
 
-        $request->patch("/api/v1/servers/{$cluster->server_id}/zones/$zoneId", [
+        $patched = $request->patch("/api/v1/servers/{$cluster->server_id}/zones/$zoneId", [
             'rrsets' => $deletes->concat($replacements)->values()->all(),
-        ])->throw();
+        ]);
+        if ($patched->status() === 422) {
+            // PowerDNS is up and answered that these record sets are not acceptable; that is the zone's content.
+            throw new ZoneContentRejectedException('PowerDNS rejected the zone content: '.mb_substr($patched->body(), 0, 300));
+        }
+        $patched->throw();
 
         $readBack = $request->get("/api/v1/servers/{$cluster->server_id}/zones/$zoneId")->throw();
         $actual = $readBack->json('rrsets');

@@ -26,7 +26,7 @@ class RepairDnsDrift extends Command
         $deployments = DnsDeployment::query()->with(['domain', 'cluster'])->where('tombstone', false)
             ->whereHas('cluster', fn ($query) => $query->where('enabled', true))
             ->whereHas('domain', fn ($query) => $query->whereIn('lifecycle_state', [DomainLifecycleState::PendingVerification, DomainLifecycleState::Active]))
-            ->orderByRaw('verified_at IS NULL DESC')->orderBy('verified_at')->orderBy('id')->limit($limit)->get();
+            ->orderByRaw("CASE WHEN failure_class = 'customer_content' THEN 1 ELSE 0 END")->orderByRaw("CASE WHEN status = 'failed' THEN 0 ELSE 1 END")->orderByRaw('verified_at IS NULL DESC')->orderBy('verified_at')->orderBy('id')->limit($limit)->get();
 
         foreach ($deployments as $deployment) {
             $domain = $deployment->domain;

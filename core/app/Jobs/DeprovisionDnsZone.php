@@ -50,10 +50,10 @@ class DeprovisionDnsZone implements ShouldBeUnique, ShouldQueue
                 if (! $zoneIsShared) {
                     $client->deleteZone($cluster, $domain->name);
                 }
-                $deployment->update(['status' => 'deprovisioned', 'active_rrsets' => [], 'active_checksum' => null, 'last_error' => null, 'deprovisioned_at' => now()]);
+                $deployment->update(['status' => 'deprovisioned', 'active_rrsets' => [], 'active_checksum' => null, 'last_error' => null, 'deprovisioned_at' => now(), 'failure_class' => null, 'first_failed_at' => null]);
             } catch (Throwable $exception) {
                 $message = mb_substr($exception->getMessage(), 0, 4000);
-                $deployment->update(['status' => 'failed', 'last_error' => $message]);
+                $deployment->update($deployment->failureAttributes($exception));
                 $failures[] = "{$cluster->name}: $message";
             }
         }

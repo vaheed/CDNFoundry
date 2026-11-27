@@ -128,11 +128,12 @@ class ReconcileDnsZone implements ShouldBeUniqueUntilProcessing, ShouldQueue
                 $deployment->update([
                     'deployed_revision' => $revision, 'status' => 'succeeded', 'active_checksum' => $checksum,
                     'active_rrsets' => $rrsets, 'last_error' => null, 'deployed_at' => now(),
+                    'failure_class' => null, 'first_failed_at' => null,
                 ]);
                 $cluster->update(['last_reconciled_revision' => max($cluster->last_reconciled_revision, $revision)]);
             } catch (Throwable $exception) {
                 $message = mb_substr($exception->getMessage(), 0, 4000);
-                $deployment->update(['status' => 'failed', 'last_error' => $message]);
+                $deployment->update($deployment->failureAttributes($exception));
                 $failures[] = "{$cluster->name}: $message";
             }
         }
