@@ -156,7 +156,7 @@
         "type": "postgres",
         "uid": "control-db"
       },
-      "description": "PoPs that are enabled.",
+      "description": "PoPs that are enabled. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -230,7 +230,7 @@
         "type": "postgres",
         "uid": "control-db"
       },
-      "description": "Cells that report ready.",
+      "description": "Cells that report ready. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -304,7 +304,7 @@
         "type": "postgres",
         "uid": "control-db"
       },
-      "description": "Placements that are not yet in their final state.",
+      "description": "Placements that are not yet in their final state. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -397,7 +397,7 @@
         "type": "postgres",
         "uid": "control-db"
       },
-      "description": "Rollouts by state. A paused rollout stopped on a safety threshold.",
+      "description": "Rollouts by state. A paused rollout stopped on a safety threshold. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -471,7 +471,7 @@
         "type": "postgres",
         "uid": "control-db"
       },
-      "description": "Where domains are in moving between pools.",
+      "description": "Where domains are in moving between pools. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -552,7 +552,7 @@
         "type": "postgres",
         "uid": "control-db"
       },
-      "description": "Tasks sent to PoPs in the last 24 hours, by state.",
+      "description": "Tasks sent to PoPs in the last 24 hours, by state. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -626,7 +626,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Pool endpoints DNS publishes (1) and withholds (0).",
+      "description": "Pool endpoints DNS publishes (1) and withholds (0). Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -712,7 +712,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Endpoints that have not acknowledged their desired map.",
+      "description": "Endpoints that have not acknowledged their desired map. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -802,7 +802,7 @@
         "type": "postgres",
         "uid": "control-db"
       },
-      "description": "Every PoP with its heartbeat, version, and applied sequence.",
+      "description": "Every PoP with its heartbeat, version, and applied sequence. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {

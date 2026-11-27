@@ -156,7 +156,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Hosts whose exporter answers.",
+      "description": "Hosts whose exporter answers. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -230,7 +230,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Hosts whose exporter does not answer.",
+      "description": "Hosts whose exporter does not answer. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -308,7 +308,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Processes the kernel killed for memory in the last day.",
+      "description": "Processes the kernel killed for memory in the last day. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -386,7 +386,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Largest clock offset on any host.",
+      "description": "Largest clock offset on any host. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -469,7 +469,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Share of CPU in use per host.",
+      "description": "Share of CPU in use per host. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -556,7 +556,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Share of memory in use per host.",
+      "description": "Share of memory in use per host. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -643,7 +643,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Share of the root filesystem in use per host.",
+      "description": "Share of the root filesystem in use per host. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -738,7 +738,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Bits per second sent and received per host.",
+      "description": "Bits per second sent and received per host. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -835,7 +835,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Clock offset per host.",
+      "description": "Clock offset per host. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -921,7 +921,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Time since each host booted; a drop is a restart.",
+      "description": "Time since each host booted; a drop is a restart. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1007,7 +1007,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Processes the kernel killed for memory, per hour.",
+      "description": "Processes the kernel killed for memory, per hour. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {

@@ -186,7 +186,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "DNSdist backends marked up.",
+      "description": "DNSdist backends marked up. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -260,7 +260,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Age of the oldest DNS deployment that has not reached its desired serial.",
+      "description": "Age of the oldest DNS deployment that has not reached its desired serial. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -514,7 +514,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "1 when DNSdist sends queries to the backend.",
+      "description": "1 when DNSdist sends queries to the backend. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -604,7 +604,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Average backend response time reported by DNSdist.",
+      "description": "Average backend response time reported by DNSdist. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -701,7 +701,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Packet-cache hits. DNSdist runs without a packet cache by design, so this stays at zero.",
+      "description": "Packet-cache hits. DNSdist runs without a packet cache by design, so this stays at zero. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -787,7 +787,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Domains whose zone has not reached its desired revision on every DNS target.",
+      "description": "Domains whose zone has not reached its desired revision on every DNS target. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {

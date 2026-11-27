@@ -312,7 +312,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Emergency modes switched on and not expired.",
+      "description": "Emergency modes switched on and not expired. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -396,7 +396,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Security alerts firing now.",
+      "description": "Security alerts firing now. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {

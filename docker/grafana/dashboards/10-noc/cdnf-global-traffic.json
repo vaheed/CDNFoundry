@@ -622,7 +622,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Client networks sending the most requests. ASNs are kept in raw events only, so this covers at most 7 days.",
+      "description": "Client networks sending the most requests. ASNs are kept in raw events only, so this covers at most 7 days. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {

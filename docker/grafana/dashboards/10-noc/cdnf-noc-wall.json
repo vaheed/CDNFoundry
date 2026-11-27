@@ -571,7 +571,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Alerts firing now.",
+      "description": "Alerts firing now. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -653,7 +653,7 @@
         "type": "postgres",
         "uid": "control-db"
       },
-      "description": "Every enabled PoP by country, green when its heartbeat is fresh and red when it is not.",
+      "description": "Every enabled PoP by country, green when its heartbeat is fresh and red when it is not. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {

@@ -278,7 +278,7 @@ def shared(uid: str, panel: dict[str, Any], *, w: int | None = None, h: int | No
     The model is written to library-panels/<uid>.json and created by the bootstrap job. A dashboard keeps only
     the reference, a title for the layout, and where the panel sits.
     """
-    model = state_window(copy.deepcopy(panel))
+    model = state_scope(state_window(copy.deepcopy(panel)))
     model.pop("gridPos", None)
     model.pop("id", None)
     if uid in LIBRARY and LIBRARY[uid] != model:
@@ -390,6 +390,20 @@ def state_window(panel: dict[str, Any]) -> dict[str, Any]:
     return panel
 
 
+_FILTERS = ("region", "pop", "edge", "pool", "domain", "hostname")
+_FILTER_USED = {name: re.compile(r"[\$\{]\{?" + name + r"\b") for name in _FILTERS}
+
+
+def state_scope(panel: dict[str, Any]) -> dict[str, Any]:
+    """A panel whose queries follow none of the dashboard's region, PoP, edge, pool, domain or hostname filters says it is fleet-wide."""
+    if panel.get("type") in ("row", "text") or "fleet-wide" in panel.get("description", "").lower():
+        return panel
+    queries = " ".join(str(target.get("expr") or target.get("rawSql") or target.get("query") or "") for target in panel.get("targets", []))
+    if queries and not any(pattern.search(queries) for pattern in _FILTER_USED.values()):
+        panel["description"] = f"{panel.get('description', '').rstrip()} Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.".strip()
+    return panel
+
+
 def layout(rows: list[Any]) -> list[dict[str, Any]]:
     """Lay panels out left to right. A list is one row of panels sharing the 24 columns; a dict is a section header."""
     panels: list[dict[str, Any]] = []
@@ -408,7 +422,7 @@ def layout(rows: list[Any]) -> list[dict[str, Any]]:
             raise ValueError(f"panels in a row must fill 24 columns, got {used}: {[p['title'] for p in item]}")
         x = 0
         for panel in item:
-            panel = state_window(copy.deepcopy(panel))
+            panel = state_scope(state_window(copy.deepcopy(panel)))
             panel["gridPos"].update({"x": x, "y": y, "h": height})
             x += panel["gridPos"]["w"]
             panels.append(panel)

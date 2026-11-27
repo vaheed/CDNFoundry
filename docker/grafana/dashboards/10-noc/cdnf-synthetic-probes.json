@@ -156,7 +156,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Probes that succeeded in their last run.",
+      "description": "Probes that succeeded in their last run. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -230,7 +230,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Probes that failed in their last run.",
+      "description": "Probes that failed in their last run. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -308,7 +308,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Longest probe duration.",
+      "description": "Longest probe duration. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -391,7 +391,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Days until the earliest certificate a probe saw expires.",
+      "description": "Days until the earliest certificate a probe saw expires. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -481,7 +481,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Share of probes that succeeded, per PoP and IP version.",
+      "description": "Share of probes that succeeded, per PoP and IP version. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -573,7 +573,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Time a probe takes, per PoP and IP version.",
+      "description": "Time a probe takes, per PoP and IP version. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {

@@ -156,7 +156,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Checks that fail now. Each one is listed first in the table below with what to do.",
+      "description": "Checks that fail now. Each one is listed first in the table below with what to do. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -234,7 +234,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Checks whose metric is not reported, usually because the part is not installed (a second control node) or has not reported yet.",
+      "description": "Checks whose metric is not reported, usually because the part is not installed (a second control node) or has not reported yet. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -308,7 +308,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Checks that pass now.",
+      "description": "Checks that pass now. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -382,7 +382,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Every daily check, failures first: its state, what it checks, and what to do when it fails.",
+      "description": "Every daily check, failures first: its state, what it checks, and what to do when it fails. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {

@@ -187,7 +187,7 @@
         "type": "loki",
         "uid": "loki"
       },
-      "description": "Operational logs for the selected services and levels. Use the Live button for a live tail.",
+      "description": "Operational logs for the selected services and levels. Use the Live button for a live tail. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -1037,7 +1037,7 @@
         "type": "loki",
         "uid": "loki"
       },
-      "description": "Lines per second by level.",
+      "description": "Lines per second by level. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1122,7 +1122,7 @@
         "type": "loki",
         "uid": "loki"
       },
-      "description": "Error and critical lines per interval, by service.",
+      "description": "Error and critical lines per interval, by service. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {

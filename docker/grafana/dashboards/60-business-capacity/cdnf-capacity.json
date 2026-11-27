@@ -156,7 +156,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Highest cache fill of any cell now.",
+      "description": "Highest cache fill of any cell now. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -239,7 +239,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Highest connection use of any cell now.",
+      "description": "Highest connection use of any cell now. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -322,7 +322,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Highest CPU use of any host now.",
+      "description": "Highest CPU use of any host now. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -405,7 +405,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Days until the first cache is forecast to fill, by a linear forecast from the last 7 days. Shows \"Not within a year\" when no cache is on course to fill.",
+      "description": "Days until the first cache is forecast to fill, by a linear forecast from the last 7 days. Shows \"Not within a year\" when no cache is on course to fill. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -490,7 +490,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Forecast cache fill in 30 days per PoP and cell. A value at or above 1 means the cache is full by then. The first row runs out first.",
+      "description": "Forecast cache fill in 30 days per PoP and cell. A value at or above 1 means the cache is full by then. The first row runs out first. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -643,7 +643,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Free share of the cache volume, per PoP.",
+      "description": "Free share of the cache volume, per PoP. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -731,7 +731,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Free share of the connection budget, per PoP.",
+      "description": "Free share of the connection budget, per PoP. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -819,7 +819,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Free share of memory per host.",
+      "description": "Free share of memory per host. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {

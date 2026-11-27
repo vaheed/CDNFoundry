@@ -4,7 +4,7 @@
       "type": "prometheus",
       "uid": "prometheus"
     },
-    "description": "Every firing alert with its team, severity, and start time. Open the dashboard column to see the cause at the time it started.",
+    "description": "Every firing alert with its team, severity, and start time. Open the dashboard column to see the cause at the time it started. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
     "fieldConfig": {
       "defaults": {
         "color": {

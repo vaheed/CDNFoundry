@@ -156,7 +156,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Each SLO with its target, the bad-event ratio over 30 days, the error budget left, and the current burn rate.",
+      "description": "Each SLO with its target, the bad-event ratio over 30 days, the error budget left, and the current burn rate. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -403,7 +403,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Share of each SLO's 30-day error budget that is left.",
+      "description": "Share of each SLO's 30-day error budget that is left. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -486,7 +486,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Hours of budget burned per hour, by SLO. Above 1 uses the budget faster than it accrues.",
+      "description": "Hours of budget burned per hour, by SLO. Above 1 uses the budget faster than it accrues. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {

@@ -491,7 +491,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Enabled PoPs whose applied revision is older than the latest.",
+      "description": "Enabled PoPs whose applied revision is older than the latest. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -569,7 +569,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "PoPs running component versions that differ from the desired versions.",
+      "description": "PoPs running component versions that differ from the desired versions. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -662,7 +662,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Enabled gateways that are not ready.",
+      "description": "Enabled gateways that are not ready. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {

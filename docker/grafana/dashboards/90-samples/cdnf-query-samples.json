@@ -343,7 +343,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Which client networks triggered the most WAF matches? SQL: group edge_events by masked client network where waf_rule_id != 0. Looks back 7 days, whatever the dashboard range.",
+      "description": "Which client networks triggered the most WAF matches? SQL: group edge_events by masked client network where waf_rule_id != 0. Looks back 7 days, whatever the dashboard range. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -417,7 +417,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "What is the rate of each 5xx status? PromQL: sum by (status_class) (cdnf:edge_requests:rate5m{status_class=\"5xx\"})",
+      "description": "What is the rate of each 5xx status? PromQL: sum by (status_class) (cdnf:edge_requests:rate5m{status_class=\"5xx\"}) Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -592,7 +592,7 @@
         "type": "loki",
         "uid": "loki"
       },
-      "description": "What errors did services log? LogQL: {level=~\"error|critical\"}",
+      "description": "What errors did services log? LogQL: {level=~\"error|critical\"} Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {

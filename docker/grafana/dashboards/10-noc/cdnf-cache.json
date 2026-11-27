@@ -388,7 +388,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Age of the oldest purge not yet applied on every PoP.",
+      "description": "Age of the oldest purge not yet applied on every PoP. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -742,7 +742,7 @@
         "type": "postgres",
         "uid": "control-db"
       },
-      "description": "Cache purge requests per hour over the last 7 days, whatever range the dashboard shows.",
+      "description": "Cache purge requests per hour over the last 7 days, whatever range the dashboard shows. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -830,7 +830,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Longest time a purge took to apply on every PoP, over the last hour.",
+      "description": "Longest time a purge took to apply on every PoP, over the last hour. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {

@@ -156,7 +156,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "TLS handshakes that failed in the selected range.",
+      "description": "TLS handshakes that failed in the selected range. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -234,7 +234,7 @@
         "type": "postgres",
         "uid": "control-db"
       },
-      "description": "Active certificates that expire within 14 days.",
+      "description": "Active certificates that expire within 14 days. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -327,7 +327,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Longest managed certificate issuance in the last 24 hours.",
+      "description": "Longest managed certificate issuance in the last 24 hours. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -409,7 +409,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Failed handshakes per hour by reason over the last 24 hours, whatever range the dashboard shows.",
+      "description": "Failed handshakes per hour by reason over the last 24 hours, whatever range the dashboard shows. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -497,7 +497,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Failed handshakes per hour by TLS version over the last 24 hours, whatever range the dashboard shows.",
+      "description": "Failed handshakes per hour by TLS version over the last 24 hours, whatever range the dashboard shows. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -747,7 +747,7 @@
         "type": "postgres",
         "uid": "control-db"
       },
-      "description": "Active certificates, soonest to expire first.",
+      "description": "Active certificates, soonest to expire first. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -827,7 +827,7 @@
         "type": "postgres",
         "uid": "control-db"
       },
-      "description": "Managed certificate orders that failed, newest first.",
+      "description": "Managed certificate orders that failed, newest first. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {

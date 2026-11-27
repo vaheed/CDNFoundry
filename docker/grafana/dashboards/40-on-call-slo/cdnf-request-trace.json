@@ -156,7 +156,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "The edge log line for the request: PoP, edge, domain, status, timings, cache, and security result. Looks back 7 days.",
+      "description": "The edge log line for the request: PoP, edge, domain, status, timings, cache, and security result. Looks back 7 days. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -236,7 +236,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Time the edge took to serve the request.",
+      "description": "Time the edge took to serve the request. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -318,7 +318,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Time the origin took to answer.",
+      "description": "Time the origin took to answer. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -400,7 +400,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "The response status the client received.",
+      "description": "The response status the client received. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -474,7 +474,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "The cache status of the request.",
+      "description": "The cache status of the request. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -548,7 +548,7 @@
         "type": "loki",
         "uid": "loki"
       },
-      "description": "Operational log lines that mention the request ID.",
+      "description": "Operational log lines that mention the request ID. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {

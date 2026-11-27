@@ -4,7 +4,7 @@
       "type": "prometheus",
       "uid": "prometheus"
     },
-    "description": "DNS deployments that have not reached their desired revision.",
+    "description": "DNS deployments that have not reached their desired revision. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
     "fieldConfig": {
       "defaults": {
         "color": {

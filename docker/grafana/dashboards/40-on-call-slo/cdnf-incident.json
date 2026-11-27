@@ -171,7 +171,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Firing alerts over the selected range. Pick the range around the incident.",
+      "description": "Firing alerts over the selected range. Pick the range around the incident. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -518,7 +518,7 @@
         "type": "loki",
         "uid": "loki"
       },
-      "description": "Error and critical logs from every service in the same range.",
+      "description": "Error and critical logs from every service in the same range. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {

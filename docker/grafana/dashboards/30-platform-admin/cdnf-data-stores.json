@@ -156,7 +156,7 @@
         "type": "postgres",
         "uid": "control-db"
       },
-      "description": "Size of the control database.",
+      "description": "Size of the control database. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -230,7 +230,7 @@
         "type": "postgres",
         "uid": "control-db"
       },
-      "description": "Sessions connected to the control database.",
+      "description": "Sessions connected to the control database. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -304,7 +304,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "How far the standby is behind the active control database. Shown only with a standby.",
+      "description": "How far the standby is behind the active control database. Shown only with a standby. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -386,7 +386,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Most data parts in one ClickHouse partition. High numbers slow queries.",
+      "description": "Most data parts in one ClickHouse partition. High numbers slow queries. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -468,7 +468,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Rows inserted per second.",
+      "description": "Rows inserted per second. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -554,7 +554,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Background merges and running queries.",
+      "description": "Background merges and running queries. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -651,7 +651,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Share of the data disk ClickHouse uses.",
+      "description": "Share of the data disk ClickHouse uses. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -746,7 +746,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Most data parts in one partition over time.",
+      "description": "Most data parts in one partition over time. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -832,7 +832,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Bytes per second Loki receives.",
+      "description": "Bytes per second Loki receives. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -918,7 +918,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Seconds since the Loki compactor last applied retention.",
+      "description": "Seconds since the Loki compactor last applied retention. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {

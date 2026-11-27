@@ -156,7 +156,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Events per second Vector delivers to ClickHouse.",
+      "description": "Events per second Vector delivers to ClickHouse. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -231,7 +231,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Events dropped by a full buffer in the last 5 minutes.",
+      "description": "Events dropped by a full buffer in the last 5 minutes. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -309,7 +309,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Delivery errors in the last 5 minutes.",
+      "description": "Delivery errors in the last 5 minutes. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -387,7 +387,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Largest delay between an event and its arrival in ClickHouse, over PoPs. Looks back 1 day, whatever the dashboard range.",
+      "description": "Largest delay between an event and its arrival in ClickHouse, over PoPs. Looks back 1 day, whatever the dashboard range. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -469,7 +469,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Events per second each Vector component delivered.",
+      "description": "Events per second each Vector component delivered. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -555,7 +555,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Bytes waiting in each disk buffer.",
+      "description": "Bytes waiting in each disk buffer. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -641,7 +641,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Events dropped per second by component.",
+      "description": "Events dropped per second by component. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -731,7 +731,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Delivery errors per second by component.",
+      "description": "Delivery errors per second by component. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -821,7 +821,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Seconds between now and the newest event each PoP delivered, looking back 1 day at most (not the dashboard range).",
+      "description": "Seconds between now and the newest event each PoP delivered, looking back 1 day at most (not the dashboard range). Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {

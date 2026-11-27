@@ -24,14 +24,14 @@ Refreshes every 10s.
 
 | Panel | What it shows |
 | --- | --- |
-| Platform status | One sentence that names what is wrong, or says everything reports in. |
-| Firing alerts | Every firing alert with its team, severity, and start time. Open the dashboard column to see the cause at the time it started. |
-| Unhealthy | Control-plane components reporting degraded or unavailable. |
-| Stale | Enabled edges whose heartbeat is older than the freshness limit. |
-| Failed ops | Operations that failed in the failed-operations window. |
-| DNS drift | DNS deployments that have not reached their desired revision. |
-| Alerts | Alerts firing now, not counting the heartbeat. |
-| Paused | Fleet rollouts paused on a safety threshold. |
+| Platform status | One sentence that names what is wrong, or says everything reports in. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Firing alerts | Every firing alert with its team, severity, and start time. Open the dashboard column to see the cause at the time it started. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Unhealthy | Control-plane components reporting degraded or unavailable. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Stale | Enabled edges whose heartbeat is older than the freshness limit. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Failed ops | Operations that failed in the failed-operations window. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| DNS drift | DNS deployments that have not reached their desired revision. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Alerts | Alerts firing now, not counting the heartbeat. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Paused | Fleet rollouts paused on a safety threshold. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Requests | Requests per second across the selected PoPs. |
 | Bandwidth | Bits per second sent to clients, headers included. |
 | 5xx ratio | Share of responses that are server errors. |
@@ -45,9 +45,9 @@ Refreshes every 10s.
 | DNS queries | Authoritative queries per second. |
 | SERVFAIL ratio | Share of DNS answers that are SERVFAIL. |
 | DNS answers by code | Queries per second by response code. |
-| Events dropped | Telemetry events Vector dropped in the last 5 minutes. |
-| Delivery errors | Telemetry delivery errors in the last 5 minutes. |
-| Events delivered | Events per second Vector delivered to ClickHouse. |
+| Events dropped | Telemetry events Vector dropped in the last 5 minutes. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Delivery errors | Telemetry delivery errors in the last 5 minutes. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Events delivered | Events per second Vector delivered to ClickHouse. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 
 ## NOC
 
@@ -64,12 +64,12 @@ Refreshes every 30s.
 | Hit ratio (requests) | Share of requests served from cache. |
 | Hit ratio (bytes) | Share of bytes served from cache. |
 | Egress saved | Bytes sent from cache instead of fetched from an origin. |
-| Purge pending age | Age of the oldest purge not yet applied on every PoP. |
+| Purge pending age | Age of the oldest purge not yet applied on every PoP. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Cache status mix | Requests per second by cache status. |
 | Hit ratio over time | Requests served from cache, as a share of all requests. |
 | Cache fill by PoP | How full the cache volume of each cell is. |
-| Purge volume | Cache purge requests per hour over the last 7 days, whatever range the dashboard shows. |
-| Purge propagation time | Longest time a purge took to apply on every PoP, over the last hour. |
+| Purge volume | Cache purge requests per hour over the last 7 days, whatever range the dashboard shows. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Purge propagation time | Longest time a purge took to apply on every PoP, over the last hour. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Cache fill by cell | How full each cell's cache volume is. The cells do not count evictions, so a volume near full is the signal. |
 
 ### DNS authoritative
@@ -82,14 +82,14 @@ Refreshes every 30s.
 | --- | --- |
 | Queries | Authoritative queries per second. |
 | SERVFAIL ratio | Share of DNS answers that are SERVFAIL. |
-| Backends up | DNSdist backends marked up. |
-| Serial pending age | Age of the oldest DNS deployment that has not reached its desired serial. |
+| Backends up | DNSdist backends marked up. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Serial pending age | Age of the oldest DNS deployment that has not reached its desired serial. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Queries by response code | Queries per second by response code. |
 | Queries by PoP | Queries per second by PoP. |
-| DNSdist backend health | 1 when DNSdist sends queries to the backend. |
-| DNSdist latency | Average backend response time reported by DNSdist. |
-| Cache hits in DNSdist | Packet-cache hits. DNSdist runs without a packet cache by design, so this stays at zero. |
-| DNS deployments pending | Domains whose zone has not reached its desired revision on every DNS target. |
+| DNSdist backend health | 1 when DNSdist sends queries to the backend. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| DNSdist latency | Average backend response time reported by DNSdist. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Cache hits in DNSdist | Packet-cache hits. DNSdist runs without a packet cache by design, so this stays at zero. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| DNS deployments pending | Domains whose zone has not reached its desired revision on every DNS target. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Answers by region | Geo-DNS answers by region of the answering PoP. |
 
 ### Edge latency
@@ -129,7 +129,7 @@ Refreshes every 30s.
 | Requests by protocol | Requests per second by HTTP version. |
 | Requests by IP version | Requests per second from IPv4 and IPv6 clients. |
 | Top countries | Countries sending the most requests. |
-| Top ASNs (last 7 days) | Client networks sending the most requests. ASNs are kept in raw events only, so this covers at most 7 days. |
+| Top ASNs (last 7 days) | Client networks sending the most requests. ASNs are kept in raw events only, so this covers at most 7 days. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Top domains by requests | Hostnames with the most requests. |
 | Top domains by bandwidth | Hostnames that sent the most bytes. |
 | Top domains by errors | Hostnames with the most 5xx responses. |
@@ -147,10 +147,10 @@ Refreshes every 10s.
 | 5xx ratio | Share of responses that are server errors. |
 | Cache hit | Share of requests served from cache. |
 | Edge p95 | 95th percentile time to serve a request. |
-| Alerts | Alerts firing now. |
-| PoPs by health | Every enabled PoP by country, green when its heartbeat is fresh and red when it is not. |
-| Probe results | The latest result of every synthetic probe, per PoP and IP version. 1 is up, 0 is down. |
-| Alerts | Every firing alert with how long it has been firing. The full table with team, severity, and dashboard is on Now. |
+| Alerts | Alerts firing now. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| PoPs by health | Every enabled PoP by country, green when its heartbeat is fresh and red when it is not. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Probe results | The latest result of every synthetic probe, per PoP and IP version. 1 is up, 0 is down. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Alerts | Every firing alert with how long it has been firing. The full table with team, severity, and dashboard is on Now. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Requests by status class | Requests per second across the selected PoPs, split by response class. |
 | 5xx and p95 | 5xx ratio and edge p95 on one axis pair. |
 
@@ -165,13 +165,13 @@ Refreshes every 30s.
 | Origin p95 | 95th percentile origin response time. |
 | Origin failures | Origin failures per second. |
 | Failure ratio | Share of origin requests that failed. |
-| Failover events (1h) | Requests that moved to a backup origin in the last 1 hour (not the dashboard range). |
+| Failover events (1h) | Requests that moved to a backup origin in the last 1 hour (not the dashboard range). Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Origin latency percentiles | Median, 95th, and 99th percentile origin response time. |
 | Origin failures | Origin failures per second by PoP. |
 | Slowest origins | Hostnames with the slowest origin responses. |
 | Failing origins | Hostnames with the most origin failures. |
 | Status codes at the edge | Response codes returned to clients. |
-| Failover events | Requests per minute that moved between primary and backup origin. |
+| Failover events | Requests per minute that moved between primary and backup origin. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 
 ### PoP detail
 
@@ -207,10 +207,10 @@ Refreshes every 30s.
 | Panel | What it shows |
 | --- | --- |
 | PoP fleet | One row per PoP with health, heartbeat age, applied revision, traffic, errors, latency, host load, and cache fill. |
-| Edges behind | Enabled PoPs whose applied revision is older than the latest. |
-| Version drift | PoPs running component versions that differ from the desired versions. |
-| Paused | Fleet rollouts paused on a safety threshold. |
-| Gateways unready | Enabled gateways that are not ready. |
+| Edges behind | Enabled PoPs whose applied revision is older than the latest. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Version drift | PoPs running component versions that differ from the desired versions. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Paused | Fleet rollouts paused on a safety threshold. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Gateways unready | Enabled gateways that are not ready. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Heartbeat age by PoP | Seconds since each PoP last reported. |
 | Applied revision by PoP | The configuration revision each PoP serves. |
 
@@ -222,13 +222,13 @@ Refreshes every 30s.
 
 | Panel | What it shows |
 | --- | --- |
-| Oldest pending purge | Age of the oldest purge not yet applied on every PoP. |
-| Oldest config | Age of the oldest published edge artifact a PoP has not applied. |
-| Slowest purge (1h) | Longest request-to-applied time of a purge in the last hour. |
-| Oldest DNS serial | Age of the oldest DNS deployment that has not reached its serial. |
-| Purge propagation | Age of the oldest pending purge and the slowest finished purge. |
-| Config propagation | Age of the oldest published artifact a PoP has not applied. |
-| Slowest PoP | Edges that have not applied the newest published artifact, with how many artifacts each is behind. |
+| Oldest pending purge | Age of the oldest purge not yet applied on every PoP. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Oldest config | Age of the oldest published edge artifact a PoP has not applied. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Slowest purge (1h) | Longest request-to-applied time of a purge in the last hour. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Oldest DNS serial | Age of the oldest DNS deployment that has not reached its serial. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Purge propagation | Age of the oldest pending purge and the slowest finished purge. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Config propagation | Age of the oldest published artifact a PoP has not applied. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Slowest PoP | Edges that have not applied the newest published artifact, with how many artifacts each is behind. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 
 ### Synthetic probes
 
@@ -238,13 +238,13 @@ Refreshes every 30s.
 
 | Panel | What it shows |
 | --- | --- |
-| Probes up | Probes that succeeded in their last run. |
-| Probes down | Probes that failed in their last run. |
-| Slowest probe | Longest probe duration. |
-| Soonest certificate | Days until the earliest certificate a probe saw expires. |
-| Probe results | The latest result of every synthetic probe, per PoP and IP version. 1 is up, 0 is down. |
-| Probe success by PoP | Share of probes that succeeded, per PoP and IP version. |
-| Probe duration by PoP | Time a probe takes, per PoP and IP version. |
+| Probes up | Probes that succeeded in their last run. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Probes down | Probes that failed in their last run. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Slowest probe | Longest probe duration. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Soonest certificate | Days until the earliest certificate a probe saw expires. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Probe results | The latest result of every synthetic probe, per PoP and IP version. 1 is up, 0 is down. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Probe success by PoP | Share of probes that succeeded, per PoP and IP version. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Probe duration by PoP | Time a probe takes, per PoP and IP version. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 
 ## SOC
 
@@ -258,15 +258,15 @@ Refreshes every 30s.
 
 | Panel | What it shows |
 | --- | --- |
-| Sign-ins | Successful sign-ins in the last hour. |
-| Failed sign-ins (1h) | Failed sign-ins in the last hour. |
-| New-network admin sign-ins | Administrator sign-ins from a network unused for 30 days, in the last 15 minutes. |
-| Token requests | API requests made with a token, per second. |
-| Sign-ins by result | Sign-ins per second by result and surface. |
-| Token use by ability | API requests per second by token ability. |
-| Recent sign-ins | Successful sign-ins by account and network. Addresses are masked to /24 or /48. |
-| Settings and rule changes | Audit entries for platform settings, domains, and security rules. |
-| Audit entries per hour | All audit entries per hour over the last 7 days, whatever range the dashboard shows. |
+| Sign-ins | Successful sign-ins in the last hour. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Failed sign-ins (1h) | Failed sign-ins in the last hour. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| New-network admin sign-ins | Administrator sign-ins from a network unused for 30 days, in the last 15 minutes. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Token requests | API requests made with a token, per second. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Sign-ins by result | Sign-ins per second by result and surface. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Token use by ability | API requests per second by token ability. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Recent sign-ins | Successful sign-ins by account and network. Addresses are masked to /24 or /48. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Settings and rule changes | Audit entries for platform settings, domains, and security rules. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Audit entries per hour | All audit entries per hour over the last 7 days, whatever range the dashboard shows. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 
 ### DNS abuse
 
@@ -282,11 +282,11 @@ Refreshes every 30s.
 | REFUSED share | Share of answers that are REFUSED. |
 | NXDOMAIN rate | NXDOMAIN answers per second; a random-subdomain flood is a steep rise. |
 | Response-limit hits | Truncated answers per second by PoP. |
-| Top queried zones | Zones that receive the most queries. |
-| Zones with the most NXDOMAIN | Zones where random names are asked most often. |
-| Query types | Query types by volume. ANY, TXT, and DNSKEY are the ones used to amplify. |
-| Top client networks | Client networks sending the most DNS queries in the last 7 days, as /24 or /48. |
-| Amplification-prone queries | ANY, TXT, and DNSKEY queries per hour over the last 24 hours, whatever range the dashboard shows. |
+| Top queried zones | Zones that receive the most queries. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Zones with the most NXDOMAIN | Zones where random names are asked most often. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Query types | Query types by volume. ANY, TXT, and DNSKEY are the ones used to amplify. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Top client networks | Client networks sending the most DNS queries in the last 7 days, as /24 or /48. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Amplification-prone queries | ANY, TXT, and DNSKEY queries per hour over the last 24 hours, whatever range the dashboard shows. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 
 ### L7 attack and flood
 
@@ -297,11 +297,11 @@ Refreshes every 30s.
 | Panel | What it shows |
 | --- | --- |
 | Request rate against baseline | Each domain's request rate in the last 10 minutes against its average over the previous day. A ratio above 4 is a flood candidate. |
-| Top client networks | Client networks sending the most requests, shown as the /24 or /48 the privacy setting allows. |
-| Top ASNs | Autonomous systems sending the most requests in the last 7 days. |
+| Top client networks | Client networks sending the most requests, shown as the /24 or /48 the privacy setting allows. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Top ASNs | Autonomous systems sending the most requests in the last 7 days. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Top countries | Countries sending the most requests. |
-| Top user agents | User agents seen most often in the last 7 days. |
-| Top paths | Paths requested most often in the last 7 days. |
+| Top user agents | User agents seen most often in the last 7 days. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Top paths | Paths requested most often in the last 7 days. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Cache abuse events | Requests flagged as cache abuse, per second. |
 | Requests by PoP | Request rate per PoP; a flood shows as one line leaving the others. |
 
@@ -315,8 +315,8 @@ Refreshes every 30s.
 | --- | --- |
 | Blocked requests | Requests the edge refused in the selected range. |
 | WAF matches | Requests the WAF matched in the selected range. |
-| Emergency modes | Emergency modes switched on and not expired. |
-| Under attack alerts | Security alerts firing now. |
+| Emergency modes | Emergency modes switched on and not expired. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Under attack alerts | Security alerts firing now. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Security events by reason | Security events by class: waf, block, cache abuse, emergency mode, and WAF body limit. |
 | Blocks per PoP | Blocked requests per second by PoP. |
 | Top attacked domains | Hostnames with the most blocked requests. |
@@ -327,7 +327,7 @@ Refreshes every 30s.
 | Firewall rules that matched | Domain rules that matched most, by rule name, over the last 7 days. |
 | Challenge outcomes | Browser challenges by outcome over the last 7 days at most: shown (the visitor was asked), solved, refused as invalid, and stopped by the per-token request budget. Counted from stored request events of the selected domains, so it follows the domain filter and not the region or PoP filter. |
 | Challenges solved | Share of challenge prompts that were solved in the selected range, from stored events (7 days at most). A prompt can be solved after the range ends, so a short range reads low. Empty when no challenge was shown. |
-| Firing alerts | Every firing alert with its team, severity, and start time. Open the dashboard column to see the cause at the time it started. |
+| Firing alerts | Every firing alert with its team, severity, and start time. Open the dashboard column to see the cause at the time it started. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 
 ### Telemetry integrity
 
@@ -337,12 +337,12 @@ Refreshes every 30s.
 
 | Panel | What it shows |
 | --- | --- |
-| Rejected events (1h) | Events dropped by authentication or validation in Vector in the last hour. |
-| Dropped at buffers (1h) | Events dropped because a buffer was full, in the last hour. |
-| Insert failures (1h) | ClickHouse inserts Vector could not complete, in the last hour. |
-| Ingest delay | Seconds between now and the newest event stored in ClickHouse, looking back 1 day at most (not the dashboard range). |
-| Rejected and forged events | Events Vector refused, by component. |
-| Dropped events and insert failures | Buffer drops and delivery errors per second. |
+| Rejected events (1h) | Events dropped by authentication or validation in Vector in the last hour. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Dropped at buffers (1h) | Events dropped because a buffer was full, in the last hour. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Insert failures (1h) | ClickHouse inserts Vector could not complete, in the last hour. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Ingest delay | Seconds between now and the newest event stored in ClickHouse, looking back 1 day at most (not the dashboard range). Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Rejected and forged events | Events Vector refused, by component. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Dropped events and insert failures | Buffer drops and delivery errors per second. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Events stored by PoP | Events per second ClickHouse stored, per PoP. A PoP that goes flat is not delivering. |
 
 ### TLS posture
@@ -353,16 +353,16 @@ Refreshes every 30s.
 
 | Panel | What it shows |
 | --- | --- |
-| Handshake failures | TLS handshakes that failed in the selected range. |
-| Expiring in 14 days | Active certificates that expire within 14 days. |
-| ACME fail | Managed certificate orders that failed in the last 24 hours. |
-| Slowest issuance | Longest managed certificate issuance in the last 24 hours. |
-| Handshake failures by reason | Failed handshakes per hour by reason over the last 24 hours, whatever range the dashboard shows. |
-| Handshake failures by protocol | Failed handshakes per hour by TLS version over the last 24 hours, whatever range the dashboard shows. |
+| Handshake failures | TLS handshakes that failed in the selected range. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Expiring in 14 days | Active certificates that expire within 14 days. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| ACME fail | Managed certificate orders that failed in the last 24 hours. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Slowest issuance | Longest managed certificate issuance in the last 24 hours. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Handshake failures by reason | Failed handshakes per hour by reason over the last 24 hours, whatever range the dashboard shows. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Handshake failures by protocol | Failed handshakes per hour by TLS version over the last 24 hours, whatever range the dashboard shows. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Protocol mix | Requests by TLS version. |
 | Cipher mix | Requests by negotiated cipher. |
-| Certificates by expiry | Active certificates, soonest to expire first. |
-| Recent ACME failures | Managed certificate orders that failed, newest first. |
+| Certificates by expiry | Active certificates, soonest to expire first. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Recent ACME failures | Managed certificate orders that failed, newest first. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 
 ### WAF
 
@@ -374,13 +374,13 @@ Refreshes every 30s.
 | --- | --- |
 | WAF actions | Requests the WAF inspected and matched. |
 | Body-limit hits | Requests refused because their body exceeded the WAF inspection limit. |
-| Exclusions in use | WAF exclusions that have not expired. |
-| Processing time p95 | 95th percentile WAF processing time per request. |
+| Exclusions in use | WAF exclusions that have not expired. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Processing time p95 | 95th percentile WAF processing time per request. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | WAF actions | Requests per second by WAF action. |
-| WAF processing time | Average and 95th percentile WAF processing time. |
-| Top rules | The WAF rules matched most often in the last 7 days. Select a rule to list its requests below. |
-| Top rules by domain | Which hostnames trigger each rule, over the last 7 days (not the dashboard range). |
-| Requests for the selected rule | Requests that matched the rule in the WAF rule field above. Choose a rule from the top rules table. Looks back 7 days, whatever the dashboard range. |
+| WAF processing time | Average and 95th percentile WAF processing time. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Top rules | The WAF rules matched most often in the last 7 days. Select a rule to list its requests below. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Top rules by domain | Which hostnames trigger each rule, over the last 7 days (not the dashboard range). Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Requests for the selected rule | Requests that matched the rule in the WAF rule field above. Choose a rule from the top rules table. Looks back 7 days, whatever the dashboard range. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 
 ## Platform admin
 
@@ -394,12 +394,12 @@ Refreshes every 30s.
 
 | Panel | What it shows |
 | --- | --- |
-| Last backup age | Time since the newest verified backup. |
-| Last backup size | Size of the newest verified backup. |
-| Backups healthy | 1 when the backup component reports healthy: a fresh backup, a passing restic check, and a passing restore preflight. |
-| Failed backups (7d) | Backups that failed in the last 7 days. |
-| Backup size | Size of each verified backup over the last 30 days, whatever range the dashboard shows, because backups run once a day. Always the last 30d, whatever range the dashboard shows. |
-| Recent backups | The newest backups with their result. |
+| Last backup age | Time since the newest verified backup. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Last backup size | Size of the newest verified backup. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Backups healthy | 1 when the backup component reports healthy: a fresh backup, a passing restic check, and a passing restore preflight. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Failed backups (7d) | Backups that failed in the last 7 days. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Backup size | Size of each verified backup over the last 30 days, whatever range the dashboard shows, because backups run once a day. Always the last 30d, whatever range the dashboard shows. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Recent backups | The newest backups with their result. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 
 ### Control plane
 
@@ -409,22 +409,22 @@ Refreshes every 30s.
 
 | Panel | What it shows |
 | --- | --- |
-| Unhealthy | Components reporting degraded or unavailable. |
-| Failed ops | Operations that failed in the failed-operations window. |
-| Bad jobs | Queue jobs that failed in the same window. |
-| API p95 | 95th percentile API request time over the last 5 minutes. |
-| Panel p95 | 95th percentile panel request time. |
-| ACME fail | Managed certificate orders that failed in the last 24 hours. |
-| Component health | Every control-plane component with its state. A red row names what to open first. |
-| Slowest routes | The ten routes with the highest 95th percentile time. |
-| API and panel latency | 95th percentile request time for API routes and for panel routes. |
-| Requests by status class | Control-plane requests per second. |
-| Horizon queue depth | Jobs waiting in each worker lane. |
-| Horizon oldest job age | Age of the oldest waiting job in each lane. |
-| Scheduler | 1 while the scheduler's durable heartbeat is fresh. |
-| ACME orders | Managed certificate orders that finished in the last 24 hours. |
-| ACME issuance time | Longest managed certificate issuance in the last 24 hours. |
-| Alert deliveries | Alerts Alertmanager sent to the notifier and receivers each second, and the ones that failed. Platform notification channels (webhooks, Slack, and so on) report in the panel under Notification channels. |
+| Unhealthy | Components reporting degraded or unavailable. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Failed ops | Operations that failed in the failed-operations window. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Bad jobs | Queue jobs that failed in the same window. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| API p95 | 95th percentile API request time over the last 5 minutes. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Panel p95 | 95th percentile panel request time. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| ACME fail | Managed certificate orders that failed in the last 24 hours. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Component health | Every control-plane component with its state. A red row names what to open first. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Slowest routes | The ten routes with the highest 95th percentile time. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| API and panel latency | 95th percentile request time for API routes and for panel routes. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Requests by status class | Control-plane requests per second. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Horizon queue depth | Jobs waiting in each worker lane. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Horizon oldest job age | Age of the oldest waiting job in each lane. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Scheduler | 1 while the scheduler's durable heartbeat is fresh. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| ACME orders | Managed certificate orders that finished in the last 24 hours. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| ACME issuance time | Longest managed certificate issuance in the last 24 hours. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Alert deliveries | Alerts Alertmanager sent to the notifier and receivers each second, and the ones that failed. Platform notification channels (webhooks, Slack, and so on) report in the panel under Notification channels. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 
 ### Daily checks
 
@@ -434,10 +434,10 @@ Refreshes every 30s.
 
 | Panel | What it shows |
 | --- | --- |
-| Failing | Checks that fail now. Each one is listed first in the table below with what to do. |
-| Not reported | Checks whose metric is not reported, usually because the part is not installed (a second control node) or has not reported yet. |
-| Passing | Checks that pass now. |
-| Daily checks | Every daily check, failures first: its state, what it checks, and what to do when it fails. |
+| Failing | Checks that fail now. Each one is listed first in the table below with what to do. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Not reported | Checks whose metric is not reported, usually because the part is not installed (a second control node) or has not reported yet. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Passing | Checks that pass now. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Daily checks | Every daily check, failures first: its state, what it checks, and what to do when it fails. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 
 ### Data stores
 
@@ -447,16 +447,16 @@ Refreshes every 30s.
 
 | Panel | What it shows |
 | --- | --- |
-| Control database size | Size of the control database. |
-| Connections | Sessions connected to the control database. |
-| Replication lag | How far the standby is behind the active control database. Shown only with a standby. |
-| Parts per partition | Most data parts in one ClickHouse partition. High numbers slow queries. |
-| ClickHouse insert rate | Rows inserted per second. |
-| ClickHouse merges and queries | Background merges and running queries. |
-| ClickHouse disk used | Share of the data disk ClickHouse uses. |
-| ClickHouse parts | Most data parts in one partition over time. |
-| Loki ingest | Bytes per second Loki receives. |
-| Loki retention run | Seconds since the Loki compactor last applied retention. |
+| Control database size | Size of the control database. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Connections | Sessions connected to the control database. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Replication lag | How far the standby is behind the active control database. Shown only with a standby. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Parts per partition | Most data parts in one ClickHouse partition. High numbers slow queries. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| ClickHouse insert rate | Rows inserted per second. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| ClickHouse merges and queries | Background merges and running queries. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| ClickHouse disk used | Share of the data disk ClickHouse uses. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| ClickHouse parts | Most data parts in one partition over time. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Loki ingest | Bytes per second Loki receives. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Loki retention run | Seconds since the Loki compactor last applied retention. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 
 ### Fleet and rollouts
 
@@ -466,16 +466,16 @@ Refreshes every 30s.
 
 | Panel | What it shows |
 | --- | --- |
-| Enabled edges | PoPs that are enabled. |
-| Cells ready | Cells that report ready. |
-| Placements settling | Placements that are not yet in their final state. |
-| Paused | Fleet rollouts paused on a safety threshold. |
-| Fleet rollouts by state | Rollouts by state. A paused rollout stopped on a safety threshold. |
-| Placements by state | Where domains are in moving between pools. |
-| Edge tasks by status | Tasks sent to PoPs in the last 24 hours, by state. |
-| Pool endpoints published | Pool endpoints DNS publishes (1) and withholds (0). |
-| Endpoint revision mismatches | Endpoints that have not acknowledged their desired map. |
-| Edges | Every PoP with its heartbeat, version, and applied sequence. |
+| Enabled edges | PoPs that are enabled. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Cells ready | Cells that report ready. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Placements settling | Placements that are not yet in their final state. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Paused | Fleet rollouts paused on a safety threshold. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Fleet rollouts by state | Rollouts by state. A paused rollout stopped on a safety threshold. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Placements by state | Where domains are in moving between pools. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Edge tasks by status | Tasks sent to PoPs in the last 24 hours, by state. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Pool endpoints published | Pool endpoints DNS publishes (1) and withholds (0). Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Endpoint revision mismatches | Endpoints that have not acknowledged their desired map. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Edges | Every PoP with its heartbeat, version, and applied sequence. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 
 ### Hosts and containers
 
@@ -485,17 +485,17 @@ Refreshes every 30s.
 
 | Panel | What it shows |
 | --- | --- |
-| Hosts up | Hosts whose exporter answers. |
-| Hosts down | Hosts whose exporter does not answer. |
-| OOM kills (24h) | Processes the kernel killed for memory in the last day. |
-| Clock offset | Largest clock offset on any host. |
-| CPU | Share of CPU in use per host. |
-| Memory | Share of memory in use per host. |
-| Disk | Share of the root filesystem in use per host. |
-| Network | Bits per second sent and received per host. |
-| Clock offset by host | Clock offset per host. |
-| Uptime | Time since each host booted; a drop is a restart. |
-| OOM kills | Processes the kernel killed for memory, per hour. |
+| Hosts up | Hosts whose exporter answers. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Hosts down | Hosts whose exporter does not answer. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| OOM kills (24h) | Processes the kernel killed for memory in the last day. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Clock offset | Largest clock offset on any host. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| CPU | Share of CPU in use per host. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Memory | Share of memory in use per host. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Disk | Share of the root filesystem in use per host. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Network | Bits per second sent and received per host. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Clock offset by host | Clock offset per host. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Uptime | Time since each host booted; a drop is a restart. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| OOM kills | Processes the kernel killed for memory, per hour. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 
 ### Telemetry pipeline
 
@@ -505,15 +505,15 @@ Refreshes every 30s.
 
 | Panel | What it shows |
 | --- | --- |
-| Events delivered | Events per second Vector delivers to ClickHouse. |
-| Dropped (5m) | Events dropped by a full buffer in the last 5 minutes. |
-| Sink errors (5m) | Delivery errors in the last 5 minutes. |
-| Slowest PoP delay | Largest delay between an event and its arrival in ClickHouse, over PoPs. Looks back 1 day, whatever the dashboard range. |
-| Events sent by collector | Events per second each Vector component delivered. |
-| Buffer size | Bytes waiting in each disk buffer. |
-| Dropped events | Events dropped per second by component. |
-| Sink errors | Delivery errors per second by component. |
-| Ingest delay by PoP | Seconds between now and the newest event each PoP delivered, looking back 1 day at most (not the dashboard range). |
+| Events delivered | Events per second Vector delivers to ClickHouse. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Dropped (5m) | Events dropped by a full buffer in the last 5 minutes. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Sink errors (5m) | Delivery errors in the last 5 minutes. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Slowest PoP delay | Largest delay between an event and its arrival in ClickHouse, over PoPs. Looks back 1 day, whatever the dashboard range. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Events sent by collector | Events per second each Vector component delivered. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Buffer size | Bytes waiting in each disk buffer. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Dropped events | Events dropped per second by component. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Sink errors | Delivery errors per second by component. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Ingest delay by PoP | Seconds between now and the newest event each PoP delivered, looking back 1 day at most (not the dashboard range). Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 
 ## On-call and SLO
 
@@ -527,12 +527,12 @@ Refreshes every 30s.
 
 | Panel | What it shows |
 | --- | --- |
-| Firing alerts | Every firing alert with its team, severity, and start time. Open the dashboard column to see the cause at the time it started. |
-| Alert state | Firing alerts over the selected range. Pick the range around the incident. |
+| Firing alerts | Every firing alert with its team, severity, and start time. Open the dashboard column to see the cause at the time it started. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Alert state | Firing alerts over the selected range. Pick the range around the incident. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Requests and errors | Requests and 5xx per second over the same range. |
 | Affected PoPs | 5xx per second by PoP, to see where it started. |
 | Affected domains | Hostnames with the most 5xx responses in the range. |
-| Related error logs | Error and critical logs from every service in the same range. |
+| Related error logs | Error and critical logs from every service in the same range. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 
 ### Logs explorer
 
@@ -542,7 +542,7 @@ Refreshes every 30s.
 
 | Panel | What it shows |
 | --- | --- |
-| Logs | Operational logs for the selected services and levels. Use the Live button for a live tail. |
+| Logs | Operational logs for the selected services and levels. Use the Live button for a live tail. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | All errors and critical events | Every error and critical line, from every service. Narrow it with the filters above; identifiers are read from the structured line, not from labels. |
 | Control plane | Application, gateway and web logs of the control plane. Narrow it with the filters above; identifiers are read from the structured line, not from labels. |
 | Jobs and scheduler | Queue workers, the scheduler, notifications and log push. Narrow it with the filters above; identifiers are read from the structured line, not from labels. |
@@ -559,8 +559,8 @@ Refreshes every 30s.
 | Database and queue | PostgreSQL, the cache, queues and connection errors. Narrow it with the filters above; identifiers are read from the structured line, not from labels. |
 | Backup, rollback and recovery | Backups, restores and rollbacks the control plane records. Fleet runs on the operator host and does not log to Loki. Narrow it with the filters above; identifiers are read from the structured line, not from labels. |
 | Request and operation correlation | Every service's lines for one request, operation or task. Fill an identifier above. Narrow it with the filters above; identifiers are read from the structured line, not from labels. |
-| Log volume by level | Lines per second by level. |
-| Error lines by service | Error and critical lines per interval, by service. |
+| Log volume by level | Lines per second by level. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Error lines by service | Error and critical lines per interval, by service. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 
 ### Request trace
 
@@ -570,12 +570,12 @@ Refreshes every 30s.
 
 | Panel | What it shows |
 | --- | --- |
-| Edge log | The edge log line for the request: PoP, edge, domain, status, timings, cache, and security result. Looks back 7 days. |
-| Edge time | Time the edge took to serve the request. |
-| Origin time | Time the origin took to answer. |
-| Status | The response status the client received. |
-| Cache | The cache status of the request. |
-| Operational logs for the request | Operational log lines that mention the request ID. |
+| Edge log | The edge log line for the request: PoP, edge, domain, status, timings, cache, and security result. Looks back 7 days. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Edge time | Time the edge took to serve the request. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Origin time | Time the origin took to answer. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Status | The response status the client received. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Cache | The cache status of the request. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Operational logs for the request | Operational log lines that mention the request ID. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 
 ### SLOs
 
@@ -585,10 +585,10 @@ Refreshes every 30s.
 
 | Panel | What it shows |
 | --- | --- |
-| SLO status | Each SLO with its target, the bad-event ratio over 30 days, the error budget left, and the current burn rate. |
-| Error budget remaining | Share of each SLO's 30-day error budget that is left. |
-| Burn rate | Hours of budget burned per hour, by SLO. Above 1 uses the budget faster than it accrues. |
-| Firing alerts | Every firing alert with its team, severity, and start time. Open the dashboard column to see the cause at the time it started. |
+| SLO status | Each SLO with its target, the bad-event ratio over 30 days, the error budget left, and the current burn rate. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Error budget remaining | Share of each SLO's 30-day error budget that is left. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Burn rate | Hours of budget burned per hour, by SLO. Above 1 uses the budget faster than it accrues. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Firing alerts | Every firing alert with its team, severity, and start time. Open the dashboard column to see the cause at the time it started. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 
 ## Domains
 
@@ -644,14 +644,14 @@ Refreshes every 30s.
 
 | Panel | What it shows |
 | --- | --- |
-| Hottest cache | Highest cache fill of any cell now. |
-| Hottest connections | Highest connection use of any cell now. |
-| Hottest CPU | Highest CPU use of any host now. |
-| First to run out | Days until the first cache is forecast to fill, by a linear forecast from the last 7 days. Shows "Not within a year" when no cache is on course to fill. |
-| Forecast: first PoP to run out | Forecast cache fill in 30 days per PoP and cell. A value at or above 1 means the cache is full by then. The first row runs out first. |
-| Cache headroom per PoP | Free share of the cache volume, per PoP. |
-| Connection headroom per PoP | Free share of the connection budget, per PoP. |
-| Memory headroom per host | Free share of memory per host. |
+| Hottest cache | Highest cache fill of any cell now. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Hottest connections | Highest connection use of any cell now. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Hottest CPU | Highest CPU use of any host now. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| First to run out | Days until the first cache is forecast to fill, by a linear forecast from the last 7 days. Shows "Not within a year" when no cache is on course to fill. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Forecast: first PoP to run out | Forecast cache fill in 30 days per PoP and cell. A value at or above 1 means the cache is full by then. The first row runs out first. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Cache headroom per PoP | Free share of the cache volume, per PoP. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Connection headroom per PoP | Free share of the connection budget, per PoP. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Memory headroom per host | Free share of memory per host. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Peak bandwidth per PoP | Largest 5-minute bandwidth each PoP carried. |
 | Forecast bandwidth | Linear forecast of total bandwidth for the next 30 days from the last 7 days. |
 
@@ -663,11 +663,11 @@ Refreshes every 30s.
 
 | Panel | What it shows |
 | --- | --- |
-| Domains | Domains that are not deleted. |
-| New domains (30d) | Domains created in the last 30 days. |
+| Domains | Domains that are not deleted. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| New domains (30d) | Domains created in the last 30 days. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Traffic growth (30d) | Requests in the last 30 days against the 30 days before. |
 | Bandwidth growth (30d) | Bytes sent in the last 30 days against the 30 days before. |
-| Domains by month | Domains created per month, over the last year. Always the last 1y, whatever range the dashboard shows. |
+| Domains by month | Domains created per month, over the last year. Always the last 1y, whatever range the dashboard shows. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Traffic by month | Requests per month, over the last year. Always the last 1y, whatever range the dashboard shows. |
 | Bandwidth by month | Bytes sent per month, over the last year. Always the last 1y, whatever range the dashboard shows. |
 | Top growing domains | Hostnames whose requests grew most against the previous 30 days. |
@@ -680,15 +680,15 @@ Refreshes every 30s.
 
 | Panel | What it shows |
 | --- | --- |
-| Bandwidth this month | Bytes sent to clients this month, headers included. |
-| p95 bandwidth | Bits per second at the 95th percentile of 5-minute intervals this month, all domains together. |
-| Requests this month | Requests served this month. |
-| DNS this month | Authoritative DNS queries this month. |
+| Bandwidth this month | Bytes sent to clients this month, headers included. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| p95 bandwidth | Bits per second at the 95th percentile of 5-minute intervals this month, all domains together. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Requests this month | Requests served this month. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| DNS this month | Authoritative DNS queries this month. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Usage by domain | Bandwidth, 95th-percentile bandwidth, and requests per domain for the selected range. |
 | Usage by region | Bandwidth and requests per region for the selected range. |
 | Bandwidth by PoP | Bits per second sent, per PoP, at 5-minute resolution. |
 | Monthly bandwidth | Bytes sent per month, over the last year. Always the last 1y, whatever range the dashboard shows. |
-| Billing rollups | Hourly usage rollups kept in the control database, which the monthly report uses. |
+| Billing rollups | Hourly usage rollups kept in the control database, which the monthly report uses. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Download by edge | Bytes sent to clients, headers included, per edge host. SQL: SELECT edge_id, sum(bytes_sent) FROM cdnf.edge_volume_hourly WHERE interval_start >= toStartOfHour($__fromTime) GROUP BY edge_id |
 | Download by cell | Bytes sent to clients per serving cell. SQL: SELECT cell, sum(bytes_sent) FROM cdnf.edge_volume_hourly WHERE interval_start >= toStartOfHour($__fromTime) GROUP BY cell |
 | Download by domain | Bytes sent to clients per domain. |
@@ -697,7 +697,7 @@ Refreshes every 30s.
 | Upload by cell | Request bytes received from clients per serving cell. |
 | Upload by domain | Request bytes received from clients per domain. |
 | Upload by country | Request bytes received from clients per client country. |
-| Bandwidth by edge | Bits per second each edge host sent (download) and received (upload), live from Prometheus. Origin-side traffic is not measured. |
+| Bandwidth by edge | Bits per second each edge host sent (download) and received (upload), live from Prometheus. Origin-side traffic is not measured. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 
 ## Samples
 
@@ -713,7 +713,7 @@ Refreshes every 30s.
 | --- | --- |
 | Top domains by egress | Which domains sent the most bytes? SQL: SELECT hostname, sum(bytes_sent) FROM cdnf.edge_traffic_hourly WHERE $__timeFilter(interval_start) GROUP BY hostname ORDER BY 2 DESC LIMIT 10 |
 | Which PoP is slowest | Which PoP has the highest 95th percentile edge time? PromQL: topk(5, 1000 * histogram_quantile(0.95, sum by (le, pop) (cdnf:edge_latency_bucket:rate5m))) |
-| Who triggered a WAF rule | Which client networks triggered the most WAF matches? SQL: group edge_events by masked client network where waf_rule_id != 0. Looks back 7 days, whatever the dashboard range. |
-| Error rate by status | What is the rate of each 5xx status? PromQL: sum by (status_class) (cdnf:edge_requests:rate5m{status_class="5xx"}) |
+| Who triggered a WAF rule | Which client networks triggered the most WAF matches? SQL: group edge_events by masked client network where waf_rule_id != 0. Looks back 7 days, whatever the dashboard range. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
+| Error rate by status | What is the rate of each 5xx status? PromQL: sum by (status_class) (cdnf:edge_requests:rate5m{status_class="5xx"}) Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Slowest origins over time | Which hostnames have a slow origin? SQL: quantilesTDigestMerge over origin_latency_q by hostname. Always the last 24h, whatever range the dashboard shows. |
-| Recent errors | What errors did services log? LogQL: {level=~"error\|critical"} |
+| Recent errors | What errors did services log? LogQL: {level=~"error\|critical"} Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |

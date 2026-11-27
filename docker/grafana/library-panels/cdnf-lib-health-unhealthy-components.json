@@ -4,7 +4,7 @@
       "type": "prometheus",
       "uid": "prometheus"
     },
-    "description": "Control-plane components reporting degraded or unavailable.",
+    "description": "Control-plane components reporting degraded or unavailable. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
     "fieldConfig": {
       "defaults": {
         "color": {

@@ -156,7 +156,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Components reporting degraded or unavailable.",
+      "description": "Components reporting degraded or unavailable. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -234,7 +234,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Operations that failed in the failed-operations window.",
+      "description": "Operations that failed in the failed-operations window. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -312,7 +312,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Queue jobs that failed in the same window.",
+      "description": "Queue jobs that failed in the same window. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -390,7 +390,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "95th percentile API request time over the last 5 minutes.",
+      "description": "95th percentile API request time over the last 5 minutes. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -473,7 +473,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "95th percentile panel request time.",
+      "description": "95th percentile panel request time. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -571,7 +571,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Every control-plane component with its state. A red row names what to open first.",
+      "description": "Every control-plane component with its state. A red row names what to open first. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -708,7 +708,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "The ten routes with the highest 95th percentile time.",
+      "description": "The ten routes with the highest 95th percentile time. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -825,7 +825,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "95th percentile request time for API routes and for panel routes.",
+      "description": "95th percentile request time for API routes and for panel routes. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -930,7 +930,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Control-plane requests per second.",
+      "description": "Control-plane requests per second. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1016,7 +1016,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Jobs waiting in each worker lane.",
+      "description": "Jobs waiting in each worker lane. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1102,7 +1102,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Age of the oldest waiting job in each lane.",
+      "description": "Age of the oldest waiting job in each lane. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1196,7 +1196,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "1 while the scheduler's durable heartbeat is fresh.",
+      "description": "1 while the scheduler's durable heartbeat is fresh. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1288,7 +1288,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Managed certificate orders that finished in the last 24 hours.",
+      "description": "Managed certificate orders that finished in the last 24 hours. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1374,7 +1374,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Longest managed certificate issuance in the last 24 hours.",
+      "description": "Longest managed certificate issuance in the last 24 hours. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1460,7 +1460,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Alerts Alertmanager sent to the notifier and receivers each second, and the ones that failed. Platform notification channels (webhooks, Slack, and so on) report in the panel under Notification channels.",
+      "description": "Alerts Alertmanager sent to the notifier and receivers each second, and the ones that failed. Platform notification channels (webhooks, Slack, and so on) report in the panel under Notification channels. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {

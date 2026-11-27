@@ -156,7 +156,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Age of the oldest purge not yet applied on every PoP.",
+      "description": "Age of the oldest purge not yet applied on every PoP. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -238,7 +238,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Age of the oldest published edge artifact a PoP has not applied.",
+      "description": "Age of the oldest published edge artifact a PoP has not applied. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -320,7 +320,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Longest request-to-applied time of a purge in the last hour.",
+      "description": "Longest request-to-applied time of a purge in the last hour. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -402,7 +402,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Age of the oldest DNS deployment that has not reached its serial.",
+      "description": "Age of the oldest DNS deployment that has not reached its serial. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -484,7 +484,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Age of the oldest pending purge and the slowest finished purge.",
+      "description": "Age of the oldest pending purge and the slowest finished purge. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -589,7 +589,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Age of the oldest published artifact a PoP has not applied.",
+      "description": "Age of the oldest published artifact a PoP has not applied. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -683,7 +683,7 @@
         "type": "postgres",
         "uid": "control-db"
       },
-      "description": "Edges that have not applied the newest published artifact, with how many artifacts each is behind.",
+      "description": "Edges that have not applied the newest published artifact, with how many artifacts each is behind. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {

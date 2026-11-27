@@ -4,7 +4,7 @@
       "type": "prometheus",
       "uid": "prometheus"
     },
-    "description": "Alerts firing now, not counting the heartbeat.",
+    "description": "Alerts firing now, not counting the heartbeat. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
     "fieldConfig": {
       "defaults": {
         "color": {

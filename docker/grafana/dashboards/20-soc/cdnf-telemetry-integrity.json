@@ -156,7 +156,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Events dropped by authentication or validation in Vector in the last hour.",
+      "description": "Events dropped by authentication or validation in Vector in the last hour. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -234,7 +234,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Events dropped because a buffer was full, in the last hour.",
+      "description": "Events dropped because a buffer was full, in the last hour. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -312,7 +312,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "ClickHouse inserts Vector could not complete, in the last hour.",
+      "description": "ClickHouse inserts Vector could not complete, in the last hour. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -390,7 +390,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Seconds between now and the newest event stored in ClickHouse, looking back 1 day at most (not the dashboard range).",
+      "description": "Seconds between now and the newest event stored in ClickHouse, looking back 1 day at most (not the dashboard range). Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -472,7 +472,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Events Vector refused, by component.",
+      "description": "Events Vector refused, by component. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -558,7 +558,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Buffer drops and delivery errors per second.",
+      "description": "Buffer drops and delivery errors per second. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {

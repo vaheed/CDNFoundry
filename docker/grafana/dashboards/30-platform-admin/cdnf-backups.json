@@ -156,7 +156,7 @@
         "type": "postgres",
         "uid": "control-db"
       },
-      "description": "Time since the newest verified backup.",
+      "description": "Time since the newest verified backup. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -238,7 +238,7 @@
         "type": "postgres",
         "uid": "control-db"
       },
-      "description": "Size of the newest verified backup.",
+      "description": "Size of the newest verified backup. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -312,7 +312,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "1 when the backup component reports healthy: a fresh backup, a passing restic check, and a passing restore preflight.",
+      "description": "1 when the backup component reports healthy: a fresh backup, a passing restic check, and a passing restore preflight. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -390,7 +390,7 @@
         "type": "postgres",
         "uid": "control-db"
       },
-      "description": "Backups that failed in the last 7 days.",
+      "description": "Backups that failed in the last 7 days. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -468,7 +468,7 @@
         "type": "postgres",
         "uid": "control-db"
       },
-      "description": "Size of each verified backup over the last 30 days, whatever range the dashboard shows, because backups run once a day. Always the last 30d, whatever range the dashboard shows.",
+      "description": "Size of each verified backup over the last 30 days, whatever range the dashboard shows, because backups run once a day. Always the last 30d, whatever range the dashboard shows. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -556,7 +556,7 @@
         "type": "postgres",
         "uid": "control-db"
       },
-      "description": "The newest backups with their result.",
+      "description": "The newest backups with their result. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {

@@ -156,7 +156,7 @@
         "type": "postgres",
         "uid": "control-db"
       },
-      "description": "Domains that are not deleted.",
+      "description": "Domains that are not deleted. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -230,7 +230,7 @@
         "type": "postgres",
         "uid": "control-db"
       },
-      "description": "Domains created in the last 30 days.",
+      "description": "Domains created in the last 30 days. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -454,7 +454,7 @@
         "type": "postgres",
         "uid": "control-db"
       },
-      "description": "Domains created per month, over the last year. Always the last 1y, whatever range the dashboard shows.",
+      "description": "Domains created per month, over the last year. Always the last 1y, whatever range the dashboard shows. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {

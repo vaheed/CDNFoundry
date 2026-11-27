@@ -156,7 +156,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Successful sign-ins in the last hour.",
+      "description": "Successful sign-ins in the last hour. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -230,7 +230,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Failed sign-ins in the last hour.",
+      "description": "Failed sign-ins in the last hour. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -308,7 +308,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Administrator sign-ins from a network unused for 30 days, in the last 15 minutes.",
+      "description": "Administrator sign-ins from a network unused for 30 days, in the last 15 minutes. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -386,7 +386,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "API requests made with a token, per second.",
+      "description": "API requests made with a token, per second. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -461,7 +461,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Sign-ins per second by result and surface.",
+      "description": "Sign-ins per second by result and surface. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -547,7 +547,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "API requests per second by token ability.",
+      "description": "API requests per second by token ability. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -633,7 +633,7 @@
         "type": "postgres",
         "uid": "control-db"
       },
-      "description": "Successful sign-ins by account and network. Addresses are masked to /24 or /48.",
+      "description": "Successful sign-ins by account and network. Addresses are masked to /24 or /48. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -713,7 +713,7 @@
         "type": "postgres",
         "uid": "control-db"
       },
-      "description": "Audit entries for platform settings, domains, and security rules.",
+      "description": "Audit entries for platform settings, domains, and security rules. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -793,7 +793,7 @@
         "type": "postgres",
         "uid": "control-db"
       },
-      "description": "All audit entries per hour over the last 7 days, whatever range the dashboard shows.",
+      "description": "All audit entries per hour over the last 7 days, whatever range the dashboard shows. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {

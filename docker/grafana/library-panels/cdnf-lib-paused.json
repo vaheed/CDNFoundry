@@ -4,7 +4,7 @@
       "type": "prometheus",
       "uid": "prometheus"
     },
-    "description": "Fleet rollouts paused on a safety threshold.",
+    "description": "Fleet rollouts paused on a safety threshold. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
     "fieldConfig": {
       "defaults": {
         "color": {

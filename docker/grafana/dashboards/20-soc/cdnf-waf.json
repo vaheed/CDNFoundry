@@ -308,7 +308,7 @@
         "type": "postgres",
         "uid": "control-db"
       },
-      "description": "WAF exclusions that have not expired.",
+      "description": "WAF exclusions that have not expired. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -382,7 +382,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "95th percentile WAF processing time per request.",
+      "description": "95th percentile WAF processing time per request. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -552,7 +552,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Average and 95th percentile WAF processing time.",
+      "description": "Average and 95th percentile WAF processing time. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -638,7 +638,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "The WAF rules matched most often in the last 7 days. Select a rule to list its requests below.",
+      "description": "The WAF rules matched most often in the last 7 days. Select a rule to list its requests below. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -735,7 +735,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Which hostnames trigger each rule, over the last 7 days (not the dashboard range).",
+      "description": "Which hostnames trigger each rule, over the last 7 days (not the dashboard range). Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -815,7 +815,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Requests that matched the rule in the WAF rule field above. Choose a rule from the top rules table. Looks back 7 days, whatever the dashboard range.",
+      "description": "Requests that matched the rule in the WAF rule field above. Choose a rule from the top rules table. Looks back 7 days, whatever the dashboard range. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {

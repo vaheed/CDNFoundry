@@ -268,6 +268,16 @@ class GrafanaContractTest(unittest.TestCase):
                 if fixed and "$__timeFilter" not in queries:
                     self.assertRegex(panel.get("description", ""), r"\d+ (hour|day|week|month)s?|last \d+|always", f"{uid}/{panel['title']}: it ignores the range and does not say which window it shows")
 
+    def test_a_panel_follows_a_scope_filter_or_says_it_is_fleet_wide(self) -> None:
+        filters = ("region", "pop", "edge", "pool", "domain", "hostname")
+        for uid, dashboard in self.by_uid.items():
+            for panel in resolved(dashboard, self.models):
+                queries = " ".join(str(target.get("expr") or target.get("rawSql") or target.get("query") or "") for target in targets(panel))
+                if not queries or panel["type"] in ("row", "text"):
+                    continue
+                follows = any(re.search(r"[\$\{]\{?" + name + r"\b", queries) for name in filters)
+                self.assertTrue(follows or "fleet-wide" in panel.get("description", "").lower(), f"{uid}/{panel['title']}: it ignores every scope filter and does not say so")
+
     def test_no_panel_turns_an_absent_series_into_zero(self) -> None:
         """`or vector(0)` shows 0 for a source that is not reporting. A panel keeps a zero only while its source exists:
         `or (0 * max(<source>))` is 0 when the source reports and has no value when it does not."""

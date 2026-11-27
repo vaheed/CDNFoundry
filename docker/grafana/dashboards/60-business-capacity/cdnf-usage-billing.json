@@ -187,7 +187,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Bytes sent to clients this month, headers included.",
+      "description": "Bytes sent to clients this month, headers included. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -261,7 +261,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Bits per second at the 95th percentile of 5-minute intervals this month, all domains together.",
+      "description": "Bits per second at the 95th percentile of 5-minute intervals this month, all domains together. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -336,7 +336,7 @@
         "type": "postgres",
         "uid": "control-db"
       },
-      "description": "Requests served this month.",
+      "description": "Requests served this month. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -410,7 +410,7 @@
         "type": "postgres",
         "uid": "control-db"
       },
-      "description": "Authoritative DNS queries this month.",
+      "description": "Authoritative DNS queries this month. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -859,7 +859,7 @@
         "type": "postgres",
         "uid": "control-db"
       },
-      "description": "Hourly usage rollups kept in the control database, which the monthly report uses.",
+      "description": "Hourly usage rollups kept in the control database, which the monthly report uses. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1556,7 +1556,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Bits per second each edge host sent (download) and received (upload), live from Prometheus. Origin-side traffic is not measured.",
+      "description": "Bits per second each edge host sent (download) and received (upload), live from Prometheus. Origin-side traffic is not measured. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {

@@ -401,7 +401,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Requests that moved to a backup origin in the last 1 hour (not the dashboard range).",
+      "description": "Requests that moved to a backup origin in the last 1 hour (not the dashboard range). Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -885,7 +885,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Requests per minute that moved between primary and backup origin.",
+      "description": "Requests per minute that moved between primary and backup origin. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {

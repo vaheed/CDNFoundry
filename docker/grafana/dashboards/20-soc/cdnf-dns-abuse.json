@@ -596,7 +596,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Zones that receive the most queries.",
+      "description": "Zones that receive the most queries. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -670,7 +670,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Zones where random names are asked most often.",
+      "description": "Zones where random names are asked most often. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -748,7 +748,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Query types by volume. ANY, TXT, and DNSKEY are the ones used to amplify.",
+      "description": "Query types by volume. ANY, TXT, and DNSKEY are the ones used to amplify. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -822,7 +822,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Client networks sending the most DNS queries in the last 7 days, as /24 or /48.",
+      "description": "Client networks sending the most DNS queries in the last 7 days, as /24 or /48. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -896,7 +896,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "ANY, TXT, and DNSKEY queries per hour over the last 24 hours, whatever range the dashboard shows.",
+      "description": "ANY, TXT, and DNSKEY queries per hour over the last 24 hours, whatever range the dashboard shows. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {

@@ -4,7 +4,7 @@
       "type": "prometheus",
       "uid": "prometheus"
     },
-    "description": "The latest result of every synthetic probe, per PoP and IP version. 1 is up, 0 is down.",
+    "description": "The latest result of every synthetic probe, per PoP and IP version. 1 is up, 0 is down. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
     "fieldConfig": {
       "defaults": {
         "color": {

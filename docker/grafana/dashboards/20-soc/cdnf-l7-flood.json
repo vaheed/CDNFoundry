@@ -290,7 +290,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Client networks sending the most requests, shown as the /24 or /48 the privacy setting allows.",
+      "description": "Client networks sending the most requests, shown as the /24 or /48 the privacy setting allows. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -364,7 +364,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Autonomous systems sending the most requests in the last 7 days.",
+      "description": "Autonomous systems sending the most requests in the last 7 days. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -453,7 +453,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "User agents seen most often in the last 7 days.",
+      "description": "User agents seen most often in the last 7 days. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -527,7 +527,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Paths requested most often in the last 7 days.",
+      "description": "Paths requested most often in the last 7 days. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
       "fieldConfig": {
         "defaults": {
           "color": {

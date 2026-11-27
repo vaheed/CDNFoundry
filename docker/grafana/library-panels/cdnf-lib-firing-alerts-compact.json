@@ -4,7 +4,7 @@
       "type": "prometheus",
       "uid": "prometheus"
     },
-    "description": "Every firing alert with how long it has been firing. The full table with team, severity, and dashboard is on Now.",
+    "description": "Every firing alert with how long it has been firing. The full table with team, severity, and dashboard is on Now. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.",
     "fieldConfig": {
       "defaults": {
         "color": {
