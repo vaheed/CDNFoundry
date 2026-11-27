@@ -696,14 +696,43 @@ that drive alerts come from the cells' own counters and rollups. The client addr
 is shown masked to the network.
 
 **Decision trace.** **Trace** on a row (and `trace` on each API item) explains the
-decision from fields the event already stores, so the log line is no larger: the
-stage that acted (managed WAF, domain rule, platform rule, rate limit, challenge,
-sensitive data, API protection, or a platform limit), the reason, the rule
-references, shadow rules that also matched, up to eight matched managed rule IDs,
-and the attack and anomaly scores. Four signals are not recorded per request and
-are listed as unavailable, never shown as empty: the rate-limit key, the
-reputation band, bot signals, and dataset versions (`meta.unavailable_signals`).
-Attack episodes and the false-positive views are not built yet.
+decision: the stage that acted (managed WAF, domain rule, platform rule, rate limit,
+challenge, sensitive data, API protection, or a platform limit), the reason, the rule
+references, shadow rules that also matched, up to eight matched managed rule IDs, the
+attack and anomaly scores, the client key, and the snapshot sequence.
+
+- The **client key** is 12 hexadecimal characters: a keyed hash of the key the cell
+  counts the client by (the address, or the /64 for IPv6). It is never the address,
+  and it is different on every edge, so it follows one client across the cells of one
+  edge and no further. Filter the list with `client_key` to follow one client.
+- The **snapshot sequence** is the revision of the signed snapshot the cell judged
+  the request under. The snapshot holds the domain's rules and its named IP lists, so
+  it identifies the rule and list content the request met.
+- Only a mitigated or shadow-matched request carries these two fields. A request
+  that no rule touched, and an event stored before cells logged them, shows them as
+  not recorded. They add up to 15 bytes to a mitigated line (budget 64) and 0 to
+  others.
+- Three signals are never recorded per request and are listed in
+  `trace.unavailable` and `meta.unavailable_signals`: the reputation band (reputation
+  runs in shadow mode), bot signals, and platform dataset versions (signed platform
+  datasets are not delivered to cells).
+
+**Attack episodes.** **Attack episodes** on the tab (and `GET
+/api/domains/{domain}/security/episodes`) groups blocked requests into one episode
+per attack. An episode starts at the first blocked minute, ends after 5 minutes
+without a blocked request, and is listed only when it blocked at least 20 requests.
+Each shows its start, end, blocked total, peak per minute, and its top five rules,
+paths, and client keys. The answer covers up to 24 hours, at most 20 episodes,
+newest first, from the same 7-day event store. `GET
+/api/domains/{domain}/security/client-keys` lists the 20 client keys with the most
+blocked requests in the range. Both are computed from stored events when asked, with
+bounded queries, and are never on the serving path.
+
+**Not built.** The bot and reputation breakdowns and the false-positive candidates
+(blocks followed by solved challenges or allows from the same key) are not built:
+the first two depend on signals the cells do not log, and the third needs the client
+key on every allowed request, which would add bytes to every log line. The rules
+match counts are in the rule list.
 
 ### Security alerts
 
@@ -719,9 +748,10 @@ is `PUT /api/domains/{domain}/security/alert` with `threshold` (1 to 1,000,000) 
 - The count is the blocked, challenged, and rate-limited requests that all cells
   report for the domain, from firewall rules, platform rulesets, and the managed
   firewall. Requests that a rule only logs are not counted.
-- **One alert per attack.** After an alert the domain stays quiet for an hour, even
-  while the attack continues, then alerts again if the count is still over the
-  threshold. The check runs every minute.
+- **One alert per attack.** An attack is one episode: it lasts while blocked requests
+  keep arriving and ends after 5 quiet minutes. You get one alert when the count
+  reaches the threshold, however long the attack runs, and another only for a later
+  attack. The check runs every minute.
 - The notification names the domain, the count, and the period. It goes to
   administrator channels and to the channels of users assigned to the domain that
   chose the event **Mitigated requests above threshold**.
