@@ -293,6 +293,35 @@ headers. It bounds request and response buffering, temporary storage, and origin
 connections. See [Cache and purge](cache.md) for cache admission and stale
 behavior.
 
+## Pages the edge writes itself
+
+When the edge refuses a request or cannot complete it, it answers with one small neutral page instead of the web
+server's built-in one. The page has a plain heading, one or two short sentences and a reference. It uses the system
+font, adapts to a light or dark browser setting, and loads nothing from outside. It names no product, project,
+vendor or runtime, and the `Server` header is never sent.
+
+| Situation | Status |
+| --- | --- |
+| A firewall rule or the managed firewall blocks the request | 403 |
+| The method is not allowed, or the request is malformed or too large | 405, 400, 413 |
+| Nothing is served at the host name | 421 |
+| Too many requests | 429, with `Retry-After` |
+| The origin refused the connection, could not be resolved, or failed TLS verification | 502 |
+| The origin did not answer in time | 504 |
+| The origin has no capacity left, or its circuit is open | 503, with `Retry-After` |
+
+A browser (a request whose `Accept` lists `text/html`) gets the page. Any other client gets a short JSON body with
+the same status, a message and the reference. A `HEAD` request gets the status and headers without a body. These
+responses are never cached and never expose an origin address, a version, a rule or the topology. The reference is
+the request identifier: it equals the `ray` public header and the `request_id` in the logs.
+
+A response your origin writes itself, including its own error page, passes through unchanged. A stale cached copy is
+still served when the origin fails inside the stale window.
+
+The browser challenge uses a neutral cookie (`_chk`) and verification path (`/.chk/verify`). A challenge page that a
+visitor loaded before the rename still verifies through the previous path, and a token issued before it still
+passes, so a challenge in flight survives an upgrade.
+
 ## Deploy and roll back
 
 Every origin or proxy change raises the domain revision and queues an edge

@@ -15,6 +15,7 @@ single source of truth; `make version-check` enforces it.
 
 ### Changed
 
+- Responses the edge writes itself (blocks, refusals, malformed or oversized requests, an unknown host, origin failures) use one neutral page with a reference, JSON for non-browser clients, no body for HEAD, and no product or runtime name. An origin timeout is a 504 and any other origin failure a 502. The `Server` header is no longer sent. The challenge cookie is `_chk`, its path `/.chk/verify`, and its element and script names are neutral; the previous cookie and path are still accepted.
 - Fleet `apply-config` activates a host narrowly when its change is only the firewall rules (the firewall step alone, no container or migration) or only documentation and scripts (a directory swap). Every other change keeps the full activation.
 - Fleet shows a service-level plan for `apply-config`: for each changed host, the services and the minimum safe action (none, firewall, file, reload, restart, recreate, node-wide), computed from digests of the files, environment keys and Compose service hashes the host last ran. It prints no value. Execution still activates a changed host as a whole.
 - The generated `firewall.sh` rebuilds its chains in an alternate chain and swaps the jump, so the filter is never empty during an update. Rerun `start.sh` or `firewall.sh` on each host; the first run retires the old chain names.
