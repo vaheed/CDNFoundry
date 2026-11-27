@@ -731,7 +731,7 @@ class EdgeAgentController extends Controller
             'result.status' => ['required', 'in:healthy,unhealthy'], 'result.latency_ms' => ['nullable', 'integer', 'between:0,60000'],
             'result.resolved_address' => ['nullable', 'ip'], 'result.tls_result' => ['nullable'],
             'result.http_status' => ['nullable', 'integer', 'between:100,599'],
-            'result.failure_reason' => ['nullable', 'in:dns_resolution_failed,blocked_destination,connect_timeout,connect_failed,tls_verification_failed,tls_handshake_failed,response_timeout,invalid_response,http_status_unhealthy,task_cancelled,task_expired'],
+            'result.failure_reason' => ['nullable', 'in:dns_resolution_failed,blocked_destination,connect_timeout,connect_failed,tls_verification_failed,tls_handshake_failed,response_timeout,invalid_response,http_status_unhealthy,task_cancelled,task_expired,worker_unavailable,worker_busy'],
         ] : [
             'result.status' => ['required', 'in:completed,failed'],
             'result.failure_reason' => ['nullable', 'string', 'max:100'],

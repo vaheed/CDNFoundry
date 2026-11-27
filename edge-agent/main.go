@@ -131,6 +131,15 @@ func main() {
 		fmt.Println(version)
 		return
 	}
+	if len(os.Args) == 2 && os.Args[1] == "--origin-probe-worker" {
+		if err := runProbeWorker(env("EDGE_PROBE_SOCKET", "")); err != nil {
+			fatal(err)
+		}
+		return
+	}
+	if len(os.Args) == 2 && os.Args[1] == "--origin-probe-worker-healthcheck" {
+		os.Exit(probeWorkerHealth(env("EDGE_PROBE_SOCKET", "")))
+	}
 	if len(os.Args) == 2 && os.Args[1] == "--healthcheck" {
 		os.Exit(healthcheck(env("EDGE_STATE_DIR", "/var/lib/cdnfoundry/agent")))
 	}
@@ -364,7 +373,12 @@ func (c *client) processTasks() error {
 		result := map[string]any{"status": "failed", "failure_reason": "cell_supervisor_unavailable"}
 		status := "failed"
 		if task.Type == "origin_test" {
-			result = runOriginTest(task)
+			// With the worker container deployed the probe runs there; without it the agent probes itself, as before.
+			if socket := env("EDGE_PROBE_SOCKET", ""); socket != "" {
+				result = forwardToProbeWorker(socket, task)
+			} else {
+				result = runOriginTest(task)
+			}
 			status = "succeeded"
 		} else if strings.HasPrefix(task.Type, "cell_") {
 			result, status = c.runCellTask(task)
