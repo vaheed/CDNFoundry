@@ -186,6 +186,7 @@ Route::middleware(['auth:sanctum', 'account.active', 'token.scope', 'throttle:ac
     Route::get('/domains/{domain}/security/mitigations', [SecurityMitigationController::class, 'index']);
     Route::get('/domains/{domain}/security/episodes', [SecurityEpisodeController::class, 'index']);
     Route::get('/domains/{domain}/security/client-keys', [SecurityEpisodeController::class, 'clientKeys']);
+    Route::get('/domains/{domain}/security/false-positive-candidates', [SecurityEpisodeController::class, 'falsePositiveCandidates']);
     Route::get('/domains/{domain}/security/platform-rulesets', [SecurityController::class, 'platformRulesets']);
     Route::get('/domains/{domain}/security/presets', [SecurityPresetController::class, 'show']);
     Route::put('/domains/{domain}/security/presets/user-agent', [SecurityPresetController::class, 'updateUserAgent'])->middleware('idempotent');

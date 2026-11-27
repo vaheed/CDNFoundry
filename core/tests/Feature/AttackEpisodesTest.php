@@ -85,6 +85,29 @@ class AttackEpisodesTest extends TestCase
         $this->actingAs(User::factory()->create())->getJson("/api/domains/{$domain->id}/security/client-keys")->assertNotFound();
     }
 
+    public function test_false_positive_candidates_are_scoped_to_the_domain_user_and_say_which_signals_are_unavailable(): void
+    {
+        $user = User::factory()->create();
+        $domain = Domain::query()->create(['name' => 'candidates.example', 'display_name' => 'C', 'revision' => 1, 'lifecycle_state' => 'active', 'nameservers_verified_at' => now()]);
+        $domain->users()->attach($user->id);
+        $sent = [];
+        Http::fake([config('services.clickhouse.url').'*' => function ($request) use (&$sent) {
+            $sent[] = $request->body();
+
+            return Http::response(json_encode(['client_key' => '0a1b2c3d4e5f', 'blocked_requests' => 4, 'solved_challenges' => 1, 'first_blocked' => '2026-11-20 10:00:00.000', 'last_solved' => '2026-11-20 10:02:00.000', 'top_rule' => 'r7']));
+        }]);
+
+        $response = $this->actingAs($user)->getJson("/api/domains/{$domain->id}/security/false-positive-candidates")->assertOk();
+        $this->assertSame([['client_key' => '0a1b2c3d4e5f', 'blocked' => 4, 'solved' => 1, 'first_blocked' => '2026-11-20 10:00:00.000', 'last_solved' => '2026-11-20 10:02:00.000', 'top_rule' => 'r7']], $response->json('data'));
+        $this->assertSame(20, $response->json('meta.maximum_rows'));
+        $this->assertArrayHasKey('bot_breakdown', $response->json('meta.unavailable'));
+        $this->assertStringContainsString("'challenge_solved'", $sent[0]);
+        $this->assertStringContainsString("NOT IN ('challenge_required'", $sent[0], 'being asked for a challenge is not a block');
+        $this->assertStringContainsString('LIMIT', $sent[0]);
+        $this->actingAs($user)->getJson("/api/domains/{$domain->id}/security/false-positive-candidates?from=2020-01-01T00:00:00Z")->assertUnprocessable();
+        $this->actingAs(User::factory()->create())->getJson("/api/domains/{$domain->id}/security/false-positive-candidates")->assertNotFound();
+    }
+
     public function test_the_panel_offers_the_episodes_and_says_so_when_the_store_does_not_answer(): void
     {
         Queue::fake();

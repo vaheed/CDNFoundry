@@ -346,6 +346,29 @@ final class AnalyticsStore
         return array_map(fn (array $row): array => ['value' => (string) $row['value'], 'blocked' => (int) $row['blocked']], $rows);
     }
 
+    /** Most false-positive candidates one answer lists. */
+    public const CANDIDATES_LISTED = 20;
+
+    /**
+     * Client keys that were blocked and then solved a challenge. A person who is blocked by a rule and then proves to be a browser is
+     * a candidate for a rule that is too broad. The challenge prompt itself is not a block here, because being asked is how the
+     * challenge works. A key is one client on one edge, so the same person can appear once for each edge. Each candidate names the
+     * rule (or reason) that blocked it most. Read from stored events of one bounded window, never from the request path.
+     *
+     * @return list<array{client_key: string, blocked: int, solved: int, first_blocked: string, last_solved: string, top_rule: string}>
+     */
+    public function falsePositiveCandidates(Domain $domain, array $range): array
+    {
+        $blocked = "(security_action = 'block' AND security_reason NOT IN ('challenge_required', 'challenge_invalid', 'challenge_token_limited'))";
+        $solved = "(security_reason = 'challenge_solved')";
+        $rows = $this->query("SELECT client_key, countIf({$blocked}) AS blocked_requests, countIf({$solved}) AS solved_challenges, toString(minIf(occurred_at, {$blocked})) AS first_blocked, toString(maxIf(occurred_at, {$solved})) AS last_solved, arrayElement(topKIf(1)(if(security_rule != '', security_rule, security_reason), {$blocked}), 1) AS top_rule FROM cdnf.edge_events WHERE {$this->edgeScope($domain)} AND occurred_at >= {from:DateTime64} AND occurred_at < {to:DateTime64} AND event_type = 'request' AND client_key != '' GROUP BY client_key HAVING blocked_requests > 0 AND solved_challenges > 0 AND maxIf(occurred_at, {$solved}) > minIf(occurred_at, {$blocked}) ORDER BY blocked_requests DESC, client_key LIMIT {limit:UInt8}", [...$this->parameters($range, $domain), 'limit' => self::CANDIDATES_LISTED]);
+
+        return array_map(fn (array $row): array => [
+            'client_key' => (string) $row['client_key'], 'blocked' => (int) $row['blocked_requests'], 'solved' => (int) $row['solved_challenges'],
+            'first_blocked' => (string) $row['first_blocked'], 'last_solved' => (string) $row['last_solved'], 'top_rule' => (string) $row['top_rule'],
+        ], $rows);
+    }
+
     /** @param array<int, string> $domains */
     public function usageInterval(CarbonImmutable $from, CarbonImmutable $to, array $domains): array
     {

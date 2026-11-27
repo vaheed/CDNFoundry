@@ -34,4 +34,18 @@ class SecurityEpisodeController extends Controller
 
         return response()->json(['data' => $store->topBlocked($domain, $range, 'client_key', 20), 'meta' => [...$store->metadata($range), 'retention_days' => 7, 'maximum_rows' => 20]]);
     }
+
+    /**
+     * Client keys that were blocked and then solved a challenge: candidates for a rule that is too broad. They are candidates, not
+     * proof. The bot and reputation breakdowns are not offered because the cell does not log those signals.
+     */
+    public function falsePositiveCandidates(Request $request, Domain $domain, AnalyticsStore $store): JsonResponse
+    {
+        Gate::authorize('view', $domain);
+        $request->merge(['from' => $request->query('from') ?? now('UTC')->subDay()->addMinute()->toIso8601String()]);
+        $range = $store->range($request, true);
+
+        return response()->json(['data' => $store->falsePositiveCandidates($domain, $range), 'meta' => [...$store->metadata($range), 'retention_days' => 7, 'maximum_rows' => AnalyticsStore::CANDIDATES_LISTED,
+            'unavailable' => ['bot_breakdown' => 'The cell does not log bot signals.', 'reputation_breakdown' => 'Reputation runs in shadow mode and is not logged.']]]);
+    }
 }

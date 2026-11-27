@@ -129,6 +129,7 @@ for authentication, pagination, response, and retry behaviour.
 | `PATCH` | `/domains/{domain}/security/ddos` | Required | Supported | `patch.domains.domain.security.ddos` |
 | `GET` | `/domains/{domain}/security/episodes` | Required | No | `get.domains.domain.security.episodes` |
 | `GET` | `/domains/{domain}/security/events` | Required | No | `get.domains.domain.security.events` |
+| `GET` | `/domains/{domain}/security/false-positive-candidates` | Required | No | `get.domains.domain.security.false-positive-candidates` |
 | `DELETE` | `/domains/{domain}/security/ip-lists/{name}` | Required | Supported | `delete.domains.domain.security.ip-lists.name` |
 | `GET` | `/domains/{domain}/security/ip-lists/{name}` | Required | No | `get.domains.domain.security.ip-lists.name` |
 | `PATCH` | `/domains/{domain}/security/ip-lists/{name}` | Required | Supported | `patch.domains.domain.security.ip-lists.name` |

@@ -11310,6 +11310,41 @@
                 }
             }
         },
+        "/domains/{domain}/security/false-positive-candidates": {
+            "get": {
+                "operationId": "get.domains.domain.security.false-positive-candidates",
+                "tags": [
+                    "Account"
+                ],
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "domain",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/Success"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/StableError"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/StableError"
+                    }
+                }
+            }
+        },
         "/domains/{domain}/security/ip-lists": {
             "get": {
                 "operationId": "get.domains.domain.security.ip-lists",
