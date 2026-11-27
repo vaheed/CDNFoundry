@@ -1065,7 +1065,10 @@ services:
       # Set only on a PoP that also runs a DNS node: the agent drives that node's local PowerDNS API.
       EDGE_DNS_API_URL: ${EDGE_DNS_API_URL}
       EDGE_DNS_API_KEY: ${EDGE_DNS_API_KEY}
+      # Set (to /run/probe/probe.sock) only on a host that runs the origin-probe worker; empty means the agent probes itself.
+      EDGE_PROBE_SOCKET: ${EDGE_PROBE_SOCKET}
     volumes:
+      - origin-probe-socket:/run/probe
       - edge-agent-state:/var/lib/cdnfoundry/agent
       - edge-runtime-memory:/var/lib/cdnfoundry/runtime
       - ${EDGE_STATE_ENCRYPTION_KEY_FILE:?EDGE_STATE_ENCRYPTION_KEY_FILE is required}:/run/secrets/edge-state-encryption.key:ro
@@ -1095,6 +1098,41 @@ services:
           memory: 256m
           cpus: "0.25"
           pids: 64
+
+  # The optional origin health-check worker: one per edge host, started only when active origin monitoring is on (Fleet adds the
+  # origin-probe profile). It has no inbound network, no datastore and no secret. The agent hands it a task over a unix socket on a
+  # volume only the two share, and it joins the egress network alone, so it cannot reach a cell, the gateway or any private service.
+  origin-probe:
+    logging: *bounded-logging
+    <<: *hardened
+    image: ${CDNF_EDGE_AGENT_IMAGE:?CDNF_EDGE_AGENT_IMAGE must be an immutable image reference}
+    profiles: [origin-probe]
+    command: ["--origin-probe-worker"]
+    environment:
+      EDGE_PROBE_SOCKET: /run/probe/probe.sock
+    volumes:
+      - origin-probe-socket:/run/probe
+    networks:
+      egress: {}
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, /usr/local/bin/edge-agent, --origin-probe-worker-healthcheck]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    stop_grace_period: 15s
+    read_only: true
+    tmpfs: [/tmp:size=8m]
+    mem_limit: 128m
+    cpus: 0.25
+    pids_limit: 128
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+          cpus: "0.25"
+          pids: 128
 
   edge-gateway:
     logging: *bounded-logging
@@ -1228,6 +1266,7 @@ volumes:
       device: tmpfs
       o: size=512m,uid=10101,gid=10101,mode=0700,nosuid,nodev,noexec
   edge-agent-state: {}
+  origin-probe-socket: {}
   edge-gateway-state: {}
   mmdb: {}
   cell-01-cache: {}

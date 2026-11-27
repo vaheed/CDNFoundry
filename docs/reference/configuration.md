@@ -133,6 +133,7 @@ object storage; other Restic backends need their own credential/mount wiring.
 | `EDGE_GATEWAY_IDLE_TIMEOUT_SECONDS` | edge gateway | A relayed connection direction with no byte for this long is closed, `5`–`3600` (default `120`) |
 | `EDGE_GATEWAY_HALF_CLOSE_TIMEOUT_SECONDS` | edge gateway | After one side half-closes, the other direction is closed when it is idle this long, `1`–`600` (default `30`) |
 | `EDGE_DNS_API_URL` | edge agent | Local PowerDNS API of a DNS node on this host, such as `http://pdns-auth:8081`; empty on a PoP with no DNS node |
+| `EDGE_PROBE_SOCKET` | edge agent | Unix socket of the origin health-check worker, `/run/probe/probe.sock`; empty means the agent runs origin checks itself. Fleet sets it when the worker is enabled |
 | `EDGE_DNS_API_KEY` | edge agent | The local node's `PDNS_API_KEY`; empty with no DNS node |
 
 ## Telemetry and GeoIP
