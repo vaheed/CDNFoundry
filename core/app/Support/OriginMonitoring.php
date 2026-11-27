@@ -39,6 +39,12 @@ final class OriginMonitoring
         return max(0, min($wanted, self::DESTINATION_PROBES_PER_MINUTE - $perDestination, $domainLimit - $perDomain));
     }
 
+    /** A probe task is useless after this: a scheduled one after one minimum interval, a manual one after a minute. The agent drops it then. */
+    public static function taskExpiry(bool $scheduled): int
+    {
+        return now()->addSeconds($scheduled ? app(PlatformSettings::class)->integer('origin_monitoring', 'minimum_interval_seconds') : 60)->timestamp;
+    }
+
     public static function enabled(): bool
     {
         return (bool) app(PlatformSettings::class)->get('origin_monitoring', 'enabled');

@@ -66,7 +66,7 @@ final class OriginProbeOutcome
             return false;
         }
         EdgeTask::query()->create(['id' => (string) Str::uuid(), 'edge_id' => $candidate->id, 'type' => 'origin_test', 'status' => 'pending', 'payload' => [
-            'operation_id' => $operation->id, 'domain_id' => $record->domain_id, 'record_id' => $record->id, 'destination' => $destination, 'confirmation_of' => $first->id,
+            'operation_id' => $operation->id, 'domain_id' => $record->domain_id, 'record_id' => $record->id, 'destination' => $destination, 'probe_expires_at' => OriginMonitoring::taskExpiry(true), 'confirmation_of' => $first->id,
             'origin_role' => $role, 'origin' => $origin, 'addresses' => $operation->input['addresses'] ?? [],
             'private_allowlist' => app(PlatformSettings::class)->get('origin_safety', 'private_origin_allowlist'),
             'blocked_networks' => app(PlatformSettings::class)->get('origin_safety', 'blocked_origin_networks'),

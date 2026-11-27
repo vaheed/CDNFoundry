@@ -105,7 +105,7 @@ class DispatchOriginTest implements ShouldQueue
             }
             foreach ($edges as $edge) {
                 EdgeTask::query()->create(['id' => (string) Str::uuid(), 'edge_id' => $edge->id, 'type' => 'origin_test', 'status' => 'pending', 'payload' => [
-                    'operation_id' => $operation->id, 'domain_id' => $record->domain_id, 'record_id' => $record->id, 'destination' => OriginMonitoring::destination($origin),
+                    'operation_id' => $operation->id, 'domain_id' => $record->domain_id, 'record_id' => $record->id, 'destination' => OriginMonitoring::destination($origin), 'probe_expires_at' => OriginMonitoring::taskExpiry(($operation->input['scheduled'] ?? false) === true),
                     'origin_role' => $role, 'origin' => $origin, 'addresses' => $operation->input['addresses'],
                     'private_allowlist' => app(PlatformSettings::class)->get('origin_safety', 'private_origin_allowlist'),
                     'blocked_networks' => app(PlatformSettings::class)->get('origin_safety', 'blocked_origin_networks'),
