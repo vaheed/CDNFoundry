@@ -33,6 +33,7 @@ use App\Support\EdgeRejectionReasons;
 use App\Support\LongWindowRateLimits;
 use App\Support\OriginHealth;
 use App\Support\OriginPolicy;
+use App\Support\OriginProbeOutcome;
 use App\Support\PlatformSettings;
 use App\Support\PowerDnsClient;
 use App\Support\RuntimeVersions;
@@ -754,14 +755,16 @@ class EdgeAgentController extends Controller
         if ($row->type === 'origin_test' && isset($row->payload['record_id'])) {
             $record = $row->currentOriginRecord(lock: true);
             $operation = Operation::query()->find($row->payload['operation_id'] ?? null);
-            if ($record !== null) {
-                OriginHealth::record($record, $row->payload['origin_role'] ?? 'primary',
-                    ($operation?->input['scheduled'] ?? false) === true ? 'active' : 'manual', [
-                        'status' => $result['status'], 'observer' => $edge->id, 'at' => $result['reported_at'],
-                        'latency_ms' => $result['latency_ms'] ?? null, 'http_status' => $result['http_status'] ?? null,
-                        'failure_reason' => $result['failure_reason'] ?? null, 'resolved_address' => $result['resolved_address'] ?? null,
-                        'tls_result' => $result['tls_result'] ?? null,
-                    ]);
+            if ($record !== null && ($operation?->input['scheduled'] ?? false) === true) {
+                // A scheduled check has several representatives: their answers are combined, and a failure is confirmed first.
+                OriginProbeOutcome::taskAnswered($row->refresh(), $operation, $record);
+            } elseif ($record !== null) {
+                OriginHealth::record($record, $row->payload['origin_role'] ?? 'primary', 'manual', [
+                    'status' => $result['status'], 'observer' => $edge->id, 'at' => $result['reported_at'],
+                    'latency_ms' => $result['latency_ms'] ?? null, 'http_status' => $result['http_status'] ?? null,
+                    'failure_reason' => $result['failure_reason'] ?? null, 'resolved_address' => $result['resolved_address'] ?? null,
+                    'tls_result' => $result['tls_result'] ?? null,
+                ]);
             }
             if ($operation !== null && in_array($operation->status, ['pending', 'running'], true)) {
                 $tasks = EdgeTask::query()->where('type', 'origin_test')->where('payload->operation_id', $operation->id)->get();

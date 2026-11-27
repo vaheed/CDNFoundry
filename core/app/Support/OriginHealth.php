@@ -24,7 +24,7 @@ final class OriginHealth
 
     public const PASSIVE_TTL_SECONDS = 900;
 
-    private const FIELDS = ['status', 'observer', 'at', 'checksum', 'latency_ms', 'http_status', 'failure_reason', 'resolved_address', 'tls_result', 'failure_count'];
+    private const FIELDS = ['status', 'observer', 'at', 'checksum', 'latency_ms', 'http_status', 'failure_reason', 'resolved_address', 'tls_result', 'failure_count', 'scope', 'failed_groups', 'not_monitored', 'worker_faults'];
 
     public static function checksum(array $origin): string
     {
@@ -128,10 +128,12 @@ final class OriginHealth
                 'passive' => self::PASSIVE_TTL_SECONDS,
             };
             $isFresh = (! isset($signal['checksum']) || hash_equals($checksum, (string) $signal['checksum'])) && $age >= -60 && $age <= $ttl;
-            $detail[$kind] = ['state' => $isFresh ? (string) $signal['status'] : 'stale', 'at' => $signal['at'] ?? null]
-                + array_intersect_key($signal, array_flip(['observer', 'latency_ms', 'http_status', 'failure_reason', 'resolved_address', 'failure_count']));
+            // A failure seen from some probe groups only, or not confirmed by a second worker, is degraded, never an origin failure.
+            $reading = $kind === 'active' && in_array($signal['scope'] ?? '', ['regional', 'unconfirmed'], true) ? 'degraded' : (string) $signal['status'];
+            $detail[$kind] = ['state' => $isFresh ? $reading : 'stale', 'at' => $signal['at'] ?? null]
+                + array_intersect_key($signal, array_flip(['observer', 'latency_ms', 'http_status', 'failure_reason', 'resolved_address', 'failure_count', 'scope', 'failed_groups', 'not_monitored', 'worker_faults']));
             if ($isFresh) {
-                $fresh[] = (string) $signal['status'];
+                $fresh[] = $reading;
             }
         }
         $any = array_filter($monitoring ? $signals : array_diff_key($signals, ['active' => 1]), 'is_array') !== [];
