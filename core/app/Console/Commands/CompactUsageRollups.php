@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Models\UsageCoverage;
 use App\Models\UsageRollup;
 use App\Support\PlatformSettings;
 use Carbon\CarbonImmutable;
@@ -27,6 +28,8 @@ class CompactUsageRollups extends Command
         $now = CarbonImmutable::now('UTC');
         $days = $this->compact('hour', 'day', $now->subDays($settings->integer('operations', 'usage_hourly_retention_days'))->startOfDay(), $limit);
         $months = $this->compact('day', 'month', $now->subDays($settings->integer('operations', 'usage_daily_retention_days'))->startOfMonth(), $limit);
+        // Coverage is needed only while an hour can still be built or compacted.
+        UsageCoverage::query()->where('interval_start', '<', $now->subDays($settings->integer('operations', 'usage_hourly_retention_days'))->startOfDay())->delete();
         $this->info("Compacted {$days} days and {$months} months of usage.");
 
         return self::SUCCESS;
@@ -65,17 +68,26 @@ class CompactUsageRollups extends Command
     private function compactPeriod(string $from, string $to, CarbonImmutable $start, CarbonImmutable $end): bool
     {
         $detail = fn () => UsageRollup::query()->where('granularity', $from)->where('interval_start', '>=', $start)->where('interval_start', '<', $end);
-        $ready = $detail()->selectRaw('domain_id, sum(requests) as requests, sum(bytes_in) as bytes_in, sum(bytes_out) as bytes_out, sum(cache_hits) as cache_hits, sum(dns_queries) as dns_queries, sum(case when status = \'finalized\' then 0 else 1 end) as open_rows')
+        $ready = $detail()->selectRaw('domain_id, sum(requests) as requests, sum(bytes_in) as bytes_in, sum(bytes_out) as bytes_out, sum(cache_hits) as cache_hits, sum(dns_queries) as dns_queries, sum(case when status = \'provisional\' then 1 else 0 end) as open_rows, sum(case when status = \'incomplete\' then 1 else 0 end) as incomplete_rows, sum(case when status = \'corrected\' then 1 else 0 end) as corrected_rows')
             ->groupBy('domain_id')->orderBy('domain_id')->get();
         // A domain whose period still holds a provisional row is left alone until it is finalized.
         $rows = $ready->where('open_rows', '=', 0)->values();
+        // An hour the telemetry did not cover is not a known zero, so the period it sits in is incomplete too.
+        $uncovered = $from === 'hour' && UsageCoverage::query()->where('status', 'incomplete')->where('interval_start', '>=', $start)->where('interval_start', '<', $end)->exists();
         foreach ($rows->chunk(self::DOMAINS_PER_TRANSACTION) as $chunk) {
-            DB::transaction(function () use ($chunk, $detail, $to, $start, $end): void {
+            DB::transaction(function () use ($chunk, $detail, $to, $start, $end, $uncovered): void {
+                // The name and owners recorded with the detail rows move to the sum: they are history, not the domain's current state.
+                $identity = $detail()->whereIn('domain_id', $chunk->pluck('domain_id'))->orderBy('interval_start')->get(['domain_id', 'domain_name', 'owner_user_ids'])
+                    ->groupBy('domain_id')->map(fn ($group): array => [
+                        'domain_name' => $group->pluck('domain_name')->filter()->last(),
+                        'owner_user_ids' => $group->flatMap(fn ($row) => $row->owner_user_ids ?? [])->unique()->sort()->values()->take(20)->all(),
+                    ]);
                 foreach ($chunk as $row) {
+                    $status = $uncovered || $row->incomplete_rows > 0 ? 'incomplete' : ($row->corrected_rows > 0 ? 'corrected' : 'finalized');
                     UsageRollup::query()->updateOrCreate(
                         ['domain_id' => $row->domain_id, 'interval_start' => $start, 'granularity' => $to],
                         ['interval_end' => $end, 'requests' => $row->requests, 'bytes_in' => $row->bytes_in, 'bytes_out' => $row->bytes_out, 'cache_hits' => $row->cache_hits,
-                            'dns_queries' => $row->dns_queries, 'status' => 'finalized', 'source_finalized_at' => now()],
+                            'dns_queries' => $row->dns_queries, 'status' => $status, 'source_finalized_at' => now(), ...($identity->get($row->domain_id) ?? [])],
                     );
                 }
                 $detail()->whereIn('domain_id', $chunk->pluck('domain_id'))->delete();

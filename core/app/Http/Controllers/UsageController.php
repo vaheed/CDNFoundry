@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Domain;
+use App\Models\UsageCoverage;
 use App\Models\UsageRollup;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
@@ -19,7 +20,7 @@ class UsageController extends Controller
         [$from, $to] = $this->range($request);
         $page = $this->query($domain, $from, $to)->cursorPaginate(100);
 
-        return response()->json(['data' => $page, 'meta' => ['from' => $from->toIso8601String(), 'to' => $to->toIso8601String(), 'units' => ['bandwidth' => 'bytes']]]);
+        return response()->json(['data' => $page, 'meta' => ['from' => $from->toIso8601String(), 'to' => $to->toIso8601String(), 'units' => ['bandwidth' => 'bytes'], 'coverage' => UsageCoverage::summary($from, $to)]]);
     }
 
     public function export(Request $request, Domain $domain): JsonResponse|StreamedResponse
