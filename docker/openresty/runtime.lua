@@ -71,7 +71,9 @@ end
 local function diagnostic_headers_enabled()
     local host = (ngx.var.host or ""):lower():gsub("%.$", "")
     local config = state.hosts[host]
-    local settings = config and config.settings
+    -- A host that is not served has no domain to opt in, so it never shows a diagnostic header.
+    if not config then return false end
+    local settings = config.settings
     -- A snapshot with public headers carries the decision (platform force-off, domain choice, platform default) in one field.
     local public = settings and settings.public_headers
     if type(public) == "table" then return public.diagnostics == true end
@@ -258,6 +260,52 @@ local function record_security_event(reason)
     end
 end
 
+-- The answer for a response the edge itself refuses or cannot complete: one small neutral page for a browser, a short JSON body for any
+-- other client, no body for HEAD, never cached. It names no product, project, vendor or runtime and carries no version, address,
+-- rule or topology. The reference is the request identifier, the same value the visitor receives in the public header.
+M.EDGE_PAGES = {
+    [400] = {"Bad request", "The request could not be understood."}, [403] = {"Access denied", "This request was not allowed."},
+    [404] = {"Not found", "There is nothing at this address."}, [405] = {"Method not allowed", "This address does not accept that request method."},
+    [408] = {"Request timeout", "The request took too long to arrive. Try again."}, [413] = {"Request too large", "The request is larger than this site accepts."},
+    [414] = {"Address too long", "The address in the request is too long."}, [421] = {"Unknown site", "This address is not served here."},
+    [429] = {"Too many requests", "Too many requests were sent. Wait a moment and try again."}, [431] = {"Request headers too large", "The request headers are larger than this site accepts."},
+    [500] = {"Something went wrong", "The request could not be completed. Try again shortly."}, [502] = {"Site unavailable", "The site could not be reached. Try again shortly."},
+    [503] = {"Temporarily unavailable", "This site cannot answer right now. Try again shortly."}, [504] = {"Site did not answer", "The site took too long to answer. Try again shortly."},
+}
+
+function M.error_response(status, retry_after)
+    local entry = M.EDGE_PAGES[status] or {"Request not completed", "The request could not be completed."}
+    local reference = ngx.var.request_id
+    ngx.status = status
+    ngx.header["Cache-Control"] = "no-store"
+    if retry_after then ngx.header["Retry-After"] = tostring(math.max(1, math.ceil(retry_after))) end
+    local accept = ngx.var.http_accept or ""
+    local html = accept:find("text/html", 1, true) ~= nil
+    if html then
+        ngx.header["Content-Type"] = "text/html; charset=utf-8"
+        ngx.header["Content-Security-Policy"] = "default-src 'none'; style-src 'nonce-" .. tostring(reference) .. "'"
+    else
+        ngx.header["Content-Type"] = "application/json"
+    end
+    if ngx.req.get_method() ~= "HEAD" then
+        if html then
+            ngx.print(table.concat({
+                '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">',
+                '<title>', entry[1], '</title><meta name="robots" content="noindex">',
+                '<style nonce="', tostring(reference), '">body{margin:0;font:16px/1.5 system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;background:#fff;color:#1a1a1a}',
+                'main{max-width:30rem;padding:1.5rem}h1{font-size:1.25rem;margin:0 0 .5rem}p{margin:.5rem 0}.ref{color:#595959;font-size:.875rem}',
+                '@media (prefers-color-scheme:dark){body{background:#141414;color:#ececec}.ref{color:#a8a8a8}}</style></head><body><main>',
+                '<h1>', entry[1], '</h1><p>', entry[2], '</p>',
+                reference and ('<p class="ref">Reference: ' .. tostring(reference) .. '</p>') or '',
+                '</main></body></html>',
+            }))
+        else
+            ngx.print(cjson.encode({error = "request_not_completed", status = status, message = entry[2], reference = reference}))
+        end
+    end
+    return ngx.exit(ngx.HTTP_OK)
+end
+
 local function security_reject(status, reason)
     ngx.shared.runtime_limits:incr("capacity:rejected_requests", 1, 0)
     record_security_event(reason)
@@ -294,7 +342,7 @@ local function security_reject(status, reason)
         ngx.print(body)
         return ngx.exit(ngx.HTTP_OK)
     end
-    return ngx.exit(status)
+    return M.error_response(status)
 end
 
 
@@ -317,7 +365,10 @@ local function incident_for(config)
     return nil
 end
 
-local CHALLENGE_PATH = "/.cdnf/challenge"
+local CHALLENGE_PATH = "/.chk/verify"
+-- The path and cookie before the challenge lost its product name stay accepted, so a challenge page already in a visitor's browser
+-- still verifies and a token issued before the change still passes. Only the neutral names are issued.
+M.LEGACY_PATH = "/.cdnf/challenge"
 -- The proof-of-work difficulty in leading zero bits: 16 by default, settable per cell with EDGE_CHALLENGE_BITS from 12 (a few
 -- thousand hashes) to 24 (millions, noticeable on a phone). A value outside that range is refused and the default applies.
 local CHALLENGE_BITS = 16
@@ -467,7 +518,7 @@ end
 -- A token is `key id . domain . expiry . binding . mac`. The key id picks the platform key (or this cell's own) that signed it, and the
 -- mac covers the key id, so a token cannot be moved to another key.
 local function valid_challenge_token(config, client)
-    local token = ngx.var.cookie_cdnf_chal
+    local token = ngx.var.cookie__chk or ngx.var.cookie_cdnf_chal
     if type(token) ~= "string" or #token > 200 then return false end
     local kid, domain, expires, binding, mac = token:match("^(%w+)%.(%d+)%.(%d+)%.(%x+)%.(%x+)$")
     if not kid or tonumber(domain) ~= tonumber(config.domain_id or 0) or tonumber(expires) <= ngx.time() then return false end
@@ -519,7 +570,7 @@ local function challenge_page(seed, nonce, bits)
         '<p id="status" role="status" aria-live="polite"></p>',
         '<noscript><p>This site is handling a flood of requests and needs JavaScript to confirm that a person is visiting. ',
         'Turn JavaScript on and reload, or contact the site owner.</p></noscript>',
-        '<script id="cdnf-solver" nonce="', nonce, '">', CHAL.solver_source(), '</script>',
+        '<script id="solver" nonce="', nonce, '">', CHAL.solver_source(), '</script>',
         '<script nonce="', nonce, '">(function(){var seed="', seed, '",bits=', tostring(bits), ',status=document.getElementById("status"),done=false,workers=[];',
         'function fail(text){status.textContent=text}status.textContent="This takes a few seconds. The page continues on its own.";',
         'function finish(counter){if(done)return;done=true;workers.forEach(function(w){w.terminate()});',
@@ -527,8 +578,8 @@ local function challenge_page(seed, nonce, bits)
         '.then(function(r){if(r.ok){location.reload()}else{fail("Verification failed. Reload the page to try again.")}},function(){fail("The check could not reach the site. Reload the page to try again.")})}',
         -- The work is split over a few workers so the page stays responsive and a phone with several cores uses them; if a worker cannot
         -- start, the page's own thread does the same search in short slices.
-        'function inline(){var next=0,slice=function(){var c=window.cdnfSolver.search(seed,bits,next,1,5000);next+=5000;if(c>=0){finish(c)}else{setTimeout(slice,0)}};slice()}',
-        'try{var count=Math.max(1,Math.min(4,(navigator.hardwareConcurrency||2)-1)),source=document.getElementById("cdnf-solver").textContent,',
+        'function inline(){var next=0,slice=function(){var c=window.chkSolver.search(seed,bits,next,1,5000);next+=5000;if(c>=0){finish(c)}else{setTimeout(slice,0)}};slice()}',
+        'try{var count=Math.max(1,Math.min(4,(navigator.hardwareConcurrency||2)-1)),source=document.getElementById("solver").textContent,',
         'url=URL.createObjectURL(new Blob([source],{type:"text/javascript"}));',
         'for(var i=0;i<count;i++){var worker=new Worker(url);worker.onmessage=function(e){finish(e.data)};',
         'worker.onerror=function(){if(!done&&workers.length){workers.forEach(function(w){w.terminate()});workers=[];inline()}};',
@@ -557,7 +608,7 @@ end
 local function enforce_challenge(config, incident, client, trusted)
     local method = ngx.req.get_method()
     local uri = ngx.var.uri or "/"
-    if uri == CHALLENGE_PATH then
+    if uri == CHALLENGE_PATH or uri == M.LEGACY_PATH then
         if method ~= "POST" then return security_reject(405, "invalid_method") end
         ngx.req.read_body()
         local raw = ngx.req.get_body_data() or ""
@@ -578,7 +629,7 @@ local function enforce_challenge(config, incident, client, trusted)
         local binding = client_binding(client)
         local signing_id, signing_secret = CHAL.signing()
         local token = signing_id .. "." .. tostring(config.domain_id or 0) .. "." .. tostring(expires) .. "." .. binding .. "." .. hmac_sha256_hex("token|" .. signing_id .. "|" .. tostring(config.domain_id or 0) .. "|" .. tostring(expires) .. "|" .. binding, signing_secret)
-        ngx.header["Set-Cookie"] = "cdnf_chal=" .. token .. "; Path=/; Max-Age=" .. tostring(expires - ngx.time()) .. "; HttpOnly; SameSite=Lax" .. (ngx.var.https == "on" and "; Secure" or "")
+        ngx.header["Set-Cookie"] = "_chk=" .. token .. "; Path=/; Max-Age=" .. tostring(expires - ngx.time()) .. "; HttpOnly; SameSite=Lax" .. (ngx.var.https == "on" and "; Secure" or "")
         ngx.header["Cache-Control"] = "no-store"
         -- A solved challenge is rare (one per visitor per token lifetime), so its log line may carry the client key. It lets the
         -- control plane see a client that was blocked and then proved to be a person; the request itself stays allowed.
@@ -2740,7 +2791,7 @@ function M.access()
     local incident = incident_for(config)
     -- Method allowlists protect origin traffic. The internal proof endpoint needs POST even on a GET-only site;
     -- it still passes body limits, client containment, firewall rules and proof validation, and never reaches the origin.
-    local challenge_submission = method == "POST" and (ngx.var.uri or "/") == CHALLENGE_PATH
+    local challenge_submission = method == "POST" and ((ngx.var.uri or "/") == CHALLENGE_PATH or (ngx.var.uri or "/") == M.LEGACY_PATH)
         and ((incident and incident.challenge == true) or security_has_challenge_rule(rules_for(security)))
     if incident and not challenge_submission then
         local incident_allows = false
@@ -2905,7 +2956,7 @@ function M.access()
             return security_reject(403, "waf_block")
         end
     end
-    if rule_challenge or ((ngx.var.uri or "/") == CHALLENGE_PATH and security_has_challenge_rule(rules)) then
+    if rule_challenge or (((ngx.var.uri or "/") == CHALLENGE_PATH or (ngx.var.uri or "/") == M.LEGACY_PATH) and security_has_challenge_rule(rules)) then
         -- A matching challenge rule asks for the same proof of work as the incident profile, valid for a short while.
         local rule_incident = {expires_at = ngx.time() + CHALLENGE_TOKEN_SECONDS, challenge_bypass_prefixes = {}}
         local challenged = enforce_challenge(config, rule_challenge and rule_incident or (incident or rule_incident), client, trusted)
@@ -3477,12 +3528,35 @@ end
 function M.origin_failure()
     if ngx.var.cdn_security_reason ~= "" then
         if diagnostic_headers_enabled() then ngx.header["X-CDNF-Security-Reason"] = ngx.var.cdn_security_reason end
-        return ngx.exit(503)
+        -- A refusal of the edge's own (a closed circuit, no origin capacity) answers with the neutral page, never nginx's built-in one.
+        return M.error_response(503, 5)
+    end
+    -- The class of the failure travels to the outer location by the request identifier it sent: a timeout is a 504, anything else a 502.
+    -- The entry lives ten seconds; if it is missing or the dictionary is full the outer answer is the generic 502.
+    local id = ngx.var.http_x_cdn_request_id
+    if id and #id <= 64 and id:find("^[%w]+$") then
+        local status = tostring(ngx.var.upstream_status or ""):match("(%d+)%s*$")
+        ngx.shared.runtime_limits:set("origfail:" .. id, status == "504" and "timeout" or "unreachable", 10)
     end
     -- The internal 444 lets the outer cache apply stale-if-error. It must
     -- not turn a pre-connect DNS failure into a successful origin receipt.
     ngx.ctx.origin_failed = true
     return ngx.exit(444)
+end
+
+-- The answer for a status nginx itself would have written with its built-in page: the neutral page, with the status class of an origin
+-- failure that the inner location recorded for this request.
+function M.edge_error()
+    local status = tonumber(ngx.status) or 500
+    if status == 502 or status == 504 then
+        local key = "origfail:" .. tostring(ngx.var.request_id)
+        local class = ngx.shared.runtime_limits:get(key)
+        if class then ngx.shared.runtime_limits:delete(key) end
+        status = class == "timeout" and 504 or 502
+    end
+    if status == 494 then status = 431 end
+    if status < 400 or status > 599 then status = 500 end
+    return M.error_response(status)
 end
 
 -- Distinct clients that caused escalating events of one domain in the current or the previous five-minute window.

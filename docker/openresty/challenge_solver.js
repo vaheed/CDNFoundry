@@ -81,5 +81,5 @@
         };
     }
     if (typeof module !== "undefined" && module.exports) module.exports = api;
-    else if (typeof globalThis !== "undefined") globalThis.cdnfSolver = api;
+    else if (typeof globalThis !== "undefined") globalThis.chkSolver = api;
 })();
