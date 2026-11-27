@@ -23,6 +23,7 @@ SELECT format('GRANT SELECT ON TABLE %I TO cdnf_grafana', view_name)
 FROM unnest(ARRAY[
     'grafana_edges', 'grafana_edge_cells', 'grafana_edge_artifacts', 'grafana_cache_purges', 'grafana_fleet_rollouts',
     'grafana_edge_tasks', 'grafana_placements', 'grafana_audit_events', 'grafana_tls_certificates', 'grafana_tls_orders',
-    'grafana_backups', 'grafana_emergency_modes', 'grafana_waf_exclusions', 'grafana_usage_rollups'
+    'grafana_backups', 'grafana_emergency_modes', 'grafana_waf_exclusions', 'grafana_usage_rollups',
+    'grafana_security_rule_lifecycle', 'grafana_challenge_keys', 'grafana_client_reputation_bands', 'grafana_client_reputation_reports'
 ]) AS view_name
 WHERE to_regclass(format('public.%I', view_name)) IS NOT NULL \gexec
