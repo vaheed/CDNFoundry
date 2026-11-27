@@ -219,7 +219,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(vector_component_discarded_events_total{component_id=~\"decoded_.*|safe_.*\"}[1h])) or vector(0)",
+          "expr": "sum(increase(vector_component_discarded_events_total{component_id=~\"decoded_.*|safe_.*\"}[1h])) or (0 * max(up{job=~`vector.*`}))",
           "instant": true,
           "legendFormat": "rejected",
           "range": false,
@@ -297,7 +297,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(vector_component_discarded_events_total{component_id=~\"clickhouse_.*\"}[1h])) or vector(0)",
+          "expr": "sum(increase(vector_component_discarded_events_total{component_id=~\"clickhouse_.*\"}[1h])) or (0 * max(up{job=~`vector.*`}))",
           "instant": true,
           "legendFormat": "dropped",
           "range": false,
@@ -375,7 +375,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(vector_component_errors_total{component_id=~\"clickhouse_.*\"}[1h])) or vector(0)",
+          "expr": "sum(increase(vector_component_errors_total{component_id=~\"clickhouse_.*\"}[1h])) or (0 * max(up{job=~`vector.*`}))",
           "instant": true,
           "legendFormat": "failures",
           "range": false,
@@ -543,7 +543,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (component_id) (rate(vector_component_discarded_events_total{component_id=~\"decoded_.*|safe_.*\"}[5m])) or label_replace(vector(0), \"component_id\", \"none\", \"\", \"\")",
+          "expr": "sum by (component_id) (rate(vector_component_discarded_events_total{component_id=~\"decoded_.*|safe_.*\"}[5m])) or label_replace(0 * max(up{job=~`vector.*`}), \"component_id\", \"none\", \"\", \"\")",
           "instant": false,
           "legendFormat": "{{component_id}}",
           "range": true,
@@ -633,7 +633,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(vector_component_discarded_events_total{component_id=~\"clickhouse_.*\"}[5m])) or vector(0)",
+          "expr": "sum(rate(vector_component_discarded_events_total{component_id=~\"clickhouse_.*\"}[5m])) or (0 * max(up{job=~`vector.*`}))",
           "instant": false,
           "legendFormat": "buffer drops",
           "range": true,
@@ -644,7 +644,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(vector_component_errors_total{component_id=~\"clickhouse_.*\"}[5m])) or vector(0)",
+          "expr": "sum(rate(vector_component_errors_total{component_id=~\"clickhouse_.*\"}[5m])) or (0 * max(up{job=~`vector.*`}))",
           "instant": false,
           "legendFormat": "insert failures",
           "range": true,

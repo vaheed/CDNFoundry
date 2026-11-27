@@ -82,7 +82,7 @@ def p95_by_pop(w: int = 12, h: int = 8) -> dict:
 
 
 HEALTH_STATS = lambda: [
-    shared("cdnf-lib-health-unhealthy-components", stat("Unhealthy", "Control-plane components reporting degraded or unavailable.", [prom("count(cdnfoundry_component_health == 0) or vector(0)", "unhealthy", instant=True)], "short", "zero_good", link="/d/cdnf-control-plane")),
+    shared("cdnf-lib-health-unhealthy-components", stat("Unhealthy", "Control-plane components reporting degraded or unavailable.", [prom("count(cdnfoundry_component_health == 0) or (0 * max(cdnfoundry_component_health))", "unhealthy", instant=True)], "short", "zero_good", link="/d/cdnf-control-plane")),
     shared("cdnf-lib-health-stale-edges", stat("Stale", "Enabled edges whose heartbeat is older than the freshness limit.", [prom("cdnfoundry_edges_stale", "stale", instant=True)], "short", "zero_warn", link="/d/cdnf-pop-fleet")),
     shared("cdnf-lib-health-failed-operations", stat("Failed ops", "Operations that failed in the failed-operations window.", [prom("cdnfoundry_operations_failed_recent", "failed", instant=True)], "short", "zero_warn", link="/d/cdnf-control-plane")),
     shared("cdnf-lib-health-dns-drift", stat("DNS drift", "DNS deployments that have not reached their desired revision.", [prom("cdnfoundry_dns_deployments_drifted", "drift", instant=True)], "short", "zero_warn", link="/d/cdnf-dns-authoritative")),
@@ -122,8 +122,8 @@ def now_dashboard() -> dict:
             stat("SERVFAIL ratio", "Share of DNS answers that are SERVFAIL.", [prom(f'100 * sum(cdnf:dns_queries:rate5m{{{SP},rcode="SERVFAIL"}}) / sum(cdnf:dns_queries:rate5m{{{SP}}})', "servfail", instant=True)], "percent", "error_percent", w=6, decimals=2),
             timeseries("DNS answers by code", "Queries per second by response code.", [prom(f"sum by (rcode) (cdnf:dns_queries:rate5m{{{SP}}})", "{{rcode}}")], "reqps", stack=True)],
         row("Telemetry pipeline"), [
-            stat("Events dropped", "Telemetry events Vector dropped in the last 5 minutes.", [prom('sum(increase(vector_component_discarded_events_total{intentional!="true"}[5m])) or vector(0)', "dropped", instant=True)], "short", "zero_warn", w=6, link="/d/cdnf-telemetry-pipeline"),
-            stat("Delivery errors", "Telemetry delivery errors in the last 5 minutes.", [prom("sum(increase(vector_component_errors_total[5m])) or vector(0)", "errors", instant=True)], "short", "zero_warn", w=6),
+            stat("Events dropped", "Telemetry events Vector dropped in the last 5 minutes.", [prom('sum(increase(vector_component_discarded_events_total{intentional!="true"}[5m])) or (0 * max(up{job=~`vector.*`}))', "dropped", instant=True)], "short", "zero_warn", w=6, link="/d/cdnf-telemetry-pipeline"),
+            stat("Delivery errors", "Telemetry delivery errors in the last 5 minutes.", [prom("sum(increase(vector_component_errors_total[5m])) or (0 * max(up{job=~`vector.*`}))", "errors", instant=True)], "short", "zero_warn", w=6),
             timeseries("Events delivered", "Events per second Vector delivered to ClickHouse.", [prom('sum by (component_id) (rate(vector_component_sent_events_total{component_id=~"clickhouse_.*"}[5m]))', "{{component_id}}")], "ops")],
     ]
     return dashboard("cdnf-now", "Now", "cdnf-overview", "What is wrong right now, and where to look. The home dashboard for every team.", rows, runbook="alerting-heartbeat", parent=None, refresh="10s", time_from="now-1h", tags=["home"])
@@ -187,8 +187,8 @@ def pop_fleet() -> dict:
                    {"matcher": {"id": "byRegexp", "options": "(CPU|Memory|Disk|Cache fill) %"}, "properties": [{"id": "unit", "value": "percent"}, {"id": "decimals", "value": 0}]}])
     rows = [
         [fleet],
-        [stat("Edges behind", "Enabled PoPs whose applied revision is older than the latest.", [prom("count(cdnfoundry_edge_gateway_active_revision < scalar(max(cdnfoundry_edge_gateway_active_revision))) or vector(0)", "behind", instant=True)], "short", "zero_warn", w=6),
-         stat("Version drift", "PoPs running component versions that differ from the desired versions.", [prom("sum(cdnfoundry_edge_runtime_version_drift) or vector(0)", "drift", instant=True)], "short", "zero_warn", w=6),
+        [stat("Edges behind", "Enabled PoPs whose applied revision is older than the latest.", [prom("count(cdnfoundry_edge_gateway_active_revision < scalar(max(cdnfoundry_edge_gateway_active_revision))) or (0 * max(cdnfoundry_edge_gateway_active_revision))", "behind", instant=True)], "short", "zero_warn", w=6),
+         stat("Version drift", "PoPs running component versions that differ from the desired versions.", [prom("sum(cdnfoundry_edge_runtime_version_drift)", "drift", instant=True)], "short", "zero_warn", w=6),
          stat("Paused", "Fleet rollouts paused on a safety threshold.", [prom("cdnfoundry_fleet_rollouts_paused", "paused", instant=True)], "short", "zero_warn", w=6),
          stat("Gateways unready", "Enabled gateways that are not ready.", [prom("cdnfoundry_edge_gateways_unready", "unready", instant=True)], "short", "zero_good", w=6)],
         [timeseries("Heartbeat age by PoP", "Seconds since each PoP last reported.", [prom('max by (pop) (cdnfoundry_edge_heartbeat_age_seconds{pop=~"$pop"})', "{{pop}}")], "s", threshold="age_seconds"),
@@ -204,7 +204,7 @@ def pop_detail() -> dict:
             stat("Ready gateways", "Gateways that are ready in the selected PoPs.", [prom('sum(cdnfoundry_edge_gateway_ready{pop=~"$pop"})', "ready", instant=True)], "short", "neutral", w=6),
             stat("Active connections", "Connections the gateways hold now.", [prom('sum(cdnfoundry_edge_gateway_connections_active{pop=~"$pop"})', "connections", instant=True)], "short", "neutral", w=6),
             stat("Rejected connections", "Connections the gateways refused, per second.", [prom('sum(rate(cdnfoundry_edge_gateway_connections_rejected_total{pop=~"$pop"}[5m]))', "rejected", instant=True)], "reqps", "zero_warn", w=6, decimals=2),
-            stat("Candidate rejections", "Routing maps the gateways refused in the last hour.", [prom('sum(increase(cdnfoundry_edge_gateway_candidate_rejections_total{pop=~"$pop"}[1h])) or vector(0)', "rejections", instant=True)], "short", "zero_warn", w=6)],
+            stat("Candidate rejections", "Routing maps the gateways refused in the last hour.", [prom('sum(increase(cdnfoundry_edge_gateway_candidate_rejections_total{pop=~"$pop"}[1h])) or (0 * max(cdnfoundry_edge_gateway_active_revision{pop=~"$pop"}))', "rejections", instant=True)], "short", "zero_warn", w=6)],
         [timeseries("Cell capacity", "How full each cell's cache, memory, and connection budget is.", [prom('cdnfoundry_cell_capacity_ratio{pop=~"$pop"}', "{{pop}} {{cell}} {{resource}}")], "percentunit", threshold="ratio_utilization", max_value=1),
          timeseries("Gateway connections", "Active gateway connections per PoP.", [prom('sum by (pop) (cdnfoundry_edge_gateway_connections_active{pop=~"$pop"})', "{{pop}}")], "short")],
         row("Host"), [
@@ -282,7 +282,7 @@ def dns_authoritative() -> dict:
 def synthetic_probes() -> dict:
     rows = [
         [stat("Probes up", "Probes that succeeded in their last run.", [prom('sum(probe_success{job=~"blackbox-.*"})', "up", instant=True)], "short", "neutral", w=6),
-         stat("Probes down", "Probes that failed in their last run.", [prom('count(probe_success{job=~"blackbox-.*"} == 0) or vector(0)', "down", instant=True)], "short", "zero_good", w=6),
+         stat("Probes down", "Probes that failed in their last run.", [prom('count(probe_success{job=~"blackbox-.*"} == 0) or (0 * max(probe_success{job=~"blackbox-.*"}))', "down", instant=True)], "short", "zero_good", w=6),
          stat("Slowest probe", "Longest probe duration.", [prom('max(probe_duration_seconds{job=~"blackbox-.*"})', "slowest", instant=True)], "s", "latency_s", w=6, decimals=2),
          stat("Soonest certificate", "Days until the earliest certificate a probe saw expires.", [prom('min(probe_ssl_earliest_cert_expiry - time()) / 86400', "days", instant=True)], "d", "neutral", w=6, decimals=0)],
         [probe_table(24, 8)],

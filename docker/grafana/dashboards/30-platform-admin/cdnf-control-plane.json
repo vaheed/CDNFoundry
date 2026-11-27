@@ -219,7 +219,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "count(cdnfoundry_component_health == 0) or vector(0)",
+          "expr": "count(cdnfoundry_component_health == 0) or (0 * max(cdnfoundry_component_health))",
           "instant": true,
           "legendFormat": "unhealthy",
           "range": false,

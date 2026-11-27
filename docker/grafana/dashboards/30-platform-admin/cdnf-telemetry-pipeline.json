@@ -294,7 +294,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(vector_component_discarded_events_total{intentional!=\"true\"}[5m])) or vector(0)",
+          "expr": "sum(increase(vector_component_discarded_events_total{intentional!=\"true\"}[5m])) or (0 * max(up{job=~`vector.*`}))",
           "instant": true,
           "legendFormat": "dropped",
           "range": false,
@@ -372,7 +372,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(vector_component_errors_total[5m])) or vector(0)",
+          "expr": "sum(increase(vector_component_errors_total[5m])) or (0 * max(up{job=~`vector.*`}))",
           "instant": true,
           "legendFormat": "errors",
           "range": false,

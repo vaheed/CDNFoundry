@@ -371,7 +371,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(cdnfoundry_control_replication_lag_seconds) or vector(0)",
+          "expr": "max(cdnfoundry_control_replication_lag_seconds)",
           "instant": true,
           "legendFormat": "lag",
           "range": false,

@@ -47,7 +47,7 @@ def control_plane() -> dict:
                  transformations=[{"id": "organize", "options": {"excludeByName": {"Time": True}, "renameByName": {"route": "Route", "Value": "p95"}}}],
                  overrides=[{"matcher": {"id": "byName", "options": "p95"}, "properties": [{"id": "unit", "value": "s"}, {"id": "decimals", "value": 0}]}])
     rows = [
-        [stat("Unhealthy", "Components reporting degraded or unavailable.", [prom("count(cdnfoundry_component_health == 0) or vector(0)", "unhealthy", instant=True)], "short", "zero_good", w=4),
+        [stat("Unhealthy", "Components reporting degraded or unavailable.", [prom("count(cdnfoundry_component_health == 0) or (0 * max(cdnfoundry_component_health))", "unhealthy", instant=True)], "short", "zero_good", w=4),
          stat("Failed ops", "Operations that failed in the failed-operations window.", [prom("cdnfoundry_operations_failed_recent", "failed", instant=True)], "short", "zero_warn", w=4),
          stat("Bad jobs", "Queue jobs that failed in the same window.", [prom("cdnfoundry_failed_jobs_recent", "jobs", instant=True)], "short", "zero_warn", w=4),
          stat("API p95", "95th percentile API request time over the last 5 minutes.", [prom('histogram_quantile(0.95, sum by (le) (cdnf:http_latency_bucket:rate5m{route=~"/api/.*"}))', "p95", instant=True)], "s", "latency_s", w=4, decimals=3, idle="No API requests"),
@@ -93,7 +93,7 @@ def data_stores() -> dict:
     rows = [
         [stat("Control database size", "Size of the control database.", [pg("SELECT pg_database_size(current_database()) AS size")], "bytes", w=6),
          stat("Connections", "Sessions connected to the control database.", [pg("SELECT count(*) AS connections FROM pg_stat_activity WHERE datname = current_database()")], "short", w=6),
-         stat("Replication lag", "How far the standby is behind the active control database. Shown only with a standby.", [prom("max(cdnfoundry_control_replication_lag_seconds) or vector(0)", "lag", instant=True)], "s", "age_seconds", w=6),
+         stat("Replication lag", "How far the standby is behind the active control database. Shown only with a standby.", [prom("max(cdnfoundry_control_replication_lag_seconds)", "lag", instant=True)], "s", "age_seconds", w=6),
          stat("Parts per partition", "Most data parts in one ClickHouse partition. High numbers slow queries.", [prom("max(ClickHouseAsyncMetrics_MaxPartCountForPartition)", "parts", instant=True)], "short", "utilization", w=6)],
         [timeseries("ClickHouse insert rate", "Rows inserted per second.", [prom("rate(ClickHouseProfileEvents_InsertedRows[5m])", "rows")], "ops"),
          timeseries("ClickHouse merges and queries", "Background merges and running queries.", [prom("ClickHouseMetrics_BackgroundMergesAndMutationsPoolTask", "merges"), prom("ClickHouseMetrics_Query", "queries")], "short")],
@@ -109,8 +109,8 @@ def data_stores() -> dict:
 def telemetry_pipeline() -> dict:
     rows = [
         [stat("Events delivered", "Events per second Vector delivers to ClickHouse.", [prom('sum(rate(vector_component_sent_events_total{component_id=~"clickhouse_.*"}[5m]))', "delivered", instant=True)], "ops", w=6, decimals=1),
-         stat("Dropped (5m)", "Events dropped by a full buffer in the last 5 minutes.", [prom('sum(increase(vector_component_discarded_events_total{intentional!="true"}[5m])) or vector(0)', "dropped", instant=True)], "short", "zero_warn", w=6),
-         stat("Sink errors (5m)", "Delivery errors in the last 5 minutes.", [prom("sum(increase(vector_component_errors_total[5m])) or vector(0)", "errors", instant=True)], "short", "zero_warn", w=6),
+         stat("Dropped (5m)", "Events dropped by a full buffer in the last 5 minutes.", [prom('sum(increase(vector_component_discarded_events_total{intentional!="true"}[5m])) or (0 * max(up{job=~`vector.*`}))', "dropped", instant=True)], "short", "zero_warn", w=6),
+         stat("Sink errors (5m)", "Delivery errors in the last 5 minutes.", [prom("sum(increase(vector_component_errors_total[5m])) or (0 * max(up{job=~`vector.*`}))", "errors", instant=True)], "short", "zero_warn", w=6),
          stat("Slowest PoP delay", "Largest delay between an event and its arrival in ClickHouse, over PoPs.", [ch("SELECT max(delay) AS delay FROM (SELECT pop, dateDiff('second', max(occurred_at), now()) AS delay FROM cdnf.edge_events WHERE occurred_at > now() - INTERVAL 1 DAY GROUP BY pop)", table=True)], "s", "age_seconds", w=6)],
         [timeseries("Events sent by collector", "Events per second each Vector component delivered.", [prom('sum by (instance, component_id) (rate(vector_component_sent_events_total{component_id=~"clickhouse_.*"}[5m]))', "{{instance}} {{component_id}}")], "ops"),
          timeseries("Buffer size", "Bytes waiting in each disk buffer.", [prom("sum by (instance, component_id) (vector_buffer_size_bytes)", "{{instance}} {{component_id}}")], "bytes")],
@@ -140,8 +140,8 @@ def hosts_containers() -> dict:
     n = 'node=~".*"'
     rows = [
         [stat("Hosts up", "Hosts whose exporter answers.", [prom('count(up{job="node"} == 1)', "up", instant=True)], "short", w=6),
-         stat("Hosts down", "Hosts whose exporter does not answer.", [prom('count(up{job="node"} == 0) or vector(0)', "down", instant=True)], "short", "zero_good", w=6),
-         stat("OOM kills (24h)", "Processes the kernel killed for memory in the last day.", [prom("sum(increase(node_vmstat_oom_kill[24h])) or vector(0)", "oom", instant=True)], "short", "zero_warn", w=6),
+         stat("Hosts down", "Hosts whose exporter does not answer.", [prom('count(up{job="node"} == 0) or (0 * max(up{job="node"}))', "down", instant=True)], "short", "zero_good", w=6),
+         stat("OOM kills (24h)", "Processes the kernel killed for memory in the last day.", [prom("sum(increase(node_vmstat_oom_kill[24h])) or (0 * max(node_vmstat_oom_kill))", "oom", instant=True)], "short", "zero_warn", w=6),
          stat("Clock offset", "Largest clock offset on any host.", [prom("max(abs(node_timex_offset_seconds))", "offset", instant=True)], "s", "latency_s", w=6, decimals=1)],
         [timeseries("CPU", "Share of CPU in use per host.", [prom('100 * (1 - avg by (node) (rate(node_cpu_seconds_total{mode="idle"}[5m])))', "{{node}}")], "percent", max_value=100),
          timeseries("Memory", "Share of memory in use per host.", [prom("100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)", "{{node}}")], "percent", max_value=100)],
@@ -204,7 +204,7 @@ ALL_CHECKS = " or ".join(_check_state(*check) for check in CHECKS)
 
 
 def daily_checks() -> dict:
-    count = lambda state: f"count(({ALL_CHECKS}) == {state}) or vector(0)"
+    count = lambda state: f"count(({ALL_CHECKS}) == {state}) or (0 * max(({ALL_CHECKS})))"
     failing = stat("Failing", "Checks that fail now. Each one is listed first in the table below with what to do.", [prom(count(STATE_FAIL), "failing", instant=True)], "short", "zero_good", w=8, h=4)
     unknown = stat("Not reported", "Checks whose metric is not reported, usually because the part is not installed (a second control node) or has not reported yet.", [prom(count(STATE_UNKNOWN), "not reported", instant=True)], "short", "neutral", w=8, h=4)
     passing = stat("Passing", "Checks that pass now.", [prom(count(STATE_PASS), "passing", instant=True)], "short", "neutral", w=8, h=4)

@@ -549,7 +549,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(cdnfoundry_edge_gateway_candidate_rejections_total{pop=~\"$pop\"}[1h])) or vector(0)",
+          "expr": "sum(increase(cdnfoundry_edge_gateway_candidate_rejections_total{pop=~\"$pop\"}[1h])) or (0 * max(cdnfoundry_edge_gateway_active_revision{pop=~\"$pop\"}))",
           "instant": true,
           "legendFormat": "rejections",
           "range": false,

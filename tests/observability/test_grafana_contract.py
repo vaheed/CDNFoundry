@@ -242,6 +242,15 @@ class GrafanaContractTest(unittest.TestCase):
             if re.search(r"\bavg(?:_over_time)?\s*(?:by\s*\([^)]*\)\s*)?\(\s*(?:histogram_quantile|quantile\w*)\b", text, re.I) or re.search(r"\b(avg|avg_over_time)\s*\(\s*[\w:]*(?:p50|p95|p99|quantile)[\w:]*", text, re.I):
                 self.fail(f"{name}: averages an already calculated percentile")
 
+    def test_no_panel_turns_an_absent_series_into_zero(self) -> None:
+        """`or vector(0)` shows 0 for a source that is not reporting. A panel keeps a zero only while its source exists:
+        `or (0 * max(<source>))` is 0 when the source reports and has no value when it does not."""
+        for uid, dashboard in self.by_uid.items():
+            for panel in resolved(dashboard, self.models):
+                for target in targets(panel):
+                    if target["datasource"]["uid"] == "prometheus":
+                        self.assertNotIn("vector(0)", target["expr"], f"{uid}/{panel['title']}: an absent series would read as zero")
+
     def test_a_counter_is_shown_as_a_rate_or_an_increase(self) -> None:
         for uid, dashboard in self.by_uid.items():
             for panel in resolved(dashboard, self.models):

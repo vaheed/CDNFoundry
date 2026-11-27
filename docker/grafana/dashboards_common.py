@@ -19,7 +19,7 @@ P95_MS = f"1000 * histogram_quantile(0.95, sum by (le) (cdnf:edge_latency_bucket
 P50_MS = f"1000 * histogram_quantile(0.5, sum by (le) (cdnf:edge_latency_bucket:rate5m{{{S}}}))"
 ORIGIN_P95_MS = f"1000 * histogram_quantile(0.95, sum by (le) (cdnf:edge_origin_latency_bucket:rate5m{{{S}}}))"
 DNS_QPS = f"sum(cdnf:dns_queries:rate5m{{{SP}}})"
-FIRING = 'count(ALERTS{alertstate="firing",alertname!="Watchdog"}) or vector(0)'
+FIRING = 'count(ALERTS{alertstate="firing",alertname!="Watchdog"}) or (0 * max(up))'
 
 # ClickHouse: a share of requests, a quantile, and a rate, over the rollup that fits the selected range.
 CH_REQUESTS = "sum(requests)"

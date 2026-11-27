@@ -293,7 +293,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "count(up{job=\"node\"} == 0) or vector(0)",
+          "expr": "count(up{job=\"node\"} == 0) or (0 * max(up{job=\"node\"}))",
           "instant": true,
           "legendFormat": "down",
           "range": false,
@@ -371,7 +371,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(node_vmstat_oom_kill[24h])) or vector(0)",
+          "expr": "sum(increase(node_vmstat_oom_kill[24h])) or (0 * max(node_vmstat_oom_kill))",
           "instant": true,
           "legendFormat": "oom",
           "range": false,

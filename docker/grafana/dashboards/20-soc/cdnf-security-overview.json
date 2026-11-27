@@ -459,7 +459,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "count(ALERTS{alertstate=\"firing\",team=\"soc\"}) or vector(0)",
+          "expr": "count(ALERTS{alertstate=\"firing\",team=\"soc\"}) or (0 * max(up))",
           "instant": true,
           "legendFormat": "alerts",
           "range": false,

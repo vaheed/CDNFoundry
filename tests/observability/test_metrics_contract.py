@@ -266,6 +266,8 @@ class SecurityClassContractTest(unittest.TestCase):
             "custom_rule_block", "custom_rule_rate_limited", "platform_rule_block",
             # A client the cell is temporarily containing is a plain block.
             "client_temporarily_blocked",
+            # A solved challenge is an allowed request; it is logged with a client key and is not a security class.
+            "challenge_solved",
         }
         self.assertEqual(set(), reasons - known, "a new security reason must be classified here and in Vector before it ships")
 

@@ -554,7 +554,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "count(cdnfoundry_edge_gateway_active_revision < scalar(max(cdnfoundry_edge_gateway_active_revision))) or vector(0)",
+          "expr": "count(cdnfoundry_edge_gateway_active_revision < scalar(max(cdnfoundry_edge_gateway_active_revision))) or (0 * max(cdnfoundry_edge_gateway_active_revision))",
           "instant": true,
           "legendFormat": "behind",
           "range": false,
@@ -632,7 +632,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(cdnfoundry_edge_runtime_version_drift) or vector(0)",
+          "expr": "sum(cdnfoundry_edge_runtime_version_drift)",
           "instant": true,
           "legendFormat": "drift",
           "range": false,

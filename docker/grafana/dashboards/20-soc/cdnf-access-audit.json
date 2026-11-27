@@ -215,7 +215,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(cdnfoundry_logins_total{result=\"success\"}[1h])) or vector(0)",
+          "expr": "sum(increase(cdnfoundry_logins_total{result=\"success\"}[1h])) or (0 * max(cdnfoundry_component_health))",
           "instant": true,
           "legendFormat": "ok",
           "range": false,
@@ -293,7 +293,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(cdnfoundry_logins_total{result=\"failure\"}[1h])) or vector(0)",
+          "expr": "sum(increase(cdnfoundry_logins_total{result=\"failure\"}[1h])) or (0 * max(cdnfoundry_component_health))",
           "instant": true,
           "legendFormat": "failed",
           "range": false,
@@ -446,7 +446,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(cdnfoundry_api_token_requests_total[5m])) or vector(0)",
+          "expr": "sum(rate(cdnfoundry_api_token_requests_total[5m])) or (0 * max(cdnfoundry_component_health))",
           "instant": true,
           "legendFormat": "tokens",
           "range": false,
@@ -532,7 +532,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (result, surface) (cdnf:logins:rate5m) or label_replace(label_replace(vector(0), \"result\", \"none\", \"\", \"\"), \"surface\", \"none\", \"\", \"\")",
+          "expr": "sum by (result, surface) (cdnf:logins:rate5m) or label_replace(label_replace(0 * max(cdnfoundry_component_health), \"result\", \"none\", \"\", \"\"), \"surface\", \"none\", \"\", \"\")",
           "instant": false,
           "legendFormat": "{{result}} {{surface}}",
           "range": true,
@@ -618,7 +618,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (ability) (rate(cdnfoundry_api_token_requests_total[5m])) or label_replace(vector(0), \"ability\", \"none\", \"\", \"\")",
+          "expr": "sum by (ability) (rate(cdnfoundry_api_token_requests_total[5m])) or label_replace(0 * max(cdnfoundry_component_health), \"ability\", \"none\", \"\", \"\")",
           "instant": false,
           "legendFormat": "{{ability}}",
           "range": true,

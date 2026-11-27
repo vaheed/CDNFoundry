@@ -293,7 +293,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "count(probe_success{job=~\"blackbox-.*\"} == 0) or vector(0)",
+          "expr": "count(probe_success{job=~\"blackbox-.*\"} == 0) or (0 * max(probe_success{job=~\"blackbox-.*\"}))",
           "instant": true,
           "legendFormat": "down",
           "range": false,
