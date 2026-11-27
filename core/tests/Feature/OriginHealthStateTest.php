@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\DnsRecord;
 use App\Models\Domain;
+use App\Models\User;
 use App\Support\OriginHealth;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -145,7 +146,7 @@ class OriginHealthStateTest extends TestCase
     {
         $record = $this->record();
         OriginHealth::record($record, 'primary', 'manual', ['status' => 'healthy', 'latency_ms' => 20]);
-        $owner = \App\Models\User::factory()->create();
+        $owner = User::factory()->create();
         $record->domain->users()->attach($owner);
 
         $health = $this->actingAs($owner)->getJson("/api/domains/{$record->domain_id}/dns/records/{$record->id}/origin/health")->assertOk()->json('data');
