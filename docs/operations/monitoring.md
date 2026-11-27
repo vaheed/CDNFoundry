@@ -97,6 +97,32 @@ Each store has one job. Review any change that puts data in a different store ag
 | Loki | Operational application and container logs | Traffic logs |
 | Prometheus | Bounded operational metrics and alert evaluation | Per-domain or per-client series |
 
+### Platform health and customer health
+
+The component list is **platform health**: the control plane, database, queues, DNS infrastructure, the edge fleet, configuration delivery, certificates the platform owns, telemetry, backups and capacity. The public status page and the aggregate state read only this list. A new or unverified domain, or any number of them, never changes it.
+
+**Customer health** is counted apart, in `GET /api/admin/system/components` as `customer` and in the metric `cdnfoundry_customer_conditions{kind}`:
+
+| Kind | Meaning |
+| --- | --- |
+| `domains_pending_delegation` | Domains whose nameservers are not verified yet |
+| `domains_lost_delegation` | Domains that lost their delegation |
+| `dns_content_rejected` | Zones PowerDNS refused because of the customer's record content |
+| `tls_orders_failed` | Failed certificate orders caused by the customer (a CAA record, a lost delegation) |
+| `origin_tests_failed` | Origin tests that failed in the last 24 hours |
+
+Each failure is classified where it is recorded, and anything unclassified counts as the platform's, so an infrastructure fault is never hidden as a customer problem. A failed origin test is customer health because it says the customer's origin did not answer. A surge of customer-class failures (20 inside 15 minutes) moves them to platform health, because that many at once points at a validator, the certificate authority or DNS-01 delivery. Domain users see their own conditions in **Needs attention** on the domain page.
+
+Components are also grouped by what they answer, with one vocabulary in the health API (`dimensions`) and in `cdnfoundry_dimension_health{dimension,status}`:
+
+| Dimension | Question | Components |
+| --- | --- | --- |
+| `serving` | Are visitors served? | DNS, edges, listeners, cells, pools, placement, configuration, capacity |
+| `management` | Can the platform be managed? | Database, queues, workers, scheduler, clock, standby, operations, rollouts, backups, certificates, purges, tasks |
+| `observability` | Can it be observed? | Analytics storage, Vector, Prometheus, Loki, alert delivery, usage |
+
+A dimension is `healthy`, `degraded`, `unavailable`, or `insufficient_evidence` when no component reported or one is unknown. An analytics outage is an observability fault and never reports serving as down.
+
 ### Telemetry buffers and edge logging
 
 - Vector's security and DNS disk buffers are capped at 268435488 bytes each. This is the smallest size the production Vector version accepts. Startup qualification checks the live process, because configuration validation does not build the disk buffers.
