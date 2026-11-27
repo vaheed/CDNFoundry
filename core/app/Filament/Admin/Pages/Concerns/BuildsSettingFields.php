@@ -26,6 +26,7 @@ trait BuildsSettingFields
             'choice_list' => CheckboxList::make($name)->options($field['options'])->columns(2)
                 ->dehydrateStateUsing(fn (array $state): array => array_map(fn (mixed $value): mixed => is_int($value) ? (string) $value : $value, $state)),
             'url' => TextInput::make($name)->url()->maxLength(2048)->placeholder('https://grafana.example.com/explore'),
+            'text' => TextInput::make($name)->maxLength(64)->placeholder($field['placeholder'] ?? null)->extraInputAttributes(['class' => 'cdn-mono']),
             // The default is the example: it shows what a normal value looks like when the field is cleared.
             default => TextInput::make($name)->integer()->required()->placeholder(is_scalar($field['default']) ? (string) $field['default'] : null)->extraInputAttributes(['class' => 'cdn-mono']),
         };

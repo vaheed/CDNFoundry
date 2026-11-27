@@ -427,7 +427,8 @@ final class RequestRuleData
             }
         }
 
-        return false;
+        // The public response headers belong to the edge: a rule can neither set nor remove one under the current prefix.
+        return str_starts_with($name, (string) app(PlatformSettings::class)->get('public_headers', 'prefix'));
     }
 
     /** A redirect target: a path on the same host, or an absolute http or https URL with a valid host and no user information. */

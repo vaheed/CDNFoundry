@@ -134,6 +134,7 @@ final class PlatformSettings
         foreach ($definition['fields'] as $key => $field) {
             $validated[$key] = match ($field['type']) {
                 'integer' => (int) $validated[$key],
+                'text' => (string) ($validated[$key] ?? ''),
                 'boolean' => (bool) $validated[$key],
                 'cidr_list', 'ip_list' => array_values(array_map(fn (string $value): string => strtolower(trim($value)), $validated[$key])),
                 'choice_list' => array_values($validated[$key]),
@@ -162,7 +163,7 @@ final class PlatformSettings
     public function update(string $group, array $input, ?User $actor = null, ?string $ipAddress = null): array
     {
         $this->definition($group);
-        $runtimeGroups = ['edge_runtime', 'origin_safety', 'proxy_defaults'];
+        $runtimeGroups = ['edge_runtime', 'origin_safety', 'proxy_defaults', 'public_headers'];
         $result = DB::transaction(function () use ($group, $input, $actor, $ipAddress, $runtimeGroups): array {
             $setting = SystemSetting::query()->lockForUpdate()->find($group)
                 ?? throw new RuntimeException("Platform setting group '{$group}' is missing. Run the database migrations.");

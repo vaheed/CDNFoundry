@@ -1,5 +1,7 @@
 <?php
 
+use App\Rules\PublicHeaderPrefix;
+
 return [
     'groups' => [
         'display' => [
@@ -181,6 +183,15 @@ return [
                 'private_origin_allowlist' => ['type' => 'cidr_list', 'label' => 'Allowed private origin networks', 'default' => [], 'description' => 'Narrow private IPv4 or IPv6 CIDRs that may be used as origins. This can never allow loopback, link-local, metadata, multicast, or reserved destinations.', 'rules' => ['present', 'array', 'max:128']],
                 'blocked_origin_networks' => ['type' => 'cidr_list', 'label' => 'Additional blocked origin networks', 'default' => [], 'description' => 'Additional IPv4 or IPv6 CIDRs rejected as origin destinations on top of the built-in non-bypassable safety policy.', 'rules' => ['present', 'array', 'max:128']],
                 'blocked_origin_addresses' => ['type' => 'ip_list', 'label' => 'Additional blocked origin addresses', 'default' => [], 'description' => 'Individual IPv4 or IPv6 addresses rejected as origin destinations in addition to edge and platform listener addresses.', 'rules' => ['present', 'array', 'max:128']],
+            ],
+        ],
+        'public_headers' => [
+            'label' => 'Public response headers',
+            'description' => 'The short headers every proxied response can carry so a visitor can quote a reference: a request reference, the cache decision, the PoP and, on a refusal by the edge, a mitigation marker. They carry no address, host, version or rule detail.',
+            'fields' => [
+                'enabled' => ['type' => 'boolean', 'label' => 'Send public response headers', 'default' => true, 'description' => 'When off, no public header is added to any response. Headers with this prefix that a client, an origin or a rule supplies are removed in both cases.', 'rules' => ['required', 'boolean']],
+                'prefix' => ['type' => 'text', 'label' => 'Header prefix', 'default' => 'cdnf-', 'placeholder' => 'edge-', 'description' => 'Lowercase words joined by hyphens, ending in a hyphen. With edge- the headers are edge-ray, edge-cache-status, edge-pop and edge-mitigated. A change reaches every cell without a restart.', 'rules' => ['required', 'string', new PublicHeaderPrefix]],
+                'pop_label' => ['type' => 'text', 'label' => 'PoP label', 'default' => '', 'placeholder' => 'eu-west', 'description' => 'A public name you choose for the edge, sent as the pop header. It is never a host, cell or topology name. Empty sends no pop header.', 'rules' => ['present', 'nullable', 'string', 'max:32', 'regex:/^(?:[A-Za-z0-9][A-Za-z0-9._-]*)?$/']],
             ],
         ],
         'proxy_defaults' => [

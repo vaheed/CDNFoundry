@@ -9,6 +9,7 @@ use App\Jobs\ReconcilePlatformDnsIdentity;
 use App\Models\Domain;
 use App\Models\SystemSetting;
 use App\Models\User;
+use App\Support\RequestRuleData;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Schema;
@@ -29,7 +30,7 @@ class SystemSettingsTest extends TestCase
         $admin = User::factory()->admin()->create();
         $response = $this->actingAs($admin)->getJson('/api/admin/system/settings')->assertOk();
 
-        $this->assertCount(13, $response->json('data'));
+        $this->assertCount(14, $response->json('data'));
         $settings = collect($response->json('data'));
         $dnsLifecycle = $settings->firstWhere('group', 'dns_lifecycle');
         $this->assertSame(7, $dnsLifecycle['fields'][0]['value']);
@@ -38,7 +39,7 @@ class SystemSettingsTest extends TestCase
         $this->assertNotNull($settings->firstWhere('group', 'telemetry'));
         $this->assertNotNull($settings->firstWhere('group', 'operations'));
         $this->assertNull($settings->firstWhere('group', 'observability')['fields'][0]['value']);
-        $this->assertDatabaseCount('system_settings', 13);
+        $this->assertDatabaseCount('system_settings', 14);
     }
 
     public function test_shared_timezone_is_validated_audited_and_admin_only(): void
@@ -87,6 +88,29 @@ class SystemSettingsTest extends TestCase
 
         $this->assertSame(14, SystemSetting::query()->findOrFail('dns_lifecycle')->values['deprovision_delay_days']);
         $this->assertDatabaseHas('audit_logs', ['action' => 'system_settings.updated', 'subject_id' => 'dns_lifecycle']);
+    }
+
+    public function test_the_public_header_prefix_is_validated_audited_and_starts_a_runtime_operation(): void
+    {
+        $admin = User::factory()->admin()->create();
+        Queue::fake();
+        $this->actingAs($admin)->withHeader('Idempotency-Key', (string) Str::uuid())
+            ->patchJson('/api/admin/system/settings/public_headers', ['values' => ['prefix' => 'edge-', 'pop_label' => 'eu-west']])
+            ->assertStatus(202)->assertJsonPath('data.setting.revision', 2)->assertJsonPath('data.operation.type', 'system_settings.update');
+        $this->assertSame(['enabled' => true, 'prefix' => 'edge-', 'pop_label' => 'eu-west'], SystemSetting::query()->findOrFail('public_headers')->values);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'system_settings.updated', 'subject_id' => 'public_headers']);
+
+        foreach (['x-cdnf-', 'x-forwarded-', 'x-cdn-', 'cookie-', 'content-', 'set-cookie-', 'Edge-', 'edge', 'edge_', '-edge-', str_repeat('a', 30).'-'] as $invalid) {
+            $this->actingAs($admin)->withHeader('Idempotency-Key', (string) Str::uuid())
+                ->patchJson('/api/admin/system/settings/public_headers', ['values' => ['prefix' => $invalid]])->assertUnprocessable();
+        }
+        $this->actingAs($admin)->withHeader('Idempotency-Key', (string) Str::uuid())
+            ->patchJson('/api/admin/system/settings/public_headers', ['values' => ['pop_label' => 'bad label!']])->assertUnprocessable();
+        $this->assertSame('edge-', SystemSetting::query()->findOrFail('public_headers')->values['prefix'], 'a refused value keeps the previous one');
+        $this->actingAs(User::factory()->create())->withHeader('Idempotency-Key', (string) Str::uuid())
+            ->patchJson('/api/admin/system/settings/public_headers', ['values' => ['prefix' => 'zz-']])->assertForbidden();
+        $this->assertTrue(RequestRuleData::protectedHeader('Edge-Ray'), 'a response rule cannot set a header under the public prefix');
+        $this->assertFalse(RequestRuleData::protectedHeader('x-custom'));
     }
 
     public function test_optional_grafana_url_is_validated_audited_and_has_no_runtime_operation(): void
