@@ -2380,11 +2380,16 @@ the development databases or volumes):
 
 **Completion checkpoint, 27 November 2026.**
 
-| Implementation | Documentation | Automated/runtime | Browser |
-| --- | --- | --- | --- |
-| Open: only Stage I.4 is implemented (see the record above); nothing else in Stages A to K is | Open: the DNS guide and changelog describe Stage I.4 only; every other stage has no page | Open: the full PHP suite (881 tests), PHPStan, pint, the observability contract tests and `make docs-check` passed with Stage I.4; no E2E ran, and the experiments of the Resolution section are not gate evidence | Open: the page, panel, dashboard and Fleet web gates are required and not run |
+| Stage | Implementation | Open |
+| --- | --- | --- |
+| H, F, I, B | Implemented in earlier increments (origin TLS default, separate origin health signals, platform and customer health, durable usage with coverage) | Their own listed gaps; no real-stack accounting qualification |
+| D | D.1 to D.3 implemented: public prefix, `ray`, `cache-status`, `pop`, `mitigated`, the per-domain diagnostic choice, the force-off override, the signed snapshot, rollback | Both prefixes in one snapshot during a mixed-version rollout, renaming the telemetry-only upstream names, IPv6 runtime coverage |
+| E | Impact map, service-level plan (CLI and web page), narrow activation for firewall-only and files-only changes | Stable live directory, gateway reload, per-service reload and restart, per-service environment, real-container continuity measurements |
+| C | Neutral edge page, JSON and HEAD negotiation, origin failure classes (502, 504, 503), no `Server` header, neutral challenge cookie and path | Rendered snapshots and accessibility scan of each page, IPv6, the five protocol paths, stale-window matrix, throughput comparison, the 413 case |
+| A | The absent-series zero removed from every panel | Per-panel states, variable-blind targets, A.2 feature panels, A.3 Loki templates, a seeded-stack Grafana run |
+| G, J, K | Not started | Everything: the origin health-check container, regional scheduling and budgets, cross-system reliability, qualification |
 
-Session record, 27 November 2026: Stages H, F, I (backend) and B (control plane) were implemented in separate commits with their tests. The full PHP suite, PHPStan after the last change and a browser run were NOT completed in this session; the browser run of `every-screen`, `crawl` and `screens-rich` was started and not read. Stages A, C, D, E, G, J and K have no implementation.
+Session record, 27 November 2026: the stages above were implemented in separate commits with their tests, and no step was run on a real host or a production stack. The full browser suite, the integrated load and recovery runs, and Phase 11 are not started. Several older end-to-end scripts (`openresty_runtime.py`, `challenge_flood.py`, `challenge_token_two_edges.py`) fail on the unchanged tree and were not repaired.
 
 Phase 10.5 is not complete.
 
