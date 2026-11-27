@@ -286,7 +286,7 @@ The `Server` header never shows a version, whatever the setting.
 | `minimum_interval_seconds` | 60 | 30–3600 |
 | `max_representatives` | 3 | 1–5 |
 | `manual_tests_when_off` | false | boolean |
-| `account_probes_per_minute` | 300 | 10–10,000 |
+| `domain_probes_per_minute` | 300 | 1–10,000 |
 
 Active monitoring is the scheduled health check of a proxied origin. It is off for a new installation. An upgrade
 turns it on only when a proxied origin already had a scheduled check, so the upgrade changes no behavior; an
@@ -300,7 +300,7 @@ shown, and traffic still fails over.
 
 A manual origin test is refused while monitoring is off unless `manual_tests_when_off` is on. `minimum_interval_seconds`
 is a floor: an origin that asks for a shorter interval is checked at the floor. `max_representatives` and
-`account_probes_per_minute` bound the checks of one origin and of one account.
+`domain_probes_per_minute` bound the checks of one origin and of one domain. Independently of the settings, one destination (an address and a port) receives at most 8 probes a minute, confirmations included, however many domains or records point at it, and a manual test of an origin is refused for 30 seconds after the last one.
 
 ## Public response headers
 
