@@ -8,7 +8,7 @@ const max = 'http://localhost:18091';
 
 /** Holds the answer to the challenge, so the page stays in the state the visitor sees while the work is being done. */
 async function holdAnswer(page: Page): Promise<void> {
-    await page.route('**/.cdnf/challenge', () => undefined);
+    await page.route('**/.chk/verify', () => undefined);
 }
 
 test('the check page says what is happening and fits every width', async ({ page }) => {
@@ -32,7 +32,7 @@ test('the page solves the check on its own and lands on the site with a token co
 });
 
 test('a refused answer is said plainly and the page stays usable', async ({ page }) => {
-    await page.route('**/.cdnf/challenge', (route) => route.fulfill({ status: 403, body: '' }));
+    await page.route('**/.chk/verify', (route) => route.fulfill({ status: 403, body: '' }));
     await page.goto(`${base}/`);
     await expect(page.getByRole('status')).toHaveText('Verification failed. Reload the page to try again.');
     await expectAccessible(page);
@@ -40,7 +40,7 @@ test('a refused answer is said plainly and the page stays usable', async ({ page
 });
 
 test('a site that cannot be reached says so instead of waiting forever', async ({ page }) => {
-    await page.route('**/.cdnf/challenge', (route) => route.abort());
+    await page.route('**/.chk/verify', (route) => route.abort());
     await page.goto(`${base}/`);
     await expect(page.getByRole('status')).toHaveText('The check could not reach the site. Reload the page to try again.');
 });
@@ -110,11 +110,38 @@ test.describe('solve time at maximum difficulty', () => {
         const perSecond = await page.evaluate(() => {
             const seed = 'k1.801.1700000000.17.aabbccddeeff.' + 'f'.repeat(64);
             const started = performance.now();
-            (window as unknown as { cdnfSolver: { search: (...a: unknown[]) => number } }).cdnfSolver.search(seed, 40, 0, 1, 300000);
+            (window as unknown as { chkSolver: { search: (...a: unknown[]) => number } }).chkSolver.search(seed, 40, 0, 1, 300000);
             return 300000 / ((performance.now() - started) / 1000);
         });
         const p95 = (3 * 2 ** 17) / perSecond;
         console.log(`6x throttled thread: ${Math.round(perSecond)} hashes per second, p95 at 17 bits ${p95.toFixed(2)} s`);
         expect(p95).toBeLessThanOrEqual(3);
     });
+});
+
+// The page the edge writes itself when it refuses a request: neutral, readable at every width, and free of any product or runtime name.
+test('a refused request gets the neutral page with a reference and no product name', async ({ page }) => {
+    const response = await page.goto(`${base}/blocked`);
+    expect(response?.status()).toBe(403);
+    await expect(page.getByRole('heading', { name: 'Access denied' })).toBeVisible();
+    await expect(page.getByText('This request was not allowed.')).toBeVisible();
+    await expect(page.getByText(/^Reference: [0-9a-f]{32}$/)).toBeVisible();
+    const text = await page.content();
+    expect(text).not.toMatch(/cdnf|cdnfoundry|openresty|nginx|foundry/i);
+    expect(response?.headers()['server']).toBeUndefined();
+    expect(response?.headers()['cache-control']).toContain('no-store');
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(0);
+    await expectAccessible(page);
+    // The reference differs on every request, so it is masked.
+    await expect(page).toHaveScreenshot('refused-request.png', { mask: [page.getByText(/^Reference: /)] });
+});
+
+test('a client that does not ask for HTML gets JSON with the same status and reference', async ({ request }) => {
+    const response = await request.get(`${base}/blocked`, { headers: { Accept: 'application/json' } });
+    expect(response.status()).toBe(403);
+    const body = await response.json();
+    expect(body.status).toBe(403);
+    expect(body.reference).toMatch(/^[0-9a-f]{32}$/);
+    expect(JSON.stringify(body)).not.toMatch(/cdnf|openresty|nginx/i);
 });
