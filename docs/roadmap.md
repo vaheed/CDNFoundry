@@ -1383,6 +1383,8 @@ inventory and query run are in H27. Corrections, each with its acceptance:
   beside the query. Until that exists a panel is "query valid, value
   unverified", never "verified".
 
+**A.1 record, 27 November 2026 (absent series).** All 24 distinct `or vector(0)` expressions (34 targets, with library panels) were replaced. A count or sum over a failure condition now reads `or (0 * max(<source that proves the exporter is reporting>))`: 0 while the source reports, no value when it does not. Sources: the alert engine's own `up` for the alert counts, `cdnfoundry_component_health` for the application counters, `up{job=~"vector.*"}` for Vector's, and the metric itself where it exists as a gauge. The standby replication lag and the version drift panels lose their fallback and show no data when the series is absent. A contract test fails any Prometheus target containing `vector(0)`, and `promtool check rules` accepted all 24 rewritten expressions. Not done: the unit-based `noValue` replacement by per-panel states for the 115 non-traffic targets (the "No traffic" wording contract exists), the 67 variable-blind targets, the fixed-window statements, expected-value fixtures per panel, the seeded-stack run of the dashboards (no Grafana run was made, so every changed panel is "query valid, value unverified"), and the Stage A.2 and A.3 panels and templates.
+
 **A.2 Visibility for current features.** Reuse the Security overview, WAF,
 Telemetry integrity, Origin health, Cache, Control plane and Domain overview
 dashboards. Add panels, not dashboards, unless a dashboard would exceed its
