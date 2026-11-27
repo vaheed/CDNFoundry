@@ -122,13 +122,37 @@ allocation, reservation and takeover.
 
 PowerAdmin is a diagnostic tool only. Any edit made directly on the DNS runtime is drift. Fix drift by reconciling from PostgreSQL. Never copy runtime data back into the desired state.
 
-`cdnf:dns:repair-drift` runs every five minutes. For up to 100 deployments, oldest
-check first, it compares the zone each DNS target actually serves (records and
+`cdnf:dns:repair-drift` runs every five minutes. For up to 100 deployments, failed
+platform deployments first, then failed content rejections, oldest check first, it compares the zone each DNS target actually serves (records and
 SOA serial) with what was deployed, and what was deployed with the current
 desired state. Any difference, and any failed deployment, queues one coalesced
 reconcile and writes a `dns.drift_repair_queued` audit entry. A target that
 cannot be reached is not treated as drift. A DNS host that was down longer than
 the retry window is therefore repaired automatically once it returns.
+
+### Failed deployments and platform health
+
+A failed deployment records why it failed and since when (`failure_class` and
+`first_failed_at`, shown as `failure_class` in the deployment API).
+
+| Class | Meaning | Effect on platform health |
+| --- | --- | --- |
+| `platform` | PowerDNS did not answer, timed out, returned a server error, failed read-back or rollback, or a retirement failed | Degrades the DNS rows of the status page once it has lasted 2 minutes. A failed retirement counts at once |
+| `customer_content` | PowerDNS answered `422` for a zone that Laravel rendered and validated, so the record content is the problem | None. It is listed for the domain's users and for administrators, and counted in `cdnfoundry_dns_deployments_customer_rejected` |
+
+Other rules:
+
+- If 20 or more zones are rejected within 15 minutes, the rejections count as a
+  platform fault, because that points at a validator and PowerDNS disagreeing.
+- A `pending` deployment is planned work, for example after a takeover, and
+  counts only when it is older than 10 minutes.
+- Pending verification, a competing claim, an unverified child and a lost
+  delegation never create a platform signal. An unverified domain whose
+  delegation zone fails because PowerDNS is down still counts, because the
+  cause is the platform.
+- A failure without a recorded class counts as a platform failure.
+
+`cdnfoundry_dns_deployments_drifted` counts only what degrades the platform.
 
 DNSdist resolves the `pdns-auth` backend again every 15 seconds, so a recreated
 PowerDNS container that receives a new address is picked up without restarting

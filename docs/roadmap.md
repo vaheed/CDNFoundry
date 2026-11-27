@@ -2354,11 +2354,19 @@ the development databases or volumes):
 | R11 | How do failed edge tasks and TLS orders classify? | Decided (source) | H22 | Same classes as I.4; a failed `origin_test` is customer health, a failed platform task is platform health | Fixture test of I.4 | Stage F |
 | R12 | Is the firewall rebuild a fail-open window? | Source; Decided | `firewall.sh` flushes and re-adds its chains | New chain and atomic swap (E.1); measure the window with a packet loop | No unfiltered packet to an internal port during an update | Stage E |
 
+**Implementation record, 27 November 2026.**
+
+| Item | Result |
+| --- | --- |
+| Stage I.4: DNS deployment health | Implemented: deployments record `failure_class` (`platform`, `customer_content`, or none, which counts as platform) and `first_failed_at` (migration `2026_11_30_000100_classify_dns_deployment_failures`, expand-only). A PowerDNS `422` on the zone content raises `ZoneContentRejectedException` and is `customer_content`; every other failure is `platform`. The drift scope counts platform failures after 2 minutes (a failed retirement and legacy rows with no time count at once), a pending non-tombstone row after 10 minutes, and customer-content rejections only when 20 or more occur within 15 minutes. `SystemHealth` reports `customer_rejected` beside `drifted`; `cdnfoundry_dns_deployments_drifted` is now the platform count and `cdnfoundry_dns_deployments_customer_rejected` is new; the deployment API shows `failure_class` to the owner and the administrator and `last_error` to the administrator only; `cdnf:dns:repair-drift` looks at platform failures first. The thresholds are constants in `DnsDeployment`, candidates not yet ratified from fleet evidence. |
+| Stage I.4: tests | `DnsDeploymentHealthTest` (11 cases on the isolated in-memory database, real reconcile job, fake PowerDNS): 22 pending domains, a competing claim, an unverified child and a lost delegation stay healthy; platform failure grace, first-failure time kept across retries and cleared on recovery; an unverified domain with PowerDNS down still counts; content rejection is customer health, with owner and administrator visibility; the surge rule and its window; takeover pending grace; failed retirement; failing cluster health check; metrics; repair order. `UnverifiedDomainTest` was updated for the pending grace. |
+| Not done in Stage I | I.1 to I.3 as a whole: the failed-edge-task and failed-TLS-order classification (R11), customer-health display in the domain panel and the status page's separate customer group, the consistent state vocabulary across Grafana, Alertmanager and Fleet gates, and the Grafana panels and alert rules that read the changed metric. No browser test was run because no screen changed. |
+
 **Completion checkpoint, 27 November 2026.**
 
 | Implementation | Documentation | Automated/runtime | Browser |
 | --- | --- | --- | --- |
-| Open: planning only; nothing in Stages A to K is implemented | Open: this section is the only change; no operator or user page is updated | Open: temporary experiments were executed (see Resolution); no repository test was added or run for this phase, so no gate field has evidence | Open: the page, panel, dashboard and Fleet web gates are required and not run |
+| Open: only Stage I.4 is implemented (see the record above); nothing else in Stages A to K is | Open: the DNS guide and changelog describe Stage I.4 only; every other stage has no page | Open: the full PHP suite (881 tests), PHPStan, pint, the observability contract tests and `make docs-check` passed with Stage I.4; no E2E ran, and the experiments of the Resolution section are not gate evidence | Open: the page, panel, dashboard and Fleet web gates are required and not run |
 
 Phase 10.5 is not complete.
 

@@ -51,6 +51,7 @@ single source of truth; `make version-check` enforces it.
 
 ### Changed
 
+- DNS deployment failures record a class and the time of the first failure (migration `2026_11_30_000100_classify_dns_deployment_failures`, expand-only). A PowerDNS `422` on a customer's zone content no longer degrades platform health and shows as `failure_class: customer_content` in the deployment API; platform failures degrade it after 2 minutes, a pending row after 10, and a surge of 20 rejections in 15 minutes counts as a platform fault. `cdnfoundry_dns_deployments_drifted` now counts platform faults only, and `cdnfoundry_dns_deployments_customer_rejected` is new. `cdnf:dns:repair-drift` checks platform failures first.
 - Fleet uses signed IPFire location data by default and refreshes country and ASN databases daily. Custom MMDB sources remain supported.
 - Cells reopen GeoIP database handles after an update without restarting.
 
