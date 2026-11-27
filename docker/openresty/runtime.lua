@@ -3211,11 +3211,40 @@ function M.prepare_cache_response()
     headers["X-Accel-Expires"] = tostring(edge_ttl)
 end
 
-function M.cache_status()
+-- What the cache did with this request: HIT, MISS, EXPIRED, STALE, REVALIDATED, UPDATING or BYPASS.
+function M.cache_decision()
     local no_store = ngx.var.upstream_http_x_cdnf_no_store == "1"
     local admission_bypass = ngx.var.cdn_cache_no_store == "1" and ngx.var.upstream_cache_status ~= "HIT"
-    ngx.header["X-CDNF-Cache"] = (ngx.var.cdn_cache_bypass == "1" or no_store or admission_bypass)
+    return (ngx.var.cdn_cache_bypass == "1" or no_store or admission_bypass)
         and "BYPASS" or (ngx.var.upstream_cache_status or "MISS")
+end
+
+-- The public response headers: the request reference, the cache decision, the PoP and the mitigation marker, under the prefix
+-- the snapshot carries. It runs last, so nothing a client, an origin or a response rule set under the prefix survives, and it
+-- is built from this request only, never from a cached response. A snapshot without the field sends none.
+function M.public_headers()
+    local host = (ngx.var.host or ""):lower():gsub("%.$", "")
+    local config = state.hosts[host]
+    local public = config and config.settings and config.settings.public_headers
+    if type(public) ~= "table" then return end
+    local prefix = public.prefix
+    if type(prefix) ~= "string" or #prefix > 24 or not prefix:find("^[a-z][a-z0-9%-]*%-$") then return end
+    for name in pairs(ngx.resp.get_headers(200)) do
+        if type(name) == "string" and name:lower():sub(1, #prefix) == prefix then ngx.header[name] = nil end
+    end
+    if public.enabled ~= true then return end
+    ngx.header[prefix .. "ray"] = ngx.var.request_id
+    if ngx.var.cdn_security_action == "block" then
+        ngx.header[prefix .. "mitigated"] = "1"
+    else
+        ngx.header[prefix .. "cache-status"] = M.cache_decision()
+    end
+    local pop = public.pop
+    if type(pop) == "string" and #pop <= 32 and pop:find("^[%w][%w%._%-]*$") then ngx.header[prefix .. "pop"] = pop end
+end
+
+function M.cache_status()
+    ngx.header["X-CDNF-Cache"] = M.cache_decision()
     if not diagnostic_headers_enabled() then
         -- The access log reads the upstream copies of these headers, so telemetry is unchanged.
         for _, name in ipairs({"X-CDNF-Cache", "X-CDNF-Origin", "X-CDNF-Origin-Transition", "X-CDNF-Error", "X-CDNF-Security-Reason", "Server"}) do

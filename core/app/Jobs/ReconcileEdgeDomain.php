@@ -130,6 +130,8 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
             && ($proxySettings['enabled'] ?? true);
         // One platform-wide switch; a domain's explicit proxy settings can never override it.
         $proxySettings['diagnostic_headers'] = (bool) app(PlatformSettings::class)->get('proxy_defaults', 'diagnostic_response_headers');
+        $publicHeaders = app(PlatformSettings::class)->values('public_headers');
+        $proxySettings['public_headers'] = ['enabled' => (bool) $publicHeaders['enabled'], 'prefix' => (string) $publicHeaders['prefix'], 'pop' => (string) $publicHeaders['pop_label']];
         $tlsCertificates = $domain->tls_mode === 'disabled' ? collect() : ($domain->tls_mode === 'custom'
             ? collect([$domain->activeTlsCertificate])->filter()
             : $domain->tlsCertificates->where('kind', 'managed')->where('status', 'active')->filter(fn ($certificate) => $certificate->expires_at->isFuture()));
