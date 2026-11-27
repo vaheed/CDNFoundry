@@ -27,6 +27,12 @@ class OriginTestLifecycleTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->enableOriginMonitoring();
+    }
+
     public function test_queued_probe_does_not_combine_new_origin_with_old_addresses(): void
     {
         [$owner, $domain, $record] = $this->fixture();

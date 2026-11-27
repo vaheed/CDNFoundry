@@ -173,6 +173,10 @@ final class PlatformSettings
                 return ['setting' => $setting, 'operation' => null];
             }
             $setting->update(['values' => [...$setting->values, ...$values], 'revision' => $setting->revision + 1]);
+            if ($group === 'origin_monitoring' && ($current['enabled'] ?? false) === true && $values['enabled'] === false) {
+                // Turning monitoring off stops every queued or running check in the same transaction, so no probe leaves an edge afterwards.
+                OriginMonitoring::cancelPending();
+            }
             $operation = in_array($group, $runtimeGroups, true) ? Operation::query()->create([
                 'actor_id' => $actor?->getKey(), 'type' => 'system_settings.update', 'status' => 'pending',
                 'input' => ['group' => $group, 'revision' => $setting->revision],

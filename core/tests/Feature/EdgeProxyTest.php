@@ -28,6 +28,12 @@ class EdgeProxyTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->enableOriginMonitoring();
+    }
+
     public function test_edge_identity_is_a_leaf_and_authentication_binds_the_enrolled_certificate(): void
     {
         $edge = Edge::query()->create(['name' => 'certificate-bound-edge', 'country_code' => 'IR', 'continent_code' => 'AS']);

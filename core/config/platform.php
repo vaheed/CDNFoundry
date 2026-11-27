@@ -185,6 +185,17 @@ return [
                 'blocked_origin_addresses' => ['type' => 'ip_list', 'label' => 'Additional blocked origin addresses', 'default' => [], 'description' => 'Individual IPv4 or IPv6 addresses rejected as origin destinations in addition to edge and platform listener addresses.', 'rules' => ['present', 'array', 'max:128']],
             ],
         ],
+        'origin_monitoring' => [
+            'label' => 'Active origin monitoring',
+            'description' => 'Scheduled health checks of proxied origins from a few representative edges. A check never replaces the passive failure detection and failover that traffic already drives. It is off for new installations.',
+            'fields' => [
+                'enabled' => ['type' => 'boolean', 'label' => 'Monitor origins actively', 'default' => false, 'description' => 'When off, no check is scheduled, queued checks are cancelled, no probe leaves an edge, and each origin shows Health check disabled. It overrides every domain and origin setting. Passive detection and failover are not affected.', 'rules' => ['required', 'boolean']],
+                'minimum_interval_seconds' => ['type' => 'integer', 'label' => 'Shortest check interval', 'default' => 60, 'description' => 'The shortest time between two scheduled checks of one origin. An origin that asks for less is checked at this interval. Nothing below 30 seconds is accepted.', 'rules' => ['required', 'integer', 'between:30,3600']],
+                'max_representatives' => ['type' => 'integer', 'label' => 'Representative edges per origin', 'default' => 3, 'description' => 'How many edges, each from a different probe group, check one origin. More edges do not mean more checks per edge: the number never grows with the fleet.', 'rules' => ['required', 'integer', 'between:1,5']],
+                'manual_tests_when_off' => ['type' => 'boolean', 'label' => 'Allow manual tests while monitoring is off', 'default' => false, 'description' => 'When off, a manual origin test is refused while active monitoring is off. A manual test is one probe from one edge, at most one per origin every 30 seconds.', 'rules' => ['required', 'boolean']],
+                'account_probes_per_minute' => ['type' => 'integer', 'label' => 'Probes per account per minute', 'default' => 300, 'description' => 'The most checks and manual tests the origins of one account may start in a minute. A check over the limit waits for the next minute.', 'rules' => ['required', 'integer', 'between:10,10000']],
+            ],
+        ],
         'public_headers' => [
             'label' => 'Public response headers',
             'description' => 'The short headers every proxied response can carry so a visitor can quote a reference: a request reference, the cache decision, the PoP and, on a refusal by the edge, a mitigation marker. They carry no address, host, version or rule detail.',

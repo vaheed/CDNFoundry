@@ -8,6 +8,7 @@ use App\Models\Operation;
 use App\Support\ArtifactSigner;
 use App\Support\OriginData;
 use App\Support\OriginHealth;
+use App\Support\OriginMonitoring;
 use Illuminate\Console\Command;
 
 class DispatchScheduledOriginChecks extends Command
@@ -18,6 +19,11 @@ class DispatchScheduledOriginChecks extends Command
 
     public function handle(): int
     {
+        if (! OriginMonitoring::enabled()) {
+            $this->info('Active origin monitoring is off; nothing was scheduled.');
+
+            return self::SUCCESS;
+        }
         $limit = max(1, min(500, (int) $this->option('limit')));
         $dispatched = 0;
         $perDomain = [];
@@ -47,10 +53,11 @@ class DispatchScheduledOriginChecks extends Command
 
     private function due(DnsRecord $record): bool
     {
-        $interval = (int) ($record->origin['health_check']['interval_seconds'] ?? 0);
-        if ($interval < 60) {
+        $requested = (int) ($record->origin['health_check']['interval_seconds'] ?? 0);
+        if ($requested < 30) {
             return false;
         }
+        $interval = OriginMonitoring::interval($requested);
         $jitter = abs(crc32((string) $record->id)) % max(1, min(300, intdiv($interval, 10)));
         // Only an active result for the current configuration postpones the next check; an edit makes it due at once.
         $active = $record->origin_signals['primary']['active'] ?? null;

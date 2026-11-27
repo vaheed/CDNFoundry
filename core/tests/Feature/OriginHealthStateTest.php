@@ -14,6 +14,12 @@ class OriginHealthStateTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->enableOriginMonitoring();
+    }
+
     /** @return iterable<string, array{0: bool, 1: list<array{0: string, 1: string, 2: int}>, 3?: string}> */
     public static function transitions(): iterable
     {

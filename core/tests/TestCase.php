@@ -2,6 +2,8 @@
 
 namespace Tests;
 
+use App\Models\SystemSetting;
+use App\Support\PlatformSettings;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 
 abstract class TestCase extends BaseTestCase
@@ -10,6 +12,14 @@ abstract class TestCase extends BaseTestCase
     {
         parent::setUp();
         config(['edge.proxy_secret' => 'test-edge-proxy-secret-0123456789abcdef']);
+    }
+
+    /** Active origin monitoring is off for a new installation; tests that exercise checks turn it on the way an administrator would. */
+    protected function enableOriginMonitoring(bool $enabled = true): void
+    {
+        $row = SystemSetting::query()->findOrFail('origin_monitoring');
+        $row->update(['values' => [...$row->values, 'enabled' => $enabled]]);
+        app()->forgetInstance(PlatformSettings::class);
     }
 
     protected function setUpTraits()

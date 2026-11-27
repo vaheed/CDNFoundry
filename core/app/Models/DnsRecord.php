@@ -7,6 +7,7 @@ use App\Jobs\DispatchOriginTest;
 use App\Support\ArtifactSigner;
 use App\Support\OriginData;
 use App\Support\OriginHealth;
+use App\Support\OriginMonitoring;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -38,6 +39,7 @@ class DnsRecord extends Model
         $this->refresh();
         $authorize($this->domain()->firstOrFail());
         abort_unless($this->mode === 'proxied', 409, 'The DNS record is not proxied.');
+        abort_unless(OriginMonitoring::manualAllowed(), 409, 'Active origin monitoring is off, so manual origin tests are not available.');
         abort_unless(in_array($role, ['primary', 'backup'], true) && count($edgeIds) <= 20, 422);
         // Probing from an edge that does not serve the domain would let a user aim any edge at an address.
         abort_unless(array_diff($edgeIds, $this->domain()->firstOrFail()->placementEdgeIds()) === [], 422, 'Origin tests can run only on edges in the domain placement.');

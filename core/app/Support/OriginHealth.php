@@ -101,7 +101,8 @@ final class OriginHealth
     /** @return array<string, mixed> */
     private static function summarizeRole(DnsRecord $record, string $role, array $origin, CarbonInterface $now): array
     {
-        $monitoring = $role === 'primary' && (bool) ($origin['health_check']['enabled'] ?? false);
+        // The platform switch overrides the origin's own setting: with monitoring off the active signal is disabled.
+        $monitoring = $role === 'primary' && OriginMonitoring::enabled() && (bool) ($origin['health_check']['enabled'] ?? false);
         $interval = max(60, (int) ($origin['health_check']['interval_seconds'] ?? 300));
         $checksum = self::checksum($origin);
         $signals = $record->origin_signals[$role] ?? self::legacySignals($record, $role);
@@ -109,8 +110,14 @@ final class OriginHealth
         $fresh = [];
         foreach (self::KINDS as $kind) {
             $signal = $signals[$kind] ?? null;
+            // With monitoring off an earlier active result is not evidence of anything current: it reads as disabled.
+            if ($kind === 'active' && ! $monitoring) {
+                $detail[$kind] = ['state' => 'disabled'];
+
+                continue;
+            }
             if (! is_array($signal)) {
-                $detail[$kind] = ['state' => $kind === 'active' && ! $monitoring ? 'disabled' : 'none'];
+                $detail[$kind] = ['state' => 'none'];
 
                 continue;
             }
@@ -127,7 +134,7 @@ final class OriginHealth
                 $fresh[] = (string) $signal['status'];
             }
         }
-        $any = array_filter($signals, 'is_array') !== [];
+        $any = array_filter($monitoring ? $signals : array_diff_key($signals, ['active' => 1]), 'is_array') !== [];
         $createdAge = $now->getTimestamp() - (int) $record->created_at?->getTimestamp();
         $state = match (true) {
             $fresh !== [] => count(array_unique($fresh)) > 1 ? 'degraded' : $fresh[0],

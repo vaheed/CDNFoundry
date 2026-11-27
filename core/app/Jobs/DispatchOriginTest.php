@@ -9,6 +9,7 @@ use App\Models\Edge;
 use App\Models\EdgeTask;
 use App\Models\Operation;
 use App\Support\ArtifactSigner;
+use App\Support\OriginMonitoring;
 use App\Support\PlatformSettings;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -37,6 +38,11 @@ class DispatchOriginTest implements ShouldQueue
     private function dispatchTasks(Operation $operation): void
     {
         if (! in_array($operation->status, ['pending', 'running'], true)) {
+            return;
+        }
+        if (($operation->input['scheduled'] ?? false) === true && ! OriginMonitoring::enabled()) {
+            $operation->update(['status' => 'failed', 'error' => 'Active origin monitoring is off.', 'finished_at' => now()]);
+
             return;
         }
         $domain = Domain::query()->lockForUpdate()->find($operation->input['domain_id'] ?? null);
