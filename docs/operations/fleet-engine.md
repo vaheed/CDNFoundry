@@ -318,6 +318,36 @@ status:
 
 Fleet flags an expired classification.
 
+## Service-level impact of a configuration change
+
+`apply-config` prints the node plan, then the **service-level impact**: one row per host and service with the
+minimum safe action for what changed. The ladder, narrowest first, is none, firewall, atomic file update, live
+reload, targeted restart, targeted recreation, and node-wide activation.
+
+| Changed input | Action named in the plan |
+| --- | --- |
+| `firewall.sh` (an address list) | `firewall`: the rules are rebuilt and swapped; no container is touched |
+| Gateway `Caddyfile` | `caddy`: validate, then reload |
+| Prometheus targets, rules, scrape settings | `prometheus`: reload |
+| Grafana dashboards and provisioning | `grafana`: file update, read by its provisioning watcher |
+| Alertmanager configuration | `alertmanager`: reload |
+| Vector pipeline, Loki, ClickHouse and PowerDNS files | one targeted restart of that service |
+| Database files | targeted recreation, never as a side effect |
+| A service whose Compose configuration hash changed | recreate that service only |
+| Documentation and operator scripts | none |
+| Certificates, TLS material, secrets, a file the map does not know, or a host with no recorded baseline | node-wide |
+
+Fleet records what each host last ran after a successful gate: the SHA-256 of every file, of every environment
+key, and Compose's own configuration hash of every service. It stores no value, and the plan prints key names only.
+The rows are computed by `scripts/cdnfoundry_fleet/impact.py`.
+
+::: warning The plan is ahead of the execution
+Fleet shows the minimum safe action, but `apply-config` still activates every changed host as a whole. Executing
+the narrow actions, the stable live configuration directory, the gateway reload, and per-service environment are
+not implemented yet. Until the environment is narrowed, a management-network change still recreates the
+application workers, and the plan shows that honestly. The local web page does not show the service rows yet.
+:::
+
 ## Backup and restore
 
 `cdnfoundry-fleet backup-now` runs a control backup on the active control node and waits for it to finish.

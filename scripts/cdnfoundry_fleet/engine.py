@@ -12,7 +12,7 @@ import shlex
 from pathlib import Path
 from typing import Any, Callable
 
-from . import actions, manifest as mf, provision as tmpfs_material
+from . import actions, impact, manifest as mf, provision as tmpfs_material
 from .checks import Check, gate_with_retry, node_gate, run_checks
 from .common import FleetError, ValidationError, atomic_json, load_json, utc_now
 from .control_cli import Runner, bundle_digest
@@ -318,7 +318,25 @@ class FleetEngine:
             recorded = self.deployed_digests()
             recorded[name] = bundle_digest(self.output_dir / name)
             atomic_json(self._deployed_file(), recorded, 0o600)
+            self._record_profile(name)
         return ok, detail
+
+    def _profile_file(self, name: str) -> Path:
+        return self.work / "deploy" / "profiles" / f"{name}.json"
+
+    def _record_profile(self, name: str) -> None:
+        """Remember what a host last ran as digests only (files, environment keys, service hashes), never values."""
+        (self.work / "deploy" / "profiles").mkdir(parents=True, exist_ok=True, mode=0o700)
+        atomic_json(self._profile_file(name), impact.profile(self.output_dir / name), 0o600)
+
+    def service_plan(self, changed: set[str]) -> list[impact.Change]:
+        """The service-level rows of a configuration change, against what each changed host last ran."""
+        rows: list[impact.Change] = []
+        for name in sorted(changed):
+            path = self._profile_file(name)
+            before = load_json(path) if path.exists() else None
+            rows += impact.plan_node(name, before, impact.profile(self.output_dir / name))
+        return rows
 
     def _provision(self, name: str) -> tuple[bool, str]:
         """Issue the node's in-memory key material from the vault's PKI and write it to the host's tmpfs."""

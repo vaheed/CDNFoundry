@@ -1282,8 +1282,12 @@ def _engine_command_body(args: argparse.Namespace, store: FleetState, output_dir
         _confirm(args, f"Upgrade the fleet to {manifest['release']}")
         return outcome(engine.upgrade(document, key_pem=key))
     elif args.command == "apply-config":
-        plan, _ = engine.config_plan()
+        plan, digests = engine.config_plan()
         print("\n".join(plan.describe()))
+        rows = engine.service_plan({n for n, (old, new) in digests.items() if old != new or n in {s.node for s in plan.steps}})
+        if rows:
+            print("Service-level impact (the minimum safe action per service; apply still activates each changed host as a whole):")
+            print("\n".join(f"  {r.line()}" for r in rows))
         if args.plan_only or not plan.steps:
             return EXIT_OK
         _confirm(args, "Deploy the changed configs")
