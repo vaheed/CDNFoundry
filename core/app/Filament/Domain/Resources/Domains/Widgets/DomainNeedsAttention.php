@@ -3,9 +3,11 @@
 namespace App\Filament\Domain\Resources\Domains\Widgets;
 
 use App\Enums\DomainLifecycleState;
+use App\Models\DnsRecord;
 use App\Models\Domain;
 use App\Support\OriginHealth;
 use Filament\Widgets\Widget;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Livewire\Attributes\On;
 
@@ -44,7 +46,9 @@ class DomainNeedsAttention extends Widget
         if ($rejected > 0) {
             $problems[] = ['text' => 'The DNS provider rejected your records', 'fix' => 'A record value is not accepted. Review the latest changes to your DNS records and correct them.'];
         }
-        foreach ($domain->dnsRecords()->where('mode', 'proxied')->whereNotNull('origin')->get() as $record) {
+        /** @var Collection<int, DnsRecord> $proxied */
+        $proxied = $domain->dnsRecords()->where('mode', 'proxied')->whereNotNull('origin')->get();
+        foreach ($proxied as $record) {
             foreach (OriginHealth::summarize($record)['roles'] as $role => $summary) {
                 if (in_array($summary['state'], ['unhealthy', 'degraded'], true)) {
                     $problems[] = [
