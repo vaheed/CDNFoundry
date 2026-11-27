@@ -182,7 +182,7 @@ class DnsRecordController extends Controller
 
                     continue;
                 }
-                $data = DnsRecordData::validate(array_merge($final->get($record->id), $action['record']), $locked->name, $locked->isVerified(), $record->origin);
+                $data = DnsRecordData::validate(array_merge($final->get($record->id), $action['record']), $locked->name, $locked->isVerified(), $record->getAttribute('origin'));
                 $this->assertCanManageDelegation($request, $data['type']);
                 $final->put($record->id, $data);
                 $updates[] = [$record, $data];
