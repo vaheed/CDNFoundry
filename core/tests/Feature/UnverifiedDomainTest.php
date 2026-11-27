@@ -114,6 +114,9 @@ class UnverifiedDomainTest extends TestCase
         $deployment->update(['status' => 'failed']);
         $this->assertSame(1, DnsDeployment::query()->drifted()->count());
         $deployment->update(['status' => 'pending', 'tombstone' => false]);
+        // Fresh pending work is planned; it counts only after the grace period (see DnsDeploymentHealthTest).
+        $this->assertSame(0, DnsDeployment::query()->drifted()->count());
+        $this->travel(DnsDeployment::PLANNED_PENDING_GRACE_MINUTES + 1)->minutes();
         $this->assertSame(1, DnsDeployment::query()->drifted()->count());
     }
 }
