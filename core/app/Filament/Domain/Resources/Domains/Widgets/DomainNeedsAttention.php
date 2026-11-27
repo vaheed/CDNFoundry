@@ -4,6 +4,7 @@ namespace App\Filament\Domain\Resources\Domains\Widgets;
 
 use App\Enums\DomainLifecycleState;
 use App\Models\Domain;
+use App\Support\OriginHealth;
 use Filament\Widgets\Widget;
 use Illuminate\Database\Eloquent\Model;
 use Livewire\Attributes\On;
@@ -38,6 +39,20 @@ class DomainNeedsAttention extends Widget
         $failedDeployments = $domain->dnsDeployments()->whereNotNull('last_error')->count();
         if ($failedDeployments > 0 && auth()->user()?->isAdmin()) {
             $problems[] = ['text' => $failedDeployments === 1 ? 'A DNS deployment failed' : "{$failedDeployments} DNS deployments failed", 'fix' => 'Choose Reconcile in the DNS deployment section below.'];
+        }
+        $rejected = $domain->dnsDeployments()->where('status', 'failed')->where('failure_class', 'customer_content')->where('tombstone', false)->count();
+        if ($rejected > 0) {
+            $problems[] = ['text' => 'The DNS provider rejected your records', 'fix' => 'A record value is not accepted. Review the latest changes to your DNS records and correct them.'];
+        }
+        foreach ($domain->dnsRecords()->where('mode', 'proxied')->whereNotNull('origin')->get() as $record) {
+            foreach (OriginHealth::summarize($record)['roles'] as $role => $summary) {
+                if (in_array($summary['state'], ['unhealthy', 'degraded'], true)) {
+                    $problems[] = [
+                        'text' => ($summary['state'] === 'unhealthy' ? 'Origin is unhealthy' : 'Origin is degraded').': '.$record->name.($role === 'backup' ? ' (backup)' : ''),
+                        'fix' => 'Check that the origin is reachable and answers the health check, then test the origin again.',
+                    ];
+                }
+            }
         }
         $placementError = $domain->edgePlacement()->value('last_error');
         if (filled($placementError)) {

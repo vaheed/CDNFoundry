@@ -6,7 +6,9 @@ use App\Enums\DomainLifecycleState;
 use App\Filament\Domain\Resources\Domains\Pages\ListDomains;
 use App\Filament\Domain\Resources\Domains\Pages\ViewDomain;
 use App\Filament\Domain\Resources\Domains\Widgets\DomainNeedsAttention;
+use App\Models\DnsCluster;
 use App\Models\Domain;
+use App\Support\OriginHealth;
 use App\Models\User;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -48,6 +50,26 @@ class DomainMonitoringPanelTest extends TestCase
             ->assertSee('Seen at registrar')->assertSee('ns1.other.example.org')->assertSee('Registration expires');
         Livewire::test(DomainNeedsAttention::class, ['record' => $lost])->assertSee('Nameservers changed, so the domain is unverified');
         Livewire::test(DomainNeedsAttention::class, ['record' => $soon])->assertSee('Registration expires soon');
+    }
+
+    public function test_needs_attention_shows_rejected_dns_content_and_unhealthy_origins(): void
+    {
+        Filament::setCurrentPanel(Filament::getPanel('app'));
+        $this->actingAs(User::factory()->admin()->create());
+        $domain = $this->domain('customer.example.com');
+        Livewire::test(DomainNeedsAttention::class, ['record' => $domain])->assertDontSee('rejected your records')->assertDontSee('Origin is');
+
+        $domain->dnsDeployments()->create(['dns_cluster_id' => DnsCluster::query()->create(['name' => 'c', 'location' => 'test', 'api_url' => 'http://pdns.invalid', 'api_key' => 'k'])->id,
+            'desired_revision' => 2, 'deployed_revision' => 1, 'status' => 'failed', 'failure_class' => 'customer_content', 'first_failed_at' => now(), 'last_error' => 'rejected']);
+        $origin = ['host' => '8.8.8.8', 'port' => 80, 'scheme' => 'http', 'host_header' => 'o.example', 'sni' => null, 'verify_tls' => false,
+            'connect_timeout_ms' => 1000, 'response_timeout_ms' => 5000, 'retry_count' => 0, 'websocket' => false, 'health_check' => null, 'backup' => null, 'failover' => null];
+        $record = $domain->dnsRecords()->create(['type' => 'A', 'mode' => 'proxied', 'name' => 'www.customer.example.com', 'content' => '8.8.8.8',
+            'content_hash' => hash('sha256', 'x'), 'ttl' => 60, 'origin' => $origin]);
+        OriginHealth::record($record, 'primary', 'manual', ['status' => 'unhealthy']);
+
+        Livewire::test(DomainNeedsAttention::class, ['record' => $domain])
+            ->assertSee('The DNS provider rejected your records')
+            ->assertSee('Origin is unhealthy: www.customer.example.com');
     }
 
     public function test_the_api_exposes_the_check_state_and_the_expiry(): void
