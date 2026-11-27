@@ -278,6 +278,30 @@ the default. A rollback restores the domain's previous choice. Changing a value
 queues a global edge reconciliation, so it reaches every edge as one signed revision.
 The `Server` header never shows a version, whatever the setting.
 
+## Active origin monitoring
+
+| Field | Default | Allowed |
+| --- | --- | --- |
+| `enabled` | false | boolean |
+| `minimum_interval_seconds` | 60 | 30–3600 |
+| `max_representatives` | 3 | 1–5 |
+| `manual_tests_when_off` | false | boolean |
+| `account_probes_per_minute` | 300 | 10–10,000 |
+
+Active monitoring is the scheduled health check of a proxied origin. It is off for a new installation. An upgrade
+turns it on only when a proxied origin already had a scheduled check, so the upgrade changes no behavior; an
+administrator can turn it off at any time.
+
+`enabled` is a platform switch that overrides every domain and origin setting. When it is off, no check is
+scheduled, every queued or running check is stopped in the same transaction, no probe leaves an edge, and each
+origin shows its active signal as **Health check disabled**. A domain's own switch works only while the platform
+allows it. Passive failure detection and runtime failover are not affected: an unhealthy passive report is still
+shown, and traffic still fails over.
+
+A manual origin test is refused while monitoring is off unless `manual_tests_when_off` is on. `minimum_interval_seconds`
+is a floor: an origin that asks for a shorter interval is checked at the floor. `max_representatives` and
+`account_probes_per_minute` bound the checks of one origin and of one account.
+
 ## Public response headers
 
 | Field | Default | Allowed |
