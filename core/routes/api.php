@@ -52,6 +52,7 @@ use App\Http\Controllers\ProxyController;
 use App\Http\Controllers\RequestRuleController;
 use App\Http\Controllers\SecurityAlertController;
 use App\Http\Controllers\SecurityController;
+use App\Http\Controllers\SecurityEpisodeController;
 use App\Http\Controllers\SecurityMitigationController;
 use App\Http\Controllers\SecurityPresetController;
 use App\Http\Controllers\SensitiveDataController;
@@ -183,6 +184,8 @@ Route::middleware(['auth:sanctum', 'account.active', 'token.scope', 'throttle:ac
     Route::put('/domains/{domain}/security/api-schema', [ApiSchemaController::class, 'update'])->middleware('idempotent');
     Route::delete('/domains/{domain}/security/api-schema', [ApiSchemaController::class, 'destroy'])->middleware('idempotent');
     Route::get('/domains/{domain}/security/mitigations', [SecurityMitigationController::class, 'index']);
+    Route::get('/domains/{domain}/security/episodes', [SecurityEpisodeController::class, 'index']);
+    Route::get('/domains/{domain}/security/client-keys', [SecurityEpisodeController::class, 'clientKeys']);
     Route::get('/domains/{domain}/security/platform-rulesets', [SecurityController::class, 'platformRulesets']);
     Route::get('/domains/{domain}/security/presets', [SecurityPresetController::class, 'show']);
     Route::put('/domains/{domain}/security/presets/user-agent', [SecurityPresetController::class, 'updateUserAgent'])->middleware('idempotent');
