@@ -71,7 +71,11 @@ end
 local function diagnostic_headers_enabled()
     local host = (ngx.var.host or ""):lower():gsub("%.$", "")
     local config = state.hosts[host]
-    return not (config and config.settings and config.settings.diagnostic_headers == false)
+    local settings = config and config.settings
+    -- A snapshot with public headers carries the decision (platform force-off, domain choice, platform default) in one field.
+    local public = settings and settings.public_headers
+    if type(public) == "table" then return public.diagnostics == true end
+    return not (settings and settings.diagnostic_headers == false)
 end
 
 -- The control plane sends the state it sets from edge reports as a small overlay per domain, apart from the signed
@@ -3232,7 +3236,15 @@ function M.public_headers()
     for name in pairs(ngx.resp.get_headers(200)) do
         if type(name) == "string" and name:lower():sub(1, #prefix) == prefix then ngx.header[name] = nil end
     end
+    -- The origin role, its transitions, errors and the security reason are for authenticated interfaces: the edge log reads them
+    -- from the upstream, and none of them reaches a visitor whatever the diagnostic setting is.
+    for _, name in ipairs({"X-CDNF-Cache", "X-CDNF-Origin", "X-CDNF-Origin-Transition", "X-CDNF-Error", "X-CDNF-Security-Reason"}) do
+        ngx.header[name] = nil
+    end
     if public.enabled ~= true then return end
+    if public.diagnostics == true and ngx.var.upstream_status and ngx.var.upstream_status ~= "" then
+        ngx.header[prefix .. "diag-origin-status"] = (ngx.var.upstream_status:match("(%d+)%s*$")) or nil
+    end
     ngx.header[prefix .. "ray"] = ngx.var.request_id
     if ngx.var.cdn_security_action == "block" then
         ngx.header[prefix .. "mitigated"] = "1"

@@ -69,9 +69,10 @@ def main() -> None:
         origin_ip = address(ORIGIN)
         block = [{"id": 1, "name": None, "priority": 1, "action": "block", "mode": "enforce", "conditions": [{"field": "path", "operator": "equals", "value": "/blocked"}]}]
         hosts = {
-            "default.headers.test": domain("default.headers.test", 811, origin_ip, {"enabled": True, "prefix": "cdnf-", "pop": ""}, block),
+            "default.headers.test": domain("default.headers.test", 811, origin_ip, {"enabled": True, "prefix": "cdnf-", "pop": "", "diagnostics": False}, block),
             "custom.headers.test": domain("custom.headers.test", 812, origin_ip, {"enabled": True, "prefix": "edge-", "pop": "eu-west"}),
             "off.headers.test": domain("off.headers.test", 813, origin_ip, {"enabled": False, "prefix": "cdnf-", "pop": "eu-west"}),
+            "diag.headers.test": domain("diag.headers.test", 815, origin_ip, {"enabled": True, "prefix": "cdnf-", "pop": "", "diagnostics": True}),
             "old.headers.test": domain("old.headers.test", 814, origin_ip, None),
         }
         runtime = temporary / "runtime.json"
@@ -114,6 +115,11 @@ def main() -> None:
             assert second["cdnf-cache-status"] == "HIT" and first["cdnf-cache-status"] in ("MISS", "BYPASS"), (first, second)
             assert "cdnf-pop" not in first and "cdnf-mitigated" not in first, "no PoP label is set, and nothing was refused"
             assert FORGED not in [value for name, value in first.items() if name.startswith("cdnf-")], first
+
+            assert not [name for name in first if name.startswith("x-cdnf-") or name == "server" or name.startswith("cdnf-diag-")], f"diagnostics off sends none: {first}"
+            _, diag = get(ip, "diag.headers.test", "/page")
+            assert diag["cdnf-diag-origin-status"] == "200" and "server" in diag, diag
+            assert not [name for name in diag if name.startswith("x-cdnf-")], f"the origin role and errors never reach a visitor: {diag}"
 
             _, custom = get(ip, "custom.headers.test", "/page")
             assert ray.fullmatch(custom["edge-ray"]) and custom["edge-pop"] == "eu-west" and custom["edge-cache-status"] != FORGED, custom
