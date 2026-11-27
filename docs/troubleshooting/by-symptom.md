@@ -57,7 +57,7 @@ Details: [Edge and origin](edge-and-origin.md).
 
 ## The cache is not hit
 
-1. Request the same URL twice and read the `X-CDNF-Cache` header.
+1. Request the same URL twice and read the `cdnf-cache-status` header (the prefix is the platform's public header prefix).
 2. Check that caching is enabled for the domain and that development mode has
    not expired.
 3. Check the request: method, `Authorization`, and bypass cookies.

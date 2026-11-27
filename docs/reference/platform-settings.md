@@ -265,21 +265,25 @@ proxy-loop destinations. The blocked lists add to the built-in rules.
 edge snapshot only when a domain has no explicit value of its own. `retry_count`
 applies to failed idempotent origin connections.
 
-`diagnostic_response_headers` is one platform-wide switch and no domain can
-override it. When it is off (the default) the edge removes `Server`,
-`X-CDNF-Cache`, `X-CDNF-Origin`, `X-CDNF-Origin-Transition`, `X-CDNF-Error`, and
-`X-CDNF-Security-Reason` from every response, so clients cannot see the edge
-software, the cache result, or which origin answered. Turn it on while you debug
-caching or origin failover. Telemetry, the access log, and Grafana are unaffected,
-because they read the same values on the edge before the headers are removed.
-Changing it queues a global edge reconciliation, so it reaches every edge as one
-signed revision. The `Server` header never shows a version, whatever the setting.
+`diagnostic_response_headers` is the platform default for diagnostic headers. A
+domain chooses **Inherit** (the default), **On** or **Off** in its Proxy defaults,
+and the field **Force diagnostic headers off everywhere** in the Public response
+headers group overrides every domain. The result is one decision per domain, carried
+in the signed snapshot. When it is on, the response carries `cdnf-diag-origin-status`
+(the HTTP status the origin returned) and keeps the `Server` header; when it is off,
+neither is sent. The origin role, its transitions, errors and the security reason
+are never sent in a header: they stay in the authenticated interfaces and the edge
+log. A new domain inherits, and an existing platform value that was on stays on as
+the default. A rollback restores the domain's previous choice. Changing a value
+queues a global edge reconciliation, so it reaches every edge as one signed revision.
+The `Server` header never shows a version, whatever the setting.
 
 ## Public response headers
 
 | Field | Default | Allowed |
 | --- | --- | --- |
 | `enabled` | true | boolean |
+| `diagnostics_force_off` | false | boolean |
 | `prefix` | `cdnf-` | lowercase words joined by hyphens, ending in a hyphen, at most 24 characters |
 | `pop_label` | empty | letters, digits, `.`, `_` and `-`, at most 32 characters; empty sends none |
 
@@ -304,10 +308,11 @@ namespace is fixed and cannot be chosen.
 Changing a field queues a global edge reconciliation and reaches every cell in one
 signed revision, without a restart. A cell that still runs a snapshot without these
 fields sends no public header and removes nothing, so during a rolling change the
-old behavior stays until the cell receives the new revision. The `X-CDNF-*`
-diagnostic headers above are separate and unchanged. A person who parsed the
-earlier `X-CDNF-Cache` header should read `cdnf-cache-status` instead; the old
-header stays under the diagnostic switch until its stage ends.
+old behavior stays until the cell receives the new revision. The earlier
+`X-CDNF-Cache`, `X-CDNF-Origin`, `X-CDNF-Origin-Transition`, `X-CDNF-Error` and
+`X-CDNF-Security-Reason` response headers are gone from every response of a cell that
+runs the new snapshot: read `cdnf-cache-status`, and use the operations and request
+views for the origin role and errors.
 
 ## API examples
 

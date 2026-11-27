@@ -56,7 +56,7 @@ a domain you can change the nameservers of, and root SSH access to the hosts.
    [First domain](../getting-started/first-domain.md) and
    [Production setup after the quick start](production-setup-after-quick-start.md).
 
-   **Check:** the domain's HTTPS response carries an `X-CDNF-Cache` header, and a
+   **Check:** the domain's HTTPS response carries a `cdnf-cache-status` header, and a
    second request is a hit.
 
 6. **Add PoPs and DNS hosts.**

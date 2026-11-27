@@ -55,7 +55,7 @@ flowchart LR
 5. The cell sends one redacted event to Vector.
 
 **Check it worked:** request a cache-eligible object twice and inspect
-`X-CDNF-Cache`. A hit requires caching to be enabled, an admitted response, and
+`cdnf-cache-status`. A hit requires caching to be enabled, an admitted response, and
 an unexpired object. Authenticated requests, development mode, and bypass rules
 can correctly produce a bypass instead. See [Cache and purge](../guides/cache.md).
 

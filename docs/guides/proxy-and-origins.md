@@ -264,13 +264,12 @@ response, so a successful retry is not an origin failure. Exhausting retries
 records one failed request. Nginx still refuses to replay a POST that was
 already sent to an origin.
 
-Two response headers show what happened when an administrator turns on
-**Expose diagnostic response headers** in Platform settings (off by default, see
-[Proxy defaults](../reference/platform-settings.md#proxy-defaults)):
-
-- `X-CDNF-Origin` is `primary` or `backup`.
-- `X-CDNF-Origin-Transition` is `none`, `primary_failure_threshold`,
-  `backup_failure`, or `primary_recovery_threshold`.
+The origin role and its transitions (`primary`, `backup`, and the transition reason)
+are not sent in response headers. Read them in the authenticated cell status, in the
+request events (the origin role and transition), and in the origin health view. With
+diagnostics on for a domain, the response also carries `cdnf-diag-origin-status`, the
+HTTP status the origin returned (see
+[Public response headers](../reference/platform-settings.md#public-response-headers)).
 
 The authenticated cell status lists the active role, the reason, and the
 failback time without destination secrets. Vector stores the role and reason with
