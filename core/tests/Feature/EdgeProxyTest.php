@@ -18,6 +18,7 @@ use App\Models\User;
 use App\Support\ArtifactSigner;
 use App\Support\EdgeCertificateAuthority;
 use App\Support\EdgeKeyEnvelope;
+use App\Support\OriginHealth;
 use App\Support\PowerDnsZone;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
@@ -102,7 +103,7 @@ class EdgeProxyTest extends TestCase
         $reports = [];
         foreach (['assigned', 'unassigned'] as $scope) {
             $domain = Domain::query()->create(['name' => $scope.'.test', 'display_name' => $scope, 'lifecycle_state' => 'active', 'revision' => 1, 'nameservers_verified_at' => now()]);
-            $record = $domain->dnsRecords()->create(['name' => $domain->name, 'type' => 'A', 'content' => '8.8.8.8', 'content_hash' => hash('sha256', '8.8.8.8'), 'mode' => 'proxied', 'ttl' => 60]);
+            $record = $domain->dnsRecords()->create(['name' => $domain->name, 'type' => 'A', 'content' => '8.8.8.8', 'content_hash' => hash('sha256', '8.8.8.8'), 'mode' => 'proxied', 'ttl' => 60, 'origin' => ['host' => '8.8.8.8', 'port' => 80, 'scheme' => 'http', 'host_header' => 'origin.example', 'sni' => null, 'verify_tls' => false, 'connect_timeout_ms' => 1000, 'response_timeout_ms' => 5000, 'retry_count' => 0, 'health_check' => null]]);
             if ($scope === 'assigned') {
                 DomainEdgeCell::query()->create(['domain_id' => $domain->id, 'edge_id' => $edge->id, 'replica' => 1, 'active_cell_id' => $cell->id, 'desired_revision' => 1, 'state' => 'active']);
             }
@@ -114,8 +115,8 @@ class EdgeProxyTest extends TestCase
             'passive_origins' => array_map(fn ($pair) => ['domain' => $pair[0]->name, 'hostname' => $pair[0]->name, 'failure_count' => 1, 'last_status' => 502, 'last_failed_at' => now()->timestamp], array_values($reports)),
         ];
         $this->withHeaders($this->edgeIdentityHeaders($signed['serial']))->postJson('/edge/v1/heartbeat', $payload)->assertOk();
-        $this->assertSame('unhealthy', $reports['assigned'][1]->refresh()->origin_health['status']);
-        $this->assertNull($reports['unassigned'][1]->refresh()->origin_health);
+        $this->assertSame('unhealthy', OriginHealth::summarize($reports['assigned'][1]->refresh())['state']);
+        $this->assertNull($reports['unassigned'][1]->refresh()->origin_signals);
         $this->assertDatabaseHas('security_events', ['domain_id' => $reports['assigned'][0]->id]);
         $this->assertDatabaseMissing('security_events', ['domain_id' => $reports['unassigned'][0]->id]);
         $payload['noisy_domains'] = [[...$payload['noisy_domains'][0], 'count' => 51, 'clients' => 12]];
@@ -461,7 +462,7 @@ class EdgeProxyTest extends TestCase
             'domain' => $domain->name, 'hostname' => $hostname, 'failure_count' => 2,
             'last_status' => 502, 'last_failed_at' => now()->timestamp,
         ]]])->assertOk();
-        $this->assertSame('passive', $domain->dnsRecords()->findOrFail($record)->origin_health['source']);
+        $this->assertSame('unhealthy', $domain->dnsRecords()->findOrFail($record)->origin_signals['primary']['passive']['status']);
         $this->assertSame($artifactCount, EdgeArtifact::query()->where('domain_id', $domain->id)->count());
         $this->actingAs($admin)->getJson('/api/admin/edge-routing')->assertOk()->assertJsonPath('data.global.0.id', $id);
         $this->actingAs($admin)->postJson("/api/admin/edge-cells/{$cell->id}/drain")->assertAccepted();

@@ -6,13 +6,14 @@ use App\Enums\DomainLifecycleState;
 use App\Jobs\DispatchOriginTest;
 use App\Support\ArtifactSigner;
 use App\Support\OriginData;
+use App\Support\OriginHealth;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 
-#[Fillable(['domain_id', 'type', 'name', 'content', 'content_hash', 'ttl', 'priority', 'weight', 'port', 'mode', 'geo_config', 'origin', 'origin_health'])]
+#[Fillable(['domain_id', 'type', 'name', 'content', 'content_hash', 'ttl', 'priority', 'weight', 'port', 'mode', 'geo_config', 'origin', 'origin_health', 'origin_signals'])]
 class DnsRecord extends Model
 {
     protected static function booted(): void
@@ -20,6 +21,7 @@ class DnsRecord extends Model
         static::updating(function (self $record): void {
             if ($record->isDirty(['origin', 'mode'])) {
                 $record->origin_health = null;
+                $record->setAttribute('origin_signals', $record->isDirty('mode') ? null : OriginHealth::afterOriginChange($record));
             }
         });
     }
@@ -71,6 +73,6 @@ class DnsRecord extends Model
 
     protected function casts(): array
     {
-        return ['geo_config' => 'array', 'origin' => 'array', 'origin_health' => 'array'];
+        return ['geo_config' => 'array', 'origin' => 'array', 'origin_health' => 'array', 'origin_signals' => 'array'];
     }
 }

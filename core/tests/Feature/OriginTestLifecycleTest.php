@@ -80,7 +80,7 @@ class OriginTestLifecycleTest extends TestCase
         $task = EdgeTask::query()->where('payload->operation_id', $operation->id)->sole();
         $record->update(['origin' => $this->origin('1.1.1.1')]);
         $this->report($edge, $task);
-        $this->assertNull($record->refresh()->origin_health);
+        $this->assertNull($record->refresh()->origin_signals);
         $this->assertSame('succeeded', $task->refresh()->status);
     }
 
@@ -92,7 +92,7 @@ class OriginTestLifecycleTest extends TestCase
         (new DispatchOriginTest($operation->id))->handle();
         $task = EdgeTask::query()->where('payload->operation_id', $operation->id)->sole();
         $this->report($edge, $task);
-        $this->assertSame('healthy', $record->refresh()->origin_health['status']);
+        $this->assertSame('healthy', $record->refresh()->origin_signals['primary']['manual']['status']);
         $this->assertSame('succeeded', $operation->refresh()->status);
         $before = $operation->result;
         (new DispatchOriginTest($operation->id))->handle();

@@ -7,6 +7,7 @@ use App\Models\DnsRecord;
 use App\Models\Operation;
 use App\Support\ArtifactSigner;
 use App\Support\OriginData;
+use App\Support\OriginHealth;
 use Illuminate\Console\Command;
 
 class DispatchScheduledOriginChecks extends Command
@@ -51,7 +52,10 @@ class DispatchScheduledOriginChecks extends Command
             return false;
         }
         $jitter = abs(crc32((string) $record->id)) % max(1, min(300, intdiv($interval, 10)));
-        $last = isset($record->origin_health['reported_at']) ? strtotime($record->origin_health['reported_at']) : $record->created_at->getTimestamp();
+        // Only an active result for the current configuration postpones the next check; an edit makes it due at once.
+        $active = $record->origin_signals['primary']['active'] ?? null;
+        $current = is_array($active) && hash_equals(OriginHealth::checksum($record->origin), (string) ($active['checksum'] ?? ''));
+        $last = $current ? (int) strtotime((string) $active['at']) : (is_array($active) ? 0 : $record->created_at->getTimestamp());
 
         return time() >= $last + $interval + $jitter;
     }

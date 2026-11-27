@@ -13,6 +13,7 @@ use App\Models\Domain;
 use App\Models\EdgeRevision;
 use App\Models\Operation;
 use App\Support\OriginData;
+use App\Support\OriginHealth;
 use App\Support\ProxyRevisionRollback;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -96,7 +97,7 @@ class ProxyController extends Controller
         $this->record($domain, $record);
         Gate::authorize('view', $domain);
 
-        return response()->json(['data' => $record->origin_health]);
+        return response()->json(['data' => OriginHealth::summarize($record)]);
     }
 
     public function deployment(Domain $domain): JsonResponse

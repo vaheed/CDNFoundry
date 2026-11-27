@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Support\OriginHealth;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -15,7 +16,7 @@ class DnsRecordResource extends JsonResource
             'weight' => $this->weight, 'port' => $this->port, 'mode' => $this->mode,
             'geo' => $this->when($this->mode === 'geo_dns', $this->geo_config),
             'origin' => $this->when($this->mode === 'proxied', $this->origin),
-            'origin_health' => $this->when($this->mode === 'proxied', $this->origin_health),
+            'origin_health' => $this->when($this->mode === 'proxied', fn (): array => OriginHealth::summarize($this->resource)),
             'created_at' => $this->created_at?->toIso8601String(), 'updated_at' => $this->updated_at?->toIso8601String(),
         ];
     }

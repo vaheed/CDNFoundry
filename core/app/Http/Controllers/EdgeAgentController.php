@@ -31,6 +31,7 @@ use App\Support\EdgeCertificateAuthority;
 use App\Support\EdgeKeyEnvelope;
 use App\Support\EdgeRejectionReasons;
 use App\Support\LongWindowRateLimits;
+use App\Support\OriginHealth;
 use App\Support\OriginPolicy;
 use App\Support\PlatformSettings;
 use App\Support\PowerDnsClient;
@@ -387,14 +388,20 @@ class EdgeAgentController extends Controller
             ReconcilePlatformDnsIdentity::dispatchForProbeChange();
         }
         foreach ($data['passive_origins'] as $failure) {
-            DnsRecord::query()->where('name', $failure['hostname'])->whereHas('domain', fn ($query) => $query->where('name', $failure['domain'])->where('lifecycle_state', 'active')
-                ->whereHas('edgeCells', fn ($cells) => $cells->where('edge_id', $edge->id)
-                    ->where(fn ($assigned) => $assigned->whereNotNull('active_cell_id')->orWhereNotNull('target_cell_id'))))
-                ->where('mode', 'proxied')->limit(1)->update(['origin_health' => [
-                    'status' => 'unhealthy', 'source' => 'passive', 'edge_id' => $edge->id,
-                    'failure_count' => $failure['failure_count'], 'http_status' => $failure['last_status'] ?: null,
-                    'reported_at' => now()->toIso8601String(),
-                ]]);
+            DB::transaction(function () use ($failure, $edge): void {
+                $record = DnsRecord::query()->where('name', $failure['hostname'])->whereHas('domain', fn ($query) => $query->where('name', $failure['domain'])->where('lifecycle_state', 'active')
+                    ->whereHas('edgeCells', fn ($cells) => $cells->where('edge_id', $edge->id)
+                        ->where(fn ($assigned) => $assigned->whereNotNull('active_cell_id')->orWhereNotNull('target_cell_id'))))
+                    ->where('mode', 'proxied')->lockForUpdate()->first();
+                // A failure from before the last origin edit describes the old configuration.
+                if ($record === null || $failure['last_failed_at'] < $record->updated_at->getTimestamp()) {
+                    return;
+                }
+                OriginHealth::record($record, 'primary', 'passive', [
+                    'status' => 'unhealthy', 'observer' => $edge->id, 'failure_count' => $failure['failure_count'],
+                    'http_status' => $failure['last_status'] ?: null, 'at' => now()->toIso8601String(),
+                ]);
+            });
         }
         foreach ($data['noisy_domains'] as $event) {
             RecordSecurityReport::execute($edge, $event);
@@ -746,10 +753,16 @@ class EdgeAgentController extends Controller
         }
         if ($row->type === 'origin_test' && isset($row->payload['record_id'])) {
             $record = $row->currentOriginRecord(lock: true);
-            if ($record !== null) {
-                $record->update(['origin_health' => $result]);
-            }
             $operation = Operation::query()->find($row->payload['operation_id'] ?? null);
+            if ($record !== null) {
+                OriginHealth::record($record, $row->payload['origin_role'] ?? 'primary',
+                    ($operation?->input['scheduled'] ?? false) === true ? 'active' : 'manual', [
+                        'status' => $result['status'], 'observer' => $edge->id, 'at' => $result['reported_at'],
+                        'latency_ms' => $result['latency_ms'] ?? null, 'http_status' => $result['http_status'] ?? null,
+                        'failure_reason' => $result['failure_reason'] ?? null, 'resolved_address' => $result['resolved_address'] ?? null,
+                        'tls_result' => $result['tls_result'] ?? null,
+                    ]);
+            }
             if ($operation !== null && in_array($operation->status, ['pending', 'running'], true)) {
                 $tasks = EdgeTask::query()->where('type', 'origin_test')->where('payload->operation_id', $operation->id)->get();
                 $completed = $tasks->whereIn('status', ['succeeded', 'failed']);
