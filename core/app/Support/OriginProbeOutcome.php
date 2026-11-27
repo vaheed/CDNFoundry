@@ -111,13 +111,15 @@ final class OriginProbeOutcome
             count($failedGroups) === count($groups) => 'unconfirmed',
             default => 'regional',
         };
+        // Consecutive scheduled checks that did not reach the origin from every group. The scheduler stretches the interval with it.
+        $streak = $scope === 'reachable' ? 0 : ((int) ($record->origin_signals[$role]['active']['failure_streak'] ?? 0)) + 1;
         OriginHealth::record($record, $role, 'active', [
             'status' => $scope === 'origin' ? 'unhealthy' : ($scope === 'reachable' ? 'healthy' : 'unhealthy'),
             'observer' => $representative['edge'] ?? null, 'at' => now()->toIso8601String(),
             'latency_ms' => $result['latency_ms'] ?? null, 'http_status' => $result['http_status'] ?? null,
             'failure_reason' => $result['failure_reason'] ?? null, 'resolved_address' => $result['resolved_address'] ?? null, 'tls_result' => $result['tls_result'] ?? null,
             'scope' => $scope, 'failed_groups' => implode(',', $failedGroups), 'not_monitored' => implode(',', $notMonitored),
-            'worker_faults' => count($workerFaults),
+            'worker_faults' => count($workerFaults), 'failure_streak' => $streak,
         ]);
     }
 }

@@ -24,7 +24,7 @@ final class OriginHealth
 
     public const PASSIVE_TTL_SECONDS = 900;
 
-    private const FIELDS = ['status', 'observer', 'at', 'checksum', 'latency_ms', 'http_status', 'failure_reason', 'resolved_address', 'tls_result', 'failure_count', 'scope', 'failed_groups', 'not_monitored', 'worker_faults'];
+    private const FIELDS = ['status', 'observer', 'at', 'checksum', 'latency_ms', 'http_status', 'failure_reason', 'resolved_address', 'tls_result', 'failure_count', 'scope', 'failed_groups', 'not_monitored', 'worker_faults', 'failure_streak'];
 
     public static function checksum(array $origin): string
     {
@@ -123,7 +123,7 @@ final class OriginHealth
             }
             $age = $now->getTimestamp() - (int) strtotime((string) ($signal['at'] ?? ''));
             $ttl = match ($kind) {
-                'active' => max(3 * $interval, 900),
+                'active' => max(3 * OriginMonitoring::stretched($interval, (int) ($signal['failure_streak'] ?? 0)), 900),
                 'manual' => self::MANUAL_TTL_SECONDS,
                 'passive' => self::PASSIVE_TTL_SECONDS,
             };

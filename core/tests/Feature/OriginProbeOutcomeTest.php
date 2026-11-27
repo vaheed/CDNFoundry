@@ -10,6 +10,7 @@ use App\Models\Edge;
 use App\Models\EdgeTask;
 use App\Models\Operation;
 use App\Support\OriginHealth;
+use App\Support\OriginMonitoring;
 use App\Support\OriginProbeOutcome;
 use App\Support\OriginProbePlanner;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -156,5 +157,27 @@ class OriginProbeOutcomeTest extends TestCase
         $signal = $this->record->refresh()->origin_signals['primary']['active'];
         $this->assertSame('continent:AS', $signal['not_monitored']);
         $this->assertSame('healthy', $signal['status']);
+    }
+
+    public function test_a_failing_origin_is_checked_less_often_but_never_by_more_than_five_times_its_interval(): void
+    {
+        $this->assertSame(60, OriginMonitoring::stretched(60, 0));
+        $this->assertSame(120, OriginMonitoring::stretched(60, 1));
+        $this->assertSame(300, OriginMonitoring::stretched(60, 4));
+        $this->assertSame(300, OriginMonitoring::stretched(60, 40), 'the stretch is capped');
+
+        $this->scene(['EU' => 1]);
+        foreach (range(1, 3) as $round) {
+            EdgeTask::query()->where('payload->operation_id', $this->operation->id)->delete();
+            $this->operation->update(['status' => 'pending']);
+            (new DispatchOriginTest($this->operation->id))->handle();
+            $this->answer($this->tasks()[0], false);
+            $this->assertSame($round, $this->record->refresh()->origin_signals['primary']['active']['failure_streak']);
+        }
+        EdgeTask::query()->where('payload->operation_id', $this->operation->id)->delete();
+        $this->operation->update(['status' => 'pending']);
+        (new DispatchOriginTest($this->operation->id))->handle();
+        $this->answer($this->tasks()[0], true);
+        $this->assertSame(0, $this->record->refresh()->origin_signals['primary']['active']['failure_streak'], 'a reachable origin returns to its own interval');
     }
 }

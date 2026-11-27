@@ -62,7 +62,13 @@ class DispatchScheduledOriginChecks extends Command
         // Only an active result for the current configuration postpones the next check; an edit makes it due at once.
         $active = $record->origin_signals['primary']['active'] ?? null;
         $current = is_array($active) && hash_equals(OriginHealth::checksum($record->origin), (string) ($active['checksum'] ?? ''));
-        $last = $current ? (int) strtotime((string) $active['at']) : (is_array($active) ? 0 : $record->created_at->getTimestamp());
+        if (is_array($active) && $current) {
+            // A failing origin waits longer between checks, up to five times its interval.
+            $interval = OriginMonitoring::stretched($interval, (int) ($active['failure_streak'] ?? 0));
+            $last = (int) strtotime((string) $active['at']);
+        } else {
+            $last = is_array($active) ? 0 : $record->created_at->getTimestamp();
+        }
 
         return time() >= $last + $interval + $jitter;
     }

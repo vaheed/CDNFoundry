@@ -56,6 +56,15 @@ final class OriginMonitoring
         return max($requested, app(PlatformSettings::class)->integer('origin_monitoring', 'minimum_interval_seconds'));
     }
 
+    /** A failing origin is checked less often, never by more than this many times its interval, so a dead origin costs the budget less. */
+    public const MAXIMUM_STRETCH = 5;
+
+    /** The interval of an origin whose last `$streak` scheduled checks failed. A healthy origin (streak 0) keeps its interval. */
+    public static function stretched(int $interval, int $streak): int
+    {
+        return $interval * min(self::MAXIMUM_STRETCH, 1 + max(0, $streak));
+    }
+
     /** Whether a manual test may start now. */
     public static function manualAllowed(): bool
     {
