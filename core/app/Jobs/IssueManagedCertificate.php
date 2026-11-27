@@ -118,7 +118,7 @@ class IssueManagedCertificate implements ShouldBeUnique, ShouldQueue
                 return;
             }
             $message = mb_substr($exception?->getMessage() ?? $current->last_error ?? 'Managed certificate issuance exhausted its retry budget.', 0, 4000);
-            $current->forceFill(['status' => 'failed', 'last_error' => $message, 'finished_at' => now()])->save();
+            $current->forceFill(['status' => 'failed', 'last_error' => $message, 'finished_at' => now(), 'failure_class' => TlsOrder::failureClassFor($exception, $domain)])->save();
             $changed = $current->challenges()->whereNull('cleaned_at')->update(['status' => 'cleaned', 'cleaned_at' => now()]);
             if ($domain !== null && $changed > 0) {
                 $domain->forceFill(['revision' => $domain->revision + 1])->save();
