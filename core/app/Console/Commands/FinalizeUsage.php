@@ -29,7 +29,7 @@ class FinalizeUsage extends Command
         $floor = $last->subDays($settings->integer('operations', 'usage_hourly_retention_days'))->startOfDay();
         $start = $start < $floor ? $floor : $start;
         $built = UsageCoverage::query()->where('interval_start', '>=', $start)->where('interval_start', '<=', $last)->get(['interval_start', 'status'])
-            ->mapWithKeys(fn (UsageCoverage $row): array => [$row->interval_start->utc()->toIso8601String() => $row->status]);
+            ->mapWithKeys(fn (UsageCoverage $row): array => [CarbonImmutable::parse((string) $row->interval_start, 'UTC')->toIso8601String() => $row->status]);
         $retryFrom = $last->subHours(self::INCOMPLETE_RETRY_HOURS);
         $queued = 0;
         /** @var CarbonImmutable|null $runStart */
