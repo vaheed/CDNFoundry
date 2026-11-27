@@ -61,7 +61,7 @@ class ProxyController extends Controller
         $this->record($domain, $record);
         Gate::authorize('update', $domain);
         abort_unless($record->mode === 'proxied', 409, 'The DNS record is not proxied.');
-        $origin = OriginData::validate($request->all());
+        $origin = OriginData::validate($request->all(), $record->origin);
         OriginData::resolveAndValidate($origin['host']);
         if (is_array($origin['backup'] ?? null)) {
             OriginData::resolveAndValidate($origin['backup']['host']);

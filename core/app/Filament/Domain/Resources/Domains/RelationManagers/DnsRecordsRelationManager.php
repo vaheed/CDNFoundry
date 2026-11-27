@@ -194,7 +194,7 @@ class DnsRecordsRelationManager extends RelationManager
                         ->afterStateUpdated(function (?string $state, Get $get, Set $set): void {
                             if ($state === 'https') {
                                 $set('origin.port', 443);
-                                $set('origin.verify_tls', true);
+                                $set('origin.verify_tls', false);
                                 if (blank($get('origin.sni'))) {
                                     $set('origin.sni', $this->ownerHostname((string) $get('name')));
                                 }
@@ -210,7 +210,8 @@ class DnsRecordsRelationManager extends RelationManager
                     TextInput::make('origin.sni')->label('TLS server name (SNI)')->placeholder('www.example.com')->required(fn ($get): bool => $get('mode') === 'proxied' && $get('origin.scheme') === 'https' && (bool) $get('origin.verify_tls'))
                         ->visible(fn ($get): bool => $get('mode') === 'proxied' && $get('origin.scheme') === 'https'),
                 ]),
-                Toggle::make('origin.verify_tls')->label('Verify origin TLS')->default(true)
+                Toggle::make('origin.verify_tls')->label('Verify origin TLS')->default(false)
+                    ->helperText('Off by default. Without verification the connection is encrypted but the origin is not authenticated, so a network attacker between the edge and your server can impersonate or intercept it. Turn it on when the origin has a trusted certificate for the server name below.')
                     ->visible(fn ($get): bool => $get('mode') === 'proxied' && $get('origin.scheme') === 'https'),
                 Toggle::make('origin.websocket')->label('Allow WebSocket upgrade')->default(false)->visible(fn ($get): bool => $get('mode') === 'proxied'),
                 Grid::make(['default' => 1, 'sm' => 3])->schema([
@@ -233,7 +234,7 @@ class DnsRecordsRelationManager extends RelationManager
                         ->required(fn ($get): bool => (bool) $get('origin.backup_enabled'))->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled'))
                         ->afterStateUpdated(function (?string $state, Set $set): void {
                             $set('origin.backup.port', $state === 'http' ? 80 : 443);
-                            $set('origin.backup.verify_tls', $state !== 'http');
+                            $set('origin.backup.verify_tls', false);
                             if ($state === 'http') {
                                 $set('origin.backup.sni', null);
                             }
@@ -245,7 +246,8 @@ class DnsRecordsRelationManager extends RelationManager
                     TextInput::make('origin.backup.sni')->label('Backup TLS SNI')
                         ->required(fn ($get): bool => (bool) $get('origin.backup_enabled') && $get('origin.backup.scheme') === 'https' && (bool) $get('origin.backup.verify_tls'))
                         ->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled') && $get('origin.backup.scheme') === 'https'),
-                    Toggle::make('origin.backup.verify_tls')->label('Verify backup TLS')->default(true)
+                    Toggle::make('origin.backup.verify_tls')->label('Verify backup TLS')->default(false)
+                        ->helperText('Off by default: encrypted, but the backup origin is not authenticated.')
                         ->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled') && $get('origin.backup.scheme') === 'https'),
                     TextInput::make('origin.backup.connect_timeout_ms')->label('Backup connect timeout (ms)')->numeric()->default(2000)->minValue(100)->maxValue(10000)
                         ->visible(fn ($get): bool => $get('mode') === 'proxied' && (bool) $get('origin.backup_enabled')),
@@ -527,7 +529,7 @@ class DnsRecordsRelationManager extends RelationManager
         } else {
             $backup = &$input['origin']['backup'];
             $backup['port'] = ($backup['scheme'] ?? 'https') === 'http' ? 80 : 443;
-            $backup['verify_tls'] = ($backup['scheme'] ?? 'https') !== 'http' && (bool) ($backup['verify_tls'] ?? true);
+            $backup['verify_tls'] = ($backup['scheme'] ?? 'https') !== 'http' && (bool) ($backup['verify_tls'] ?? false);
             $backup['sni'] = ($backup['scheme'] ?? 'https') === 'http' ? null : ($backup['sni'] ?? null);
             $backup['retry_count'] = 0;
             $backup['websocket'] = (bool) ($input['origin']['websocket'] ?? false);

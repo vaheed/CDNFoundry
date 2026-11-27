@@ -10,9 +10,13 @@ use Illuminate\Validation\ValidationException;
 
 final class OriginData
 {
-    public static function validate(array $input): array
+    /**
+     * Validate an origin. `$existing` is the stored origin on an update: an omitted `verify_tls`
+     * keeps the stored value, and on create an omitted value is false.
+     */
+    public static function validate(array $input, ?array $existing = null): array
     {
-        $origin = self::validateEndpoint($input);
+        $origin = self::validateEndpoint($input, $existing);
         $validator = Validator::make($input, [
             'backup' => ['sometimes', 'nullable', 'array'],
             'failover' => ['sometimes', 'nullable', 'array'],
@@ -21,10 +25,10 @@ final class OriginData
             'failover.hold_down_seconds' => ['required_with:backup', 'integer', 'between:5,3600'],
             'failover.failback_delay_seconds' => ['required_with:backup', 'integer', 'between:5,86400'],
         ]);
-        $validator->after(function ($validator) use ($input, $origin): void {
+        $validator->after(function ($validator) use ($input, $origin, $existing): void {
             if (is_array($input['backup'] ?? null)) {
                 try {
-                    $backup = self::validateEndpoint($input['backup']);
+                    $backup = self::validateEndpoint($input['backup'], is_array($existing['backup'] ?? null) ? $existing['backup'] : null);
                     if ($backup['scheme'] === $origin['scheme'] && $backup['host'] === $origin['host'] && $backup['port'] === $origin['port']) {
                         $validator->errors()->add('backup.host', 'The backup origin must use a different endpoint than the primary origin.');
                     }
@@ -41,7 +45,7 @@ final class OriginData
             throw new ValidationException($validator);
         }
         if (is_array($input['backup'] ?? null)) {
-            $origin['backup'] = self::validateEndpoint($input['backup']);
+            $origin['backup'] = self::validateEndpoint($input['backup'], is_array($existing['backup'] ?? null) ? $existing['backup'] : null);
             $origin['failover'] = [
                 'failure_threshold' => (int) $input['failover']['failure_threshold'],
                 'recovery_threshold' => (int) $input['failover']['recovery_threshold'],
@@ -62,8 +66,11 @@ final class OriginData
      */
     public const ALLOWED_PORTS = [80, 443, 2052, 2053, 2082, 2083, 2086, 2087, 2095, 2096, 8000, 8008, 8080, 8081, 8088, 8443, 8444, 8880, 8888, 9000, 9443];
 
-    private static function validateEndpoint(array $input): array
+    private static function validateEndpoint(array $input, ?array $existing = null): array
     {
+        if (! array_key_exists('verify_tls', $input) || $input['verify_tls'] === null) {
+            $input['verify_tls'] = (bool) ($existing['verify_tls'] ?? false);
+        }
         $validator = Validator::make($input, [
             'host' => ['required', 'string', 'max:253'],
             'port' => ['required', 'integer', Rule::in(self::ALLOWED_PORTS)],

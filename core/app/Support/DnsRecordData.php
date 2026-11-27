@@ -10,7 +10,7 @@ final class DnsRecordData
     public const TYPES = ['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'NS', 'CAA', 'SRV', 'PTR'];
 
     /** @return array<string,mixed> */
-    public static function validate(array $input, string $zone, bool $verified = true): array
+    public static function validate(array $input, string $zone, bool $verified = true, ?array $existingOrigin = null): array
     {
         if (isset($input['type']) && is_string($input['type'])) {
             $input['type'] = strtoupper($input['type']);
@@ -27,7 +27,7 @@ final class DnsRecordData
             'geo' => ['required_if:mode,geo_dns', 'nullable', 'array'],
             'origin' => ['required_if:mode,proxied', 'nullable', 'array'],
         ]);
-        $validator->after(function ($validator) use ($input, $zone, $verified): void {
+        $validator->after(function ($validator) use ($input, $zone, $verified, $existingOrigin): void {
             if (! $verified && in_array($input['mode'] ?? 'dns_only', ['geo_dns', 'proxied'], true)) {
                 $validator->errors()->add('mode', 'Geo-DNS and proxied records become available after the nameservers are verified. Until then, records are DNS only.');
 
@@ -44,7 +44,7 @@ final class DnsRecordData
                     if (! in_array($type, ['A', 'AAAA', 'CNAME'], true)) {
                         $validator->errors()->add('mode', 'Proxy is supported only for A, AAAA, and CNAME records.');
                     } elseif (is_array($input['origin'] ?? null)) {
-                        OriginData::validate($input['origin']);
+                        OriginData::validate($input['origin'], $existingOrigin);
                     }
                 } else {
                     self::normalizeContent($type, (string) ($input['content'] ?? ''), $zone);
@@ -76,7 +76,7 @@ final class DnsRecordData
         $type = strtoupper((string) $input['type']);
         $mode = in_array(($input['mode'] ?? 'dns_only'), ['geo_dns', 'proxied'], true) ? $input['mode'] : 'dns_only';
         $geo = $mode === 'geo_dns' ? GeoDnsConfig::validate($input['geo'], $type, $zone) : null;
-        $origin = $mode === 'proxied' ? OriginData::validate($input['origin']) : null;
+        $origin = $mode === 'proxied' ? OriginData::validate($input['origin'], $existingOrigin) : null;
         if ($origin !== null) {
             OriginData::resolveAndValidate($origin['host']);
             if (is_array($origin['backup'] ?? null)) {
