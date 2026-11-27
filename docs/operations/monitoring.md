@@ -85,6 +85,18 @@ The administrator dashboard shows the evidence for each component. For each stat
 
 A degraded aggregate is not a request to restart the platform. Follow the named component, its counts and timestamps, and the narrow runbook. Leave unrelated serving paths alone.
 
+### Which store owns what
+
+Each store has one job. Review any change that puts data in a different store against this table.
+
+| Store | Owns | Does not own |
+| --- | --- | --- |
+| PostgreSQL | Configuration, users and authorization, domains and DNS, security policy, certificates, edge and Fleet inventory, live security state, bounded operational history, durable usage summaries, last-known dashboard summaries, the latest origin monitoring state | Per-request, per-query, per-event or per-probe rows |
+| ClickHouse | Raw HTTP and DNS events, detailed traffic, cache, geography and latency analytics, historical security observations, high-volume telemetry | Anything the control plane needs to run, or the only copy of finalized usage |
+| Valkey | Queues, leases, scheduling coordination, bounded transient counters | Anything that must survive a restart as a record |
+| Loki | Operational application and container logs | Traffic logs |
+| Prometheus | Bounded operational metrics and alert evaluation | Per-domain or per-client series |
+
 ### Telemetry buffers and edge logging
 
 - Vector's security and DNS disk buffers are capped at 268435488 bytes each. This is the smallest size the production Vector version accepts. Startup qualification checks the live process, because configuration validation does not build the disk buffers.

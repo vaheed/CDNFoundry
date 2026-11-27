@@ -141,9 +141,34 @@ Raw events, with the full name and a masked client address, stay for seven days.
 
 ## Usage rollups
 
-After the configured delay, the scheduler finalizes the latest complete hour.
-The `usage_rollups` table stores request, DNS, ingress, and egress counts per
-hour, with a status. Rebuilding the same hour gives the same result.
+After the configured delay, the scheduler finalizes the latest complete hour and
+builds every hour it missed since, up to 48 hours per run, so an outage is caught
+up without a manual rebuild. `usage_rollups` stores request, DNS, ingress, and
+egress counts per domain and hour, with a status. Rows are sparse: a domain with
+no traffic in an hour has no row. Rebuilding the same hour gives the same result.
+
+Whether a missing row is a real zero is recorded in `usage_coverage`, one row per
+built hour:
+
+| Coverage | Meaning |
+| --- | --- |
+| `finalized` | The hour was built from telemetry. A domain with no row had no traffic. |
+| `incomplete` | The platform had edges but no telemetry arrived for the whole hour, so a missing row is not a zero. The build retries for 24 hours in case late telemetry arrives, then the hour stays incomplete. |
+| none | The hour is not built yet, or the analytics store was unavailable. Nothing is stored. |
+
+Each row has a status: `finalized`, `corrected` (a rebuild changed a finalized
+hour because telemetry arrived late; the earlier values and the reason are kept
+in `corrections`, at most five), or `incomplete` when it sums an hour the
+telemetry did not cover. `provisional` and `reconciled` are reserved. Each row
+also keeps the `domain_name` and the `owner_user_ids` the domain had when it was
+written, so a later owner change or domain deletion does not rewrite history and
+rows are not deleted with the domain. An owner change inside one hour is
+attributed to the owners at the time that hour is built. `GET .../usage`
+returns `meta.coverage` with the hours of the range that are complete,
+incomplete and unbuilt; coverage is kept for the hourly retention window only.
+
+Usage is an operational measure built from telemetry that is delivered at least
+once and can be lost when a buffer is full. It is not an invoice-grade record.
 
 To keep the control database small for years, a daily job sums old rows without changing any total: hourly rows
 older than 35 days become one row per day, and daily rows older than a year become one row per month. Monthly rows are

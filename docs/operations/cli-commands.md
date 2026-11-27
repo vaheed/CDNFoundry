@@ -162,7 +162,7 @@ docker compose -f compose.dev.yml run --rm core php artisan cdnf:platform:settin
 
 | Command and syntax | Purpose and effects | Scheduled |
 | --- | --- | --- |
-| `cdnf:usage:finalize` | Dispatches an idempotent rebuild for the most recently finalized UTC usage hour. It does not wait for ClickHouse aggregation. | Hourly at minute 20 |
+| `cdnf:usage:finalize` | Dispatches idempotent builds for every UTC usage hour that has no coverage record, up to 48 hours per run, and retries incomplete hours of the last 24 hours. It does not wait for ClickHouse aggregation. | Hourly at minute 20 |
 | `cdnf:reports:build {kind} [--period=]` | `kind` is `usage` or `operations`. `--period` is `YYYY-MM` for usage and `YYYY-Www` for operations. Builds the monthly usage report or weekly operations report from rollups as CSV and PDF, and records each file with its checksum. A period that has not finished is refused. | Usage on the 2nd at 03:40 UTC; operations Mondays at 06:00 UTC |
 
 ## Scheduler
