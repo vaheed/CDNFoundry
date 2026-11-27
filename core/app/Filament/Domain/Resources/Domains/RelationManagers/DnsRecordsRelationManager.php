@@ -21,6 +21,7 @@ use App\Support\FilamentHelp;
 use App\Support\GeoDnsConfig;
 use App\Support\GeoIpClassifier;
 use App\Support\GeoVocabulary;
+use App\Support\OriginHealth;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
@@ -285,10 +286,12 @@ class DnsRecordsRelationManager extends RelationManager
                 ->badge()
                 ->color(fn (string $state): string => $state === 'proxied' ? 'info' : 'gray'),
             TextColumn::make('origin_health.status')->label('Origin')
-                ->state(fn (DnsRecord $record): ?string => $record->mode === 'proxied' ? ($record->origin_health['status'] ?? 'not_tested') : null)
-                ->badge()->formatStateUsing(fn ($state): string => ucfirst(str_replace('_', ' ', $state instanceof \BackedEnum ? $state->value : (string) $state)))->color(fn (?string $state): string => match ($state) {
+                ->state(fn (DnsRecord $record): ?string => $record->mode === 'proxied' ? OriginHealth::summarize($record)['state'] : null)
+                ->badge()->formatStateUsing(fn ($state): string => $state === 'disabled' ? 'Health check disabled' : ucfirst((string) ($state instanceof \BackedEnum ? $state->value : $state)))
+                ->color(fn (?string $state): string => match ($state) {
                     'healthy' => 'success',
                     'unhealthy' => 'danger',
+                    'degraded' => 'warning',
                     default => 'gray',
                 }),
             TextColumn::make('desired_route')->label('DNS route')
