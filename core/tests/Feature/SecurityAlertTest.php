@@ -49,7 +49,7 @@ class SecurityAlertTest extends TestCase
     {
         [$user, $domain] = $this->ownedDomain();
         $url = "/api/domains/{$domain->id}/security/alert";
-        $this->actingAs($user)->getJson($url)->assertOk()->assertJsonPath('data.alert', null)->assertJsonPath('data.cooldown_minutes', 60);
+        $this->actingAs($user)->getJson($url)->assertOk()->assertJsonPath('data.alert', null)->assertJsonPath('data.episode_quiet_minutes', 5);
         $this->actingAs($user)->putJson($url, ['threshold' => 250, 'period_minutes' => 10])->assertOk()->assertJsonPath('data.alert.threshold', 250);
         $this->assertSame(['threshold' => 250, 'period_minutes' => 10], $domain->refresh()->security_alert);
         $this->assertDatabaseHas('audit_logs', ['action' => 'security.alert_updated', 'subject_id' => (string) $domain->id]);
@@ -115,7 +115,7 @@ class SecurityAlertTest extends TestCase
         Queue::assertPushed(DeliverNotification::class, 2);
     }
 
-    public function test_the_alert_is_a_domain_event_and_is_sent_again_after_the_cooldown(): void
+    public function test_one_attack_is_one_alert_and_a_later_attack_alerts_again(): void
     {
         Queue::fake();
         Cache::flush();
@@ -124,7 +124,20 @@ class SecurityAlertTest extends TestCase
         $domain->update(['security_alert' => ['threshold' => 10, 'period_minutes' => 5]]);
         $this->report($domain, 'custom_rule_block', 50);
         $this->artisan('cdnf:notifications:security-mitigations');
-        $this->travel(61)->minutes();
+        Queue::assertPushed(DeliverNotification::class, 1);
+
+        // The attack goes on for an hour, with mitigated requests in the latest slots at every check: still one alert.
+        foreach (range(1, 60) as $step) {
+            $this->travel(1)->minutes();
+            $this->report($domain, 'custom_rule_block', 50, 0);
+            $this->artisan('cdnf:notifications:security-mitigations');
+        }
+        Queue::assertPushed(DeliverNotification::class, 1);
+
+        // Six quiet minutes end the episode; the next attack is a new one.
+        $this->travel(6)->minutes();
+        $this->artisan('cdnf:notifications:security-mitigations');
+        $this->travel(1)->minutes();
         $this->report($domain, 'custom_rule_block', 50, 0);
         $this->artisan('cdnf:notifications:security-mitigations');
         Queue::assertPushed(DeliverNotification::class, 2);

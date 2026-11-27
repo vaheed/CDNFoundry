@@ -10,8 +10,8 @@ final class SecurityAlertData
 {
     public const PERIODS = [5 => '5 minutes', 10 => '10 minutes', 15 => '15 minutes'];
 
-    /** One alert per domain in this many minutes, however long the attack lasts. */
-    public const COOLDOWN_MINUTES = 60;
+    /** An attack ends after this many minutes without a mitigated request; the next one is a new episode and alerts again. */
+    public const EPISODE_QUIET_MINUTES = 5;
 
     /** Reasons a rule or the platform enforces. A request only logged by a rule is not a mitigation. */
     public const NOT_MITIGATIONS = ['custom_rule_would_block', 'custom_rule_would_challenge', 'platform_rule_would_block', 'platform_rule_would_challenge', 'custom_rule_log', 'platform_rule_log', 'waf_rule_logged', 'sensitive_data_card', 'sensitive_data_iban', 'sensitive_data_private_key', 'sensitive_data_api_key', 'schema_unknown_path', 'schema_wrong_method', 'schema_missing_parameter', 'schema_invalid_parameter', 'schema_body_too_large', 'schema_invalid_body', 'schema_unknown_field', 'jwt_invalid'];

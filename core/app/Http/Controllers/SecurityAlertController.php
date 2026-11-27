@@ -39,6 +39,6 @@ class SecurityAlertController extends Controller
 
     private function payload(Domain $domain): array
     {
-        return ['alert' => $domain->security_alert, 'periods' => array_keys(SecurityAlertData::PERIODS), 'cooldown_minutes' => SecurityAlertData::COOLDOWN_MINUTES];
+        return ['alert' => $domain->security_alert, 'periods' => array_keys(SecurityAlertData::PERIODS), 'episode_quiet_minutes' => SecurityAlertData::EPISODE_QUIET_MINUTES];
     }
 }

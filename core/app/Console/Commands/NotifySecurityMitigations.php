@@ -13,7 +13,7 @@ class NotifySecurityMitigations extends Command
 {
     protected $signature = 'cdnf:notifications:security-mitigations';
 
-    protected $description = 'Send one notification for each domain whose mitigated requests reach their alert threshold, then stay quiet for an hour';
+    protected $description = 'Send one notification for each attack episode of a domain whose mitigated requests reach their alert threshold';
 
     public function handle(): int
     {
@@ -24,11 +24,22 @@ class NotifySecurityMitigations extends Command
                     continue;
                 }
                 $count = RecordSecurityReport::mitigationsInWindow($domain, (int) $alert['period_minutes']);
-                // One notification per domain and hour, however long the attack keeps going.
-                if ($count < (int) $alert['threshold'] || ! Cache::add("notify:security-mitigations:{$domain->id}", 1, now()->addMinutes(SecurityAlertData::COOLDOWN_MINUTES))) {
+                // An episode lasts while mitigated requests keep arriving and ends after a quiet spell, so one attack is one alert
+                // however long it runs and a later attack alerts again.
+                $marker = "notify:security-episode:{$domain->id}";
+                $active = RecordSecurityReport::mitigationsInWindow($domain, SecurityAlertData::EPISODE_QUIET_MINUTES) > 0;
+                if (Cache::has($marker)) {
+                    if ($active) {
+                        Cache::put($marker, 1, now()->addMinutes(SecurityAlertData::EPISODE_QUIET_MINUTES));
+                    }
+
                     continue;
                 }
-                EventPublisher::publish('security.mitigations_high', $domain, "Mitigated requests for {$domain->name}", number_format($count)." requests were blocked in the last {$alert['period_minutes']} minutes, above your alert of ".number_format((int) $alert['threshold']).'. This alert is sent at most once an hour.');
+                if ($count < (int) $alert['threshold']) {
+                    continue;
+                }
+                Cache::put($marker, 1, now()->addMinutes(SecurityAlertData::EPISODE_QUIET_MINUTES));
+                EventPublisher::publish('security.mitigations_high', $domain, "Mitigated requests for {$domain->name}", number_format($count)." requests were blocked in the last {$alert['period_minutes']} minutes, above your alert of ".number_format((int) $alert['threshold']).'. You get one alert for each attack, and another only after five quiet minutes.');
             }
         });
 
