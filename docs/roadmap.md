@@ -1471,6 +1471,8 @@ empty state, that no label exceeds its cardinality budget, and that a Loki
 outage shows unavailable rather than empty. Preserve bounded disk buffers,
 retention and asynchronous delivery.
 
+**A.3 record, 27 November 2026.** The Logs explorer holds 16 templates (`docker/grafana/log_templates.py`, one per class of the list above; Fleet runs on the operator host and does not log to Loki, so its template covers the backup and rollback lines the control plane records), filtered by environment, host, domain, edge, cell, request ID, operation ID, task ID, revision, event type and free text as parsed fields after `| json`, never as labels. `tests/e2e/loki_templates.py` pushed a known line per class to the development Loki and read it back through each template's own LogQL: all 16 returned their line, narrowing by the line's own request ID kept it and kept every other class out, a mismatched request ID or free text returned nothing, and no identifier became a label. `test_the_logs_explorer_has_one_template_per_class...` fixes the shape. Not done: new normalized fields in the Go services where a class has none (the templates rely on keyword filters for the classes whose services do not log a typed event), a Loki-outage check that the panel shows unavailable rather than empty, a rendered browser check of the dashboard, and the extension of the Loki line with the public reference.
+
 **Acceptance.** The panel inventory is complete and committed with its checks.
 No panel conflates the seven conditions or ignores a filter without saying so.
 Every listed capability has a panel or a recorded unsupported marker. Every

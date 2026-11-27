@@ -294,6 +294,8 @@ Every alert links here. To find a runbook from an alert's name, look it up in th
 
 **First action:** Open Logs explorer for that service and read the first error. A silent service is down or cannot ship logs.
 
+The Logs explorer also holds one saved template for each class of event (errors, control plane, jobs, edge agent, gateway and cells, origin and TLS, DNS, certificates, WAF, challenge, rate limits and reputation, deployment and revision mismatch, telemetry delivery, database and queue, backup and recovery, and one for a request, operation or task identifier). Narrow a template with the filters at the top: environment, host, domain, edge, cell, request ID, operation ID, task ID, revision, event type and free text. The identifiers are read from the structured line, not from labels, so a filter that matches nothing shows an empty panel, and a stopped Loki shows the data source as unavailable instead.
+
 ## Host filesystem pressure {#host-filesystem-pressure}
 
 **Open:** Hosts and containers.
