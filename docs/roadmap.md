@@ -13,6 +13,13 @@ corrects stale starting points, and separates mandatory reliability work from
 conditional feature proposals. It is planning only; it changes no runtime,
 production code, infrastructure or dependencies.
 
+**Extension, 27 November 2026.** Phase 10.5 (operational hardening,
+observability and reliability) is added between Phase 10 and Phase 11 and is a
+mandatory prerequisite for Phase 11. No existing phase was renumbered or
+rewritten, and its evidence and checkpoints are unchanged. The extension is
+planning only: it changes no runtime, migration, Compose file, test or
+deployment, and every one of its checkpoints is open.
+
 This roadmap is part of the product contract in `AGENTS.md`. Security comes
 first, measured performance second, and simplicity third. A conflicting idea
 stops here until the contract and documented evidence are reconciled. Work
@@ -97,7 +104,7 @@ PostgreSQL remains the owner of desired state; derived state stays rebuildable.
 | --- | --- | --- |
 | F1 / P0 for deployments relying on rule limits as an abuse boundary | Runtime `rate_limit_exceeded` returns false for new keys refused by `domain_budget.admit` or on counter allocation failure. `rate_limit_isolation.py` explicitly expects the attacked domain to lose counting. Other tenants and built-in domain/Nginx protections remain; this is not proof of a WAF bypass or data leak. Source confidence high; trigger cost and exploit impact unmeasured. | Finish the remaining Phase 3 overflow work first. Define a bounded, conservative domain-scoped fallback using reserved capacity; new keys must not silently evade the rule's protection. Test repeated requests on keys first seen after exhaustion, allocator pressure and a healthy comparison domain. |
 | F2 / P1 | Unresolved historical telemetry/loading observations and pending browser qualification can conceal incomplete behavior. They are not proven serving defects. | Reproduce on stamped images, distinguish fixture timing from runtime failure, and close four separate completion fields. Escalate to P0 only if reproduction shows isolation, serving or last-valid-state failure. |
-| F3 / P1 | Origin TLS verification can be disabled and HTTP is accepted. Public unverified traffic is exposed to interception/impersonation; source does not show one tenant changing another's settings. | Qualify and document current modes; review secure defaults and bounded custom trust before changing compatibility. Optional origin mTLS follows ordinary server verification, never substitutes for it. |
+| F3 / P1 | Origin TLS verification can be disabled and HTTP is accepted. Public unverified traffic is exposed to interception/impersonation; source does not show one tenant changing another's settings. | Qualify and document current modes; review secure defaults and bounded custom trust before changing compatibility. Optional origin mTLS follows ordinary server verification, never substitutes for it. Update, 27 November 2026: the owner requires new origins to default to verification off; Phase 10.5 Stage H records that change and its documentation and keeps every stored explicit value. |
 | F4 / P1 | Cache safety depends on response filters, internal header trust, normalization and purge agreeing after rewrites. Unknown-length responses require bounded spool/admission proof. No leak was demonstrated. | Qualify auth/cookies, repeated Vary, HEAD/Range, compression, rewrite/purge, full temporary storage and restart. Keep unsupported variants uncacheable; hit ratio never outranks isolation. |
 | F5 / P1 | Combined gateway/cells/agent/Vector/DNS, sustained load, bursts and recovery were not measured after local improvements. Per-container limits do not ensure whole-host headroom. | Establish integrated saturation/recovery baselines before tuning quotas, buffers, connection reuse or log volume. Preserve source/global protections; do not improve benchmarks by weakening admission. |
 | F6 / P1 feasibility, P2 implementation | DNSSEC and origin client authentication offer useful authenticity, but require signing/key/DS or per-tenant certificate lifecycle and recovery not currently present. | Complete bounded feasibility/security decisions first. Reuse PowerDNS, artifact delivery and encrypted TLS storage. Defer implementation if restoration or rotation cannot be proved without new infrastructure. |
@@ -202,9 +209,15 @@ reputation, and 9 JWT/discovery are conditional; an explicit deferral removes
 their optional fields from dependent scopes, never waives a core security gate.
 This avoids the Phase 7/8 reputation dependency cycle.
 
+Phase 10.5 runs after Phase 10 and before Phase 11. It is mandatory, not
+conditional. Its stages have their own order, stated in the phase, and Phase 11
+cannot start its release gate until all of its checkpoints are closed.
+
 Each change uses existing queues, revisioned snapshots, signing, stores and
 qualification machinery. No synchronous runtime effects, new service, general
-expression language or second evaluator. Invalid candidates retain previous
+expression language or second evaluator. The one exception is the optional
+origin health-check container admitted in Phase 10.5 Stage G, with the limits
+stated there. Invalid candidates retain previous
 valid state. Time-limited trust/mitigations also honor expiry/revocation; last
 valid state must not mean trusting a revoked key or keeping a stale block forever.
 
@@ -1187,6 +1200,14 @@ line.
 
 **Dependencies.** Phases 2, 3 and 4 for core traces. Phases 7 and 8 only for their admitted signal fields; deferred signals are explicitly unavailable.
 
+**Relationship to Phase 10.5.** Historical analytics, traces, episodes and
+views stay in ClickHouse and are not a source of durable accounting. Durable
+usage and accounting summaries, the ClickHouse-independent dashboard state and
+their freshness labels belong to Phase 10.5 Stage B. Remaining Phase 10 work
+reads those summaries and adds no PostgreSQL table that grows with events;
+an episode needs only bounded state for its alert, and unavailable analytics
+shows as unavailable, never as zero. The Phase 10 checkpoint below is unchanged.
+
 **Acceptance criteria.**
 
 - For every mitigated request in a harness run, the trace names the stage and
@@ -1207,13 +1228,693 @@ cell to ClickHouse to the API. Browser tests for traces, episodes, and views.
 
 ---
 
+## Phase 10.5: Operational hardening, observability and reliability
+
+**Execution plan.** Priority: P1 mandatory prerequisite for Phase 11. Stage H
+changes a security default at the owner's explicit request and is P1 for the
+documentation of its consequence. Stage G is P1 only after Stages E, F and H.
+
+**Ordered stages.** The stage letters are identifiers, not the order of work.
+Execute in this order: 1. Stage A.1 audit (read-only baseline). 2. Stages H, F
+and I (small correctness and trust changes). 3. Stage B (data ownership and
+durable summaries). 4. Stage E (narrow Fleet changes). 5. Stage G (origin
+health infrastructure). 6. Stages C and D (edge pages, then headers). 7. Stages
+A.2 and A.3 (feature dashboards and Loki templates, after the new signals
+exist). 8. Stage J. 9. Stage K.
+
+**Security, resources and failure boundary.** No new database, observability
+platform, tracing system, queue or analytics store. One service is admitted:
+the optional origin health-check container of Stage G, with the limits stated
+there. Telemetry, dashboards, logging and probing failures never stop serving
+and never turn missing evidence into a healthy or a zero value. Every runtime
+change follows the AGENTS.md path: authorize, validate, write desired state
+and revision in one transaction, dispatch one unique job, sign, activate
+atomically, verify, and keep the previous valid state.
+
+Each stage closes the shared phase gate with the phase-specific tests and
+acceptance criteria. Scope not named in this phase is excluded.
+
+**Objective.** Make the platform tell the truth about itself: dashboards and
+logs that can be trusted, durable usage that does not depend on ClickHouse,
+anonymous edge-generated pages, a configurable public header namespace,
+service-level Fleet changes, origin health that is correct and bounded by a
+budget instead of the number of edges, and health that separates the platform
+from its customers.
+
+**Current state.** Written from a source and configuration inspection of `dev`
+at `c4fb583f` plus the working tree on 27 November 2026. No stack was started,
+no dashboard was rendered and no test was run for this section. Every row below
+is a source observation; none is a runtime measurement. Statuses use the
+vocabulary of section 1, with **Confirmed defect** for behavior the source
+states directly.
+
+| ID | Area | Status | Evidence in the inspected paths | Consequence and open question |
+| --- | --- | --- | --- | --- |
+| H1 | Grafana inventory | Verified inventory | 35 dashboards in 8 folders generated by `docker/grafana/build_dashboards.py`, 23 library panels, four provisioned alert rules and data sources Prometheus, ClickHouse, the control database and Loki. `tests/e2e/grafana_observability.py` already runs every panel target against its real source. | The audit starts from this inventory and runner. Panel-by-panel correctness was not established. |
+| H2 | Dashboard filters | Confirmed defect | Every dashboard declares `environment`, `region`, `pop`, `edge`, `pool`, `domain` and `hostname`. In `dashboards_security.py` the shared `RAW` and `RAW_WEEK` conditions carry no variable filter, so WAF processing time, top rules, top client networks, ASNs, user agents and paths ignore the selected region, PoP, edge and often domain. The logs explorer query `{service=~"$service", level=~"$level"}` ignores `environment`, `host` and `domain`. | A narrowed view silently shows fleet-wide numbers. Enumerate every inert or partly applied variable per panel. |
+| H3 | Empty versus zero | Confirmed defect (mechanism); per-panel impact unverified | `dashboard_lib.py` sets `noValue` to "No traffic" for every panel whose unit is `reqps`, `Bps`, `bps`, `short` or `none`, by unit and not by meaning. 26 query lines use `or vector(0)`. | A count such as exclusions in use or emergency modes can read "No traffic", and an absent series reads as an actual zero. Zero, no traffic, no match, disabled, unsupported, stale and unavailable are not distinguished. |
+| H4 | Percentiles | Unverified | Prometheus panels use `histogram_quantile` over the recording rule `cdnf:edge_latency_bucket:rate5m`. ClickHouse panels use `quantilesTDigestMerge` on rollups, and the WAF panels use exact `quantile` on raw `edge_events`. | Three methods answer one question. Bucket bounds, merge order and agreement were not compared. |
+| H5 | Query cost | Unverified | 33 dashboards refresh every 30 s and two every 10 s, over a one- or six-hour default; many ClickHouse panels read raw `edge_events` (7-day TTL). The platform sets `max_execution_time` 3 s for Laravel only. | Concurrent dashboards may amplify ClickHouse load. Grafana's own query limits were not found. |
+| H6 | Feature visibility | Missing | No panel, recording rule or alert references challenge outcomes or difficulty, challenge-key synchronization, shared or long-window rate limits, client reputation, JWT validation, IP lists, incident profiles, staged rulesets or expiring rules. `shadow_rule` and `request_rule` exist in the ClickHouse event, and `rule_matches_hourly` already has a shadow view. No `grafana_*` read model exists for the rate, reputation, challenge-key or list tables. | The data for part of the list exists and only needs panels. The rest needs a small bounded signal first. |
+| H7 | Loki | Partial | Vector sets the low-cardinality labels `environment`, `host`, `service` and `level` and keeps request, operation, job, task, domain, edge, cell and revision identifiers in structured JSON (`OperationalJsonFormatter`). `cdnf-logs-explorer` holds one markdown table of per-service queries, `cdnf-incident` and `cdnf-request-trace` hold one query each. Retention (168 h default), bounded disk buffers and Docker log rotation (10 MB by three files) exist, and alerts cover Loki and collector failures. | There are no reusable templates by failure class, and no identifier variables. Whether the Go services emit the same normalized fields as Laravel is unverified. |
+| H8 | Usage summaries | Partial | `usage_rollups` holds hour, day and month rows per `domain_id` with requests, bytes in and out, cache hits and DNS queries, compacted by `cdnf:usage:compact` (35 hourly and 365 daily days by default). The admin and domain panels read it when ClickHouse is down. | See H9 to H12. |
+| H9 | Usage finalization | Confirmed defect | `cdnf:usage:finalize` queues only the single hour that ended. It never catches up after an outage. `BuildUsageRollups` writes a `finalized` row for every domain and hour, with zeros when ClickHouse returns no row for the domain, so a Vector or telemetry outage is stored as final zero usage. It records `source_finalized_at` as the build time, not as a completeness statement. | Gaps and false zeros become permanent, and a compacted row is never rebuilt. This is the direct opposite of the billing-readiness rule that missing telemetry is never free usage. |
+| H10 | Usage attribution and durability | Confirmed defect | Rows carry `domain_id` only, with `ON DELETE CASCADE` to `domains`. DNS counts are mapped from the zone name to the current domain names. Nothing records which user or account owned the domain in a period. | Deleting a domain deletes its accounting rows, and a later owner change rewrites history by omission. Whether final deprovisioning hard-deletes the row (the report uses `withTrashed`) is unverified. |
+| H11 | Accounting guarantee | Confirmed limitation | Vector buffers use `when_full: drop_newest`. `edge_events` is plain `MergeTree` and the hourly views are `SummingMergeTree`, so a retried delivery is counted twice and a dropped event is lost. Raw events live 7 days and hourly rollups 400 days. | Telemetry is at-least-once on retry and lossy on saturation. It is a usable operational measure and not a durable accounting source. No edge-side counter exists to reconcile against. |
+| H12 | Write volume | Confirmed | The build writes a row per domain per hour even for zero traffic. At the default retention one domain holds about 840 hourly, 330 daily and 12 yearly month rows. | PostgreSQL grows with domains times hours, not with traffic. At roughly 230 bytes per row with three indexes that is about 0.27 MB per domain, or about 27 GB at 100,000 domains. These are estimates for Stage B to measure. |
+| H13 | Other PostgreSQL growth | Partial | Security events are bucketed per domain, edge, reason and hour with a unique index and a retention prune. Rate and reputation reports, edge tasks, purges, orders, operations, audit logs and revisions each have a prune command or setting. `edge_probe_results` holds one latest row per observer, target and address. | Each is bounded by design. The product of domains, edges, reasons and hours per table was never computed or measured, and the probe table grows with the square of the edge count. |
+| H14 | ClickHouse outage | Partial | Panel widgets catch the failure and show an unavailable state, usage reads PostgreSQL, and the client uses a 1 s connect and 4 s total timeout. The security event list and rule impact paths throw `AnalyticsUnavailableException`. | Fallback summaries carry no age, finalization or completeness label, and several widgets can each wait up to 4 s in one render. Per-component isolation was not tested. |
+| H15 | Edge-generated pages | Partial; unverified in a browser | Only the browser challenge, a plain-text maintenance body and JSON rejection bodies are written by the runtime. Most rejections end in a bare `ngx.exit(status)`, so Nginx's built-in page names the server software (`server_tokens off` does not remove the "openresty" footer), and the gateway's 421 has an empty body. The challenge page is already minimal, light and dark, nonce-bound and states no product name, but it sets the cookie `cdnf_chal` and the element id `cdnf-solver`. | Pages are inconsistent and some reveal the runtime. Which status a visitor receives after `ngx.exit(444)` in `origin_failure` was not observed. |
+| H16 | Public headers | Confirmed defect | The runtime emits `X-CDNF-Cache`, `X-CDNF-Origin`, `X-CDNF-Origin-Transition`, `X-CDNF-Error`, `X-CDNF-Security-Reason` and `Server` as one platform switch (`diagnostic_response_headers`, default off). A snapshot that predates the setting shows them. The access log reads the same names from the upstream. There is no ray header, no PoP header and no per-domain control. Client `X-CDNF-*` request headers are stripped. Whether an origin or a response rule can set a response header with that prefix was not tested. | The prefix is hard coded in the runtime and in the telemetry format. `X-CDNF-Origin` reveals the origin role. Nothing correlates a visitor's response to a log line. |
+| H17 | Fleet granularity | Confirmed defect (source); effect unmeasured | A release diff yields roles, and `node_needs_restart` is `role in d.roles`. A configuration change re-renders a node bundle, and the plan is `provision`, `upload`, `validate`, `activate`, `gate`, with `activate` running `start.sh` (`docker compose up -d`). The management and telemetry allowlists are environment values of the `caddy` and `telemetry-gateway` services, so a change to either list changes their Compose configuration. | An allowlist edit is planned as a whole-node activation and likely recreates two ingress services. Dashboard files are probably release configs of the monitoring role (unverified). The plan names no service and no availability impact. No container-ID or start-time test exists. |
+| H18 | Origin health state | Confirmed defect | `dns_records.origin_health` is one JSON value. A manual test, a scheduled test and a passive failure report each overwrite it, and the passive writer stores `status: unhealthy`. The panel column falls back to "Not tested" and colors only healthy and unhealthy. | There is no disabled, pending, degraded, unknown or stale state. A passive failure can replace active evidence and the reverse. With checks disabled a record can still read unhealthy with no label saying why. |
+| H19 | Probe fan-out | Confirmed defect | Each scheduled check is an `origin_test` operation that creates one task for every heartbeat-fresh placement edge, up to 20, so the load on one origin per interval is the smaller of the placement size and 20, not a budget. The probe runs inside the edge agent (`runOriginTest`). It already refuses blocked destinations, pins approved addresses, follows no redirects and reads at most 4 KiB. Separately, each edge probes every other PoP's listeners every 15 s (at most 128 targets), which grows with the square of the edge count. | Probing is neither isolated from the agent nor independent of fleet size. Customer-origin traffic is already capped at 20 edges, which is still too many for one origin. |
+| H20 | Probe controls | Missing | The per-origin settings are `enabled`, `path` and an interval of 60 to 86,400 s. There is no platform switch, no per-destination or per-user budget, no regional selection, no confirmation rule and no deduplication across domains that share an origin. | A customer can multiply load by adding domains. A restarted fleet is spread only by a per-record jitter of at most 300 s. |
+| H21 | Origin TLS default | Confirmed (current) | The API requires `verify_tls`. The panel toggles default to on and force it off for HTTP. The Phase 0 record decided that no secure-origin-mode change is proposed. | The owner has now required the creation default to be off. This reverses that decision for new origins only. Import paths were not inspected. |
+| H22 | Platform health | Confirmed defect (source); effect on a live status page unverified | `SystemHealth` counts every failed `edge_task`, every failed TLS order and every pending, non-tombstone DNS deployment as platform degradation, and the public status page maps them to "Runtime tasks", "Certificates" and "Zone changes". A failed `origin_test` task is an `edge_task`, and a customer's failed ACME order is a `TlsOrder`. Delegation is checked per domain in `domains`. | Customer origin failures, certificate failures and, if pending deployments exist before delegation, unverified domains can show the platform as degraded. Whether an unverified domain creates a DNS deployment was not tested. |
+| H23 | Correlation | Partial | `request_id` exists in the edge event, the Loki JSON and the request trace dashboard. The visitor never receives it, and the nginx identifier is not documented as a stable public reference. | A visitor's report cannot be joined to a log line. |
+
+Not found and not assumed: a second analytics store, a tracing system, or any
+external provider on the request path. None is added by this phase.
+
+**Scope.** Stages A to K below. Each stage records durable state, permissions,
+external effects, retry, rollback and exact bounds before coding.
+
+### Stage A: Observability audit and completion
+
+**A.1 Dashboard correctness (audit first, then fix).**
+
+- Build the panel inventory from the provisioned JSON, not from documentation:
+  for every folder, dashboard, library panel, variable, target, transformation,
+  link, threshold, unit, `noValue`, alert reference and data-source permission,
+  record the query, the source table or series, the filter variables it honors,
+  its time range and refresh, and whether it can distinguish the seven states
+  below. Extend `grafana_observability.py` to emit this inventory and to run
+  every panel with specific variable values, not only `All`.
+- Validate against real data on a seeded stack: Prometheus recording rules and
+  counter resets, ClickHouse aggregation and duplicate counting, the PostgreSQL
+  `grafana_*` read models, Loki queries, variable cascades, region, PoP, edge,
+  cell and domain filters, percentile agreement, cache-hit and bandwidth units
+  (bits versus bytes, per second versus per interval), stale series, obsolete
+  and unsupported metrics, and per-panel query cost (ClickHouse `query_log`
+  rows read, duration and memory).
+- Every panel states which of seven conditions it shows: an actual zero, no
+  traffic, no matching records, disabled functionality, an unsupported metric,
+  stale information (with age) and an unavailable data source. Replace unit-
+  based `noValue` with per-panel semantics. Remove `or vector(0)` wherever it
+  turns an absent series into a value, and replace it with an explicit
+  unavailable or no-data state. Never invent data, hide a failed query or tint
+  a failure green.
+- Panels that ignore a selected filter either honor it or say, on the panel,
+  that they are fleet-wide. Panels over raw events state their seven-day limit.
+- Decide one percentile method per question and document the difference where
+  two remain. Record the cost of each dashboard at the default range and
+  refresh, and set a ratified budget; reduce refresh or move to a rollup where
+  a panel exceeds it.
+
+**A.2 Visibility for current features.** Reuse the Security overview, WAF,
+Telemetry integrity, Origin health, Cache, Control plane and Domain overview
+dashboards. Add panels, not dashboards, unless a dashboard would exceed its
+folder's panel budget. Required coverage, each with its source:
+
+| Capability | Signal and source to confirm |
+| --- | --- |
+| Managed WAF, shadow rules, staged rulesets, expiring rules | Existing ClickHouse fields (`waf_*`, `shadow_rule`, `request_rule`, `rule_matches_hourly`) plus a `grafana_*` view for staged and expiring rules |
+| Challenge outcomes and adaptive difficulty | Reason values already in `security_reason`; a bounded per-cell counter by outcome and difficulty band if the log cannot answer |
+| Challenge key synchronization | Key epoch and acknowledgement age per edge from the control database |
+| Shared and long-window rate limits | Report age, keys over threshold and aggregation lag from the rate report tables |
+| Client reputation | Report age, band counts and shadow-versus-enforced state |
+| JWT validation, IP lists, incident profiles | Denial counts by reason and list or profile version per cell |
+| Cells, gateways, resource saturation | Existing gateway and cell capacity metrics, extended with shared-memory and descriptor use where the cell reports them |
+| Configuration revisions | Desired versus active revision and age per edge, domain and cell |
+| Telemetry delivery and loss | Vector accepted, dropped and rejected counters tied to the integrity dashboard |
+
+A signal that does not exist is marked unsupported on the panel until it is
+added. A new Prometheus series must carry only fixed-value labels and the
+existing PoP and edge labels. No domain, client or request label is added to
+Prometheus.
+
+**A.3 Loki investigation templates.** Extend `cdnf-logs-explorer`; do not
+duplicate HTTP access or DNS query logs into Loki, which stay in ClickHouse.
+Provision one reusable LogQL template per class: all errors and critical
+events; control plane; jobs and scheduler; edge agent; gateway and cells;
+origin connectivity and TLS; DNS and zone synchronization; certificate
+issuance and renewal; WAF runtime; challenge failures; shared rate-limit and
+reputation processing; configuration deployment and revision mismatch; telemetry
+delivery; database and queue; Fleet deployment, rollback, backup and recovery;
+and request or operation correlation. Variables: environment, host, service,
+severity (existing labels), and domain, edge, cell, request ID, operation ID,
+task ID, revision, event type and free text, applied as parsed fields and never
+as new labels. Add normalized fields to the Go services only where a class has
+none, with redaction unchanged. Qualify with a seeded log fixture that every
+template returns a known line, that a mismatched filter returns an explicit
+empty state, that no label exceeds its cardinality budget, and that a Loki
+outage shows unavailable rather than empty. Preserve bounded disk buffers,
+retention and asynchronous delivery.
+
+**Acceptance.** The panel inventory is complete and committed with its checks.
+No panel conflates the seven conditions or ignores a filter without saying so.
+Every listed capability has a panel or a recorded unsupported marker. Every
+template returns its seeded line. The measured query cost of each dashboard is
+within its recorded budget.
+
+### Stage B: Storage ownership, bounded summaries and analytics availability
+
+**B.1 Ownership.** Record one table in the operations documentation and
+enforce it in review.
+
+| Store | Owns | Does not own |
+| --- | --- | --- |
+| PostgreSQL | Configuration, users and authorization, domains and DNS, security policy, certificates, edge and Fleet inventory, transactional and required live security state, bounded operational history, durable usage and accounting summaries, last-known dashboard summaries, latest origin monitoring state | Per-request, per-query, per-event or per-probe rows |
+| ClickHouse | Raw HTTP and DNS events, detailed traffic, cache, geography and latency analytics, historical security and origin-probe observations, high-volume telemetry | Anything the control plane needs to run, or the only copy of finalized accounting |
+| Valkey | Queues, leases, scheduling coordination, bounded transient counters | Anything that must survive a restart as a record |
+| Loki | Operational application and container logs | Traffic logs |
+| Prometheus | Bounded operational metrics and alert evaluation | Per-domain or per-client series |
+
+**B.2 Growth audit.** For every PostgreSQL table, record its dataset class
+(authoritative configuration, transactional state, required live security
+state, accounting summary, dashboard fallback summary, temporary coordination
+state or historical telemetry), its writers, readers, indexes, prune path, row
+bound as a formula, JSON field maximum and WAL contribution. Do not remove
+`usage_rollups`, and do not move live security coordination state (mitigations,
+reputation bands, challenge keys, lists) into ClickHouse. A table that grows
+with request, query or event volume is moved, bucketed or capped.
+
+**B.3 Durable summaries.** Extend the existing `usage_rollups` mechanism; do not
+add a second one. Direction to evaluate, with Expand and Contract migrations:
+
+- Keep the unique `(domain, interval, granularity)` shape and add the measured
+  fields that the telemetry can support: upload and download bytes (existing
+  `bytes_in`, `bytes_out`), total transferred, cache-served requests and bytes,
+  origin-served requests, mitigation total, and DNS queries, each defined by the
+  existing ClickHouse rollup definitions so a dashboard and a summary agree.
+- Add an account attribution that is written with the row, not derived from the
+  domain's current owner: the owning user at the time of the interval, with
+  ownership changes splitting the period. Rows stop cascading on domain delete;
+  a deleted domain's accounting rows remain under a retained identifier until
+  their retention policy ends.
+- Replace write-per-domain-per-hour with sparse rows plus an explicit coverage
+  record, so a domain with no traffic costs nothing but its coverage. Evaluate
+  dropping hourly rows from the default and keeping day and month only, with the
+  shortest hourly window the dashboards actually need.
+- Retention tiers: current period and a short hourly window, bounded daily rows,
+  finalized monthly rows, and a long accounting tier only where an explicit
+  policy requires it. No redundant copy of an aggregate.
+- Record expected PostgreSQL size at 100, 1,000, 10,000 and 100,000 domains with
+  the formula and a measurement on a populated database, for rows, table, index
+  and WAL, and show that raising the request rate tenfold does not change them.
+
+**B.4 Availability without ClickHouse.** Define, per component of both panels,
+what it shows when ClickHouse is down: authentication, authorization, domain,
+DNS and proxy management and usage summaries stay fully usable, finalized
+accounting stays readable, and last-known totals stay visible. Detailed views
+show an explicit temporary-unavailable state and never a zero. Every fallback
+summary shows its last successful update, its age and one of **current,
+delayed, stale, incomplete** plus its finalization status. Components load
+independently with a bounded timeout and a short-lived failure memory (an
+existing cache entry, not a new circuit-breaker library), so one dead query does
+not delay the page by the sum of the widgets' timeouts. A dashboard total that
+is stored is labeled as stored, with its age.
+
+**B.5 Billing readiness (foundation only).** No invoice engine, price, wallet or
+gateway. Define and test:
+
+- States: provisional, finalized, reconciled, corrected and incomplete usage,
+  stored per period with the reason for each correction.
+- Idempotent aggregation keyed by source interval and a source watermark;
+  duplicate prevention; late events within a bounded window re-open the period
+  to provisional and are recorded as a correction rather than rewriting a
+  finalized row silently; a catch-up job that walks every missing interval.
+- A period is never finalized while telemetry completeness is unknown or below
+  a ratified threshold; it becomes `incomplete` with the measured gap. Missing
+  telemetry is never zero and never estimated.
+- Reconciliation of ClickHouse against an independent count the edges can
+  report (for example per-edge request and byte counters sent in the existing
+  heartbeat), so loss and double delivery are measured. State plainly which
+  guarantee is missing today (H11) and whether the counters close it. If they
+  do not, the documentation says usage is an operational measure and not an
+  invoice-grade record.
+- Account attribution, domain ownership change, counter correction and period
+  finalization are each covered by a test.
+- Finalized and corrected summaries are inside the backup set and the documented
+  restore test.
+
+**B.6 Retention and growth guarantees.** Record a measured bound and a check for
+PostgreSQL rows, table and index sizes, WAL per day and JSON size; temporary
+security reports; operational history; dashboard and accounting summaries;
+ClickHouse partitions and TTLs; Valkey memory; Loki and Prometheus retention;
+Vector buffers; and Docker log rotation. Run them under representative HTTP,
+DNS, security and operational workloads at two request rates and show no
+proportional PostgreSQL growth. Ship the migration with a reconciliation query
+that compares old and new totals, a backup before it, and a tested rollback.
+Existing finalized rows are never recomputed.
+
+**Acceptance.** Storage ownership is documented and each table is classified.
+No PostgreSQL table grows with request volume in the measured run. The usage
+build catches up after a ClickHouse outage, marks the gap `incomplete` and
+never writes a final zero for missing telemetry. Both panels remain usable with
+ClickHouse stopped, within a recorded time, with age and status on each
+summary. A domain deletion and an owner change leave earlier accounting intact.
+
+### Stage C: Anonymous edge-generated pages
+
+**C.1 Inventory and design.** Enumerate every response the edge writes itself:
+browser challenge and failure, access denied, security block, rate limit,
+origin unavailable, timeout and TLS failure, gateway error, service
+unavailable, capacity rejection, maintenance, and unknown or unavailable
+domain (including the gateway's empty 421). Use one small shared template for
+the HTML case: neutral background, system font stack, spacing, a simple heading,
+one or two short sentences, a responsive layout, light and dark through
+`prefers-color-scheme`, and an optional opaque reference. Reuse the existing
+challenge styling. No external CSS, font, script, image, animation or framework.
+Self-contained HTML with a nonce'd inline style under the existing CSP.
+
+**C.2 Anonymity.** No product, project, platform, vendor or runtime name, logo,
+powered-by line, project or repository link, or identifier that reveals the
+product, in visible text, `<title>`, metadata, comments, accessible names, the
+`Server` header, cookie names, DOM ids, script identifiers or static error
+content. Rename the challenge cookie and element ids to neutral values with an
+overlap period so a challenge in flight survives the change. Replace Nginx's
+built-in error pages, which name the server software, for every edge-generated
+status.
+
+**C.3 Correctness.** Preserve each status code, `Retry-After`, content
+negotiation (JSON and API clients keep a machine-readable body), HEAD without a
+body, `Cache-Control: no-store`, the CSP and challenge nonces, challenge
+verification, accessibility and existing security semantics. Do not expose
+origin addresses, stack traces, rule internals, versions or topology. Origin-
+generated error pages are not replaced unless an existing policy requires it.
+Decide, from observation, what a visitor receives after an origin failure, since
+the internal `444` path was not observed.
+
+**Acceptance.** A scripted audit lists every edge-generated response, and a
+search of every response body and header for the forbidden names finds none.
+Each page has a rendered snapshot in light and dark at desktop and phone width,
+an accessibility scan, and a functional check (status, headers, HEAD, JSON,
+challenge solve and failure, retry). Browser qualification uses the existing
+disposable-cell suites. The `X-CDNF-*` internal request headers are unchanged.
+
+### Stage D: Configurable public headers and domain diagnostics
+
+**D.1 Namespace.** One typed platform setting holds the public prefix, default
+`cdnf-`. Validate it as an HTTP field-name token with a length limit, lowercase,
+ending in a hyphen, and reject collisions with standard headers, the internal
+security and forwarding headers (`X-CDNF-Internal-*`, `X-CDN-*`,
+`X-Forwarded-*`), authentication and cookie headers, hop-by-hop and reserved
+protocol fields, and any current platform control header. The internal control
+namespace is fixed and never customizable. The value is compiled into the
+existing signed snapshot, applied by cells on activation without a restart, and
+read by the runtime from the snapshot instead of from string literals. During
+mixed-version rollout a cell without the field keeps the current names; the
+snapshot carries both until every cell reports the new version, then the old
+names stop. State the migration of previously exposed `X-CDNF-*` names, and
+rename the telemetry-only upstream channel so it no longer shares the public
+prefix.
+
+**D.2 Default headers.** The public contract is `ray`, `cache-status`, `pop`
+and `mitigated` under the prefix, for example `edge-ray`. `ray` is the real
+per-request identifier, unique per request and never copied from a cache entry,
+a client or an origin, and is the same value stored in `request_id` so a visitor
+reference joins a log line (Stage J). `cache-status` reports the actual cache
+decision. `pop` is an intentionally public label set by the administrator, not
+a host, cell or topology name. `mitigated` appears only on responses the edge
+itself refuses and that policy permits disclosing. No IP, cell identifier,
+version, revision, rule internals or credential appears in any default header.
+Client, origin and response-rule values for any header in the public namespace
+are removed or overwritten, and the existing response-rule validation rejects
+a rule that names it.
+
+**D.3 Diagnostics.** Replace the single global switch with a platform policy and
+a per-domain value: inherit, enabled or disabled. Platform controls: the prefix,
+public-header enablement, the default diagnostic policy and an override that
+forces diagnostics off everywhere. New domains inherit a default of off, and an
+existing explicit setting is preserved, including a platform value that is
+currently on. Diagnostic headers use the same prefix with a clear `diag-`
+suffix group. Sensitive diagnostics (origin role, transitions, errors, rule
+details) stay in authenticated interfaces. Authorization follows the domain
+policies, the value travels in the signed snapshot, and a rollback restores the
+previous value.
+
+**Acceptance.** Changing the prefix reaches every cell without a restart and
+the old names stop at the stated time. A hostile client, origin and response
+rule cannot inject or suppress a public header. A cache hit shows its own ray.
+Each default header appears on the right responses only, and a domain with the
+override off emits no diagnostic header. Tests cover authorization, tenant
+isolation, cache correctness, signed propagation, rollback and a mixed-version
+fleet, on IPv4 and IPv6.
+
+### Stage E: Fleet service-level reconciliation
+
+**E.1 Impact map.** Add a declared dependency map from each configuration input
+to the smallest safe action, and compute the plan from it. The ladder is: no
+operation; atomic file update; supported live reload; targeted restart;
+targeted recreation; dependency-ordered rollout; and a node-wide activation
+only when nothing narrower is safe. Inputs to map: host firewall, management
+and telemetry allowlists, Prometheus targets and rules, Grafana provisioning,
+Loki, Vector, TLS material, environment values, secrets, images, database and
+edge and DNS configuration, networks and volumes. Starting candidates, each to
+be proven by measurement:
+
+| Change | Candidate action |
+| --- | --- |
+| Host firewall address list | Re-run the firewall script on the host; no container action |
+| Management or telemetry allowlist | Move the values to a file read by the two Caddy services and reload them; no recreation |
+| Dashboard or alert rule file | Replace the mounted file; Grafana and Prometheus reload without a restart |
+| Loki, Vector or Prometheus configuration | Validate, then the service's supported reload or one targeted restart |
+| Environment value used by one service | Recreate that service only |
+| Image digest | Recreate the services that use it, in dependency order |
+| An equivalent rendered bundle | No operation |
+
+**E.2 Plans.** The CLI and the local web page show one service-level plan per
+change: host, service, change, action, reason, expected availability effect,
+validation and rollback, derived from the same engine. Secret values are never
+printed. Signed releases, digest-pinned images, secure firewall operations,
+SSH, the deployment lock, HA ordering, boot recovery and the last-known-good
+bundle stay as they are. A failed narrow step rolls back that step and leaves
+the rest.
+
+**E.3 Verification.** Regression tests on real containers prove that unrelated
+container IDs, start times and restart counts are unchanged for an allowlist
+edit, a dashboard edit, a Prometheus rule edit and a no-op apply, and that the
+targeted service did change. Measure request and DNS continuity during a reload
+and a targeted recreation. Cover partial failure, an invalid configuration
+refused before activation, and rollback.
+
+**Acceptance.** Each row of the map has a test. An allowlist edit changes no
+container. A dashboard edit leaves PostgreSQL, ClickHouse and Laravel
+untouched. An identical bundle produces an empty plan.
+
+### Stage F: Origin health state correctness
+
+**F.1 States.** Use one vocabulary: disabled, pending, healthy, unhealthy,
+degraded, unknown and stale. An origin with active monitoring off shows
+`Health check disabled`. Absent evidence is unknown or pending, never
+unhealthy.
+
+**F.2 Separate signals.** Store the scheduled active result, the manual test,
+the passive traffic failures, the runtime failover state and the historical
+reliability as separate fields or rows keyed by record and origin role (primary
+or backup), each with its source, observer, time and configuration checksum.
+A passive failure never overwrites an active result and the reverse. Turning
+active monitoring off clears the active state to disabled and does not disable
+passive detection or runtime failover. Handle an origin edit (checksum
+mismatch makes old evidence stale), a delayed or out-of-date report (dropped on
+revision mismatch), deletion, primary and backup roles and edge reassignment.
+Expire evidence by age to stale. Expand and Contract the column, with old
+`origin_health` readable until the new fields are written.
+
+**Acceptance.** The panel, API resource and Grafana show the same state for the
+same record. A table test covers every state transition, including disabled
+with an unhealthy passive report, and the runtime failover decision is shown to
+be unchanged by the monitoring switch.
+
+### Stage G: Dedicated, budgeted origin health-check infrastructure
+
+**Admission and reconciliation with the architecture rules.** The owner admits,
+on 27 November 2026, exactly one new optional container per edge host: the
+origin health-check worker. It is not a microservice: it has no inbound API, no
+datastore and no domain model, and it exists per host, never per domain. It
+reuses the agent's probe code and signed task contract. All other restrictions
+stand, including no per-domain process, timer or container. The AGENTS.md
+statement about new services and the roadmap rules that forbid a new service
+are amended by this narrow exception when implementation starts, not before.
+
+**G.1 Container.** A separate Go binary built from the edge-agent module that
+shares `runOriginTest` and `origin_policy`, started by the existing Fleet
+lifecycle as its own Compose service, not inside a serving cell, the gateway,
+a request worker, the agent process or Laravel. The agent only delivers signed
+tasks and forwards results. The container has its own lifecycle and readiness
+report, explicit CPU, memory and PID limits, bounded concurrency, a bounded
+queue, a bounded outbound rate, a read-only root with no other mounts, no
+capabilities, and an egress rule that permits only public origin addresses and
+the agent's local socket. Candidate limits to ratify from measurement: 0.25
+CPU, 128 MB, 128 PIDs, 8 concurrent probes, a 256 task queue. Priority
+protection for serving is by cgroup weight and a host-level check that the
+worker stops pulling work when the cell's CPU or connection headroom is below a
+threshold. Updating or restarting the container never restarts a serving cell.
+
+**G.2 Platform switch.** A typed administrator setting enables or disables
+active origin monitoring for the whole platform. Disabled means: no scheduling,
+queued and expiring probe tasks cancelled safely, no outbound probe, evidence
+set to disabled, passive detection and failover untouched, and the container not
+deployed or stopped by the Fleet lifecycle so it costs nothing idle. The
+platform switch overrides every domain and origin setting; a domain switch
+works only while the platform allows it. The default for new installations is
+off. On upgrade it is on if any origin already has a scheduled check, and the
+migration states this; an operator can turn it off at any time.
+
+**G.3 Regional scheduling.** The control plane schedules and never probes. For
+each origin it selects a bounded set of regions from the domain's real serving
+topology (its pools and placements), and from each region one representative
+worker, instead of every edge. Starting design: one worker per eligible
+region, at most one normal scheduled probe per region per origin per interval,
+a configurable maximum number of regions and workers per origin, a hard
+per-origin probe budget per interval, and a deterministic stagger. Do not
+assume every edge in a continent reaches an origin alike. The implementation
+design must justify the grouping (continent, region, pool or administrator
+set) against the actual fleet's region labels and pools, with the weaker
+policies kept as evaluated alternatives. One automatic policy is the default;
+administrators control only the minimum interval, global and per-destination
+budgets, the maximum representative count and worker budgets. A domain user can
+lower, never raise, any limit.
+
+**G.4 Worker selection and failover.** Choose a worker by eligibility,
+region, readiness, freshness, spare capacity, network compatibility (IPv4 and
+IPv6) and current probe load. Assign it through the existing expiring
+`edge_tasks` rows with a lease, so two workers cannot run the same probe.
+Rotate the representative on a schedule. When the worker is unavailable, assign
+one other eligible worker within the same budget and mark the first as a worker
+failure, not an origin failure. A failed task is never broadcast to all edges.
+
+**G.5 Origin protection budgets.** Enforce, in the control plane before a task
+exists and again in the worker: probes per origin, per destination address and
+port, per domain, per user, per worker and for the platform; concurrent
+probes; retries and confirmation probes; response bytes (the existing 4 KiB
+read); and connection duration. Mechanisms: a minimum interval, deterministic
+stagger with bounded jitter, retry backoff, global and per-destination
+concurrency, duplicate suppression, failure-aware scheduling, queue expiry and
+load shedding. Probes for different domains that resolve to the same address,
+port, host header, SNI, path and TLS policy are deduplicated into one probe whose
+result is stored for each domain that is authorized to see it, and results never
+cross tenants. Probes that cannot be merged share one destination budget, so
+creating more domains, hostnames or records adds no probe capacity. A fleet
+start or restart does not burst: first runs are spread over the interval from
+a stable per-origin offset and a global start-up rate limit.
+
+**G.6 Failure confirmation.** One failed regional probe never marks an origin
+globally down. Record and show separately: confirmed origin failure, regional
+connectivity failure, worker failure, local network failure, timeout, missing
+evidence and stale evidence. Confirm a failure with one other eligible worker
+or region, inside the same per-origin budget, then apply bounded failure and
+recovery thresholds. Show results as sampled by region and say plainly that
+representative probes do not show that every edge reaches the origin. Active
+evidence never withdraws a healthy serving edge or changes global routing on
+its own, and passive per-edge traffic evidence is kept apart from it.
+
+**G.7 Policies.** Evaluate automatic regional selection, one per continent, one
+per region and a bounded administrator set, and ship the automatic policy. Every
+numeric default in this stage is a candidate that needs feasibility and
+performance evidence first.
+
+**G.8 Network and probe security.** The worker probes from the same network
+vantage as serving: verify equivalent reachability, source routing, DNS
+resolution, IPv4 and IPv6, the Host header, SNI, the origin TLS policy of Stage
+H and egress firewall rules. Keep and extend the existing controls: destination
+exclusions and connection-time revalidation, address pinning against rebinding,
+no private, link-local, metadata or platform destinations, no redirects, signed
+task authorization with expiry and replay protection, tenant isolation, a
+response-size limit and timeouts. The worker is never an arbitrary request or
+scanning service: it accepts only a signed task built from a stored origin.
+
+**G.9 Results.** Keep only bounded latest state in PostgreSQL, keyed by record,
+origin role, signal and region, with an age. Store each probe observation in
+ClickHouse through the existing telemetry path with a probe identifier for
+idempotency and a TTL. No PostgreSQL row per probe. The control surfaces show
+the latest state while ClickHouse is down.
+
+**G.10 Qualification.** Use real containers and a simulated-edge harness for
+3, 10, 80 and 100 or more edges; several continents and regions; several edges in
+one region; several domains on one origin; worker failure; whole-origin and
+regional origin failure; control plane down; container restart; platform switch
+off; domain switch off; delayed, duplicate and expired tasks; a configuration
+change during probing; resource saturation; and a simultaneous fleet start. Show
+that the number of probes, the maximum concurrency and the load on each
+destination follow the configured budget and not the edge count (the count at
+10 and at 200 edges must be equal for the same origins and regions apart from
+confirmation probes), and measure CPU, memory, network, and the effect on
+serving throughput and latency with the benchmark in `edge_cell_benchmark.py`
+with probing on and off.
+
+**Acceptance.** The criteria in G.10 hold with recorded numbers. Disabling the
+platform switch stops all probes and every container within a stated time. The
+serving benchmark difference is inside the ratified noise bound. No scenario
+produces a probe the budget forbids.
+
+### Stage H: Origin TLS verification default
+
+New origin configurations default to **Verify origin TLS: off**. This is an
+explicit product requirement and it lowers the default protection from the
+Phase 0 position that the panel defaults to on. Required work:
+
+- Audit every entry point: domain creation, DNS and proxy record creation, the
+  admin and domain panels, the API (where `verify_tls` is currently required),
+  imports, primary and backup origins, runtime configuration and the
+  health-check worker. Define the omitted-field behavior of the API as an
+  Expand and Contract change to the OpenAPI document: an omitted value on create
+  becomes false, an explicit value is always kept, and an omitted value on
+  update never changes the stored one.
+- Preserve every stored explicit value. An old configuration that lacks the
+  field is not treated as unverified by the migration; its current effective
+  behavior is read and kept.
+- Keep the setting easy to turn on. When on, the runtime must enforce the
+  certificate chain, hostname, validity dates and the SNI. When off, still send
+  the SNI that the origin expects and apply every destination check.
+- Document that HTTPS without verification encrypts the connection but does not
+  authenticate the origin, so a network attacker can impersonate or intercept
+  it, and put that wording next to the control in the panel and the API
+  reference. The health-check worker follows the same per-origin policy.
+- Do not change TLS verification for any other platform connection (control,
+  agent, ACME, telemetry, DNS and backup).
+
+**Acceptance.** A new origin created through each entry point stores false;
+an existing true or false is unchanged by upgrade; enabling it produces
+verified connections and a failure on an invalid chain, name or date; the
+worker agrees with the runtime in a paired test; documentation and the OpenAPI
+check pass.
+
+### Stage I: Platform health and customer health
+
+**I.1 Platform health.** Only conditions of the shared platform: control plane,
+database, queues, DNS infrastructure, the edge fleet, shared routing,
+configuration delivery, infrastructure certificates, telemetry, backup
+readiness, high availability and shared capacity.
+
+**I.2 Customer health.** Domain-specific conditions: pending or lost delegation,
+unconfigured nameservers, customer DNS problems, origin availability, a
+customer's certificate problems and domain configuration errors. These are
+shown to the domain's users and to authorized administrators, in a separate
+group and a separate count. A new, unverified domain, or any number of them,
+never changes the platform status or the public status page. A platform fault
+that affects customer domains (a failed placement, an undeliverable revision, a
+DNS deployment that fails for a verified domain) stays in platform health. Do
+not hide an infrastructure fault by calling it customer-specific; classify each
+existing check by cause, with a test per classification, starting with failed
+edge tasks, failed TLS orders and pending DNS deployments (H22).
+
+**I.3 Consistent semantics.** Review the public status page, liveness and
+readiness endpoints, the administrator health API, customer dashboards, Grafana,
+Prometheus, Alertmanager, Fleet health gates, notifications, availability
+calculations and SLOs, and use one state vocabulary: serving availability,
+management availability, observability availability, customer configuration
+health, regional health, disabled and insufficient evidence. An unavailable
+analytics database is an observability fault and never reports serving as down.
+
+**Acceptance.** A test fixture with many unverified domains, failed customer
+orders and unhealthy customer origins leaves the platform status healthy and
+shows each customer condition to its owner. A fixture with a real platform
+fault changes it. Every consumer of health uses the same classification.
+
+### Stage J: Cross-system reliability
+
+Evaluate with a measurement for each item and fix only what is demonstrated:
+
+- Correlation: the public `ray` equals the ClickHouse `request_id`, appears in
+  the Loki line that mentions it, and links the request trace dashboard, the
+  panel log view and the support reference. Operation and task identifiers carry
+  through the control plane, agent and Loki.
+- Configuration drift and stale acknowledgements; signed snapshot delivery;
+  activation on edges and cells; security dataset synchronization.
+- Telemetry failure isolation and buffer saturation, with drops counted.
+- Database query amplification, excessive polling and unnecessary scheduled
+  work (the scheduler has 22 per-minute jobs of 45 entries, and the edge agents poll),
+  resource exhaustion, slow dashboards and wrong timeouts.
+- Missing alerts for the new signals of Stages A, B, F and G and for backup
+  and recovery completeness, including the accounting tier.
+- PoP-to-PoP listener probing grows with the square of the edge count; measure
+  it at 80 and 100 edges and cap it if its cost is not negligible.
+- Serving continues while ClickHouse, Loki, Grafana, Prometheus, the telemetry
+  transport and the control plane are each stopped in turn; the WAF, challenge,
+  JWT, IP list, shared rate-limit, reputation and overlay guarantees hold.
+
+**Acceptance.** Each item has a recorded measurement and either a fix with its
+test or a documented reason it is not needed. The serving-continuity matrix
+passes on real cells.
+
+### Stage K: Qualification
+
+Per stage, close the four gate fields separately. Use the existing tooling:
+`grafana_observability.py`, `edge_cell_benchmark.py`, the E2E suites in
+`tests/e2e`, the contract and qualification tests, Playwright under
+`tests/browser` and `production_qualification.py`; add scripts only for new
+behavior. Required evidence:
+
+- The complete panel inventory and the runtime query run, with Loki templates.
+- PostgreSQL growth at two request rates, the storage formula and the
+  ClickHouse-down check of both panels.
+- Usage catch-up, reconciliation, correction, late-event, ownership-change and
+  incompleteness tests, and the billing-readiness limitation text.
+- The page audit and the forbidden-name search; the prefix, spoofing and
+  diagnostics tests.
+- The Fleet no-restart tests with continuity numbers.
+- The origin state table, the platform switch, the 3 to 200 edge probe runs
+  with budget, resource and serving-impact numbers, and the TLS default tests.
+- The platform and customer health fixtures and the security regression suite
+  for every changed runtime path.
+- A before and after measurement for each performance-relevant change on the
+  same host and workload, with budgets taken from the baseline and not
+  invented, and an upgrade and rollback run from the previous release.
+
+A test that was not executed is not reported as passed, and planning is never
+recorded as implementation.
+
+**Dependencies.** Phase 0 evidence reconciliation, and the shipped Phases 3 to 9
+and the Phase 10 paging and trace already on `dev`. Stage G needs Stages E, F
+and H. Stage D needs Stage E (no unrelated restart). Stages A.2 and A.3 need the
+new signals of B, F and G. Phase 10's remaining episode and view work uses the
+summaries of Stage B and must not add its own storage. Phase 11 requires this
+phase complete.
+
+**Migration requirements.** Expand and Contract for every changed field
+(`origin_health`, usage columns and the cascade, the header setting, the
+verify default). Each migration is production-safe, reversible or paired with a
+restore point, and ships with a reconciliation check. PowerDNS migrations stay
+separate. No volume removal, no destructive refresh, and no `RefreshDatabase`
+test against PostgreSQL.
+
+**Verification.** PHP feature tests for permissions, validation, idempotency,
+failure and last valid state; Go and Lua tests for the runtime, agent and the
+worker; Python E2E under `tests/e2e` on real cells and containers with IPv4 and
+IPv6; the Phase 1 harness re-run with numbers recorded; and `tests/browser` for
+every changed screen and page with snapshots and accessibility checks. The
+documentation (operators, users, API reference, OpenAPI, Fleet reference,
+Grafana reference and the roadmap record) is updated with each stage.
+
+**Remaining uncertainties for implementation-stage evaluation.** Whether an
+unverified domain creates a DNS deployment that counts as drift; what a visitor
+receives after the internal `444`; whether Compose recreates containers for an
+allowlist-only change and whether a bundle directory swap leaves stale file
+mounts; per-panel dashboard defects beyond the mechanisms above; the agreement
+of the three percentile methods; whether edge counters can close the accounting
+gap; whether the Go services already emit normalized log fields; the right
+regional grouping for the real fleet; and the ratified numeric limits.
+
+**Completion checkpoint, 27 November 2026.**
+
+| Implementation | Documentation | Automated/runtime | Browser |
+| --- | --- | --- | --- |
+| Open: planning only; nothing in Stages A to K is implemented | Open: this section is the only change; no operator or user page is updated | Open: no test run for this phase; the observations above are source inspection | Open: the page, panel, dashboard and Fleet web gates are required and not run |
+
+Phase 10.5 is not complete.
+
+---
+
 ## Phase 11: Full qualification and external review
 
 **Execution plan.** Priority: P1 release gate; reproduced unsafe failure is P0.
 
 **Ordered stages.** 1. Reconcile every earlier gate against one release manifest. 2. Execute integrated load, IPv4/IPv6, failure, recovery and soak scenarios. 3. Obtain scoped external security review and close release-blocking findings.
 
-**Security, resources and failure boundary.** No production/customer testing or new fleet topology just for optional features. Use existing qualification tooling; choose the smallest topology that proves actual PoP/cell failover and record coverage limits. Measure whole-host headroom, disk/network limits, recovery and rollback, not summed container throughput.
+**Security, resources and failure boundary.** No production/customer testing or new fleet topology just for optional features. The origin health-check container admitted in Phase 10.5 is part of the standard edge host and release manifest, not an added topology. Use existing qualification tooling; choose the smallest topology that proves actual PoP/cell failover and record coverage limits. Measure whole-host headroom, disk/network limits, recovery and rollback, not summed container throughput.
 
 Each stage closes the shared phase gate with the phase-specific tests and
 acceptance criteria. Scope not named in this phase is excluded.
@@ -1236,12 +1937,14 @@ release-matched external review was established by this audit.
   browser farm. The clean corpus runs at the same time.
 - **Failure injection**: control plane down, agent down, a corrupt dataset, the
   scoring listener down, full shared memory, ClickHouse down, and a PoP lost.
+  Both panels stay usable with ClickHouse down, and probe traffic stays inside
+  its Phase 10.5 budget during each injection.
 - **A WAF performance envelope** on the reference cell: requests per second and
   latency for each profile and feature, and the saturated resource.
 - **An external review** of the challenge tokens and keys, dataset signing,
   tenant isolation, and the bypass corpus.
 
-**Dependencies.** Phase 0, required work in Phases 1 to 10, and Phase 12 integration. Conditional capabilities need an explicit admission or deferral decision, not a placeholder implementation.
+**Dependencies.** Phase 0, required work in Phases 1 to 10, **Phase 10.5 (mandatory, complete with every checkpoint closed)**, and Phase 12 integration. Conditional capabilities need an explicit admission or deferral decision, not a placeholder implementation.
 
 **Acceptance criteria.**
 
@@ -1425,24 +2128,24 @@ admission/deferral decision before dependent work begins.
 | Domain overview and administration / Partial qualification | Claims, delegation, assigned users and both panels already manage desired state. | P1: preserve lifecycle/permission paths; Stage 0A proves competing parent/child claims, revocation, deletion and idempotency. No registrar, new hierarchy or dashboard. |
 | Authoritative/secondary DNS and DNS analytics / Partial qualification | Hidden primary plus TSIG/catalog secondaries and dnstap/ClickHouse already provide serving/replication/visibility. | P1: finish Stage 0B negative-answer, transfer/expiry, serial, dual-stack and loss/rcode evidence. External multi-provider secondary imports are deferred: conflicting state ownership adds little immediate value. |
 | DNSSEC / Missing lifecycle | Authenticating signed answers requires both signing and a valid parent DS chain; it does not encrypt DNS. | P1 feasibility, P2 conditional implementation: first evaluate key ownership/escrow, Geo-DNS and signed transfers; then, if admitted, revisioned signing/DS workflow; finally real validating-resolver tests for rotation, expiry, stale DS, restore, TCP and larger responses. No hand-managed runtime-only keys. Defer if recovery cannot preserve trust without new infrastructure. |
-| Secure origin modes / Partial | Server verification authenticates the origin; current HTTP/unverified TLS remain explicit modes. | P1: qualify current semantics and review defaults/custom trust with a migration/rollback plan. Measure handshake/reuse cost with the same trust policy. Never improve latency by disabling certificate or destination checks. |
+| Secure origin modes / Partial | Server verification authenticates the origin; current HTTP/unverified TLS remain explicit modes. | P1: qualify current semantics and review defaults/custom trust with a migration/rollback plan. Measure handshake/reuse cost with the same trust policy. Never improve latency by disabling certificate or destination checks. Phase 10.5 Stage H sets the creation default to off at the owner's request; stored explicit values are preserved and the limit is documented. |
 | Origin client authentication / Missing | A client certificate lets an origin verify the requesting CDN identity; the origin must enforce it to prevent direct bypass. | P2 conditional: first define per-tenant key scope and origin enforcement; then reuse encrypted storage and assigned signed delivery; finally qualify overlap rotation, revoke/expiry, cross-tenant refusal, backup origins and handshake cost. No shared cross-tenant credential or new CA service. Server verification remains required. |
 | WAF, custom/managed rules and account protection / Partial | Signature scores, typed policy and basic schema/password/prompt heuristics exist. They do not establish calibrated bot/attack probabilities. | P1: finish Phases 1 to 4/6 and bounded schema checks; P2 conditional JWT. Corpus accuracy, body coverage, memory and failure behavior precede new detections. Keep response scanning limitations explicit. |
-| API identity gateway / Missing, Not needed | Management-panel authentication is separate from authenticating applications proxied through the CDN. | Reject a new identity/Access gateway: sessions, callbacks, upstream identity availability and protocol bypass are a separate product. Retain application/origin authentication and policy-based management. |
+| API identity gateway / Missing, Not needed | Management-panel authentication is separate from authenticating applications proxied through the CDN. | Reject a new identity gateway: sessions, callbacks, upstream identity availability and protocol bypass are a separate product. Retain application/origin authentication and policy-based management. |
 | Bot signals and AI crawler control / Partial policy building blocks | Typed UA matching exists; real crawler identity requires maintained, verified datasets. robots.txt is advisory, not proof of identity. | P2 conditional after Phases 4/5/7: first establish provenance/freshness; then reuse typed crawler policy and existing analytics; finally qualify spoofed claims, stale ranges, clean crawlers and rollback. Fingerprint/heuristic scoring waits for measured false-positive and operating value. No separate crawler service, monetization or external request-path check. |
 | Agent readiness and Markdown responses / Missing, Not needed | Readiness guidance concerns origin content; negotiated HTML conversion changes response bytes, validators and cache variants. | P3: documentation guidance only if requested. Reject runtime HTML-to-Markdown conversion and automatic page rewriting: untrusted parsing and variant costs are unjustified. Origins can serve negotiated content. |
 | Cache diagnostics / Partial | HIT/MISS/BYPASS, typed cache policy and purge exist; redacted reasons would make incorrect admission or TTLs easier to diagnose. | P1 correctness, P2 diagnostics through Phases 0B/10: first qualify variants/internal-header trust; then expose bounded no-store/bypass/purge reason metadata; finally test auth/cookies/Vary/rewrite and cross-tenant redaction through runtime/API/UI. Reuse current log line; budget bytes and cardinality. |
 | Tiered caching / Missing | An upper cache tier can reduce origin fetches after lower-tier misses. | Defer P3 until measured origin amplification remains costly after current locking/admission. Feasibility must count extra latency, inter-PoP traffic, purge consistency and upper-tier outage. No extra serving dependency without evidence of net value. |
-| Persistent cache reserve / Missing, Not needed | An object-store cache adds a further freshness/revalidation/retention layer. | Reject now: new credentials, consistency, egress and recovery obligations. The backup object store does not become a serving cache. |
+| Persistent object-store cache / Missing, Not needed | An object-store cache adds a further freshness/revalidation/retention layer. | Reject now: new credentials, consistency, egress and recovery obligations. The backup object store does not become a serving cache. |
 | HTTP/2, WebSockets and compression / Partial qualification | Existing listeners, origin options and Gzip/Brotli support need streaming/variant and resource evidence. | P1: measure connection reuse, handshake and compression CPU/bytes before tuning. Qualify ETag/Vary/Range/Content-Length and sensitive responses. No new codecs, minification or response-body transformations without benefit. |
 | HTTP/3 and gRPC / Missing qualified edge paths | QUIC changes client transport; gRPC requires upstream HTTP/2 and stream/trailer semantics, not merely an HTTP/2 listener. | Defer P3 HTTP/3 and P2 demand-gated gRPC. TCP gateway routing does not automatically support UDP; stream-body WAF limits must be explicit. Admission needs identity/SSRF/resource/timeout design and real dual-stack long-stream/failure tests, not a protocol toggle. |
 | Redirect/rewrite/header/cache rules / Partial qualification | Phase 12 already implements bounded typed mutations after security, with protected origin/Host semantics. | P1: close its browser and release gates. No second engine, arbitrary origin override, custom regex or rule language. Measure worst-case misses and rule cardinality without dropping security order. |
 | Rule simulation / Partial preview | Validation preview is not execution simulation; historical estimates are only as complete as stored fields. | P2 conditional after Phase 4: first specify unknown fields and trace scope; then reuse one matcher with bounded synthetic input; finally prove trace/runtime agreement. No origin probe from arbitrary simulated input, secret replay or duplicate evaluator. |
 | Custom errors / Built-in responses; customer templates missing | A small status-preserving response can improve incident usability without general response rewriting. | Defer P3 until demanded. Bound template bytes, allow no script or remote fetch, preserve status/Retry-After and private/no-store, and prove no shared cached error leaks. Reuse current response handling; no template runtime. |
-| Origin failover, health and steering / Partial qualification | Validated primary/backup, hysteresis, hold-down/failback, pool endpoints and Geo-DNS already exist. | P1: qualify active/passive disagreement, both-down, DNS TTL lag, unsafe/partial retries, IPv4/IPv6 and recovery. No arbitrary origin pool, smart-routing service or affinity before existing behavior is proved. |
-| Programmable edge routes / Missing, Not needed | Customer code would execute before origin requests; typed rules already address bounded transformations. | Reject code execution, snippets and plugin runtimes: tenant sandboxing, CPU accounting, outbound policy and language lifecycle create a new platform. |
+| Origin failover, health and steering / Partial qualification | Validated primary/backup, hysteresis, hold-down/failback, pool endpoints and Geo-DNS already exist. | P1: qualify active/passive disagreement, both-down, DNS TTL lag, unsafe/partial retries, IPv4/IPv6 and recovery. No arbitrary origin pool, smart-routing service or affinity before existing behavior is proved. Phase 10.5 Stages F and G correct the health states and bound active probing by a budget. |
+| Programmable edge routes / Missing, Not needed | Customer code would execute before origin requests; typed rules already address bounded transformations. | Reject code execution, scripts and plugin runtimes: tenant sandboxing, CPU accounting, outbound policy and language lifecycle create a new platform. |
 | Log export and live diagnostics / Export present; live stream missing | Existing gzip HTTPS/S3 export has cursor-after-acceptance, retry and retention-gap semantics. Existing ClickHouse logs can support bounded polling. | P1 export/freshness/loss proof through Phases 0B/10; P2 conditional polling before streaming. Bound sessions, queries, retention and redaction; show sampling/drops/lag. No synchronous subscriber or new streaming service, and no exactly-once delivery claim. |
-| DDoS and network controls / Partial local protection | Gateway/cell connection, request and incident controls are bounded local defenses; a saturated uplink is outside their capacity. | P1 failure/capacity truth. Reject volumetric-scrubbing claims, new BGP control and machine-learned scoring. Keep the existing Simple Anycast contract; no architecture expansion to imitate a larger network. |
+| DDoS and network controls / Partial local protection | Gateway/cell connection, request and incident controls are bounded local defenses; a saturated uplink is outside their capacity. | P1 failure/capacity truth. Reject volumetric-scrubbing claims, new BGP control and machine-learned scoring. Keep the existing Simple Anycast contract; no architecture expansion beyond what the measured capacity supports. |
 | Email DNS versus mail forwarding / DNS records present; forwarding missing, Not needed | MX/TXT can describe mail policy; routing/catch-all would receive and deliver messages to verified destinations. | Reject forwarding/catch-all: SMTP queues, abuse, loops, retries and forwarding authentication are a new operational plane. Retain email DNS; bounded SPF/DKIM/DMARC diagnostics only when requested, with no automatic policy rewrites. |
 | Image optimization / Byte caching present; transformations missing, Not needed | Decode/resize/transcode creates expensive derived variants. | Reject in this roadmap: decoder vulnerabilities, bombs, source-fetch SSRF and variant explosion lack a demonstrated need. Cache origin-produced variants. |
 
@@ -1474,7 +2177,7 @@ No new library or infrastructure requirement follows from a reference.
 
 The roadmap is complete when:
 
-- Phase 0, required work in Phases 1 to 12, and every admitted optional stage
+- Phase 0, required work in Phases 1 to 12, Phase 10.5, and every admitted optional stage
   have passed their gates on the same release. Deferred candidates are recorded
   as out of scope, never as implemented or passed.
 - Each retained capability has scoped, release-matched verification or an
@@ -1501,8 +2204,8 @@ The review sampled every requested subsystem's entry points, data flow and
 trust boundaries; it is not a line-by-line security proof. Source absence
 findings remain scoped to the inspected paths. Historical records retain their
 original attribution and workload limits. Public primary documentation informed
-the capability decisions; no provider dashboard or comparative benchmark was
-used to establish superiority or performance.
+the capability decisions; no outside product, dashboard or comparative
+benchmark was used to establish performance.
 
 During this planning audit, `python3 -m unittest discover -s tests/contract`
 passed **55 tests in 2.507 seconds**, and
