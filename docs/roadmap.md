@@ -2268,6 +2268,14 @@ Evaluate with a measurement for each item and fix only what is demonstrated:
   transport and the control plane are each stopped in turn; the WAF, challenge,
   JWT, IP list, shared rate-limit, reputation and overlay guarantees hold.
 
+**Record, 27 November 2026 (Stage J, partial).**
+
+| Item | Measurement | Result |
+| --- | --- | --- |
+| PoP-to-PoP probing cost (`ProbeRoundCostTest`, in-memory SQLite, one report of N-1 results, in a fleet of N edges) | Before: 37, 326 and 370 queries (51, 213 and 214 ms) at 10, 80 and 100 edges for a round in which nothing changed; at 100 edges reporting every 17 s that is about 2,200 control-database queries a second. | Fixed: the controller reads the observer's rows once, writes only a changed or 60-second-old result in one batched upsert, and evaluates DNS publication only when a result flipped. After: 2 queries (5, 24 and 33 ms) at every size. A change is still recorded at once. The 128-target cap and the 15 s interval of the agent were already in place; the dials per edge stay at most 128 targets, two connections each. |
+| Serving continuity (`serving_continuity_matrix.py`, a real cell logging to the development Vector, 120 requests per case: a proxied page, a blocked request, a refused method, each with its public reference header) | Baseline p50 2.3 ms, p99 9.4 ms. With Vector, ClickHouse, Loki, Grafana, Prometheus, Horizon and the application stopped in turn: p50 2.3 to 3.3 ms, p99 7.7 to 11.5 ms, no failed or 5xx request, no lost header. | Passed for these seven services on one cell; each was restored and waited for. Not covered: the WAF scoring, challenge, JWT, IP list, shared rate limit, reputation and overlay guarantees during each outage, the control plane as a whole host, a PoP restart, and IPv6. |
+| Correlation, drift and stale acknowledgements, signed snapshot delivery, security dataset sync, telemetry buffer saturation, scheduler and polling load (22 per-minute jobs), timeouts, missing alerts for the new signals | Not measured | Open. |
+
 **Acceptance.** Each item has a recorded measurement and either a fix with its
 test or a documented reason it is not needed. The serving-continuity matrix
 passes on real cells.
