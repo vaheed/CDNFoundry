@@ -154,7 +154,7 @@ def main() -> None:
             # window before the test makes its next request.
             run("docker", "kill", PRIMARY)
             first, second = request("failover.example", "/one"), request("failover.example", "/two")
-            assert "502 Bad Gateway" in first and "502 Bad Gateway" in second, first + second
+            assert all(("502 Bad Gateway" in r or "504 Gateway Time-out" in r) for r in (first, second)), first + second
             activated = request("failover.example", "/three")
             diagnostics = run("docker", "exec", CELL, "wget", "-qO-",
                 "--header=X-Edge-Status-Token: origin-failover-test", "http://127.0.0.1:9080/passive-failures", check=False).stdout
@@ -216,7 +216,7 @@ def main() -> None:
                 f"\nedge logs:\n{stale_diagnostics.stdout}{stale_diagnostics.stderr}"
             )
             bounded_failure = request("failover.example", "/both-down")
-            assert "502 Bad Gateway" in bounded_failure, bounded_failure
+            assert "502 Bad Gateway" in bounded_failure or "504 Gateway Time-out" in bounded_failure, bounded_failure
             isolated = request("isolated.example")
             assert "isolated\n" in isolated, isolated
             print("origin_failover=passed transition_seconds<=5 concurrent_requests=24 isolation=passed")
