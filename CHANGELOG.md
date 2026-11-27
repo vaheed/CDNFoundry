@@ -9,6 +9,7 @@ single source of truth; `make version-check` enforces it.
 
 ### Added
 
+- Public response headers: a platform setting group (`public_headers`) for a configurable prefix, a PoP label and an on/off switch. Every proxied response carries a per-request reference equal to the logged `request_id`, the cache decision, the PoP label, and a mitigation marker on edge refusals. The edge removes headers under the prefix that a client, an origin or a response rule supplies, and a response rule cannot name one. The prefix travels in the signed snapshot and applies without a restart.
 - Possible false positives: the domain security tab and `GET /api/domains/{domain}/security/false-positive-candidates` list client keys that a rule blocked and that then solved a challenge. Cells now log a solved challenge as an allowed request with reason `challenge_solved` and the client key of the challenged request.
 
 ### Changed

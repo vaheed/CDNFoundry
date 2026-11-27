@@ -275,6 +275,40 @@ because they read the same values on the edge before the headers are removed.
 Changing it queues a global edge reconciliation, so it reaches every edge as one
 signed revision. The `Server` header never shows a version, whatever the setting.
 
+## Public response headers
+
+| Field | Default | Allowed |
+| --- | --- | --- |
+| `enabled` | true | boolean |
+| `prefix` | `cdnf-` | lowercase words joined by hyphens, ending in a hyphen, at most 24 characters |
+| `pop_label` | empty | letters, digits, `.`, `_` and `-`, at most 32 characters; empty sends none |
+
+With the default prefix a proxied response carries up to four short headers:
+
+| Header | Value |
+| --- | --- |
+| `cdnf-ray` | The reference of this request: 32 hexadecimal characters, new for every response (a cache hit included) and equal to the `request_id` stored in the edge log. Quote it to find the request. |
+| `cdnf-cache-status` | The cache decision: `HIT`, `MISS`, `EXPIRED`, `STALE`, `REVALIDATED`, `UPDATING` or `BYPASS`. Not sent on a response the edge itself refuses. |
+| `cdnf-pop` | The public label you set in `pop_label`. It is never a host, cell or topology name. Not sent while the label is empty. |
+| `cdnf-mitigated` | `1`, only on a response the edge itself refused. It names no rule and no reason. |
+
+No address, host name, cell, version, revision, rule detail or credential appears
+in any of them. The edge removes every header under the prefix that a client, an
+origin or a response rule supplies, so a visitor cannot be shown a forged value,
+and a response rule cannot name a header under the prefix. This holds while the
+headers are switched off as well. The prefix must not start a name that HTTP, a
+cache, a browser policy, authentication, cookies or the platform own (`x-`,
+`content-`, `cache-`, `set-`, `sec-` and similar), and the internal control
+namespace is fixed and cannot be chosen.
+
+Changing a field queues a global edge reconciliation and reaches every cell in one
+signed revision, without a restart. A cell that still runs a snapshot without these
+fields sends no public header and removes nothing, so during a rolling change the
+old behavior stays until the cell receives the new revision. The `X-CDNF-*`
+diagnostic headers above are separate and unchanged. A person who parsed the
+earlier `X-CDNF-Cache` header should read `cdnf-cache-status` instead; the old
+header stays under the diagnostic switch until its stage ends.
+
 ## API examples
 
 A `PATCH` of `edge_runtime`, `origin_safety`, or `proxy_defaults` returns
