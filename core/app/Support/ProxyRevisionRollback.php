@@ -99,7 +99,7 @@ final class ProxyRevisionRollback
         $proxy = is_array($settings) ? Validator::make($settings, [
             'enabled' => ['required', 'boolean'], 'redirect_https' => ['required', 'boolean'],
             'http_versions' => ['required', 'array', 'min:1', 'max:2'], 'http_versions.*' => ['in:1.1,2'],
-            'retry_count' => ['required', 'integer', 'between:0,2'], 'maintenance' => ['nullable', 'array'],
+            'retry_count' => ['required', 'integer', 'between:0,2'], 'maintenance' => ['nullable', 'array'], 'diagnostics' => ['sometimes', 'in:inherit,enabled,disabled'],
             'maintenance.status' => ['required_with:maintenance', 'integer', 'in:503'],
             'maintenance.body' => ['required_with:maintenance', 'string', 'max:4096'],
         ])->validate() : null;

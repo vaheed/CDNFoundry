@@ -97,7 +97,7 @@ class SystemSettingsTest extends TestCase
         $this->actingAs($admin)->withHeader('Idempotency-Key', (string) Str::uuid())
             ->patchJson('/api/admin/system/settings/public_headers', ['values' => ['prefix' => 'edge-', 'pop_label' => 'eu-west']])
             ->assertStatus(202)->assertJsonPath('data.setting.revision', 2)->assertJsonPath('data.operation.type', 'system_settings.update');
-        $this->assertSame(['enabled' => true, 'prefix' => 'edge-', 'pop_label' => 'eu-west'], SystemSetting::query()->findOrFail('public_headers')->values);
+        $this->assertEquals(['enabled' => true, 'prefix' => 'edge-', 'diagnostics_force_off' => false, 'pop_label' => 'eu-west'], SystemSetting::query()->findOrFail('public_headers')->values);
         $this->assertDatabaseHas('audit_logs', ['action' => 'system_settings.updated', 'subject_id' => 'public_headers']);
 
         foreach (['x-cdnf-', 'x-forwarded-', 'x-cdn-', 'cookie-', 'content-', 'set-cookie-', 'Edge-', 'edge', 'edge_', '-edge-', str_repeat('a', 30).'-'] as $invalid) {

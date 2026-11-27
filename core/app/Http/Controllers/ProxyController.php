@@ -35,12 +35,14 @@ class ProxyController extends Controller
         $data = $request->validate([
             'enabled' => ['required', 'boolean'], 'redirect_https' => ['required', 'boolean'],
             'http_versions' => ['required', 'array', 'min:1', 'max:2'], 'http_versions.*' => ['in:1.1,2'],
-            'retry_count' => ['required', 'integer', 'between:0,2'], 'maintenance' => ['nullable', 'array'],
+            'retry_count' => ['required', 'integer', 'between:0,2'], 'maintenance' => ['nullable', 'array'], 'diagnostics' => ['sometimes', 'in:inherit,enabled,disabled'],
             'maintenance.status' => ['required_with:maintenance', 'integer', 'in:503'],
             'maintenance.body' => ['required_with:maintenance', 'string', 'max:4096'],
         ]);
         DB::transaction(function () use ($domain, $data, $request): void {
             $locked = Domain::query()->lockForUpdate()->findOrFail($domain->id);
+            // A request that does not mention the diagnostic choice keeps the one the domain already has.
+            $data['diagnostics'] ??= $locked->proxy_settings['diagnostics'] ?? 'inherit';
             $locked->update(['proxy_settings' => $data, 'revision' => $locked->revision + 1]);
             AuditLog::record($request->user(), 'proxy.defaults_updated', $locked, ['revision' => $locked->revision], $request->ip());
         });

@@ -128,10 +128,18 @@ class ReconcileEdgeDomain implements ShouldBeUniqueUntilProcessing, ShouldQueue
         $proxySettings = is_array($domain->proxy_settings) ? $domain->proxy_settings : self::defaults();
         $proxySettings['enabled'] = $domain->lifecycle_state === DomainLifecycleState::Active
             && ($proxySettings['enabled'] ?? true);
-        // One platform-wide switch; a domain's explicit proxy settings can never override it.
-        $proxySettings['diagnostic_headers'] = (bool) app(PlatformSettings::class)->get('proxy_defaults', 'diagnostic_response_headers');
+        // Diagnostics: the platform can force them off; otherwise the domain's own choice wins, and Inherit follows the platform default.
         $publicHeaders = app(PlatformSettings::class)->values('public_headers');
-        $proxySettings['public_headers'] = ['enabled' => (bool) $publicHeaders['enabled'], 'prefix' => (string) $publicHeaders['prefix'], 'pop' => (string) $publicHeaders['pop_label']];
+        $choice = in_array($proxySettings['diagnostics'] ?? null, ['inherit', 'enabled', 'disabled'], true) ? $proxySettings['diagnostics'] : 'inherit';
+        $diagnostics = ! $publicHeaders['diagnostics_force_off'] && match ($choice) {
+            'enabled' => true,
+            'disabled' => false,
+            default => (bool) app(PlatformSettings::class)->get('proxy_defaults', 'diagnostic_response_headers'),
+        };
+        $proxySettings['diagnostics'] = $choice;
+        // Cells that predate the public headers read this field and follow the same decision.
+        $proxySettings['diagnostic_headers'] = $diagnostics;
+        $proxySettings['public_headers'] = ['enabled' => (bool) $publicHeaders['enabled'], 'prefix' => (string) $publicHeaders['prefix'], 'pop' => (string) $publicHeaders['pop_label'], 'diagnostics' => $diagnostics];
         $tlsCertificates = $domain->tls_mode === 'disabled' ? collect() : ($domain->tls_mode === 'custom'
             ? collect([$domain->activeTlsCertificate])->filter()
             : $domain->tlsCertificates->where('kind', 'managed')->where('status', 'active')->filter(fn ($certificate) => $certificate->expires_at->isFuture()));
