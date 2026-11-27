@@ -19,6 +19,8 @@ from pathlib import Path
 from typing import Any
 
 LADDER = ("none", "firewall", "file", "reload", "restart", "recreate", "node")
+# The actions that have an activation narrower than the full one (see actions.plan_config_change).
+NARROW = ("none", "firewall")
 
 # (path prefix or exact name, kind, services that read it, action, reason, availability, validation, rollback)
 # Files are matched in order; the first match wins.

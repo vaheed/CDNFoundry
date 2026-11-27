@@ -50,7 +50,7 @@ class Transport(Protocol):
 class Step:
     id: str
     node: str
-    kind: str  # pin | prereq | enroll | provision | prepull | upload | validate | activate | gate | rollback | switchover
+    kind: str  # pin | prereq | enroll | provision | prepull | upload | validate | activate | activate_firewall | activate_files | gate | rollback | switchover
     detail: str = ""
 
     def label(self) -> str:
@@ -215,7 +215,7 @@ class Engine:
             log(f"{step.label()}: {'ok' if ok else 'FAILED'} {detail}".strip())
             if not ok:
                 # Before the swap the node still runs its old release; there is nothing to undo on it.
-                swapped = step.kind in {"activate", "gate"}
+                swapped = step.kind in {"activate", "activate_firewall", "activate_files", "gate"}
                 rolled = self._rollback([step.node] if swapped else [], upgraded if not self.mixed_versions_ok else [], log)
                 state["done"] = []
                 self.journal.save(state)
@@ -418,11 +418,14 @@ class Engine:
             if self.switchover:
                 self.switchover(step.node)
             return True, ""
-        if step.kind == "activate":
-            # Safe to run twice: a retry after a dropped connection finds the swap already done and only starts the services.
+        if step.kind in {"activate", "activate_firewall", "activate_files"}:
+            # Safe to run twice: a retry after a dropped connection finds the swap already done and only runs what the change needs.
             # Only a bundle that passed its health gate (it carries .cdnf-good) becomes the rollback target; a broken one is discarded.
+            # A full activation starts the services. A firewall-only change re-runs the firewall step (its chains are swapped
+            # atomically) and a change to files no service reads only swaps the directory: no container, no migration.
+            then = {"activate": "./start.sh", "activate_firewall": "./firewall.sh", "activate_files": ":"}[step.kind]
             command = (f"set -e; if [ -d {remote}.next ]; then rm -rf {remote}.previous; if [ -d {remote} ]; then if [ -e {remote}/.cdnf-good ]; then mv {remote} {remote}.previous; else rm -rf {remote}; fi; fi; mv {remote}.next {remote}; fi; "
-                       f"cd {remote} && ./start.sh")
+                       f"cd {remote} && {then}")
             r = self._remote(step.node, target, command)
             if r.ok:
                 return True, ""
@@ -471,14 +474,24 @@ def plan_bootstrap(name: str, release: str, *, enroll: bool = False, prepull: bo
     return plan
 
 
-def plan_config_change(nodes: dict[str, dict[str, Any]], changed: set[str], release: str, *, ha_standby: str | None = None) -> Plan:
-    """Deploy re-rendered bundles to the nodes whose bundle changed; others are not touched."""
+NARROW_ACTIVATION = {"none": "activate_files", "firewall": "activate_firewall"}
+
+
+def plan_config_change(nodes: dict[str, dict[str, Any]], changed: set[str], release: str, *, ha_standby: str | None = None,
+                       narrow: dict[str, str] | None = None) -> Plan:
+    """Deploy re-rendered bundles to the nodes whose bundle changed; others are not touched.
+
+    `narrow` maps a node to the widest action its change needs (see the Fleet impact map). Only "none" and "firewall" have a
+    narrower activation than the full one; every other value, and a node that is not listed, gets the full activation.
+    """
+    narrow = narrow or {}
     plan = Plan("config", release)
     for name in order_nodes(nodes, ha_standby=ha_standby):
         if name not in changed:
             plan.skipped.append(name)
             continue
-        kinds = (("provision",) if nodes[name]["role"] in {"edge", "dns-edge"} else ()) + ("upload", "validate", "activate", "gate")
+        activation = NARROW_ACTIVATION.get(narrow.get(name, ""), "activate")
+        kinds = (("provision",) if nodes[name]["role"] in {"edge", "dns-edge"} else ()) + ("upload", "validate", activation, "gate")
         for kind in kinds:
             plan.steps.append(Step(f"{name}:{kind}", name, kind))
     return plan

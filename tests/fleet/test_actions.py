@@ -368,3 +368,47 @@ def test_a_failed_start_still_reports_when_the_logs_cannot_be_read(tmp_path: Pat
     new = manifest("2.0.1", D2)
     out = engine(tmp_path, t).apply(a.plan_upgrade(NODES, manifest("2.0.0", D1), new), new)
     assert out.failed == "pop-1:activate" and "boom" in out.detail and "could not read container logs" in out.detail
+
+
+def test_a_firewall_only_change_swaps_the_bundle_and_runs_only_the_firewall_step(tmp_path: Path) -> None:
+    t = FakeTransport()
+    plan = a.plan_config_change(NODES, {"dns-1"}, "2.0.0", narrow={"dns-1": "firewall"})
+    assert [s.kind for s in plan.steps] == ["upload", "validate", "activate_firewall", "gate"]
+    out = engine(tmp_path, t).apply(plan, manifest("2.0.0", D1))
+    assert out.ok
+    commands = [c for n, c in t.calls if n == "dns-1"]
+    assert any(".next" in c and c.rstrip().endswith("&& ./firewall.sh") for c in commands)
+    assert not any("./start.sh" in c for c in commands), "no service is started, so no container and no migration is touched"
+
+
+def test_a_change_to_files_no_service_reads_only_swaps_the_directory(tmp_path: Path) -> None:
+    t = FakeTransport()
+    plan = a.plan_config_change(NODES, {"pop-1"}, "2.0.0", narrow={"pop-1": "none"})
+    assert [s.kind for s in plan.steps] == ["provision", "upload", "validate", "activate_files", "gate"]
+    assert engine(tmp_path, t).apply(plan, manifest("2.0.0", D1)).ok
+    commands = [c for n, c in t.calls if n == "pop-1"]
+    assert not any("./start.sh" in c or "./firewall.sh" in c for c in commands)
+    assert any(c.rstrip().endswith("&& :") for c in commands)
+
+
+def test_every_wider_change_and_an_unlisted_node_keep_the_full_activation() -> None:
+    for widest in ("file", "reload", "restart", "recreate", "node", ""):
+        plan = a.plan_config_change(NODES, {"dns-1"}, "2.0.0", narrow={"dns-1": widest})
+        assert [s.kind for s in plan.steps] == ["upload", "validate", "activate", "gate"], widest
+    assert [s.kind for s in a.plan_config_change(NODES, {"dns-1"}, "2.0.0").steps] == ["upload", "validate", "activate", "gate"]
+    assert a.plan_config_change(NODES, set(), "2.0.0").steps == []
+
+
+def test_a_failed_narrow_step_rolls_back_that_node_and_leaves_the_rest(tmp_path: Path) -> None:
+    class Failing(FakeTransport):
+        def run(self, target, command, **kw):
+            if "./firewall.sh" in command and "start.sh" not in command and target.name == "dns-1":
+                self.calls.append((target.name, command))
+                return R(1, "", "iptables failed")
+            return super().run(target, command, **kw)
+
+    t = Failing()
+    plan = a.plan_config_change(NODES, {"dns-1", "pop-1"}, "2.0.0", narrow={"dns-1": "firewall", "pop-1": "firewall"})
+    out = engine(tmp_path, t).apply(plan, manifest("2.0.0", D1))
+    assert not out.ok and out.failed == "dns-1:activate_firewall" and out.rolled_back == ["dns-1"]
+    assert not any(n == "pop-1" and c.startswith("upload") for n, c in t.calls), "the next node is not touched after a failure"
