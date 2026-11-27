@@ -70,6 +70,17 @@ curl -X PUT "$CDNF_URL/api/domains/$DOMAIN_ID/dns/records/$RECORD_ID/origin" \
 </template>
 </DocTabs>
 
+::: warning Origin TLS verification is off by default
+A new origin stores `verify_tls: false`. HTTPS without verification encrypts the
+connection but does not authenticate the origin, so a network attacker between
+the edge and your server can impersonate or intercept it. Set `verify_tls` to
+`true` and give an `sni` your origin's certificate covers to turn verification
+on. An explicit value is always kept, an origin saved before this default keeps
+the behavior it had, and the scheduled health check follows the same setting.
+Destination checks apply in both modes. Only origin connections are affected:
+control, agent, ACME, telemetry, DNS and backup connections always verify.
+:::
+
 **Expected result:** the record shows as proxied. CDNFoundry raises the domain
 revision and queues an edge update. The control plane resolves and validates the
 destination before it saves, so an unsafe origin is refused at this step.
@@ -83,7 +94,7 @@ destination before it saves, so an unsafe origin is refused at this step.
 | `port` | One of the [allowed ports](#allowed-origin-ports) |
 | `host_header` | Required. The `Host` value sent to the origin, up to 253 characters |
 | `sni` | Required for verified HTTPS, up to 253 characters |
-| `verify_tls` | Verify the origin certificate when the scheme is HTTPS |
+| `verify_tls` | Verify the origin certificate chain, host name, dates and SNI when the scheme is HTTPS. Omitted on create it is `false`; omitted on update the stored value is kept |
 | `connect_timeout_ms` | 100 to 10,000 ms |
 | `response_timeout_ms` | 500 to 60,000 ms |
 | `retry_count` | 0 to 2 |

@@ -529,7 +529,7 @@ After the domain is active, update it with `PATCH /domains/{domain}/dns/records/
 }
 ```
 
-Use the Host header your origin expects. `verify_tls` applies only when `scheme` is `https`. For an HTTPS origin, use its real port, a matching `sni`, and a valid trusted certificate with `verify_tls: true`. Visitor certificates cannot validate the origin connection. Do not create placeholder DNS records just to request certificates.
+Use the Host header your origin expects. `verify_tls` applies only when `scheme` is `https` and defaults to `false` when omitted on create; it encrypts but does not authenticate the origin until you set it to `true`. For an HTTPS origin, use its real port, a matching `sni`, and a valid trusted certificate with `verify_tls: true`. Visitor certificates cannot validate the origin connection. Do not create placeholder DNS records just to request certificates.
 
 ### Smoke-test TLS, cache, purge, and security
 

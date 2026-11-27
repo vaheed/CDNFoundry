@@ -7,6 +7,10 @@ single source of truth; `make version-check` enforces it.
 
 ## [Unreleased]
 
+### Changed
+
+- New origins default to **Verify origin TLS: off**, in the domain panel and the API (`verify_tls` may be omitted on create). HTTPS without verification encrypts but does not authenticate the origin. An explicit value is always kept, an omitted value on update keeps the stored one, and stored origins are unchanged.
+
 ### Added
 
 - The security events list pages by cursor through the whole 24-hour window instead of stopping at 500 rows (`limit`, `cursor`, `meta.next_cursor`), and each event carries a decision trace: the stage, rule references, shadow rules, matched managed rule IDs and scores, with the signals the cell does not log named as unavailable. A **Trace** action opens it in the panel.
