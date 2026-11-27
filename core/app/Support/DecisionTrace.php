@@ -9,17 +9,16 @@ namespace App\Support;
  */
 final class DecisionTrace
 {
-    /** Signals the event does not carry; each is named so an absent value is never read as a clean one. */
+    /** Signals no event carries; each is named so an absent value is never read as a clean one. */
     public const UNAVAILABLE = [
-        'client_key' => 'The cell does not log the rate-limit key of a request.',
         'reputation_band' => 'Client reputation runs in shadow mode and is not logged per request.',
         'bot_components' => 'Bot signals are not logged per request.',
-        'dataset_versions' => 'The dataset versions a request was matched against are not logged per request.',
+        'platform_datasets' => 'Signed platform datasets are not delivered to cells, so no dataset version applies.',
     ];
 
     /**
      * @param  array<string, mixed>  $event  a row read from edge_events
-     * @return array{stage: string, acted: ?string, rules: list<string>, shadow_rules: list<string>, managed_rule_ids: list<int>, scores: array<string, int>, unavailable: list<string>}
+     * @return array{stage: string, acted: ?string, rules: list<string>, shadow_rules: list<string>, managed_rule_ids: list<int>, scores: array<string, int>, client_key: ?string, snapshot_sequence: ?int, unavailable: list<string>}
      */
     public static function of(array $event): array
     {
@@ -48,7 +47,15 @@ final class DecisionTrace
             'shadow_rules' => self::list((string) ($event['shadow_rule'] ?? '')),
             'managed_rule_ids' => array_map('intval', self::list((string) ($event['waf_rule_ids'] ?? ''))),
             'scores' => $scores,
-            'unavailable' => array_keys(self::UNAVAILABLE),
+            // The keyed hash differs on every node, so it follows one client across the cells of one edge and no further. Events
+            // written before the cells logged these fields, and requests that no rule touched, carry neither.
+            'client_key' => filled($event['client_key'] ?? null) ? (string) $event['client_key'] : null,
+            'snapshot_sequence' => (int) ($event['snapshot_sequence'] ?? 0) > 0 ? (int) $event['snapshot_sequence'] : null,
+            'unavailable' => [
+                ...(filled($event['client_key'] ?? null) ? [] : ['client_key']),
+                ...((int) ($event['snapshot_sequence'] ?? 0) > 0 ? [] : ['snapshot_sequence']),
+                ...array_keys(self::UNAVAILABLE),
+            ],
         ];
     }
 

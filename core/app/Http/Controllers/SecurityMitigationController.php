@@ -20,7 +20,7 @@ class SecurityMitigationController extends Controller
         $filters = $request->validate([
             'action' => ['sometimes', 'in:blocked,logged'], 'rule' => ['sometimes', 'string', 'max:24'], 'reason' => ['sometimes', 'string', 'max:64'],
             'score_max' => ['sometimes', 'integer', 'between:1,99'], 'path' => ['sometimes', 'string', 'max:512'], 'country' => ['sometimes', 'string', 'size:2'],
-            'asn' => ['sometimes', 'integer', 'between:0,4294967295'], 'user_agent' => ['sometimes', 'string', 'max:256'], 'request_id' => ['sometimes', 'string', 'max:64'],
+            'asn' => ['sometimes', 'integer', 'between:0,4294967295'], 'user_agent' => ['sometimes', 'string', 'max:256'], 'request_id' => ['sometimes', 'string', 'max:64'], 'client_key' => ['sometimes', 'string', 'regex:/^[0-9a-f]{12}$/'],
             'cursor' => ['sometimes', 'string', 'max:200'], 'limit' => ['sometimes', 'integer', 'between:1,'.AnalyticsStore::MITIGATIONS_PAGE],
         ]);
         $request->merge(['from' => $request->query('from') ?? now('UTC')->subDay()->addMinute()->toIso8601String()]);

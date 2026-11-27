@@ -291,6 +291,7 @@ class AnalyticsApiTest extends TestCase
         $this->assertSame('domain_rule', $items[0]['trace']['stage']);
         $this->assertSame('managed_waf', $items[2]['trace']['stage']);
         $this->assertContains('reputation_band', $items[0]['trace']['unavailable']);
+        $this->assertContains('client_key', $items[0]['trace']['unavailable']);
         Http::assertSent(function ($request): bool {
             $query = $request->data() + [];
             parse_str(parse_url($request->url(), PHP_URL_QUERY) ?? '', $query);
@@ -309,7 +310,7 @@ class AnalyticsApiTest extends TestCase
         $domain = Domain::query()->create(['name' => 'paged.example', 'display_name' => 'P', 'revision' => 1, 'lifecycle_state' => 'active', 'nameservers_verified_at' => now()]);
         $domain->users()->attach($user->id);
         $row = fn (int $second) => ['occurred_at' => sprintf('2026-11-13 10:00:%02d.000', $second), 'event_id' => (string) Str::uuid(), 'hostname' => 'paged.example', 'method' => 'GET', 'path' => '/x', 'status' => 429,
-            'security_action' => 'block', 'security_reason' => 'custom_rule_rate_limited', 'security_rule' => 'r1', 'shadow_rule' => 'r2,p3', 'request_rule' => '', 'waf_rule_ids' => '942100,941110', 'waf_score' => 0,
+            'security_action' => 'block', 'security_reason' => 'custom_rule_rate_limited', 'security_rule' => 'r1', 'shadow_rule' => 'r2,p3', 'request_rule' => '', 'client_key' => '0a1b2c3d4e5f', 'snapshot_sequence' => 812, 'waf_rule_ids' => '942100,941110', 'waf_score' => 0,
             'attack_score' => 0, 'attack_score_sqli' => 4, 'attack_score_xss' => 0, 'attack_score_rce' => 0, 'country' => 'DE', 'asn' => 1, 'user_agent' => 'x', 'request_id' => 'a', 'client_ip' => '2001:db8:1:2::9'];
         $rows = collect(range(1, 3))->map($row);
         Http::fake([config('services.clickhouse.url').'*' => Http::response($rows->map(fn ($item) => json_encode($item))->implode("\n"))]);
@@ -323,7 +324,9 @@ class AnalyticsApiTest extends TestCase
         $this->assertSame(['r2', 'p3'], $trace['shadow_rules']);
         $this->assertSame([942100, 941110], $trace['managed_rule_ids']);
         $this->assertSame(['sqli' => 4], $trace['scores']);
-        $this->assertSame(['client_key', 'reputation_band', 'bot_components', 'dataset_versions'], $trace['unavailable']);
+        $this->assertSame('0a1b2c3d4e5f', $trace['client_key']);
+        $this->assertSame(812, $trace['snapshot_sequence']);
+        $this->assertSame(['reputation_band', 'bot_components', 'platform_datasets'], $trace['unavailable']);
         $this->assertStringNotContainsString('::9', $response->json('data.0.client_ip'));
 
         $second = $rows->all()[1];
@@ -334,6 +337,9 @@ class AnalyticsApiTest extends TestCase
 
             return ($query['param_cursor_id'] ?? null) === $second['event_id'] && ($query['param_limit'] ?? null) === '3' && str_contains($request->body(), '(occurred_at, event_id) < ');
         });
+        $this->actingAs($user)->getJson("/api/domains/{$domain->id}/security/mitigations?client_key=0a1b2c3d4e5f")->assertOk();
+        Http::assertSent(fn ($request): bool => str_contains($request->body(), 'client_key = {client_key:String}'));
+        $this->actingAs($user)->getJson("/api/domains/{$domain->id}/security/mitigations?client_key=203.0.113.9")->assertUnprocessable();
         $this->actingAs($user)->getJson("/api/domains/{$domain->id}/security/mitigations?cursor=garbage")->assertUnprocessable();
         $this->actingAs($user)->getJson("/api/domains/{$domain->id}/security/mitigations?limit=101")->assertUnprocessable();
     }
