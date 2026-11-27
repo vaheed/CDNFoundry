@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Jobs\DispatchOriginTest;
 use App\Models\DnsRecord;
 use App\Models\Domain;
+use App\Models\DomainEdgeCell;
 use App\Models\Edge;
 use App\Models\EdgeTask;
 use App\Models\Operation;
@@ -108,5 +109,47 @@ class OriginMonitoringPolicyTest extends TestCase
         $this->assertSame('disabled', $summary['roles']['primary']['signals']['active']['state']);
         $this->assertSame('unhealthy', $summary['roles']['primary']['signals']['passive']['state'], 'passive evidence is kept');
         Queue::assertNotPushed(DispatchOriginTest::class);
+    }
+
+    public function test_a_scheduled_check_uses_one_representative_per_group_and_a_manual_test_uses_one_edge(): void
+    {
+        Queue::fake();
+        $this->enableOriginMonitoring();
+        $record = $this->record();
+        foreach (range(1, 18) as $index) {
+            $edge = Edge::query()->create(['name' => "fleet-$index", 'country_code' => 'IR', 'continent_code' => ['EU', 'AS', 'NA', 'SA', 'AF', 'OC'][$index % 6], 'enabled' => true,
+                'registered_at' => now(), 'last_heartbeat_at' => now()]);
+            DomainEdgeCell::query()->create(['domain_id' => $record->domain_id, 'edge_id' => $edge->id, 'desired_revision' => 1, 'state' => 'active']);
+        }
+        $input = ['domain_id' => $record->domain_id, 'record_id' => $record->id, 'origin_role' => 'primary', 'edge_ids' => [], 'addresses' => ['8.8.8.8'],
+            'origin_checksum' => OriginHealth::checksum($record->origin)];
+        $scheduled = Operation::query()->create(['type' => 'edge.origin_test', 'status' => 'pending', 'input' => [...$input, 'scheduled' => true]]);
+        (new DispatchOriginTest($scheduled->id))->handle();
+        $this->assertSame(3, EdgeTask::query()->where('payload->operation_id', $scheduled->id)->count(), 'three groups, one worker each, whatever the fleet size');
+        $this->assertCount(3, $scheduled->refresh()->input['groups']);
+
+        $user = User::factory()->create();
+        $manual = Operation::query()->create(['type' => 'edge.origin_test', 'status' => 'pending', 'actor_id' => $user->id, 'input' => $input]);
+        $record->domain->users()->attach($user->id);
+        (new DispatchOriginTest($manual->id))->handle();
+        $this->assertSame(1, EdgeTask::query()->where('payload->operation_id', $manual->id)->count(), 'a manual test is one probe from one edge');
+    }
+
+    public function test_the_probe_group_label_is_admin_only_validated_and_optional(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $edge = Edge::query()->create(['name' => 'labelled-edge', 'country_code' => 'IR', 'continent_code' => 'AS']);
+        $this->actingAs($admin)->withHeader('Idempotency-Key', (string) Str::uuid())
+            ->patchJson("/api/admin/edges/{$edge->id}", ['probe_group' => 'eu-west-transit'])->assertSuccessful();
+        $this->assertSame('eu-west-transit', $edge->refresh()->probe_group);
+        foreach (['Bad Label', '-start', str_repeat('a', 41), 'UPPER'] as $invalid) {
+            $this->actingAs($admin)->withHeader('Idempotency-Key', (string) Str::uuid())
+                ->patchJson("/api/admin/edges/{$edge->id}", ['probe_group' => $invalid])->assertUnprocessable();
+        }
+        $this->actingAs($admin)->withHeader('Idempotency-Key', (string) Str::uuid())
+            ->patchJson("/api/admin/edges/{$edge->id}", ['probe_group' => null])->assertSuccessful();
+        $this->assertNull($edge->refresh()->probe_group);
+        $this->actingAs(User::factory()->create())->withHeader('Idempotency-Key', (string) Str::uuid())
+            ->patchJson("/api/admin/edges/{$edge->id}", ['probe_group' => 'x'])->assertForbidden();
     }
 }

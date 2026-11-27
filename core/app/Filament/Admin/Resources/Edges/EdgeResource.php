@@ -44,7 +44,8 @@ class EdgeResource extends Resource
             TextInput::make('name')->required()->maxLength(100)->unique(ignoreRecord: true),
             TextInput::make('cell_slot_count')->label(FilamentHelp::label('Cell slots', 'OpenResty slots created during edge installation. Production Compose runs exactly eight cells per PoP, so the count is fixed.'))->numeric()->integer()->required()->minValue(Edge::CELL_SLOT_COUNT)->maxValue(Edge::CELL_SLOT_COUNT)->default(Edge::CELL_SLOT_COUNT)->disabled()->dehydrated(),
             Select::make('country_code')->label('Country')->options(array_combine(GeoVocabulary::countries(), GeoVocabulary::countries()))->searchable()->required(),
-            Select::make('continent_code')->label('Continent')->options(array_combine(GeoVocabulary::CONTINENTS, GeoVocabulary::CONTINENTS))->required()]);
+            Select::make('continent_code')->label('Continent')->options(array_combine(GeoVocabulary::CONTINENTS, GeoVocabulary::CONTINENTS))->required(),
+            TextInput::make('probe_group')->label(FilamentHelp::label('Probe group', 'Optional. Edges that leave through a different network from the rest of their continent share a label here, so origin checks sample each network. Leave empty to group by continent.'))->maxLength(40)->regex('/^[a-z0-9][a-z0-9._-]*$/')->placeholder('eu-west-transit')]);
     }
 
     public static function infolist(Schema $schema): Schema

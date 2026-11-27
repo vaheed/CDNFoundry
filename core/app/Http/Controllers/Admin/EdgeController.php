@@ -28,7 +28,7 @@ class EdgeController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $data = $request->validate(['name' => ['required', 'string', 'max:100', 'unique:edges'], 'country_code' => ['required', Rule::in(GeoVocabulary::countries())], 'continent_code' => ['required', Rule::in(GeoVocabulary::CONTINENTS)], 'management_ipv4' => ['prohibited'], 'management_ipv6' => ['prohibited'], 'ipv4' => ['prohibited'], 'ipv6' => ['prohibited'], 'cell_slot_count' => ['sometimes', 'integer', Rule::in([Edge::CELL_SLOT_COUNT])]]);
+        $data = $request->validate(['name' => ['required', 'string', 'max:100', 'unique:edges'], 'country_code' => ['required', Rule::in(GeoVocabulary::countries())], 'continent_code' => ['required', Rule::in(GeoVocabulary::CONTINENTS)], 'management_ipv4' => ['prohibited'], 'management_ipv6' => ['prohibited'], 'ipv4' => ['prohibited'], 'ipv6' => ['prohibited'], 'cell_slot_count' => ['sometimes', 'integer', Rule::in([Edge::CELL_SLOT_COUNT])], 'probe_group' => ['nullable', 'string', 'max:40', 'regex:/^[a-z0-9][a-z0-9._-]*$/']]);
         [$edge, $token] = app(CreateEdge::class)->handle($data, $request->user(), $request->ip());
 
         return response()->json(['data' => array_merge($edge->toArray(), ['bootstrap_token' => $token])], 201);
@@ -40,6 +40,7 @@ class EdgeController extends Controller
             'name' => ['sometimes', 'string', 'max:100', Rule::unique('edges')->ignore($edge)],
             'country_code' => ['sometimes', Rule::in(GeoVocabulary::countries())],
             'continent_code' => ['sometimes', Rule::in(GeoVocabulary::CONTINENTS)],
+            'probe_group' => ['sometimes', 'nullable', 'string', 'max:40', 'regex:/^[a-z0-9][a-z0-9._-]*$/'],
             'management_ipv4' => ['prohibited'],
             'management_ipv6' => ['prohibited'],
             'ipv4' => ['prohibited'],

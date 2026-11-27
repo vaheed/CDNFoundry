@@ -112,6 +112,8 @@ class OriginTestLifecycleTest extends TestCase
             'registered_at' => now(), 'last_heartbeat_at' => now()]);
         $this->place($domain, $secondEdge);
         $operation = $this->operation($owner, $domain, $record);
+        // Both edges were chosen when the test was requested, so the dispatch fixes both as recipients.
+        $operation->update(['input' => [...$operation->input, 'edge_ids' => [$edge->id, $secondEdge->id]]]);
         (new DispatchOriginTest($operation->id))->handle();
         $request = Request::create('/edge/v1/tasks', 'GET');
         $request->attributes->set('edge', $edge);

@@ -75,6 +75,27 @@ Edges have no host addresses. Fleet knows where a host is. The control plane onl
 
 **Expected result:** the response shows an edge UUID and a bootstrap token once. Store them only until the agent enrolls. If you lose the token, rotate the identity (`POST /api/admin/edges/{edge}/rotate-identity`) to get a new one.
 
+## Origin checks and probe groups
+
+Active origin monitoring (a [platform setting](../reference/platform-settings.md#active-origin-monitoring), off by
+default) does not check an origin from every edge. The control plane picks a few **reachability groups** from the
+edges that serve the domain and one **representative** edge in each, so the number of checks of one origin stays the
+same whether the fleet has 3 edges or 400.
+
+- A group is the edge's **Probe group** label when it has one, otherwise its continent. Set the label only when
+  edges in the same continent leave through different networks (for example `eu-west-transit`), so each network is
+  sampled. It is lowercase letters, digits, `.`, `_` and `-`, at most 40 characters, and optional.
+- The groups are ranked for each destination by a stable hash, and the first **Representative edges per origin** of
+  them (3 by default, at most 5) are checked. The representative of a group is chosen the same way among the edges
+  that are enabled, registered and heartbeat-fresh. It changes only when that edge becomes unavailable or at the
+  daily rotation.
+- A group with no usable edge is reported as **not monitored**. It is never counted as healthy.
+- A manual test is one probe from one edge.
+
+A healthy result means the origin was reachable from that group at that time. It says nothing about the other edges
+of the group; the passive failure reports from traffic remain the evidence for an edge-specific problem. Egress
+address families (IPv4 and IPv6) are not modelled yet.
+
 ## Pool service endpoints
 
 Cells do not own public addresses. Assign one or more bounded cells to a pool,

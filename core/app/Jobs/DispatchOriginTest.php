@@ -10,6 +10,7 @@ use App\Models\EdgeTask;
 use App\Models\Operation;
 use App\Support\ArtifactSigner;
 use App\Support\OriginMonitoring;
+use App\Support\OriginProbePlanner;
 use App\Support\PlatformSettings;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -71,11 +72,21 @@ class DispatchOriginTest implements ShouldQueue
         // this operation as edge availability changes.
         if ($tasks->isEmpty()) {
             $selected = collect($operation->input['edge_ids'] ?? []);
-            $edges = Edge::query()->where('enabled', true)->where('drained', false)->whereNull('identity_revoked_at')
-                ->whereNotNull('registered_at')->where('last_heartbeat_at', '>=', now()->subSeconds(app(PlatformSettings::class)->integer('edge_runtime', 'heartbeat_fresh_seconds')))
-                ->whereIn('id', Domain::query()->findOrFail($record->domain_id)->placementEdgeIds())
-                ->when($selected->isNotEmpty(), fn ($query) => $query->whereIn('id', $selected))
-                ->orderBy('id')->limit(20)->get();
+            $placement = Edge::query()->whereIn('id', Domain::query()->findOrFail($record->domain_id)->placementEdgeIds())->orderBy('id')->get();
+            $usable = $placement->filter(fn (Edge $edge): bool => $edge->enabled && ! $edge->drained && $edge->identity_revoked_at === null && $edge->registered_at !== null
+                && $edge->last_heartbeat_at !== null && $edge->last_heartbeat_at >= now()->subSeconds(app(PlatformSettings::class)->integer('edge_runtime', 'heartbeat_fresh_seconds')));
+            if ($selected->isNotEmpty()) {
+                // The person who asked chose the edges, from the domain's placement only.
+                $edges = $usable->whereIn('id', $selected->all())->sortBy('id')->take(20)->values();
+            } else {
+                // The control plane schedules; it never probes the fleet. A scheduled check uses one representative from each of a few
+                // reachability groups, and a manual test uses the single best-ranked one, so the count does not grow with the edges.
+                $maximum = ($operation->input['scheduled'] ?? false) === true ? app(PlatformSettings::class)->integer('origin_monitoring', 'max_representatives') : 1;
+                $destination = strtolower($origin['host']).':'.((int) ($origin['port'] ?? 0));
+                $plan = OriginProbePlanner::plan($placement, $usable, $destination, $maximum);
+                $edges = collect($plan['representatives']);
+                $operation->input = [...$operation->input, 'groups' => $plan['groups']];
+            }
             if ($edges->isEmpty()) {
                 $operation->update(['status' => 'failed', 'error' => 'No selected edge is registered, enabled, and heartbeat-fresh.', 'finished_at' => now()]);
 
