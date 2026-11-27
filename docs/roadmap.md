@@ -1203,7 +1203,7 @@ cell to ClickHouse to the API. Browser tests for traces, episodes, and views.
 
 | Implementation | Documentation | Automated/runtime | Browser |
 | --- | --- | --- | --- |
-| Logs/export present; trace/query scope open | Retention/loss/trace contract open | Counted scope/loss/query matrix open | Trace/event view gate open |
+| Stage 2 partly done (cursor paging, 27 November 2026): mitigation list pages through the 24-hour window; trace built from stored fields with four signals named unavailable. Not done: new log fields, the 1,000,000-event timing, episodes and views | Current: security guide, changelog | Passed: PHP feature tests for paging, trace, panel. Not run: ClickHouse counted-sample and 1,000,000-event page timing, cell-to-API e2e | Passed for the security events spec (4 specs in light and dark, desktop and phone, 16 passed, with accessibility checks); the rest of the suite was not rerun |
 
 ---
 

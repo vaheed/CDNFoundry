@@ -9,6 +9,7 @@ single source of truth; `make version-check` enforces it.
 
 ### Added
 
+- The security events list pages by cursor through the whole 24-hour window instead of stopping at 500 rows (`limit`, `cursor`, `meta.next_cursor`), and each event carries a decision trace: the stage, rule references, shadow rules, matched managed rule IDs and scores, with the signals the cell does not log named as unavailable. A **Trace** action opens it in the panel.
 - Cells report the WAF engine and Core Rule Set commits they were built from. The Cells list shows whether they match the pinned versions, and the `CellRulesetDiffers` alert fires when they do not. The Service pools list shows the same state for each pool.
 
 - A WAF verification baseline: versioned CRS regression, evasion and 10,300-request clean corpora, a harness that replays them against a real cell at every protection and paranoia level, and a latency and CPU matrix. See [WAF verification baseline](docs/operations/waf-verification-baseline.md).

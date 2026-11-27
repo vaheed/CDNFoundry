@@ -686,11 +686,24 @@ column menu.
   platform rule, because platform rules run before the domain's own rules.
 - A platform rule is named by its ruleset only. Its conditions are never shown.
 
-**What the list is.** The list is built from stored request events: the newest 500
-mitigated requests of the last 24 hours, kept for 7 days. During a large attack
-that is a sample, not every request. The counts in **Analytics and logs** and the
-event counters that drive alerts come from the cells' own counters and rollups and
-are not limited to 500. The client address is shown masked to the network.
+**What the list is.** The list is built from stored request events of the last
+24 hours, kept for 7 days. It pages with a cursor over time and event ID, 25 or 50
+rows a page in the panel and up to 100 in the API (`limit`, `cursor`, and
+`meta.next_cursor`), so a page costs the same however deep it is and a long attack
+can be read to its start. The range is one 24-hour window; `from` and `to` move
+it inside the 7 days. The counts in **Analytics and logs** and the event counters
+that drive alerts come from the cells' own counters and rollups. The client address
+is shown masked to the network.
+
+**Decision trace.** **Trace** on a row (and `trace` on each API item) explains the
+decision from fields the event already stores, so the log line is no larger: the
+stage that acted (managed WAF, domain rule, platform rule, rate limit, challenge,
+sensitive data, API protection, or a platform limit), the reason, the rule
+references, shadow rules that also matched, up to eight matched managed rule IDs,
+and the attack and anomaly scores. Four signals are not recorded per request and
+are listed as unavailable, never shown as empty: the rate-limit key, the
+reputation band, bot signals, and dataset versions (`meta.unavailable_signals`).
+Attack episodes and the false-positive views are not built yet.
 
 ### Security alerts
 
