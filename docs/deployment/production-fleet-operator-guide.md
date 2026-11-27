@@ -127,7 +127,7 @@ Expected: `status` prints `Monitoring: colocated`. The control bundle's Compose 
 | Create the state only | `init` |
 | Add, change, or remove a host | `add-node`, `update-node`, `remove-node` |
 | Import credentials from an old `.env` file | `adopt-existing` |
-| Set monitoring, central logs, or backups | `configure-monitoring`, `configure-logs`, `configure-backups` |
+| Set monitoring, central logs, or backups | `configure-monitoring`, `configure-logs`, `configure-backups`, `configure-origin-probe` |
 | Store an edge ID and bootstrap token by hand | `configure-edge-registration`, `clear-edge-bootstrap-token` |
 | Replace or rotate a secret | `set-secret`, `rotate-secret` |
 | Show the plan | `status`, `status --json`, `list-nodes`, `show-start-order` |

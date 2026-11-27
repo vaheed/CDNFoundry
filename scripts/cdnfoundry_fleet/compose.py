@@ -106,6 +106,7 @@ def select_services(
     monitoring_enabled: bool,
     logs_enabled: bool,
     monitoring_host: bool,
+    origin_probe: bool = False,
 ) -> dict[str, Any]:
     if role not in ROLE_PROFILES:
         raise ValidationError(f"Unsupported role: {role}")
@@ -118,6 +119,8 @@ def select_services(
         active_profiles.add("telemetry")
     if logs_enabled:
         active_profiles.add("logs")
+    if origin_probe and "edge" in active_profiles:
+        active_profiles.add("origin-probe")
 
     selected: set[str] = set()
     for name, service in services.items():

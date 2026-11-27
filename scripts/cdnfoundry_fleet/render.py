@@ -96,6 +96,7 @@ class Renderer:
             monitoring_enabled=monitoring_enabled,
             logs_enabled=logs_enabled,
             monitoring_host=monitoring_host or watcher,
+            origin_probe=self._origin_probe_enabled(state, node),
         )
         if watcher:
             ha.restrict_to_watcher(filtered["services"])
@@ -291,6 +292,8 @@ class Renderer:
             "EDGE_STATE_ENCRYPTION_KEY_FILE": "/dev/shm/cdnfoundry/edge-state-encryption.key",
             # A PoP that also runs a DNS node lets its agent drive the node's local PowerDNS API.
             "EDGE_DNS_API_URL": "http://pdns-auth:8081" if node["role"] == "dns-edge" else "",
+            # The agent hands origin probes to the worker over this socket only where the worker runs; empty means it probes itself.
+            "EDGE_PROBE_SOCKET": "/run/probe/probe.sock" if self._origin_probe_enabled(state, node) else "",
             "EDGE_DNS_API_KEY": self._optional_node_secret("pdns-api-key", node) if node["role"] == "dns-edge" else "",
             "MANAGEMENT_NETWORKS": self._management_networks(state),
             "CONTROL_PUBLIC_IPV4_ALLOWLIST": self._control_allowlist(state),
@@ -1097,7 +1100,14 @@ openssl verify -CAfile pki/edge-server-ca.crt pki/node.crt
             profiles.append("telemetry")
         if state["features"]["logs"]["mode"] == "centralized":
             profiles.append("logs")
+        if self._origin_probe_enabled(state, node):
+            profiles.append("origin-probe")
         return " ".join(f"--profile {profile}" for profile in profiles)
+
+    @staticmethod
+    def _origin_probe_enabled(state: dict[str, Any], node: dict[str, Any]) -> bool:
+        """The origin probe worker runs beside the edge agent of an edge host, and nowhere else, only while the feature is enabled."""
+        return node["role"] in {"edge", "dns-edge"} and state["features"].get("origin_probe", {}).get("mode") == "enabled"
 
     def _start_script(self, state: dict[str, Any], node: dict[str, Any]) -> str:
         standby_script = ha.start_script(state, node)

@@ -541,7 +541,11 @@ class FleetWeb:
                 f'<label>Region<input name="region" value="{esc(backups.get("region") or "us-east-1")}" autocomplete="off" placeholder="us-east-1"></label>'
                 '<label>Access key ID<input name="access_key" type="password" autocomplete="off" spellcheck="false" placeholder="Leave empty to keep the saved key"><span class="hint">The S3 access key for the repository. It is stored in the Fleet vault and never shown again.</span></label>'
                 '<label>Secret access key<input name="secret_key" type="password" autocomplete="off" spellcheck="false" placeholder="Leave empty to keep the saved key"><span class="hint">The S3 secret paired with the access key ID. Leave empty to retain the saved secret.</span></label>'))
-        return ('<p class="hint">Saving changes the plan only. Use Deploy changes below to send it to the hosts.</p>' + monitoring + central + backup)
+        probe = self.action_form(
+            "/config/feature/origin_probe", "Save origin checks", fields=(
+                f'<label>Origin health-check worker<select name="mode" data-testid="origin-probe-mode">{options(("disabled", "enabled"), features.get("origin_probe", {}).get("mode", "disabled"), {"disabled": "Off", "enabled": "On every edge host"})}</select>'
+                '<span class="hint">Starts one small container beside each edge agent to run the origin checks. Turn on Active origin monitoring in Platform settings too; with it off the container stays idle.</span></label>'))
+        return ('<p class="hint">Saving changes the plan only. Use Deploy changes below to send it to the hosts.</p>' + monitoring + central + backup + probe)
 
     def _tls_section(self, state: dict[str, Any]) -> str:
         own = self.read(lambda e: e.management_certificates())
@@ -1081,12 +1085,12 @@ class FleetWeb:
             return job("Rolling upgrade", lambda e: e.upgrade(document), "upgrade")
         if path.startswith("/config/feature/"):
             feature = path.rsplit("/", 1)[1]
-            if feature not in {"monitoring", "logs", "backups"}:
+            if feature not in {"monitoring", "logs", "backups", "origin_probe"}:
                 raise ValidationError("Unknown setting")
             config = {k: form.get(k, "").strip() or None for k in ("mode", "host", "endpoint", "repository", "region")}
             if not config["mode"]:
                 raise ValidationError("Choose a mode")
-            config = {k: v for k, v in config.items() if k in {"monitoring": ("mode", "host"), "logs": ("mode", "host", "endpoint"), "backups": ("mode", "repository", "region")}[feature]}
+            config = {k: v for k, v in config.items() if k in {"monitoring": ("mode", "host"), "logs": ("mode", "host", "endpoint"), "backups": ("mode", "repository", "region"), "origin_probe": ("mode",)}[feature]}
             credentials = {name: form.get(field, "").strip() for name, field in (("backup-access-key", "access_key"), ("backup-secret-key", "secret_key")) if feature == "backups" and form.get(field, "").strip()}
 
             def save_feature(e: FleetEngine) -> None:

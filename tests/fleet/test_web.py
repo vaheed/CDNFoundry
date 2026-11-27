@@ -649,3 +649,16 @@ def test_config_plan_page_shows_the_plan_and_the_service_rows_and_changes_nothin
     assert status == 200 and "Config plan" in body
     assert ("Service-level impact" in body) or "Nothing is touched" in body or "<ol>" in body
     assert post(port, "/config/plan", {"csrf": "wrong"})[0] in (400, 403)
+
+
+def test_config_page_turns_the_origin_probe_worker_on_and_off_like_the_cli(served) -> None:
+    web, port = served
+    add_node(web, port)
+    assert 'data-testid="origin-probe-mode"' in get(port, "/config")[1]
+    assert web.read(lambda e: e.features()).get("origin_probe", {"mode": "disabled"})["mode"] == "disabled"
+    assert post(port, "/config/feature/origin_probe", {"csrf": web.csrf, "mode": "enabled"})[0] == 303
+    assert web.read(lambda e: e.features())["origin_probe"] == {"mode": "enabled"}
+    assert post(port, "/config/feature/origin_probe", {"csrf": web.csrf, "mode": "sometimes"})[0] != 303
+    assert web.read(lambda e: e.features())["origin_probe"] == {"mode": "enabled"}, "an invalid mode changes nothing"
+    assert post(port, "/config/feature/origin_probe", {"csrf": web.csrf, "mode": "disabled"})[0] == 303
+    assert web.read(lambda e: e.features())["origin_probe"] == {"mode": "disabled"}

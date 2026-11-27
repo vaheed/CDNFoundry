@@ -35,6 +35,7 @@ ROLES = {"control", "edge", "dns", "dns-edge", "monitoring"}
 MONITORING_MODES = {"disabled", "colocated", "dedicated"}
 LOG_MODES = {"disabled", "centralized"}
 BACKUP_MODES = {"disabled", "control", "all-stateful"}
+ORIGIN_PROBE_MODES = {"disabled", "enabled"}
 NULLABLE_NODE_ADDRESSES = {"public_ipv6", "bind_ipv6", "monitor_ipv4", "monitor_ipv6", "log_ipv4", "log_ipv6"}
 
 GLOBAL_SECRET_NAMES = {
@@ -170,6 +171,7 @@ class FleetState:
                 "monitoring": {"mode": "disabled", "host": None},
                 "logs": {"mode": "disabled", "host": None},
                 "backups": {"mode": "disabled", "repository": None, "region": None},
+                "origin_probe": {"mode": "disabled"},
             },
             "nodes": {},
             "metadata": {
@@ -241,6 +243,9 @@ class FleetState:
             raise ValidationError("Invalid logs mode")
         if backups.get("mode") not in BACKUP_MODES:
             raise ValidationError("Invalid backup mode")
+        # A state written before the origin probe worker existed has no entry: that is disabled.
+        if features.get("origin_probe", {"mode": "disabled"}).get("mode") not in ORIGIN_PROBE_MODES:
+            raise ValidationError("Invalid origin probe mode")
 
         names: set[str] = set()
         hostnames: set[str] = set()
@@ -431,6 +436,11 @@ class FleetState:
                 "repository": config.get("repository"),
                 "region": config.get("region") or "us-east-1",
             }
+        elif feature == "origin_probe":
+            mode = config["mode"]
+            if mode not in ORIGIN_PROBE_MODES:
+                raise ValidationError("Invalid origin probe mode")
+            candidate["features"][feature] = {"mode": mode}
         else:
             raise ValidationError(f"Unknown feature: {feature}")
         self.validate(candidate, require_secrets=False)

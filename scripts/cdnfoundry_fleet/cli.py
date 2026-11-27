@@ -14,6 +14,7 @@ from .common import FleetError, StateError, ValidationError, load_json, utc_now
 from .render import Renderer
 from .state import (
     BACKUP_MODES,
+    ORIGIN_PROBE_MODES,
     GLOBAL_SECRET_NAMES,
     LOG_MODES,
     MONITORING_MODES,
@@ -41,6 +42,7 @@ SETUP_FEATURE_FIELDS = {
     "monitoring": {"mode", "host"},
     "logs": {"mode", "host", "endpoint"},
     "backups": {"mode", "repository", "region"},
+    "origin_probe": {"mode"},
 }
 SETUP_NODE_FIELDS = {
     "name", "role", "region", "location", "hostname", "public_ipv4", "public_ipv6",
@@ -199,6 +201,9 @@ def parser() -> argparse.ArgumentParser:
     backups.add_argument("--mode", choices=sorted(BACKUP_MODES), required=True, help="How the feature is set up")
     backups.add_argument("--repository", help="Backup repository location")
     backups.add_argument("--region", default="us-east-1", help="Region label")
+
+    probe = sub.add_parser("configure-origin-probe", parents=[command_common], help="Run the origin health-check worker on every edge host")
+    probe.add_argument("--mode", choices=sorted(ORIGIN_PROBE_MODES), required=True, help="enabled starts one worker container beside each edge agent; disabled removes it")
 
     render = sub.add_parser("render", parents=[command_common], help="Generate the host bundles")
     render.add_argument("--node", help="Node name")
@@ -887,6 +892,9 @@ def execute(args: argparse.Namespace) -> int:
                 {"mode": args.mode, "repository": args.repository, "region": args.region},
             )
             print(json.dumps({"status": "configured", "feature": "backups", "mode": args.mode}))
+        elif args.command == "configure-origin-probe":
+            store.configure_feature(state, "origin_probe", {"mode": args.mode})
+            print(json.dumps({"status": "configured", "feature": "origin_probe", "mode": args.mode}))
         elif args.command in {"render", "validate"}:
             renderer = Renderer(Path(args.repo_root), store, output_dir, dry_run=args.dry_run)
             store.validate(state, require_secrets=not args.dry_run)

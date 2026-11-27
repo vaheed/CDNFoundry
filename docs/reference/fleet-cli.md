@@ -145,6 +145,14 @@ Set up monitoring.
 | `--mode` `MODE` | How the feature is set up (one of `colocated`, `dedicated`, `disabled`; required) |
 | `--host` `HOST` | Host name or address |
 
+## configure-origin-probe
+
+Run the origin health-check worker on every edge host.
+
+| Option | Meaning |
+| --- | --- |
+| `--mode` `MODE` | enabled starts one worker container beside each edge agent; disabled removes it (one of `disabled`, `enabled`; required) |
+
 ## control
 
 Optional two-node control plane: standby, promotion, rejoin.

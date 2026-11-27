@@ -290,11 +290,12 @@ For the same steps in the command line, see [Upgrade](../deployment/upgrade.md).
 
 Use this when you changed fleet settings and want hosts to match.
 
-**Features** sets the same three things as `configure-monitoring`, `configure-logs`, and `configure-backups`:
+**Features** sets the same four things as `configure-monitoring`, `configure-logs`, `configure-backups`, and `configure-origin-probe`:
 
 - **Monitoring**: off, on the control node, or on its own host. Its own host needs a host with the monitoring role that can reach the control database over a private network. See [Set up a dedicated monitoring host](../deployment/production-fleet.md#set-up-a-dedicated-monitoring-host).
 - **Central logs**: off, or on, with the log host and the endpoint.
 - **Backups**: off, the control plane, or every stateful host, with the restic repository, region, and the S3 access key ID and secret access key. The keys are write-only: they go into the Fleet vault, the page never shows them again, and leaving the fields empty keeps the saved keys.
+- **Origin health-check worker**: off, or one small container beside each edge agent that runs the active origin checks. It has no inbound network, no secret and no datastore; it joins only the egress network and talks to the agent over a local socket. Turn on Active origin monitoring in Platform settings as well.
 
 Saving a feature changes the plan only. Nothing reaches a host until you deploy.
 
