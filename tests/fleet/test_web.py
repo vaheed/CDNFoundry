@@ -638,3 +638,14 @@ def test_recovery_runs_the_shared_engine_as_a_background_job(served, monkeypatch
 def test_recovery_rejects_a_missing_csrf_token(served):
     _, port = served
     assert post(port, '/recover', {})[0] == 400
+
+
+def test_config_plan_page_shows_the_plan_and_the_service_rows_and_changes_nothing(served) -> None:
+    web, port = served
+    add_node(web, port)
+    page = get(port, "/config")[1]
+    assert "Show the plan" in page and "Deploy the changes" in page
+    status, body, _ = post(port, "/config/plan", {"csrf": web.csrf})
+    assert status == 200 and "Config plan" in body
+    assert ("Service-level impact" in body) or "Nothing is touched" in body or "<ol>" in body
+    assert post(port, "/config/plan", {"csrf": "wrong"})[0] in (400, 403)

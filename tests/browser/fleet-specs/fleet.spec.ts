@@ -274,3 +274,13 @@ test('recovery offers the fleet and one host, and reports missing saved keys', a
     await expectAccessible(page);
     await noHorizontalOverflow(page);
 });
+
+test('the config plan button answers with the plan or says plainly why it cannot render one', async ({ page }) => {
+    await page.goto('/config');
+    await page.getByRole('button', { name: 'Show the plan' }).click();
+    // The seeded fleet has a node name too long for a certificate, so the render fails and the page must say so with a way back.
+    await expect(page.getByRole('heading', { name: /^(Plan|Action failed)$/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: /^Back to/ })).toBeVisible();
+    await noHorizontalOverflow(page);
+    await expectAccessible(page);
+});
