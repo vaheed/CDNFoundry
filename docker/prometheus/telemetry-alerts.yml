@@ -51,6 +51,24 @@ groups:
           summary: A CDNFoundry dependency or reconciliation component is degraded
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#component-unhealthy
           dashboard_url: /d/cdnf-control-plane
+      - alert: CDNFoundryServingDimensionUnhealthy
+        # The serving dimension answers "can traffic be served and its configuration delivered". It never counts a
+        # customer's own domain conditions; those are reported by cdnfoundry_customer_conditions and do not alert.
+        expr: cdnfoundry_dimension_health{dimension="serving"} == 0
+        for: 5m
+        labels: { team: platform, severity: critical, dashboard: cdnf-control-plane }
+        annotations:
+          summary: The serving components of the platform are unhealthy
+          runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#component-unhealthy
+          dashboard_url: /d/cdnf-control-plane
+      - alert: CDNFoundryDnsDeploymentsDrifted
+        expr: cdnfoundry_dns_deployments_drifted > 0
+        for: 10m
+        labels: { team: platform, severity: warning, dashboard: cdnf-control-plane }
+        annotations:
+          summary: DNS deployments are failing for platform reasons, not because of a customer's records
+          runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#component-unhealthy
+          dashboard_url: /d/cdnf-control-plane
       - alert: ControlBackupStale
         # The backups component turns degraded when no verified backup is newer than operations.backup_stale_hours,
         # and when the weekly repository integrity check fails.

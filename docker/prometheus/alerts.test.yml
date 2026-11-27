@@ -306,3 +306,29 @@ tests:
         summary: The managed WAF could not score requests, so inline inspection with unadjusted rules decided them
         runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#waf-scoring-failing
         dashboard_url: /d/cdnf-waf
+- interval: 1m
+  input_series:
+  - series: cdnfoundry_dimension_health{dimension="serving",status="unhealthy"}
+    values: 0 0 0 0 0 0 0
+  - series: cdnfoundry_dimension_health{dimension="management",status="unhealthy"}
+    values: 0 0 0 0 0 0 0
+  - series: cdnfoundry_dns_deployments_customer_rejected
+    values: 30 30 30 30 30 30 30
+  alert_rule_test:
+  - eval_time: 6m
+    alertname: CDNFoundryServingDimensionUnhealthy
+    exp_alerts:
+    - exp_labels:
+        severity: critical
+        dimension: serving
+        status: unhealthy
+        team: platform
+        dashboard: cdnf-control-plane
+      exp_annotations:
+        summary: The serving components of the platform are unhealthy
+        runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#component-unhealthy
+        dashboard_url: /d/cdnf-control-plane
+  # Thirty customer-rejected zones are customer health: no platform alert reads that series.
+  - eval_time: 6m
+    alertname: CDNFoundryDnsDeploymentsDrifted
+    exp_alerts: []
