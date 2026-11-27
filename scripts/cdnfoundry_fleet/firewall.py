@@ -58,39 +58,59 @@ FLEET_V6="{' '.join(v6)}"
 FORWARDED_PORTS="{' '.join(forwarded)}"
 HOST_PORTS="{' '.join(host)}"
 
+# Each chain has two slots, A and B. A run fills the idle slot, points the parent chain at it, and only then
+# removes the jumps to every other slot and empties them, so the filter is never empty and never half built.
+# A chain from an earlier release, named without a slot, is retired the same way.
+swap_chain() {{
+    ipt="$1"; parent="$2"; base="$3"; new="$4"
+    "$ipt" -w -I "$parent" 1 -j "$new"
+    for old in "$base" "$base-A" "$base-B"; do
+        [ "$old" = "$new" ] && continue
+        while "$ipt" -w -D "$parent" -j "$old" 2>/dev/null; do :; done
+        "$ipt" -w -F "$old" 2>/dev/null && "$ipt" -w -X "$old" 2>/dev/null || true
+    done
+}}
+
+new_slot() {{
+    ipt="$1"; parent="$2"; base="$3"
+    if "$ipt" -w -C "$parent" -j "$base-A" 2>/dev/null; then echo "$base-B"; else echo "$base-A"; fi
+}}
+
 apply_family() {{
     ipt="$1"; fleet="$2"
     command -v "$ipt" >/dev/null 2>&1 || return 0
     "$ipt" -w -L DOCKER-USER >/dev/null 2>&1 || "$ipt" -w -N DOCKER-USER 2>/dev/null || return 0
-    for chain in CDNF-INTERNAL-FORWARD CDNF-INTERNAL-INPUT; do
+    forward="$(new_slot "$ipt" DOCKER-USER CDNF-INTERNAL-FORWARD)"
+    input="$(new_slot "$ipt" INPUT CDNF-INTERNAL-INPUT)"
+    for chain in "$forward" "$input"; do
         "$ipt" -w -N "$chain" 2>/dev/null || "$ipt" -w -F "$chain"
     done
     # Traffic between containers on this host arrives on a Docker bridge and is not judged here.
-    "$ipt" -w -A CDNF-INTERNAL-FORWARD -i docker0 -j RETURN
-    "$ipt" -w -A CDNF-INTERNAL-FORWARD -i 'br-+' -j RETURN
+    "$ipt" -w -A "$forward" -i docker0 -j RETURN
+    "$ipt" -w -A "$forward" -i 'br-+' -j RETURN
     # Forwarded (Docker-published) ports: judge the connection's original destination port.
     for entry in $FORWARDED_PORTS; do
         port="${{entry%/*}}"; proto="${{entry#*/}}"
         for source in $fleet; do
-            "$ipt" -w -A CDNF-INTERNAL-FORWARD -p "$proto" -m conntrack --ctorigdstport "$port" --ctdir ORIGINAL -s "$source" -j RETURN
+            "$ipt" -w -A "$forward" -p "$proto" -m conntrack --ctorigdstport "$port" --ctdir ORIGINAL -s "$source" -j RETURN
         done
-        "$ipt" -w -A CDNF-INTERNAL-FORWARD -p "$proto" -m conntrack --ctorigdstport "$port" --ctdir ORIGINAL -j DROP
+        "$ipt" -w -A "$forward" -p "$proto" -m conntrack --ctorigdstport "$port" --ctdir ORIGINAL -j DROP
     done
-    "$ipt" -w -A CDNF-INTERNAL-FORWARD -j RETURN
+    "$ipt" -w -A "$forward" -j RETURN
     # Host-network services: loopback, container bridges, and the fleet only.
-    "$ipt" -w -A CDNF-INTERNAL-INPUT -i lo -j RETURN
-    "$ipt" -w -A CDNF-INTERNAL-INPUT -i docker0 -j RETURN
-    "$ipt" -w -A CDNF-INTERNAL-INPUT -i 'br-+' -j RETURN
+    "$ipt" -w -A "$input" -i lo -j RETURN
+    "$ipt" -w -A "$input" -i docker0 -j RETURN
+    "$ipt" -w -A "$input" -i 'br-+' -j RETURN
     for entry in $HOST_PORTS; do
         port="${{entry%/*}}"; proto="${{entry#*/}}"
         for source in $fleet; do
-            "$ipt" -w -A CDNF-INTERNAL-INPUT -p "$proto" --dport "$port" -s "$source" -j RETURN
+            "$ipt" -w -A "$input" -p "$proto" --dport "$port" -s "$source" -j RETURN
         done
-        "$ipt" -w -A CDNF-INTERNAL-INPUT -p "$proto" --dport "$port" -j DROP
+        "$ipt" -w -A "$input" -p "$proto" --dport "$port" -j DROP
     done
-    "$ipt" -w -A CDNF-INTERNAL-INPUT -j RETURN
-    "$ipt" -w -C DOCKER-USER -j CDNF-INTERNAL-FORWARD 2>/dev/null || "$ipt" -w -I DOCKER-USER 1 -j CDNF-INTERNAL-FORWARD
-    "$ipt" -w -C INPUT -j CDNF-INTERNAL-INPUT 2>/dev/null || "$ipt" -w -I INPUT 1 -j CDNF-INTERNAL-INPUT
+    "$ipt" -w -A "$input" -j RETURN
+    swap_chain "$ipt" DOCKER-USER CDNF-INTERNAL-FORWARD "$forward"
+    swap_chain "$ipt" INPUT CDNF-INTERNAL-INPUT "$input"
 }}
 
 apply_family iptables "$FLEET_V4"

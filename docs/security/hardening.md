@@ -48,6 +48,10 @@ generated `firewall.sh`, and `start.sh` runs it before any container starts.
   destination port. The edge gateway runs on the host network, so its metrics port
   is judged in `INPUT`. Traffic between containers on the same host is not touched.
 - Public listeners (DNS, HTTP, HTTPS, edge control) are never filtered by it.
+- A rerun does not flush the rules that are filtering. It builds the new rules in a second chain
+  (`CDNF-INTERNAL-FORWARD-A` or `-B`, `CDNF-INTERNAL-INPUT-A` or `-B`), points the jump at it, and only then removes the
+  old chain, so the filter is never empty while it changes. A chain from an earlier release is retired the same way. The
+  swap is checked in a real network namespace; a packet-loop measurement of the window has not been run.
 - On a host with systemd it installs `cdnfoundry-firewall.service`, so the rules return
   after a reboot before containers restart. It uses `ip6tables` too when present.
 

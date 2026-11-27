@@ -59,13 +59,20 @@ def test_rules_load_in_a_real_network_namespace(tmp_path: Path) -> None:
     script = tmp_path / "firewall.sh"
     script.write_text(render_firewall_script(state, state["nodes"]["control-1"]))
     code = (
-        "apk add --no-cache iptables >/dev/null && iptables -N DOCKER-USER && sh /fw/firewall.sh --no-boot-unit && "
-        "iptables -S CDNF-INTERNAL-FORWARD && sh /fw/firewall.sh --no-boot-unit && iptables -S DOCKER-USER && iptables -S INPUT"
+        "apk add --no-cache iptables >/dev/null && iptables -N DOCKER-USER && "
+        # a chain from the earlier release, named without a slot, must be retired by the first run
+        "iptables -N CDNF-INTERNAL-FORWARD && iptables -A CDNF-INTERNAL-FORWARD -j RETURN && iptables -I DOCKER-USER 1 -j CDNF-INTERNAL-FORWARD && "
+        "sh /fw/firewall.sh --no-boot-unit && echo FIRST && iptables -S && sh /fw/firewall.sh --no-boot-unit && echo SECOND && iptables -S"
     )
     done = subprocess.run(["docker", "run", "--rm", "--cap-add", "NET_ADMIN", "-v", f"{tmp_path}:/fw:ro", "alpine:3.20", "sh", "-ec", code],
                           capture_output=True, text=True, check=False, timeout=240)
     out = done.stdout
     assert done.returncode == 0, done.stderr[-600:] + out[-600:]
-    assert "--ctorigdstport 9100" in out and "-A CDNF-INTERNAL-FORWARD -p tcp -m conntrack --ctorigdstport 9100 --ctdir ORIGINAL -j DROP" in out
-    assert out.count("-j CDNF-INTERNAL-FORWARD") == 1, "a second run must not duplicate the jump"
-    assert out.count("-j CDNF-INTERNAL-INPUT") == 1
+    first, second = out.split("FIRST")[1].split("SECOND")[0], out.split("SECOND")[1]
+    assert "-N CDNF-INTERNAL-FORWARD\n" not in first and "-j CDNF-INTERNAL-FORWARD\n" not in first, "the unslotted chain is retired"
+    assert "-A DOCKER-USER -j CDNF-INTERNAL-FORWARD-A" in first and "CDNF-INTERNAL-FORWARD-B" not in first.replace("-N CDNF-INTERNAL-FORWARD-B", "")
+    assert "-A CDNF-INTERNAL-FORWARD-A -p tcp -m conntrack --ctorigdstport 9100 --ctdir ORIGINAL -j DROP" in first
+    assert "-A DOCKER-USER -j CDNF-INTERNAL-FORWARD-B" in second and "-N CDNF-INTERNAL-FORWARD-A" not in second, "the second run swaps to the other slot and removes the first"
+    for text in (first, second):
+        assert sum(line.startswith("-A DOCKER-USER -j CDNF-INTERNAL-FORWARD") for line in text.splitlines()) == 1, "exactly one jump"
+        assert sum(line.startswith("-A INPUT -j CDNF-INTERNAL-INPUT") for line in text.splitlines()) == 1
