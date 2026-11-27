@@ -420,12 +420,14 @@ class ViewDomain extends ViewRecord
                 Toggle::make('redirect_https')->label(FilamentHelp::label('Redirect HTTP to HTTPS', 'Plain HTTP requests get a 301 to the same address over HTTPS.'))->default(false)->required(),
                 Select::make('http_versions')->label(FilamentHelp::label('Allowed HTTP versions', 'Versions visitors may use to reach the edge. Keep both unless an old client needs only one.'))->multiple()->options(['1.1' => 'HTTP/1.1', '2' => 'HTTP/2'])->required()->maxItems(2)->placeholder('Choose versions'),
                 TextInput::make('retry_count')->label(FilamentHelp::label('Origin retry count', 'How many times a failed request to the origin is tried again. Only safe methods are retried.'))->numeric()->default(0)->minValue(0)->maxValue(2)->required()->placeholder('0'),
+                Select::make('diagnostics')->label(FilamentHelp::label('Diagnostic headers', 'Adds the diag-origin-status response header and keeps the Server header for this domain. Inherit follows the platform default. An administrator can force diagnostics off for every domain.'))
+                    ->options(['inherit' => 'Inherit the platform default', 'enabled' => 'On', 'disabled' => 'Off'])->native(false)->selectablePlaceholder(false)->required()->default('inherit'),
             ])->fillForm(function (): array {
-                return is_array($this->record->proxy_settings) ? $this->record->proxy_settings : ReconcileEdgeDomain::defaults();
+                return [...(is_array($this->record->proxy_settings) ? $this->record->proxy_settings : ReconcileEdgeDomain::defaults()), 'diagnostics' => $this->record->proxy_settings['diagnostics'] ?? 'inherit'];
             })->action(function (array $data): void {
                 $settings = [
                     'enabled' => (bool) $data['enabled'], 'redirect_https' => (bool) $data['redirect_https'],
-                    'http_versions' => array_values($data['http_versions']), 'retry_count' => (int) $data['retry_count'],
+                    'http_versions' => array_values($data['http_versions']), 'retry_count' => (int) $data['retry_count'], 'diagnostics' => $data['diagnostics'],
                     'maintenance' => $this->record->proxy_settings['maintenance'] ?? null,
                 ];
                 DB::transaction(function () use ($settings): void {
