@@ -35,6 +35,12 @@ foreach ($security as $marker => $rows) {
         return;
     }
 }
+// The possible false positives sheet: one client blocked by a rule and then solving a challenge.
+if (str_contains($sql, 'solved_challenges')) {
+    echo json_encode(['client_key' => '0a1b2c3d4e5f', 'blocked_requests' => 7, 'solved_challenges' => 1, 'first_blocked' => gmdate('Y-m-d H:i:s.000', time() - 3000), 'last_solved' => gmdate('Y-m-d H:i:s.000', time() - 2900), 'top_rule' => 'r1'])."\n";
+
+    return;
+}
 // The attack episodes sheet: two blocked minutes make one episode, with its top client keys, paths, and rules.
 if (str_contains($sql, 'GROUP BY minute')) {
     foreach ([[40, 60], [39, 90]] as [$minutesAgo, $blocked]) {

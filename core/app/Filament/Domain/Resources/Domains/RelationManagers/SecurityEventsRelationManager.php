@@ -84,6 +84,10 @@ class SecurityEventsRelationManager extends RelationManager
                     ->modalDescription('Blocked requests grouped into one episode per attack. Client keys are not addresses and are different on every edge.')
                     ->slideOver()->modalWidth(Width::FiveExtraLarge)->modalSubmitAction(false)->modalCancelActionLabel('Close')
                     ->modalContent(fn () => view('filament.domain.security-episodes', $this->episodeData())),
+                Action::make('candidates')->label('Possible false positives')->icon('phosphor-user-check')->modalHeading('Possible false positives, last 24 hours')
+                    ->modalDescription('Clients that a rule blocked and that then solved a challenge. A person proved to be a browser, so the rule may be too broad. These are candidates to review, not proof.')
+                    ->slideOver()->modalWidth(Width::FiveExtraLarge)->modalSubmitAction(false)->modalCancelActionLabel('Close')
+                    ->modalContent(fn () => view('filament.domain.security-candidates', $this->candidateData())),
             ])
             ->recordActions([
                 Action::make('trace')->label('Trace')->icon('phosphor-list-magnifying-glass')->modalHeading('Why this request was mitigated')
@@ -161,6 +165,20 @@ class SecurityEventsRelationManager extends RelationManager
         $data = ['state' => 'ready', 'episodes' => [], 'minimum' => AttackEpisodes::MINIMUM_BLOCKED, 'quiet' => SecurityAlertData::EPISODE_QUIET_MINUTES];
         try {
             $data['episodes'] = AttackEpisodes::describe($this->domain(), ['from' => $now->subDay(), 'to' => $now, 'raw' => true], app(AnalyticsStore::class));
+        } catch (AnalyticsUnavailableException) {
+            $data['state'] = 'unavailable';
+        }
+
+        return $data;
+    }
+
+    /** @return array{state: string, candidates: array<int, array<string, mixed>>} */
+    private function candidateData(): array
+    {
+        $now = CarbonImmutable::now('UTC');
+        $data = ['state' => 'ready', 'candidates' => []];
+        try {
+            $data['candidates'] = app(AnalyticsStore::class)->falsePositiveCandidates($this->domain(), ['from' => $now->subDay(), 'to' => $now, 'raw' => true]);
         } catch (AnalyticsUnavailableException) {
             $data['state'] = 'unavailable';
         }

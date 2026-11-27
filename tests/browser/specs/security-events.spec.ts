@@ -95,3 +95,19 @@ test('the episodes sheet lists an attack with its top sources', async ({ page })
     await sheet.getByRole('button', { name: 'Close', exact: true }).last().click();
     await expect(sheet).toBeHidden();
 });
+
+test('the false positives sheet lists a client blocked and then proven to be a browser', async ({ page }) => {
+    await openEvents(page);
+    await page.getByRole('button', { name: 'Possible false positives' }).click();
+    const sheet = page.locator('.fi-modal-window:visible');
+    await expect(sheet.getByRole('heading', { name: 'Possible false positives, last 24 hours' })).toBeVisible();
+    const row = sheet.getByTestId('false-positive-candidates').locator('tbody tr');
+    await expect(row).toHaveCount(1);
+    await expect(row).toContainText('0a1b2c3d4e5f');
+    await expect(row).toContainText('7');
+    await expect(row).toContainText('r1');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    await expectAccessible(page);
+    await sheet.getByRole('button', { name: 'Close', exact: true }).last().click();
+    await expect(sheet).toBeHidden();
+});
