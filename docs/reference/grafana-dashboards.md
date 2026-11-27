@@ -325,6 +325,8 @@ Refreshes every 30s.
 | Blocks and logs by reason | Why the edge acted on a request: rate limits, firewall rules, the WAF, and cache abuse protection. |
 | Client-side reports | Browser reports of blocked scripts and connections that reached the edge, per hour. |
 | Firewall rules that matched | Domain rules that matched most, by rule name, over the last 7 days. |
+| Challenge outcomes | Browser challenges by outcome over the last 7 days at most: shown (the visitor was asked), solved, refused as invalid, and stopped by the per-token request budget. Counted from stored request events of the selected domains, so it follows the domain filter and not the region or PoP filter. |
+| Challenges solved | Share of challenge prompts that were solved in the selected range, from stored events (7 days at most). A prompt can be solved after the range ends, so a short range reads low. Empty when no challenge was shown. |
 | Firing alerts | Every firing alert with its team, severity, and start time. Open the dashboard column to see the cause at the time it started. |
 
 ### Telemetry integrity
