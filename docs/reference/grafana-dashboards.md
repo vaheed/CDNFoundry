@@ -327,6 +327,13 @@ Refreshes every 30s.
 | Firewall rules that matched | Domain rules that matched most, by rule name, over the last 7 days. |
 | Challenge outcomes | Browser challenges by outcome over the last 7 days at most: shown (the visitor was asked), solved, refused as invalid, and stopped by the per-token request budget. Counted from stored request events of the selected domains, so it follows the domain filter and not the region or PoP filter. |
 | Challenges solved | Share of challenge prompts that were solved in the selected range, from stored events (7 days at most). A prompt can be solved after the range ends, so a short range reads low. Empty when no challenge was shown. |
+| Shadow rules | Firewall rules that are evaluated and recorded but never act. Counted from the control database, all domains: fleet-wide. Empty while the database source is unreachable. |
+| Expiring rules | Enabled firewall rules that end on their own within the next 7 days. Fleet-wide, from the control database. |
+| Challenge key age | Time since the active challenge key was activated. Fleet-wide. A key that stays active for a long time was not rotated; no value means no active key exists. How far each edge has acknowledged the key is not recorded yet, so no panel claims it. |
+| Challenge key rotation | Challenge keys held for verification only, which every cell must still accept until their retirement. Fleet-wide, from the control database. |
+| Client reputation bands | Clients currently held in each shared reputation band. Reputation is in shadow stage: it records bands and publishes nothing to any cell. Fleet-wide; the table is empty until a domain opts in and a cell reports. |
+| Reputation report age | Time since a cell last reported clients for shared reputation. Fleet-wide. No value means no report was ever received, which is not the same as a healthy fleet. |
+| Reputation reporting edges | Edges that reported clients inside the report retention window. Fleet-wide. |
 | Firing alerts | Every firing alert with its team, severity, and start time. Open the dashboard column to see the cause at the time it started. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 
 ### Telemetry integrity
