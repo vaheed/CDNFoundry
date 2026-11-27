@@ -771,7 +771,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Bytes sent per month, over the last year.",
+      "description": "Bytes sent per month, over the last year. Always the last 1y, whatever range the dashboard shows.",
       "fieldConfig": {
         "defaults": {
           "color": {

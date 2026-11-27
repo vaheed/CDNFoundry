@@ -468,7 +468,7 @@
         "type": "postgres",
         "uid": "control-db"
       },
-      "description": "Size of each verified backup over the last 30 days, whatever range the dashboard shows, because backups run once a day.",
+      "description": "Size of each verified backup over the last 30 days, whatever range the dashboard shows, because backups run once a day. Always the last 30d, whatever range the dashboard shows.",
       "fieldConfig": {
         "defaults": {
           "color": {

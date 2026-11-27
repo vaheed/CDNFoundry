@@ -454,7 +454,7 @@
         "type": "postgres",
         "uid": "control-db"
       },
-      "description": "Domains created per month, over the last year.",
+      "description": "Domains created per month, over the last year. Always the last 1y, whatever range the dashboard shows.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -542,7 +542,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Requests per month, over the last year.",
+      "description": "Requests per month, over the last year. Always the last 1y, whatever range the dashboard shows.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -630,7 +630,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Bytes sent per month, over the last year.",
+      "description": "Bytes sent per month, over the last year. Always the last 1y, whatever range the dashboard shows.",
       "fieldConfig": {
         "defaults": {
           "color": {

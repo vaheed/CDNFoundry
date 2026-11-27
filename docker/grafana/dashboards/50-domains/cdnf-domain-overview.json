@@ -1124,7 +1124,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "DNS queries per hour for the domain's zone over the last 24 hours, whatever range the dashboard shows.",
+      "description": "DNS queries per hour for the domain's zone over the last 24 hours, whatever range the dashboard shows. Always the last 24h, whatever range the dashboard shows.",
       "fieldConfig": {
         "defaults": {
           "color": {

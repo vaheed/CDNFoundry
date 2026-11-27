@@ -165,7 +165,7 @@ Refreshes every 30s.
 | Origin p95 | 95th percentile origin response time. |
 | Origin failures | Origin failures per second. |
 | Failure ratio | Share of origin requests that failed. |
-| Failover events (1h) | Requests that moved to a backup origin in the last hour. |
+| Failover events (1h) | Requests that moved to a backup origin in the last 1 hour (not the dashboard range). |
 | Origin latency percentiles | Median, 95th, and 99th percentile origin response time. |
 | Origin failures | Origin failures per second by PoP. |
 | Slowest origins | Hostnames with the slowest origin responses. |
@@ -340,7 +340,7 @@ Refreshes every 30s.
 | Rejected events (1h) | Events dropped by authentication or validation in Vector in the last hour. |
 | Dropped at buffers (1h) | Events dropped because a buffer was full, in the last hour. |
 | Insert failures (1h) | ClickHouse inserts Vector could not complete, in the last hour. |
-| Ingest delay | Seconds between now and the newest event stored in ClickHouse. |
+| Ingest delay | Seconds between now and the newest event stored in ClickHouse, looking back 1 day at most (not the dashboard range). |
 | Rejected and forged events | Events Vector refused, by component. |
 | Dropped events and insert failures | Buffer drops and delivery errors per second. |
 | Events stored by PoP | Events per second ClickHouse stored, per PoP. A PoP that goes flat is not delivering. |
@@ -379,8 +379,8 @@ Refreshes every 30s.
 | WAF actions | Requests per second by WAF action. |
 | WAF processing time | Average and 95th percentile WAF processing time. |
 | Top rules | The WAF rules matched most often in the last 7 days. Select a rule to list its requests below. |
-| Top rules by domain | Which hostnames trigger each rule. |
-| Requests for the selected rule | Requests that matched the rule in the WAF rule field above. Choose a rule from the top rules table. |
+| Top rules by domain | Which hostnames trigger each rule, over the last 7 days (not the dashboard range). |
+| Requests for the selected rule | Requests that matched the rule in the WAF rule field above. Choose a rule from the top rules table. Looks back 7 days, whatever the dashboard range. |
 
 ## Platform admin
 
@@ -398,7 +398,7 @@ Refreshes every 30s.
 | Last backup size | Size of the newest verified backup. |
 | Backups healthy | 1 when the backup component reports healthy: a fresh backup, a passing restic check, and a passing restore preflight. |
 | Failed backups (7d) | Backups that failed in the last 7 days. |
-| Backup size | Size of each verified backup over the last 30 days, whatever range the dashboard shows, because backups run once a day. |
+| Backup size | Size of each verified backup over the last 30 days, whatever range the dashboard shows, because backups run once a day. Always the last 30d, whatever range the dashboard shows. |
 | Recent backups | The newest backups with their result. |
 
 ### Control plane
@@ -508,12 +508,12 @@ Refreshes every 30s.
 | Events delivered | Events per second Vector delivers to ClickHouse. |
 | Dropped (5m) | Events dropped by a full buffer in the last 5 minutes. |
 | Sink errors (5m) | Delivery errors in the last 5 minutes. |
-| Slowest PoP delay | Largest delay between an event and its arrival in ClickHouse, over PoPs. |
+| Slowest PoP delay | Largest delay between an event and its arrival in ClickHouse, over PoPs. Looks back 1 day, whatever the dashboard range. |
 | Events sent by collector | Events per second each Vector component delivered. |
 | Buffer size | Bytes waiting in each disk buffer. |
 | Dropped events | Events dropped per second by component. |
 | Sink errors | Delivery errors per second by component. |
-| Ingest delay by PoP | Seconds between now and the newest event each PoP delivered. |
+| Ingest delay by PoP | Seconds between now and the newest event each PoP delivered, looking back 1 day at most (not the dashboard range). |
 
 ## On-call and SLO
 
@@ -570,7 +570,7 @@ Refreshes every 30s.
 
 | Panel | What it shows |
 | --- | --- |
-| Edge log | The edge log line for the request: PoP, edge, domain, status, timings, cache, and security result. |
+| Edge log | The edge log line for the request: PoP, edge, domain, status, timings, cache, and security result. Looks back 7 days. |
 | Edge time | Time the edge took to serve the request. |
 | Origin time | Time the origin took to answer. |
 | Status | The response status the client received. |
@@ -603,10 +603,10 @@ Refreshes every 30s.
 | Panel | What it shows |
 | --- | --- |
 | Domains side by side | The selected hostnames with requests, errors, cache hit, bytes, and latency, for support to compare. |
-| Requests by domain | Requests per second for the selected hostnames. |
-| 5xx by domain | Server errors per second for the selected hostnames. |
-| Cache hit by domain | Share of requests served from cache. |
-| Latency by domain | 95th percentile edge time. |
+| Requests by domain | Requests per second for the selected hostnames. Always the last 24h, whatever range the dashboard shows. |
+| 5xx by domain | Server errors per second for the selected hostnames. Always the last 24h, whatever range the dashboard shows. |
+| Cache hit by domain | Share of requests served from cache. Always the last 24h, whatever range the dashboard shows. |
+| Latency by domain | 95th percentile edge time. Always the last 24h, whatever range the dashboard shows. |
 
 ### Domain overview
 
@@ -627,7 +627,7 @@ Refreshes every 30s.
 | Origin latency | 95th percentile origin time and origin errors. |
 | Security events | Blocked and classified requests per second. |
 | TLS certificates | The domain's certificates and when they expire. |
-| DNS queries | DNS queries per hour for the domain's zone over the last 24 hours, whatever range the dashboard shows. |
+| DNS queries | DNS queries per hour for the domain's zone over the last 24 hours, whatever range the dashboard shows. Always the last 24h, whatever range the dashboard shows. |
 | Purge history | Recent cache purges for the domain. |
 | Configuration changes | Edge configuration published for the domain, newest first. |
 | Requests by status code | The status codes the domain returned in the range. |
@@ -667,9 +667,9 @@ Refreshes every 30s.
 | New domains (30d) | Domains created in the last 30 days. |
 | Traffic growth (30d) | Requests in the last 30 days against the 30 days before. |
 | Bandwidth growth (30d) | Bytes sent in the last 30 days against the 30 days before. |
-| Domains by month | Domains created per month, over the last year. |
-| Traffic by month | Requests per month, over the last year. |
-| Bandwidth by month | Bytes sent per month, over the last year. |
+| Domains by month | Domains created per month, over the last year. Always the last 1y, whatever range the dashboard shows. |
+| Traffic by month | Requests per month, over the last year. Always the last 1y, whatever range the dashboard shows. |
+| Bandwidth by month | Bytes sent per month, over the last year. Always the last 1y, whatever range the dashboard shows. |
 | Top growing domains | Hostnames whose requests grew most against the previous 30 days. |
 
 ### Usage and billing
@@ -687,7 +687,7 @@ Refreshes every 30s.
 | Usage by domain | Bandwidth, 95th-percentile bandwidth, and requests per domain for the selected range. |
 | Usage by region | Bandwidth and requests per region for the selected range. |
 | Bandwidth by PoP | Bits per second sent, per PoP, at 5-minute resolution. |
-| Monthly bandwidth | Bytes sent per month, over the last year. |
+| Monthly bandwidth | Bytes sent per month, over the last year. Always the last 1y, whatever range the dashboard shows. |
 | Billing rollups | Hourly usage rollups kept in the control database, which the monthly report uses. |
 | Download by edge | Bytes sent to clients, headers included, per edge host. SQL: SELECT edge_id, sum(bytes_sent) FROM cdnf.edge_volume_hourly WHERE interval_start >= toStartOfHour($__fromTime) GROUP BY edge_id |
 | Download by cell | Bytes sent to clients per serving cell. SQL: SELECT cell, sum(bytes_sent) FROM cdnf.edge_volume_hourly WHERE interval_start >= toStartOfHour($__fromTime) GROUP BY cell |
@@ -713,7 +713,7 @@ Refreshes every 30s.
 | --- | --- |
 | Top domains by egress | Which domains sent the most bytes? SQL: SELECT hostname, sum(bytes_sent) FROM cdnf.edge_traffic_hourly WHERE $__timeFilter(interval_start) GROUP BY hostname ORDER BY 2 DESC LIMIT 10 |
 | Which PoP is slowest | Which PoP has the highest 95th percentile edge time? PromQL: topk(5, 1000 * histogram_quantile(0.95, sum by (le, pop) (cdnf:edge_latency_bucket:rate5m))) |
-| Who triggered a WAF rule | Which client networks triggered the most WAF matches? SQL: group edge_events by masked client network where waf_rule_id != 0. |
+| Who triggered a WAF rule | Which client networks triggered the most WAF matches? SQL: group edge_events by masked client network where waf_rule_id != 0. Looks back 7 days, whatever the dashboard range. |
 | Error rate by status | What is the rate of each 5xx status? PromQL: sum by (status_class) (cdnf:edge_requests:rate5m{status_class="5xx"}) |
-| Slowest origins over time | Which hostnames have a slow origin? SQL: quantilesTDigestMerge over origin_latency_q by hostname. |
+| Slowest origins over time | Which hostnames have a slow origin? SQL: quantilesTDigestMerge over origin_latency_q by hostname. Always the last 24h, whatever range the dashboard shows. |
 | Recent errors | What errors did services log? LogQL: {level=~"error\|critical"} |

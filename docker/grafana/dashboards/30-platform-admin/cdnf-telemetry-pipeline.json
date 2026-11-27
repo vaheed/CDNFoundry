@@ -387,7 +387,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Largest delay between an event and its arrival in ClickHouse, over PoPs.",
+      "description": "Largest delay between an event and its arrival in ClickHouse, over PoPs. Looks back 1 day, whatever the dashboard range.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -821,7 +821,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Seconds between now and the newest event each PoP delivered.",
+      "description": "Seconds between now and the newest event each PoP delivered, looking back 1 day at most (not the dashboard range).",
       "fieldConfig": {
         "defaults": {
           "color": {

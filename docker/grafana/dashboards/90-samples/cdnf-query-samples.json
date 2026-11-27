@@ -343,7 +343,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Which client networks triggered the most WAF matches? SQL: group edge_events by masked client network where waf_rule_id != 0.",
+      "description": "Which client networks triggered the most WAF matches? SQL: group edge_events by masked client network where waf_rule_id != 0. Looks back 7 days, whatever the dashboard range.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -503,7 +503,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Which hostnames have a slow origin? SQL: quantilesTDigestMerge over origin_latency_q by hostname.",
+      "description": "Which hostnames have a slow origin? SQL: quantilesTDigestMerge over origin_latency_q by hostname. Always the last 24h, whatever range the dashboard shows.",
       "fieldConfig": {
         "defaults": {
           "color": {

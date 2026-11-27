@@ -156,7 +156,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "The edge log line for the request: PoP, edge, domain, status, timings, cache, and security result.",
+      "description": "The edge log line for the request: PoP, edge, domain, status, timings, cache, and security result. Looks back 7 days.",
       "fieldConfig": {
         "defaults": {
           "color": {

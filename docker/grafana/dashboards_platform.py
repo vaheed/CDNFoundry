@@ -30,6 +30,7 @@ def first_to_run_out(panel: dict) -> dict:
 def over(panel: dict, span: str) -> dict:
     """A panel that always shows `span`, whatever range the dashboard shows: monthly and daily series have no point inside six hours."""
     panel["timeFrom"] = span
+    panel["description"] = f"{panel.get('description', '').rstrip()} Always the last {span}, whatever range the dashboard shows.".strip()
     # The title already says so in the description; the override label would cut a narrow panel's title short.
     panel["hideTimeOverride"] = True
     return panel
@@ -112,12 +113,12 @@ def telemetry_pipeline() -> dict:
         [stat("Events delivered", "Events per second Vector delivers to ClickHouse.", [prom('sum(rate(vector_component_sent_events_total{component_id=~"clickhouse_.*"}[5m]))', "delivered", instant=True)], "ops", w=6, decimals=1),
          stat("Dropped (5m)", "Events dropped by a full buffer in the last 5 minutes.", [prom('sum(increase(vector_component_discarded_events_total{intentional!="true"}[5m])) or (0 * max(up{job=~`vector.*`}))', "dropped", instant=True)], "short", "zero_warn", w=6),
          stat("Sink errors (5m)", "Delivery errors in the last 5 minutes.", [prom("sum(increase(vector_component_errors_total[5m])) or (0 * max(up{job=~`vector.*`}))", "errors", instant=True)], "short", "zero_warn", w=6),
-         stat("Slowest PoP delay", "Largest delay between an event and its arrival in ClickHouse, over PoPs.", [ch("SELECT max(delay) AS delay FROM (SELECT pop, dateDiff('second', max(occurred_at), now()) AS delay FROM cdnf.edge_events WHERE occurred_at > now() - INTERVAL 1 DAY GROUP BY pop)", table=True)], "s", "age_seconds", w=6)],
+         stat("Slowest PoP delay", "Largest delay between an event and its arrival in ClickHouse, over PoPs. Looks back 1 day, whatever the dashboard range.", [ch("SELECT max(delay) AS delay FROM (SELECT pop, dateDiff('second', max(occurred_at), now()) AS delay FROM cdnf.edge_events WHERE occurred_at > now() - INTERVAL 1 DAY GROUP BY pop)", table=True)], "s", "age_seconds", w=6)],
         [timeseries("Events sent by collector", "Events per second each Vector component delivered.", [prom('sum by (instance, component_id) (rate(vector_component_sent_events_total{component_id=~"clickhouse_.*"}[5m]))', "{{instance}} {{component_id}}")], "ops"),
          timeseries("Buffer size", "Bytes waiting in each disk buffer.", [prom("sum by (instance, component_id) (vector_buffer_size_bytes)", "{{instance}} {{component_id}}")], "bytes")],
         [timeseries("Dropped events", "Events dropped per second by component.", [prom('sum by (component_id) (rate(vector_component_discarded_events_total{intentional!="true"}[5m]))', "{{component_id}}")], "ops", threshold="zero_warn"),
          timeseries("Sink errors", "Delivery errors per second by component.", [prom("sum by (component_id) (rate(vector_component_errors_total[5m]))", "{{component_id}}")], "ops", threshold="zero_warn")],
-        [table("Ingest delay by PoP", "Seconds between now and the newest event each PoP delivered.", [ch("SELECT pop, dateDiff('second', max(occurred_at), now()) AS delay_seconds FROM cdnf.edge_events WHERE occurred_at > now() - INTERVAL 1 DAY GROUP BY pop ORDER BY delay_seconds DESC", table=True)], w=24, h=6,
+        [table("Ingest delay by PoP", "Seconds between now and the newest event each PoP delivered, looking back 1 day at most (not the dashboard range).", [ch("SELECT pop, dateDiff('second', max(occurred_at), now()) AS delay_seconds FROM cdnf.edge_events WHERE occurred_at > now() - INTERVAL 1 DAY GROUP BY pop ORDER BY delay_seconds DESC", table=True)], w=24, h=6,
                overrides=[{"matcher": {"id": "byName", "options": "delay_seconds"}, "properties": [{"id": "unit", "value": "s"}, {"id": "decimals", "value": 0}]}])],
     ]
     return dashboard("cdnf-telemetry-pipeline", "Telemetry pipeline", "cdnf-platform", "Vector per role, buffers, drops, sink errors, and ingest delay from edge to ClickHouse.", rows, runbook="clickhouse-or-vector-outage")
@@ -293,7 +294,7 @@ def logs_explorer() -> dict:
 def request_trace() -> dict:
     request = {"name": "request_id", "label": "Request ID", "type": "textbox", "query": "", "current": {"text": "", "value": ""}, "hide": 0, "options": [{"selected": True, "text": "", "value": ""}], "skipUrlSync": False}
     rows = [
-        [table("Edge log", "The edge log line for the request: PoP, edge, domain, status, timings, cache, and security result.", [ch(
+        [table("Edge log", "The edge log line for the request: PoP, edge, domain, status, timings, cache, and security result. Looks back 7 days.", [ch(
             "SELECT occurred_at AS time, pop, edge_id, hostname, method, path, status, cache_status, request_time_ms, upstream_header_ms, origin_latency_ms, origin_error, origin_role, security_action, security_class, server_protocol, ssl_protocol "
             "FROM cdnf.edge_events WHERE request_id = '${request_id}' AND request_id != '' AND occurred_at > now() - INTERVAL 7 DAY ORDER BY occurred_at LIMIT 20", table=True)], w=24, h=7)],
         [stat("Edge time", "Time the edge took to serve the request.", [ch("SELECT request_time_ms AS ms FROM cdnf.edge_events WHERE request_id = '${request_id}' AND request_id != '' LIMIT 1", table=True)], "ms", "latency_ms", w=6),

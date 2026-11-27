@@ -259,6 +259,15 @@ class GrafanaContractTest(unittest.TestCase):
                 self.assertIn(f'{parsed}=~".*${variable}.*"', expression, f"{title}: {variable}")
         self.assertGreaterEqual(len(TEMPLATES), 16)
 
+    def test_a_panel_that_ignores_the_dashboard_range_states_its_window(self) -> None:
+        """A panel with its own time override, or a fixed look-back inside its query, must say so, or a reader takes it for the range."""
+        for uid, dashboard in self.by_uid.items():
+            for panel in resolved(dashboard, self.models):
+                queries = " ".join(str(target.get("expr") or target.get("rawSql") or target.get("query") or "") for target in targets(panel))
+                fixed = bool(panel.get("timeFrom")) or re.search(r"INTERVAL \d+ (DAY|HOUR|MONTH)", queries)
+                if fixed and "$__timeFilter" not in queries:
+                    self.assertRegex(panel.get("description", ""), r"\d+ (hour|day|week|month)s?|last \d+|always", f"{uid}/{panel['title']}: it ignores the range and does not say which window it shows")
+
     def test_no_panel_turns_an_absent_series_into_zero(self) -> None:
         """`or vector(0)` shows 0 for a source that is not reporting. A panel keeps a zero only while its source exists:
         `or (0 * max(<source>))` is 0 when the source reports and has no value when it does not."""

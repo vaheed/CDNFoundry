@@ -295,7 +295,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Requests per second for the selected hostnames.",
+      "description": "Requests per second for the selected hostnames. Always the last 24h, whatever range the dashboard shows.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -384,7 +384,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Server errors per second for the selected hostnames.",
+      "description": "Server errors per second for the selected hostnames. Always the last 24h, whatever range the dashboard shows.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -477,7 +477,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Share of requests served from cache.",
+      "description": "Share of requests served from cache. Always the last 24h, whatever range the dashboard shows.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -570,7 +570,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "95th percentile edge time.",
+      "description": "95th percentile edge time. Always the last 24h, whatever range the dashboard shows.",
       "fieldConfig": {
         "defaults": {
           "color": {

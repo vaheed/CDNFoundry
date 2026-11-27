@@ -735,7 +735,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Which hostnames trigger each rule.",
+      "description": "Which hostnames trigger each rule, over the last 7 days (not the dashboard range).",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -815,7 +815,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Requests that matched the rule in the WAF rule field above. Choose a rule from the top rules table.",
+      "description": "Requests that matched the rule in the WAF rule field above. Choose a rule from the top rules table. Looks back 7 days, whatever the dashboard range.",
       "fieldConfig": {
         "defaults": {
           "color": {

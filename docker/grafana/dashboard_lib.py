@@ -7,6 +7,7 @@ written JSON, so a rule broken here fails CI.
 from __future__ import annotations
 
 import copy
+import re
 from typing import Any
 
 DOCS = "https://vaheed.github.io/CDNFoundry/operations/runbooks"
@@ -277,7 +278,7 @@ def shared(uid: str, panel: dict[str, Any], *, w: int | None = None, h: int | No
     The model is written to library-panels/<uid>.json and created by the bootstrap job. A dashboard keeps only
     the reference, a title for the layout, and where the panel sits.
     """
-    model = copy.deepcopy(panel)
+    model = state_window(copy.deepcopy(panel))
     model.pop("gridPos", None)
     model.pop("id", None)
     if uid in LIBRARY and LIBRARY[uid] != model:
@@ -363,6 +364,32 @@ def fit_titles(row_panels: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return panels
 
 
+_LOOK_BACK = re.compile(r"INTERVAL (\d+) (DAY|HOUR|MONTH)")
+_OVERRIDE = re.compile(r"^(\d+)([hdw])$")
+_STATED = re.compile(r"\d+ (hour|day|week|month)s?|last \d+|always", re.IGNORECASE)
+
+
+def state_window(panel: dict[str, Any]) -> dict[str, Any]:
+    """A panel that ignores the dashboard range (its own time override or a fixed look-back in its query) says which window it shows."""
+    if panel.get("type") in ("row", "text"):
+        return panel
+    queries = " ".join(str(target.get("expr") or target.get("rawSql") or target.get("query") or "") for target in panel.get("targets", []))
+    if "$__timeFilter" in queries or _STATED.search(panel.get("description", "")):
+        return panel
+    window = None
+    override = _OVERRIDE.match(str(panel.get("timeFrom", "")))
+    if override:
+        unit = {"h": "hour", "d": "day", "w": "week"}[override.group(2)]
+        window = f"{override.group(1)} {unit}"
+    look_back = _LOOK_BACK.search(queries)
+    if window is None and look_back:
+        window = f"{look_back.group(1)} {look_back.group(2).lower()}"
+    if window is not None:
+        count = int(window.split()[0])
+        panel["description"] = f"{panel.get('description', '').rstrip()} Looks back {window}{'s' if count != 1 else ''}, whatever the dashboard range.".strip()
+    return panel
+
+
 def layout(rows: list[Any]) -> list[dict[str, Any]]:
     """Lay panels out left to right. A list is one row of panels sharing the 24 columns; a dict is a section header."""
     panels: list[dict[str, Any]] = []
@@ -381,7 +408,7 @@ def layout(rows: list[Any]) -> list[dict[str, Any]]:
             raise ValueError(f"panels in a row must fill 24 columns, got {used}: {[p['title'] for p in item]}")
         x = 0
         for panel in item:
-            panel = copy.deepcopy(panel)
+            panel = state_window(copy.deepcopy(panel))
             panel["gridPos"].update({"x": x, "y": y, "h": height})
             x += panel["gridPos"]["w"]
             panels.append(panel)
