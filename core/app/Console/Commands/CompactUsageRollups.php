@@ -83,7 +83,7 @@ class CompactUsageRollups extends Command
                         'owner_user_ids' => $group->flatMap(fn ($row) => $row->owner_user_ids ?? [])->unique()->sort()->values()->take(20)->all(),
                     ]);
                 foreach ($chunk as $row) {
-                    $status = $uncovered || $row->incomplete_rows > 0 ? 'incomplete' : ($row->corrected_rows > 0 ? 'corrected' : 'finalized');
+                    $status = $uncovered || (int) $row->getAttribute('incomplete_rows') > 0 ? 'incomplete' : ((int) $row->getAttribute('corrected_rows') > 0 ? 'corrected' : 'finalized');
                     UsageRollup::query()->updateOrCreate(
                         ['domain_id' => $row->domain_id, 'interval_start' => $start, 'granularity' => $to],
                         ['interval_end' => $end, 'requests' => $row->requests, 'bytes_in' => $row->bytes_in, 'bytes_out' => $row->bytes_out, 'cache_hits' => $row->cache_hits,

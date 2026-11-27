@@ -23,17 +23,19 @@ class FinalizeUsage extends Command
     public function handle(PlatformSettings $settings): int
     {
         $last = CarbonImmutable::now('UTC')->subHour()->startOfHour()->subHour();
-        $first = UsageCoverage::query()->min('interval_start');
+        $first = UsageCoverage::query()->orderBy('interval_start')->first()?->interval_start;
         // A fleet with no coverage yet starts at the latest hour: rows finalized before coverage existed are never recomputed.
-        $start = $first === null ? $last : CarbonImmutable::parse($first, 'UTC');
+        $start = $first === null ? $last : CarbonImmutable::parse((string) $first, 'UTC');
         $floor = $last->subDays($settings->integer('operations', 'usage_hourly_retention_days'))->startOfDay();
         $start = $start < $floor ? $floor : $start;
         $built = UsageCoverage::query()->where('interval_start', '>=', $start)->where('interval_start', '<=', $last)->get(['interval_start', 'status'])
             ->mapWithKeys(fn (UsageCoverage $row): array => [$row->interval_start->utc()->toIso8601String() => $row->status]);
         $retryFrom = $last->subHours(self::INCOMPLETE_RETRY_HOURS);
         $queued = 0;
+        /** @var CarbonImmutable|null $runStart */
         $runStart = null;
-        $previous = null;
+        /** @var CarbonImmutable $previous */
+        $previous = $last;
         $flush = function () use (&$runStart, &$previous, &$queued): void {
             if ($runStart !== null) {
                 BuildUsageRollups::dispatch($runStart->toIso8601String(), $previous->addHour()->toIso8601String());
