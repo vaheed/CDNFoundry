@@ -260,19 +260,24 @@ final class AnalyticsStore
         return ['items' => $rows, 'next_cursor' => $hasMore && is_array($last) ? $this->encodeCursor($last) : null];
     }
 
-    /** The most mitigated requests one list returns. The list is the newest of the window, not every mitigated request. */
-    public const MITIGATIONS_LIMIT = 500;
+    /** Mitigated requests one page returns; the list pages through the whole window with a cursor. */
+    public const MITIGATIONS_PAGE = 100;
 
     /**
      * Mitigated requests of one domain, newest first: blocked, challenged, or logged by a rule. Only stored request events can be
-     * listed, so the list is bounded by the event retention and by MITIGATIONS_LIMIT.
+     * listed, so the list is bounded by the event retention and by the range (24 hours at most). It pages with a cursor over
+     * (occurred_at, event_id), so a page costs the same wherever it sits in the window. Every row carries its decision trace.
      *
      * @param  array{action?: ?string, rule?: ?string, reason?: ?string, score_max?: ?int, path?: ?string, country?: ?string, asn?: ?int, user_agent?: ?string, request_id?: ?string}  $filters
+     * @return array{items: list<array<string, mixed>>, next_cursor: ?string}
      */
-    public function mitigations(Domain $domain, array $range, array $filters): array
+    public function mitigations(Domain $domain, array $range, array $filters, ?string $cursor = null, int $limit = self::MITIGATIONS_PAGE): array
     {
-        $parameters = [...$this->parameters($range, $domain), 'limit' => self::MITIGATIONS_LIMIT];
-        $where = ["event_type = 'request'", "(security_action = 'block' OR security_rule != '')"];
+        $limit = max(1, min(self::MITIGATIONS_PAGE, $limit));
+        $decoded = $this->decodeCursor($cursor);
+        $parameters = [...$this->parameters($range, $domain), 'limit' => $limit + 1,
+            'cursor_time' => $decoded['occurred_at'] ?? '9999-12-31 23:59:59.999', 'cursor_id' => $decoded['event_id'] ?? 'ffffffff-ffff-ffff-ffff-ffffffffffff'];
+        $where = ["event_type = 'request'", "(security_action = 'block' OR security_rule != '')", '(occurred_at, event_id) < ({cursor_time:DateTime64}, {cursor_id:UUID})'];
         $equals = ['rule' => ['security_rule', 'String'], 'reason' => ['security_reason', 'String'], 'country' => ['country', 'String'], 'request_id' => ['request_id', 'String']];
         foreach ($equals as $name => [$column, $type]) {
             if (filled($filters[$name] ?? null)) {
@@ -299,12 +304,17 @@ final class AnalyticsStore
             'logged' => "security_action != 'block'",
             default => '1',
         };
-        $rows = $this->query('SELECT occurred_at, event_id, hostname, method, path, status, security_action, security_reason, security_rule, attack_score, country, asn, user_agent, request_id, client_ip FROM cdnf.edge_events WHERE '.$this->edgeScope($domain).' AND occurred_at >= {from:DateTime64} AND occurred_at < {to:DateTime64} AND '.implode(' AND ', $where).' ORDER BY occurred_at DESC, event_id DESC LIMIT {limit:UInt32}', $parameters);
+        $rows = $this->query('SELECT occurred_at, event_id, hostname, method, path, status, security_action, security_reason, security_rule, shadow_rule, request_rule, waf_rule_ids, waf_score, attack_score, attack_score_sqli, attack_score_xss, attack_score_rce, country, asn, user_agent, request_id, client_ip FROM cdnf.edge_events WHERE '.$this->edgeScope($domain).' AND occurred_at >= {from:DateTime64} AND occurred_at < {to:DateTime64} AND '.implode(' AND ', $where).' ORDER BY occurred_at DESC, event_id DESC LIMIT {limit:UInt32}', $parameters);
+        $hasMore = count($rows) > $limit;
+        $rows = array_slice($rows, 0, $limit);
         foreach ($rows as &$row) {
             $row['client_ip'] = $this->maskAddress((string) ($row['client_ip'] ?? ''));
+            $row['trace'] = DecisionTrace::of($row);
         }
+        unset($row);
+        $last = end($rows);
 
-        return $rows;
+        return ['items' => $rows, 'next_cursor' => $hasMore && is_array($last) ? $this->encodeCursor($last) : null];
     }
 
     /** @param array<int, string> $domains */
