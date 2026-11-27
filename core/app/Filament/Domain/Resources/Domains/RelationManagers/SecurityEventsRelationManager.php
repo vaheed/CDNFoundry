@@ -17,14 +17,15 @@ use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Support\Enums\Width;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Enums\PaginationMode;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Pagination\Paginator;
 
 /**
- * Requests the domain's rules and the managed WAF mitigated, from stored request events. The list is the newest 500 of the last
- * 24 hours, kept for 7 days, so it is a view of the stored events and not a count of everything that was mitigated.
+ * Requests the domain's rules and the managed WAF mitigated, from stored request events. The list pages through the last 24 hours
+ * with a cursor, 25 or 50 rows a page, kept for 7 days, so it is a view of the stored events and not a count of everything mitigated.
  */
 class SecurityEventsRelationManager extends RelationManager
 {
@@ -33,7 +34,8 @@ class SecurityEventsRelationManager extends RelationManager
 
     protected static ?string $title = 'Security events';
 
-    private ?array $loaded = null;
+    /** @var array<string, array<int, string>> the cursor that opens the next page, by filter and page size */
+    public array $pageCursors = [];
 
     private bool $unavailable = false;
 
@@ -44,7 +46,7 @@ class SecurityEventsRelationManager extends RelationManager
 
     public function table(Table $table): Table
     {
-        return $table->recordAction(null)->recordUrl(null)->records(fn (array $filters, int|string $page, int|string $recordsPerPage): LengthAwarePaginator => $this->page($filters, (int) $page, (int) $recordsPerPage))
+        return $table->recordAction(null)->recordUrl(null)->paginationMode(PaginationMode::Simple)->records(fn (array $filters, int|string $page, int|string $recordsPerPage): Paginator => $this->page($filters, (int) $page, (int) $recordsPerPage))
             ->columns([
                 TextColumn::make('occurred_at')->label('Time')->state(fn (array $record): string => CarbonImmutable::parse($record['occurred_at'], 'UTC')->diffForHumans())
                     ->tooltip(fn (array $record): string => CarbonImmutable::parse($record['occurred_at'], 'UTC')->format('Y-m-d H:i:s').' UTC'),
@@ -75,6 +77,10 @@ class SecurityEventsRelationManager extends RelationManager
                 ])->columns(2),
             ])->filtersFormWidth('lg')->deferFilters(false)
             ->recordActions([
+                Action::make('trace')->label('Trace')->icon('phosphor-list-magnifying-glass')->modalHeading('Why this request was mitigated')
+                    ->modalDescription('Built from what the event stores. Signals the cell does not log are listed as not recorded.')
+                    ->modalSubmitAction(false)->modalCancelActionLabel('Close')
+                    ->modalContent(fn (array $record) => view('filament.domain.security-event-trace', ['trace' => $record['trace']])),
                 Action::make('createRule')->label('Create rule')->icon('phosphor-plus-circle')->modalHeading('Create a rule from this request')
                     ->modalDescription('The conditions come from the request. Remove the ones that should not matter.')
                     ->slideOver()->modalWidth(Width::TwoExtraLarge)->modalSubmitActionLabel('Create rule')
@@ -90,7 +96,7 @@ class SecurityEventsRelationManager extends RelationManager
             ->emptyStateHeading(fn (): string => $this->unavailable ? 'Security events are unavailable' : 'No mitigated requests')
             ->emptyStateDescription(fn (): string => $this->unavailable
                 ? 'The telemetry store did not answer. Serving is not affected. Try again in a minute.'
-                : 'Requests that a rule or the managed firewall blocks or logs appear here for 7 days.')
+                : 'Requests that a rule or the managed firewall blocks or logs appear here for 7 days, 24 hours at a time.')
             ->defaultPaginationPageOption(25)->paginated([25, 50]);
     }
 
@@ -109,33 +115,34 @@ class SecurityEventsRelationManager extends RelationManager
         };
     }
 
-    /** @return array<int, array> */
-    private function rows(array $filters): array
+    /**
+     * One page of the last 24 hours. The store answers by cursor, so the cursor that opens page N + 1 is kept when page N is read;
+     * a page whose cursor is unknown (a changed filter or page size) starts again from the newest events.
+     */
+    private function page(array $filters, int $page, int $perPage): Paginator
     {
-        if ($this->loaded !== null) {
-            return $this->loaded;
-        }
         $state = array_filter($filters['events'] ?? [], fn (mixed $value): bool => filled($value));
+        $key = md5(json_encode([$state, $perPage], JSON_THROW_ON_ERROR));
+        $cursor = $page > 1 ? ($this->pageCursors[$key][$page] ?? null) : null;
+        if ($page > 1 && $cursor === null) {
+            $page = 1;
+            $this->setPage(1, $this->getTablePaginationPageName());
+        }
         try {
-            $store = app(AnalyticsStore::class);
             $now = CarbonImmutable::now('UTC');
-            $rows = $store->mitigations($this->getOwnerRecord(), ['from' => $now->subDay(), 'to' => $now, 'raw' => true], $state);
+            $result = app(AnalyticsStore::class)->mitigations($this->getOwnerRecord(), ['from' => $now->subDay(), 'to' => $now, 'raw' => true], $state, $cursor, $perPage);
+            $rows = $result['items'];
             $rules = MitigationRules::describe($this->getOwnerRecord(), array_column($rows, 'security_rule'));
-            $this->loaded = array_map(fn (array $row): array => [...$row, 'rule' => $row['security_rule'] === '' ? null : ['ref' => $row['security_rule'], ...$rules[$row['security_rule']]]], $rows);
+            $rows = array_map(fn (array $row): array => [...$row, 'rule' => $row['security_rule'] === '' ? null : ['ref' => $row['security_rule'], ...$rules[$row['security_rule']]]], $rows);
         } catch (AnalyticsUnavailableException) {
             $this->unavailable = true;
-            $this->loaded = [];
+            $rows = [];
+            $result = ['next_cursor' => null];
         }
+        $this->pageCursors[$key] = $result['next_cursor'] === null ? [] : [$page + 1 => $result['next_cursor']];
 
-        return $this->loaded;
-    }
-
-    private function page(array $filters, int $page, int $perPage): LengthAwarePaginator
-    {
-        $rows = $this->rows($filters);
-        $slice = array_slice($rows, ($page - 1) * $perPage, $perPage);
-
-        return new LengthAwarePaginator(collect($slice)->mapWithKeys(fn (array $row): array => [$row['event_id'] => $row]), count($rows), $perPage, $page, ['pageName' => $this->getTablePaginationPageName()]);
+        return (new Paginator(collect($rows)->mapWithKeys(fn (array $row): array => [$row['event_id'] => $row]), $perPage, $page, ['pageName' => $this->getTablePaginationPageName()]))
+            ->hasMorePagesWhen($result['next_cursor'] !== null);
     }
 
     /** The rule sheet's values for a request: its path, country, network, and user agent as conditions, and a safe default action. */

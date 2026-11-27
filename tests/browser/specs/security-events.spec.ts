@@ -66,3 +66,16 @@ test('create rule starts from the request, and an exception is offered only wher
     await expect(rows.nth(2).getByRole('button', { name: 'Create exception' })).toHaveCount(0);
     await expect(rows.nth(1).getByRole('button', { name: 'Create exception' })).toBeVisible();
 });
+
+test('the trace explains the stage and lists the signals a request does not record', async ({ page }) => {
+    await openEvents(page);
+    await page.locator('table tbody tr').nth(1).getByRole('button', { name: 'Trace' }).click();
+    const sheet = page.locator('.fi-modal-window:visible');
+    await expect(sheet.getByRole('heading', { name: 'Why this request was mitigated' })).toBeVisible();
+    await expect(sheet).toContainText('Managed WAF');
+    await expect(sheet).toContainText('Reputation band');
+    await expect(sheet).toContainText('Dataset versions');
+    await expectAccessible(page);
+    await sheet.getByRole('button', { name: 'Close', exact: true }).last().click();
+    await expect(sheet).toBeHidden();
+});

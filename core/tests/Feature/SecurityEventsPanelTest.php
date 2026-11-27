@@ -7,6 +7,7 @@ use App\Filament\Domain\Resources\Domains\RelationManagers\SecurityEventsRelatio
 use App\Models\Domain;
 use App\Models\PlatformRuleset;
 use App\Models\User;
+use App\Support\DecisionTrace;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -68,11 +69,30 @@ class SecurityEventsPanelTest extends TestCase
         $this->assertSame('block', $created->action);
     }
 
+    public function test_the_trace_names_the_stage_and_the_signals_the_event_cannot_report(): void
+    {
+        [, $domain] = $this->eventsDomain();
+        $event = $this->event('waf', '/?q=1', 'waf_block') + ['waf_rule_ids' => '942100', 'shadow_rule' => 'r7'];
+        $this->fakeEvents([$event]);
+
+        $this->manager($domain)->assertTableActionExists('trace', record: $event['event_id'])->callTableAction('trace', $event['event_id'])->assertHasNoTableActionErrors();
+        $html = view('filament.domain.security-event-trace', ['trace' => DecisionTrace::of($event)])->render();
+        foreach (['Managed WAF', '942100', 'r7', 'Reputation band', 'Dataset versions'] as $text) {
+            $this->assertStringContainsString($text, $html);
+        }
+    }
+
     public function test_the_next_page_shows_the_older_events(): void
     {
         [, $domain] = $this->eventsDomain();
         $events = collect(range(1, 30))->map(fn (int $number): array => $this->event('waf', sprintf('/probe-%02d', $number), 'waf_block'))->all();
-        $this->fakeEvents($events);
+        // The store asks for one row more than the page holds; the fake answers the first request with 26 and the second with the rest.
+        $lines = fn (array $rows): string => collect($rows)->map(fn ($event) => json_encode($event))->implode("\n");
+        Http::fake([config('services.clickhouse.url').'*' => function ($request) use ($lines, $events) {
+            parse_str(parse_url($request->url(), PHP_URL_QUERY) ?? '', $query);
+
+            return Http::response($lines(str_starts_with((string) ($query['param_cursor_id'] ?? ''), 'ffffffff') ? array_slice($events, 0, 26) : array_slice($events, 25)));
+        }]);
 
         // The button must name the page the table reads, or Next changes nothing.
         $pageName = $this->manager($domain)->instance()->getTablePaginationPageName();
