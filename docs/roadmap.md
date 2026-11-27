@@ -2409,6 +2409,8 @@ the development databases or volumes):
 
 Session record, 27 November 2026: the stages above were implemented in separate commits with their tests, and no step was run on a real host or a production stack. The full browser suite, the integrated load and recovery runs, and Phase 11 are not started. Several older end-to-end scripts (`openresty_runtime.py`, `challenge_flood.py`, `challenge_token_two_edges.py`) fail on the unchanged tree and were not repaired.
 
+**Update, 28 November 2026.** Origin health-check container: the Compose service (`origin-probe` profile, read-only, no capabilities, 128 MB, 0.25 CPU, 128 PIDs, egress network only, socket volume shared with the agent) and the Fleet setting `configure-origin-probe` (CLI and web) are implemented and documented. The worker image passed `tests/e2e/origin_probe_worker.py` on the development host and on one separate spare staging host (documentation-range address `203.0.113.10`): 120 concurrent probes healthy in 0.81 s, 6.8 MiB and 12 PIDs. Nothing else on that host or any other staging host was used, and the spare was cleaned afterwards. The customer-health additions to the domain panel's Needs attention widget (DNS content rejected, unhealthy origins) are implemented and snapshotted; the earlier "not done" note is superseded. No shared or long-window rate-limit report tables exist in the control plane, so that A.2 capability is recorded as unsupported rather than drawn. Still open: Stage E live directory, gateway reload and per-service environment; Stages J and K; the upgrade and rollback run; the full PHP and browser suites on the final tree.
+
 Phase 10.5 is not complete.
 
 ---
