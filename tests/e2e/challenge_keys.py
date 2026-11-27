@@ -57,11 +57,11 @@ def mint(ip: str, source: str, user_agent: str = "Browser/1") -> str:
     seed, bits = challenge(ip, source, user_agent)
     code, headers, _ = request(ip, source, "POST", "/.cdnf/challenge", {"User-Agent": user_agent}, f"seed={urllib.parse.quote(seed)}&counter={solve(seed, bits)}")
     assert code == 204, code
-    return re.search(r"cdnf_chal=([0-9a-z.]+)", headers["set-cookie"]).group(1)
+    return re.search(r"_chk=([0-9a-z.]+)", headers["set-cookie"]).group(1)
 
 
 def with_token(ip: str, source: str, cookie: str, user_agent: str = "Browser/1", **kwargs) -> int:
-    return request(ip, source, headers={"Cookie": f"cdnf_chal={cookie}", "User-Agent": user_agent}, **kwargs)[0]
+    return request(ip, source, headers={"Cookie": f"_chk={cookie}", "User-Agent": user_agent}, **kwargs)[0]
 
 
 TOKENS = {name: f"status-token-{name}" for name in CELLS.values()}
@@ -157,7 +157,7 @@ def main() -> None:
             other = mint(ips["budget"], "198.51.100.21")
             codes = [with_token(ips["budget"], "198.51.100.20", heavy) for _ in range(45)]
             assert codes[:30] == [200] * 30 and set(codes[31:]) == {429}, codes
-            code, headers, body = request(ips["budget"], "198.51.100.20", headers={"Cookie": f"cdnf_chal={heavy}"}, accept="application/json")
+            code, headers, body = request(ips["budget"], "198.51.100.20", headers={"Cookie": f"_chk={heavy}"}, accept="application/json")
             assert code == 429 and 1 <= int(headers["retry-after"]) <= 60 and body_json(body)["error"] == "rate_limited", (code, headers, body)
             assert with_token(ips["budget"], "198.51.100.21", other) == 200, "one token's budget spent another's"
 

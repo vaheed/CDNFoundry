@@ -100,7 +100,7 @@ def main() -> None:
             # 2. A seed keeps the difficulty it was issued with, and a changed difficulty is refused.
             counter = solve(first_seed, first_bits)
             status, headers, _ = request(default, "198.51.100.11", "POST", "/.cdnf/challenge", body=f"seed={urllib.parse.quote(first_seed)}&counter={counter}")
-            assert status == 204 and "cdnf_chal=" in headers["set-cookie"], "a seed issued before the events was refused"
+            assert status == 204 and "_chk=" in headers["set-cookie"], "a seed issued before the events was refused"
             kid, domain, issued, bits, nonce, mac = seed.split(".")
             lowered = ".".join([kid, domain, issued, "12", nonce, mac])
             status, _, _ = request(default, "198.51.100.11", "POST", "/.cdnf/challenge", body=f"seed={urllib.parse.quote(lowered)}&counter={solve(lowered, 12)}")

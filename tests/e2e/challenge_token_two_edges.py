@@ -37,7 +37,7 @@ HTML = "text/html"
 def http(edge: str, method: str = "GET", path: str = "/", source: str = CLIENT, cookie: str = "", body: str = "") -> tuple[int, dict[str, str], str]:
     lines = [f"{method} {path} HTTP/1.1", f"Host: {DOMAIN}", "Connection: close", f"Accept: {HTML}", "User-Agent: Browser/1"]
     if cookie:
-        lines.append(f"Cookie: cdnf_chal={cookie}")
+        lines.append(f"Cookie: _chk={cookie}")
     if body:
         lines += ["Content-Type: application/x-www-form-urlencoded", f"Content-Length: {len(body)}"]
     with socket.socket() as connection:
@@ -64,7 +64,7 @@ def solved_token(edge: str, source: str = CLIENT) -> str:
     seed, bits = seed_of(edge, source)
     status, headers, _ = http(edge, "POST", "/.cdnf/challenge", source, body=f"seed={urllib.parse.quote(seed)}&counter={solve(seed, bits)}")
     assert status == 204, f"{edge} refused a correct solution: {status}"
-    return re.search(r"cdnf_chal=([0-9a-z.]+)", headers["set-cookie"]).group(1)
+    return re.search(r"_chk=([0-9a-z.]+)", headers["set-cookie"]).group(1)
 
 
 def wait_until_challenging(timeout: int = 150) -> None:

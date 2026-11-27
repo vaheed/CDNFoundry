@@ -37,7 +37,7 @@ def solved_token(ip: str, source: str) -> str:
     seed, bits = challenge(ip, source)
     status, headers, _ = request(ip, source, "POST", "/.cdnf/challenge", body=f"seed={urllib.parse.quote(seed)}&counter={solve(seed, bits)}")
     assert status == 204, status
-    return headers["set-cookie"].split("cdnf_chal=")[1].split(";")[0]
+    return headers["set-cookie"].split("_chk=")[1].split(";")[0]
 
 
 def main() -> None:
@@ -78,7 +78,7 @@ def main() -> None:
                 source = f"198.51.100.{100 + client}"
                 token = solved_token(ip, source)
                 for _ in range(BUDGET + 100):
-                    status = paced(ip, source, headers={"Cookie": f"cdnf_chal={token}", "User-Agent": "Browser/1"})
+                    status = paced(ip, source, headers={"Cookie": f"_chk={token}", "User-Agent": "Browser/1"})
                     allowed += status == 200
                     refused += status == 429
             results["solving_scripts"] = {"sent": 5 * (BUDGET + 100), "through": allowed, "refused_by_token_budget": refused}
@@ -86,7 +86,7 @@ def main() -> None:
 
             # 3. One token passed to 30 other addresses: it is bound to the client it was issued to.
             token = solved_token(ip, "198.51.100.200")
-            shared = sum(request(ip, f"198.51.101.{index}", headers={"Cookie": f"cdnf_chal={token}", "User-Agent": "Browser/1"})[0] == 200 for index in range(30))
+            shared = sum(request(ip, f"198.51.101.{index}", headers={"Cookie": f"_chk={token}", "User-Agent": "Browser/1"})[0] == 200 for index in range(30))
             results["one_token_on_30_addresses"] = {"sent": 30, "through": shared}
             assert shared == 0, shared
             print(json.dumps(results))

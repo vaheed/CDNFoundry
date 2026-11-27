@@ -23,6 +23,14 @@ from managed_waf import IMAGE, NETWORK, host, run  # noqa: E402
 CELL, ORIGIN = "cdnf-e2e-challenge-solved", "cdnf-e2e-challenge-solved-origin"
 
 
+def page_of(ip: str) -> str:
+    """The challenge page a new visitor gets: it must carry no product name, and must post to the neutral path."""
+    status, _, page = request(ip, "198.51.100.12")
+    assert status == 403 and "Checking your browser" in page and "/.chk/verify" in page, (status, page[:200])
+    assert not re.search(r"cdnf|cdnfoundry|foundry", page, re.IGNORECASE), "the challenge page names the product"
+    return ""
+
+
 def main() -> None:
     run("docker", "rm", "-f", ORIGIN, CELL, check=False)
     run("docker", "run", "-d", "--name", ORIGIN, "--network", NETWORK, "nginx:1.30.3-alpine")
@@ -52,6 +60,7 @@ def main() -> None:
                 "-e", f"EDGE_PROXY_PROTOCOL_TRUSTED_CIDRS={subnet}", "-e", "EDGE_CHALLENGE_BITS=12",
                 "-v", f"{temporary / 'nginx.conf'}:/usr/local/openresty/nginx/conf/nginx.conf:ro", "-v", f"{runtime}:/var/lib/cdnfoundry/runtime/active.json:ro",
                 "-v", f"{pathlib.Path(__file__).resolve().parents[2] / 'docker/openresty/runtime.lua'}:/etc/cdnfoundry/runtime.lua:ro",
+                "-v", f"{pathlib.Path(__file__).resolve().parents[2] / 'docker/openresty/challenge_solver.js'}:/etc/cdnfoundry/challenge_solver.js:ro",
                 "-v", f"{temporary / 'tls.crt'}:/run/edge/tls.crt:ro", "-v", f"{temporary / 'tls.key'}:/run/edge/tls.key:ro",
                 "--tmpfs", "/var/cache/nginx:rw,noexec,nosuid,size=64m,mode=0777", IMAGE)
             ip = address(CELL)
@@ -67,7 +76,11 @@ def main() -> None:
 
             seed, bits = challenge(ip, "198.51.100.10")
             status, headers, _ = request(ip, "198.51.100.10", "POST", "/.cdnf/challenge", body=f"seed={urllib.parse.quote(seed)}&counter={solve(seed, bits)}")
-            assert status == 204 and "cdnf_chal=" in headers["set-cookie"], status
+            assert status == 204 and "_chk=" in headers["set-cookie"], status
+            # The neutral cookie passes, and so does the name and path used before the challenge lost its product name.
+            cookie = re.search(r"_chk=([0-9a-z.]+)", headers["set-cookie"]).group(1)
+            assert request(ip, "198.51.100.10", headers={"Cookie": f"cdnf_chal={cookie}"})[0] == 200, "a token issued before the rename still passes"
+            assert "Cookie" not in page_of(ip) and "_chk" in headers["set-cookie"] and "cdnf" not in headers["set-cookie"], headers["set-cookie"]
             challenge(ip, "198.51.100.11")  # challenged and never solves
             time.sleep(1)
 

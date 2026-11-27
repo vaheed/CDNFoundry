@@ -221,7 +221,7 @@ def qualify_incident_profile() -> None:
     # A page load with no token gets the challenge page; anything else with no token is refused outright.
     status, head, body = curl("overlay.example", "/", html)
     assert status == 403 and "Checking your browser" in body and "noscript" in body and 'role="status"' in body and "Content-Security-Policy" in head and "no-store" in head.lower(), (status, head)
-    seed = re.search(r'var seed="([0-9a-f.]+)"', body).group(1)
+    seed = re.search(r'var seed="([0-9a-z.]+)"', body).group(1)
     assert curl("overlay.example", "/", ("Accept: */*",))[0] == 403 and "Checking" not in curl("overlay.example", "/", ("Accept: */*",))[2]
     # Marked API paths are not challenged, and the profile's method and body limits apply.
     assert curl("overlay.example", "/api/status")[0] != 403
@@ -241,21 +241,21 @@ def qualify_incident_profile() -> None:
     # A correct answer gives a token; the seed cannot be replayed; the token passes until its expiry.
     answer = f"seed={seed}&counter={solve_challenge(seed)}"
     status, head, _ = curl("overlay.example", "/.cdnf/challenge", method="POST", data=answer)
-    assert status == 204 and "cdnf_chal=" in head and "HttpOnly" in head and "SameSite=Lax" in head, head
-    cookie = re.search(r"cdnf_chal=([0-9a-f.]+)", head).group(1)
+    assert status == 204 and "_chk=" in head and "HttpOnly" in head and "SameSite=Lax" in head, head
+    cookie = re.search(r"_chk=([0-9a-z.]+)", head).group(1)
     assert curl("overlay.example", "/.cdnf/challenge", method="POST", data=answer)[0] == 403, "a solved seed is single use"
-    assert curl("overlay.example", "/", html + (f"Cookie: cdnf_chal={cookie}",))[0] == 200
-    assert curl("overlay.example", "/", ("Accept: */*", f"Cookie: cdnf_chal={cookie}"))[0] == 200
-    assert curl("overlay.example", attack, ("Accept: */*", f"Cookie: cdnf_chal={cookie}"))[0] == 403, "the profile turns the firewall on in blocking mode"
+    assert curl("overlay.example", "/", html + (f"Cookie: _chk={cookie}",))[0] == 200
+    assert curl("overlay.example", "/", ("Accept: */*", f"Cookie: _chk={cookie}"))[0] == 200
+    assert curl("overlay.example", attack, ("Accept: */*", f"Cookie: _chk={cookie}"))[0] == 403, "the profile turns the firewall on in blocking mode"
     # A token is bound to the domain and the client, and its signature is checked.
     forged = cookie[:-1] + ("0" if cookie[-1] != "0" else "1")
-    assert curl("overlay.example", "/", html + (f"Cookie: cdnf_chal={forged}",))[0] == 403
+    assert curl("overlay.example", "/", html + (f"Cookie: _chk={forged}",))[0] == 403
     # The token follows the client, not its browser string: another User-Agent from the same client is still accepted, unless the cell
     # is set to bind it too (tests/e2e/challenge_binding.py).
-    assert curl("overlay.example", "/", html + ("User-Agent: Another/1", f"Cookie: cdnf_chal={cookie}"))[0] == 200
+    assert curl("overlay.example", "/", html + ("User-Agent: Another/1", f"Cookie: _chk={cookie}"))[0] == 200
     other = cookie.split(".")
     other[0] = "7702"
-    assert curl("overlay.example", "/", html + (f"Cookie: cdnf_chal={'.'.join(other)}",))[0] == 403, "a token for another domain means nothing"
+    assert curl("overlay.example", "/", html + (f"Cookie: _chk={'.'.join(other)}",))[0] == 403, "a token for another domain means nothing"
     assert curl("runtime.example")[0] == 200, "the profile is scoped to its own domain"
 
     # A scripted flood never reaches the origin: every request is refused, and issuing challenges is itself rate limited.

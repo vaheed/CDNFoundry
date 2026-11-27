@@ -25,10 +25,10 @@ test('the check page says what is happening and fits every width', async ({ page
 test('the page solves the check on its own and lands on the site with a token cookie it cannot read', async ({ page, context }) => {
     await page.goto(`${base}/`);
     await expect(page.getByRole('heading', { name: 'Origin reached' })).toBeVisible();
-    const [cookie] = (await context.cookies()).filter((item) => item.name === 'cdnf_chal');
+    const [cookie] = (await context.cookies()).filter((item) => item.name === '_chk');
     expect(cookie.httpOnly).toBe(true);
     expect(cookie.sameSite).toBe('Lax');
-    expect(await page.evaluate(() => document.cookie)).not.toContain('cdnf_chal');
+    expect(await page.evaluate(() => document.cookie)).not.toContain('_chk');
 });
 
 test('a refused answer is said plainly and the page stays usable', async ({ page }) => {
