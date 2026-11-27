@@ -316,6 +316,7 @@ type edgeTask struct {
 		EmergencyActions   []string          `json:"actions"`
 		EmergencyExpiresAt *int64            `json:"expires_at"`
 		Versions           map[string]string `json:"versions"`
+		ProbeExpiresAt     int64             `json:"probe_expires_at"`
 		DomainID           int64             `json:"domain_id"`
 		OverlaySequence    uint64            `json:"overlay_sequence"`
 		OverlayState       string            `json:"state"`
@@ -611,10 +612,21 @@ func (c *client) loadEmergencyControls() (map[string]emergencyControl, error) {
 	return controls, nil
 }
 
+// The ceilings of one origin probe: the connection and the whole exchange. They clamp the origin's own timeouts.
+const (
+	probeConnectCeiling = 3 * time.Second
+	probeTotalCeiling   = 5 * time.Second
+)
+
 func runOriginTest(task edgeTask) (result map[string]any) {
 	started := time.Now()
 	result = map[string]any{"status": "unhealthy"}
 	defer func() { result["latency_ms"] = min(time.Since(started).Milliseconds(), int64(60000)) }()
+	// A task the control plane gave an expiry is dropped once it has passed, so a backlog after an outage is not probed late.
+	if task.Payload.ProbeExpiresAt > 0 && time.Now().Unix() > task.Payload.ProbeExpiresAt {
+		result["failure_reason"] = "task_expired"
+		return result
+	}
 	if len(task.Payload.Addresses) == 0 || len(task.Payload.Addresses) > 64 {
 		result["failure_reason"] = "dns_resolution_failed"
 		return result
@@ -633,8 +645,9 @@ func runOriginTest(task edgeTask) (result map[string]any) {
 		result["failure_reason"] = "blocked_destination"
 		return result
 	}
-	connectTimeout := boundedDuration(origin.ConnectTimeoutMS, 100, 10000)
-	responseTimeout := boundedDuration(origin.ResponseTimeoutMS, 500, 60000)
+	// A probe is bounded whatever the origin's own settings ask for, so one origin cannot hold the agent for a minute.
+	connectTimeout := min(boundedDuration(origin.ConnectTimeoutMS, 100, 10000), probeConnectCeiling)
+	responseTimeout := min(boundedDuration(origin.ResponseTimeoutMS, 500, 60000), probeTotalCeiling)
 	ctx, cancel := context.WithTimeout(context.Background(), responseTimeout)
 	defer cancel()
 	var resolved []netip.Addr

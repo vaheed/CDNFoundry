@@ -332,3 +332,53 @@ func allowOriginPortForTest(t *testing.T, port int) {
 	allowedOriginPorts[port] = true
 	t.Cleanup(func() { delete(allowedOriginPorts, port) })
 }
+
+func TestAnOriginProbeIsBoundedWhateverTheOriginAsksFor(t *testing.T) {
+	host := privateInterfaceAddress(t)
+	listener, err := net.Listen("tcp", net.JoinHostPort(host, "0"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { listener.Close() })
+	go func() {
+		for {
+			connection, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			// Never answers: only the probe's own ceiling ends the exchange.
+			go func() { time.Sleep(30 * time.Second); connection.Close() }()
+		}
+	}()
+	task := edgeTask{Type: "origin_test"}
+	task.Payload.Addresses = []string{host}
+	task.Payload.Allowlist = []string{host + "/32"}
+	task.Payload.Origin.Host = host
+	task.Payload.Origin.Scheme = "http"
+	task.Payload.Origin.Port = listener.Addr().(*net.TCPAddr).Port
+	task.Payload.Origin.HostHeader = "origin.example"
+	allowOriginPortForTest(t, task.Payload.Origin.Port)
+	task.Payload.Origin.ConnectTimeoutMS = 10000
+	task.Payload.Origin.ResponseTimeoutMS = 60000
+	started := time.Now()
+	result := runOriginTest(task)
+	elapsed := time.Since(started)
+	if elapsed < 4*time.Second || elapsed > probeTotalCeiling+time.Second {
+		t.Fatalf("a probe ran %s; it must end at its ceiling of %s, not at the origin's 60 s", elapsed, probeTotalCeiling)
+	}
+	if result["status"] != "unhealthy" {
+		t.Fatalf("an origin that never answers must not be healthy: %v", result)
+	}
+}
+
+func TestAnExpiredProbeTaskIsDroppedWithoutContactingTheOrigin(t *testing.T) {
+	task := edgeTask{Type: "origin_test"}
+	task.Payload.ProbeExpiresAt = time.Now().Add(-time.Minute).Unix()
+	task.Payload.Addresses = []string{"203.0.113.9"}
+	task.Payload.Origin.Host = "203.0.113.9"
+	task.Payload.Origin.Port = 80
+	result := runOriginTest(task)
+	if result["failure_reason"] != "task_expired" || result["status"] != "unhealthy" {
+		t.Fatalf("an expired task must be dropped: %v", result)
+	}
+}
