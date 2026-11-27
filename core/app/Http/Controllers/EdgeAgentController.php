@@ -91,6 +91,9 @@ class EdgeAgentController extends Controller
         return response()->json(['data' => ['targets' => $targets, 'ports' => ['http' => 80, 'tls' => 443]]]);
     }
 
+    /** An unchanged probe result is rewritten at most this often, so its age stays honest without a write every round. */
+    private const PROBE_REFRESH_SECONDS = 60;
+
     public function probeResults(Request $request): JsonResponse
     {
         /** @var Edge $edge */
@@ -105,18 +108,33 @@ class EdgeAgentController extends Controller
         $known = EdgePoolEndpoint::query()->where('edge_id', '!=', $edge->id)->get(['edge_id', 'ipv4', 'ipv6'])
             ->flatMap(fn (EdgePoolEndpoint $endpoint): array => collect([$endpoint->ipv4, $endpoint->ipv6])->filter()->map(fn (string $address): string => $endpoint->edge_id.'|'.$address)->all())
             ->flip();
+        // One read of what this observer already reported, one batched write of what changed or went stale, and a publication
+        // evaluation only when a result flipped: a round in which nothing changed costs the same number of queries at any fleet size.
+        $existing = EdgeProbeResult::query()->where('observer_edge_id', $edge->id)->get(['target_edge_id', 'address', 'ok', 'checked_at'])
+            ->keyBy(fn (EdgeProbeResult $row): string => $row->target_edge_id.'|'.$row->address);
         $accepted = 0;
+        $rows = [];
+        $flipped = false;
         foreach ($data['results'] as $result) {
-            if (! $known->has($result['edge_id'].'|'.$result['address'])) {
+            $key = $result['edge_id'].'|'.$result['address'];
+            if (! $known->has($key)) {
                 continue;
             }
-            EdgeProbeResult::query()->updateOrCreate(
-                ['observer_edge_id' => $edge->id, 'target_edge_id' => $result['edge_id'], 'address' => $result['address']],
-                ['ok' => $result['ok'], 'detail' => $result['detail'] ?? null, 'checked_at' => now()],
-            );
             $accepted++;
+            $current = $existing->get($key);
+            $changed = $current === null || $current->ok !== (bool) $result['ok'];
+            if ($changed || $current->checked_at->lt(now()->subSeconds(self::PROBE_REFRESH_SECONDS))) {
+                $rows[$key] = ['observer_edge_id' => $edge->id, 'target_edge_id' => $result['edge_id'], 'address' => $result['address'],
+                    'ok' => (bool) $result['ok'], 'detail' => $result['detail'] ?? null, 'checked_at' => now()];
+            }
+            $flipped = $flipped || $changed;
         }
-        ReconcilePlatformDnsIdentity::dispatchForProbeChange();
+        if ($rows !== []) {
+            EdgeProbeResult::query()->upsert(array_values($rows), ['observer_edge_id', 'target_edge_id', 'address'], ['ok', 'detail', 'checked_at']);
+        }
+        if ($flipped) {
+            ReconcilePlatformDnsIdentity::dispatchForProbeChange();
+        }
 
         return response()->json(['data' => ['accepted' => $accepted]]);
     }
