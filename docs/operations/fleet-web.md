@@ -302,7 +302,10 @@ Fleet renders the bundles it would send now, compares each one with the bundle t
 successfully, validates the new files on the node, and swaps them in, one node at a time. A change you
 saved earlier, even one saved by another command, is still found here until it is deployed.
 
-Choose **Show changes and deploy**.
+Choose **Show the plan** to read the changed hosts and, for each service, the minimum safe action,
+the expected availability effect, how it is validated and how it is undone. It changes no host.
+Then choose **Deploy the changes**. A host whose change is only the firewall or only documentation
+and scripts is activated narrowly; every other changed host is activated as a whole.
 
 **Expected result:** an action page lists the nodes it changed. Nodes with no
 change are left alone.

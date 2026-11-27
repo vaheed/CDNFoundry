@@ -341,11 +341,23 @@ Fleet records what each host last ran after a successful gate: the SHA-256 of ev
 key, and Compose's own configuration hash of every service. It stores no value, and the plan prints key names only.
 The rows are computed by `scripts/cdnfoundry_fleet/impact.py`.
 
-::: warning The plan is ahead of the execution
-Fleet shows the minimum safe action, but `apply-config` still activates every changed host as a whole. Executing
-the narrow actions, the stable live configuration directory, the gateway reload, and per-service environment are
-not implemented yet. Until the environment is narrowed, a management-network change still recreates the
-application workers, and the plan shows that honestly. The local web page does not show the service rows yet.
+### What `apply-config` runs
+
+Two of the actions are executed narrowly. A host whose change is **only** the firewall rules uploads and
+validates the bundle, swaps the directory, runs `firewall.sh` (the chains are swapped atomically), and passes its
+health gate: no `start.sh`, no `docker compose up`, no migration, no container change. A host whose change is only
+documentation or operator scripts swaps the directory and starts nothing. A failed narrow step rolls that host
+back to its previous bundle and stops; the hosts after it are not touched.
+
+Every other action still activates the changed host as a whole, including a host with no recorded baseline, a
+file the map does not know, and a change Compose cannot name services for. The plan shows the narrower action for
+those rows as the minimum, and the activation does more than the plan says.
+
+::: warning Not narrowed yet
+Reloads and targeted restarts of one service, the stable live configuration directory that makes a mounted file
+change visible to a running container, the gateway reload for an allowlist change, and per-service environment are
+not implemented. Until the environment is narrowed, a management-network change still recreates the application
+workers, and the plan shows that honestly. The local web page does not show the service rows yet.
 :::
 
 ## Backup and restore

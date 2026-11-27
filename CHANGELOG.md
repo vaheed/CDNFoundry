@@ -15,6 +15,7 @@ single source of truth; `make version-check` enforces it.
 
 ### Changed
 
+- Fleet `apply-config` activates a host narrowly when its change is only the firewall rules (the firewall step alone, no container or migration) or only documentation and scripts (a directory swap). Every other change keeps the full activation.
 - Fleet shows a service-level plan for `apply-config`: for each changed host, the services and the minimum safe action (none, firewall, file, reload, restart, recreate, node-wide), computed from digests of the files, environment keys and Compose service hashes the host last ran. It prints no value. Execution still activates a changed host as a whole.
 - The generated `firewall.sh` rebuilds its chains in an alternate chain and swaps the jump, so the filter is never empty during an update. Rerun `start.sh` or `firewall.sh` on each host; the first run retires the old chain names.
 - Usage is stored sparsely with a coverage record per hour. An hour with edges and no telemetry is `incomplete` instead of a final zero, `cdnf:usage:finalize` catches up every missed hour, a rebuild that changes a finalized hour is recorded as a correction, and usage rows keep the domain name and owners from when they were written and are no longer deleted with the domain. `GET /api/domains/{id}/usage` returns `meta.coverage`. Apply the migration `2026_11_30_000400_add_usage_attribution_and_coverage`.
