@@ -148,12 +148,16 @@ def _source(targets: list[dict[str, Any]]) -> dict[str, Any]:
     return copy.deepcopy(PROM) if uids == {"prometheus"} else (copy.deepcopy(next(t for t in targets)["datasource"]) if len(uids) == 1 else {"type": "datasource", "uid": "-- Mixed --"})
 
 
+# Only a request, byte or bit rate can honestly mean "no traffic"; a count of alerts or components cannot.
+TRAFFIC_UNITS = {"reqps", "Bps", "bps"}
+
+
 def _defaults(unit: str, threshold: str, decimals: int | None, min_value: float | None = None, max_value: float | None = None) -> dict[str, Any]:
     defaults: dict[str, Any] = {
         "unit": unit,
         "color": {"mode": "thresholds"},
         "thresholds": {"mode": "absolute", "steps": copy.deepcopy(THRESHOLDS[threshold])},
-        "noValue": "No traffic" if unit in {"reqps", "Bps", "bps", "short", "none"} else "–",
+        "noValue": "No traffic" if unit in TRAFFIC_UNITS else "–",
         "mappings": [{"type": "special", "options": {"match": "null+nan", "result": {"text": "No data yet", "color": NEUTRAL}}}],
     }
     if decimals is not None:

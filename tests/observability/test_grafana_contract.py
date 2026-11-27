@@ -223,6 +223,25 @@ class GrafanaContractTest(unittest.TestCase):
                     mapping = [m for m in panel["fieldConfig"]["defaults"]["mappings"] if m.get("type") == "special"]
                     self.assertTrue(mapping and mapping[0]["options"]["result"]["color"] == "text", f"{name}: empty state must be neutral")
 
+    def test_no_traffic_is_said_only_by_a_request_byte_or_bit_rate(self) -> None:
+        for uid, dashboard in self.by_uid.items():
+            for panel in resolved(dashboard, self.models):
+                if panel["type"] in {"row", "text"}:
+                    continue
+                defaults = panel["fieldConfig"]["defaults"]
+                texts = {defaults.get("noValue")} | {m["options"]["result"]["text"] for m in defaults.get("mappings", []) if m.get("type") == "special"}
+                if "No traffic" in texts:
+                    self.assertIn(defaults.get("unit"), {"reqps", "Bps", "bps"}, f"{uid}/{panel['title']}: says No traffic but is not a request, byte or bit rate")
+
+    def test_a_quantile_is_never_averaged_or_summed_with_other_quantiles(self) -> None:
+        sources = [(f"{uid}/{panel['title']}", query_text(t)) for uid, d in self.by_uid.items() for panel in resolved(d, self.models) for t in targets(panel)]
+        for path in (ROOT / "docker" / "prometheus").glob("*rules*.yml"):
+            for group in yaml.safe_load(path.read_text()).get("groups", []):
+                sources += [(f"{path.name}/{rule.get('record') or rule.get('alert')}", str(rule.get("expr", ""))) for rule in group.get("rules", [])]
+        for name, text in sources:
+            if re.search(r"\bavg(?:_over_time)?\s*(?:by\s*\([^)]*\)\s*)?\(\s*(?:histogram_quantile|quantile\w*)\b", text, re.I) or re.search(r"\b(avg|avg_over_time)\s*\(\s*[\w:]*(?:p50|p95|p99|quantile)[\w:]*", text, re.I):
+                self.fail(f"{name}: averages an already calculated percentile")
+
     def test_a_counter_is_shown_as_a_rate_or_an_increase(self) -> None:
         for uid, dashboard in self.by_uid.items():
             for panel in resolved(dashboard, self.models):
