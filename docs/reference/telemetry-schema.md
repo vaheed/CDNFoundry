@@ -39,6 +39,8 @@ from the collector's own settings and never reads them from the event.
 | `security_reason` | low-cardinality string, 64 characters |
 | `request_rule` | Up to eight comma-separated `redirect:id`, `rewrite:id`, `header:id`, or `cache:id` entries; at most 256 characters. Empty when no rule acted or the value failed validation |
 | `shadow_rule` | Up to eight comma-separated references (`r3` for a domain rule, `5` for a platform rule) of the shadow rules that matched the request; at most 128 characters. Empty when none matched or the value failed validation. The hourly table `rule_matches_hourly` counts these and the enforced `security_rule` by rule and mode |
+| `client_key` | A keyed hash (12 lowercase hexadecimal characters) of the client key a mitigated or shadow-matched request was counted by, derived with the node secret, so it differs on every edge and is not the address. Empty for other requests and for rows written before the column existed; anything else fails validation and is emptied |
+| `snapshot_sequence` | The sequence of the signed snapshot the cell judged a mitigated or shadow-matched request under; 0 for other requests and older rows |
 | `edge_id` | the edge host: the collector sets it, so a cell name is never an edge identity. 64 characters |
 | `cell` | the serving cell, as the runtime named it (letters, digits, `.`, `_`, `-`; 64 characters). Empty on rows written before the column existed |
 | `client_ip` | string, 45 characters |

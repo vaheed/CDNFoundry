@@ -140,6 +140,19 @@ end
 -- reads this: a full dictionary or a missing one only means the client is not reported.
 local REP = {WINDOW = 300, MAXIMUM_KEYS = 1000, REPORTED = 50}
 
+-- Notes on the request's log line which client and which snapshot a mitigated or shadow-matched request met. The client key is a
+-- keyed hash (twelve hex characters) so a log never carries the counting key itself, and it differs on every node by design.
+function REP.trace()
+    if ngx.ctx.trace_noted then return end
+    local text = ngx.ctx.security_client and client_keys.text(ngx.ctx.security_client)
+    if not text then return end
+    ngx.ctx.trace_noted = true
+    local digest = resty_sha256:new()
+    digest:update("cdnf-client-key-v1|" .. (os.getenv("EDGE_STATUS_TOKEN") or "") .. "|" .. tostring(ngx.ctx.security_domain) .. "|" .. text)
+    ngx.var.cdn_client_key = resty_string.to_hex(digest:final()):sub(1, 12)
+    ngx.var.cdn_snapshot_sequence = tostring(math.floor(tonumber(state.sequence) or 0))
+end
+
 function REP.event(domain, client)
     local dictionary = ngx.shared.client_reputation
     if not dictionary or not client_keys.text(client) then return end
@@ -218,6 +231,7 @@ end
 -- Counts a security event for the reason and, when the request belongs to a domain, queues it for the next heartbeat.
 local function record_security_event(reason)
     ngx.shared.runtime_limits:incr("security:reason:" .. reason, 1, 0)
+    REP.trace()
     if ngx.ctx.security_domain then
         local events = ngx.shared.security_limits
         local key = "event:" .. tostring(ngx.ctx.security_domain) .. ":" .. reason

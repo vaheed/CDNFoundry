@@ -40,6 +40,8 @@ CREATE TABLE IF NOT EXISTS cdnf.edge_events
     waf_exclusion_id UInt64 DEFAULT 0,
     security_rule LowCardinality(String) DEFAULT '',
     shadow_rule String DEFAULT '',
+    client_key String DEFAULT '',
+    snapshot_sequence UInt64 DEFAULT 0,
     request_rule LowCardinality(String) DEFAULT '',
     client_report String DEFAULT '',
     attack_score UInt8 DEFAULT 0,

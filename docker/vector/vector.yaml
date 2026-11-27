@@ -142,6 +142,13 @@ transforms:
       # The shadow rules that matched, as references like the one above joined by commas (r3,5), at most eight; anything else is dropped.
       .shadow_rule = slice!(to_string(.shadow_rule) ?? "", 0, 128)
       if !match(.shadow_rule, r'^r?[0-9]{1,20}(,r?[0-9]{1,20}){0,7}$') { .shadow_rule = "" }
+      # The keyed hash of the client key a mitigated request met (twelve hex characters), and the snapshot sequence it was judged under.
+      .client_key = slice!(to_string(.client_key) ?? "", 0, 12)
+      if !match(.client_key, r'^[0-9a-f]{12}$') { .client_key = "" }
+      .snapshot_sequence = to_int(.snapshot_sequence) ?? 0
+      if .snapshot_sequence < 0 {
+        .snapshot_sequence = 0
+      }
       # The request rules that acted, as "type:id" joined by commas (rewrite:3,cache:7), at most eight; anything else is dropped.
       .request_rule = slice!(to_string(.request_rule) ?? "", 0, 256)
       if !match(.request_rule, r'^(redirect|rewrite|header|cache):[0-9]{1,20}(,(redirect|rewrite|header|cache):[0-9]{1,20}){0,7}$') { .request_rule = "" }
@@ -494,6 +501,30 @@ tests:
           - type: vrl
             source: |-
               if .path == "/forged" { assert_eq!(.waf_rule_ids, "") } else { assert_eq!(.waf_rule_ids, "941100,942100") }
+  - name: keep_the_client_key_hash_and_snapshot_sequence_and_drop_anything_else
+    inputs:
+      - insert_at: safe_edge_events
+        type: log
+        log_fields:
+          domain_id: 1
+          path: /kept
+          client_key: 0123456789ab
+          snapshot_sequence: 42
+          security_action: block
+      - insert_at: safe_edge_events
+        type: log
+        log_fields:
+          domain_id: 1
+          path: /forged
+          client_key: "203.0.113.9"
+          snapshot_sequence: -5
+          security_action: block
+    outputs:
+      - extract_from: safe_edge_events
+        conditions:
+          - type: vrl
+            source: |-
+              if .path == "/forged" { assert_eq!(.client_key, ""); assert_eq!(.snapshot_sequence, 0) } else { assert_eq!(.client_key, "0123456789ab"); assert_eq!(.snapshot_sequence, 42) }
   - name: keep_customer_dns_events_and_drop_the_synthetic_probe
     inputs:
       - insert_at: safe_dns_events
