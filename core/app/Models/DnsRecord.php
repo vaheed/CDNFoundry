@@ -45,6 +45,9 @@ class DnsRecord extends Model
         abort_unless(array_diff($edgeIds, $this->domain()->firstOrFail()->placementEdgeIds()) === [], 422, 'Origin tests can run only on edges in the domain placement.');
         $origin = $role === 'backup' ? ($this->origin['backup'] ?? null) : $this->origin;
         abort_unless(is_array($origin), 422, 'The selected origin does not exist.');
+        // One manual test per origin every few seconds, so the button cannot be used to hammer an origin.
+        abort_if(Operation::query()->where('type', 'edge.origin_test')->whereNotNull('actor_id')->where('input->record_id', $this->id)->where('input->origin_role', $role)
+            ->where('created_at', '>=', now()->subSeconds(OriginMonitoring::MANUAL_SPACING_SECONDS))->exists(), 429, 'Wait '.OriginMonitoring::MANUAL_SPACING_SECONDS.' seconds between manual tests of the same origin.');
         $checksum = hash('sha256', ArtifactSigner::encode($origin));
         // Resolve before taking database locks. A changed target is rejected
         // under lock rather than combining its settings with these addresses.

@@ -22,7 +22,7 @@ return new class extends Migration
         }
         DB::table('system_settings')->insertOrIgnore([
             'group' => 'origin_monitoring', 'revision' => 1, 'created_at' => now(), 'updated_at' => now(),
-            'values' => json_encode(['enabled' => $scheduled, 'minimum_interval_seconds' => 60, 'max_representatives' => 3, 'manual_tests_when_off' => false, 'account_probes_per_minute' => 300]),
+            'values' => json_encode(['enabled' => $scheduled, 'minimum_interval_seconds' => 60, 'max_representatives' => 3, 'manual_tests_when_off' => false, 'domain_probes_per_minute' => 300]),
         ]);
     }
 

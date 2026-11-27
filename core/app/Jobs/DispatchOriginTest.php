@@ -87,6 +87,17 @@ class DispatchOriginTest implements ShouldQueue
                 $edges = collect($plan['representatives']);
                 $operation->input = [...$operation->input, 'groups' => $plan['groups']];
             }
+            if ($edges->isNotEmpty()) {
+                // The budgets are charged before a task exists: a destination receives at most a fixed number of probes a minute.
+                $destination = OriginMonitoring::destination($origin);
+                $allowed = OriginMonitoring::allowance($destination, (int) $record->domain_id, $edges->count());
+                if ($allowed === 0) {
+                    $operation->update(['status' => 'failed', 'error' => 'The probe budget of this origin or domain is used up for now; the check runs again on a later pass.', 'finished_at' => now()]);
+
+                    return;
+                }
+                $edges = $edges->take($allowed)->values();
+            }
             if ($edges->isEmpty()) {
                 $operation->update(['status' => 'failed', 'error' => 'No selected edge is registered, enabled, and heartbeat-fresh.', 'finished_at' => now()]);
 
@@ -94,7 +105,7 @@ class DispatchOriginTest implements ShouldQueue
             }
             foreach ($edges as $edge) {
                 EdgeTask::query()->create(['id' => (string) Str::uuid(), 'edge_id' => $edge->id, 'type' => 'origin_test', 'status' => 'pending', 'payload' => [
-                    'operation_id' => $operation->id, 'domain_id' => $record->domain_id, 'record_id' => $record->id,
+                    'operation_id' => $operation->id, 'domain_id' => $record->domain_id, 'record_id' => $record->id, 'destination' => OriginMonitoring::destination($origin),
                     'origin_role' => $role, 'origin' => $origin, 'addresses' => $operation->input['addresses'],
                     'private_allowlist' => app(PlatformSettings::class)->get('origin_safety', 'private_origin_allowlist'),
                     'blocked_networks' => app(PlatformSettings::class)->get('origin_safety', 'blocked_origin_networks'),

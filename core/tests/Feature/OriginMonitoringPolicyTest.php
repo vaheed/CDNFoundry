@@ -152,4 +152,62 @@ class OriginMonitoringPolicyTest extends TestCase
         $this->actingAs(User::factory()->create())->withHeader('Idempotency-Key', (string) Str::uuid())
             ->patchJson("/api/admin/edges/{$edge->id}", ['probe_group' => 'x'])->assertForbidden();
     }
+
+    public function test_probes_are_capped_per_destination_and_per_domain_and_manual_tests_are_spaced(): void
+    {
+        Queue::fake();
+        $this->enableOriginMonitoring();
+        $record = $this->record();
+        $other = $this->record();
+        foreach ([$record, $other] as $one) {
+            $one->update(['origin' => [...$one->origin, 'host' => '8.8.8.8']]);
+        }
+        foreach (range(1, 12) as $index) {
+            $edge = Edge::query()->create(['name' => "cap-$index", 'country_code' => 'IR', 'continent_code' => ['EU', 'AS', 'NA', 'SA'][$index % 4], 'enabled' => true, 'registered_at' => now(), 'last_heartbeat_at' => now()]);
+            foreach ([$record, $other] as $one) {
+                DomainEdgeCell::query()->create(['domain_id' => $one->domain_id, 'edge_id' => $edge->id, 'desired_revision' => 1, 'state' => 'active']);
+            }
+        }
+        $dispatch = function (DnsRecord $one): Operation {
+            $operation = Operation::query()->create(['type' => 'edge.origin_test', 'status' => 'pending', 'input' => ['domain_id' => $one->domain_id, 'record_id' => $one->id,
+                'origin_role' => 'primary', 'edge_ids' => [], 'addresses' => ['8.8.8.8'], 'scheduled' => true, 'origin_checksum' => OriginHealth::checksum($one->refresh()->origin)]]);
+            (new DispatchOriginTest($operation->id))->handle();
+
+            return $operation->refresh();
+        };
+        // Two domains share one destination: three probes, then three, then the two that are left, then none.
+        $counts = [];
+        foreach ([$record, $other, $record, $other, $record] as $one) {
+            $operation = $dispatch($one);
+            $counts[] = EdgeTask::query()->where('payload->operation_id', $operation->id)->count();
+        }
+        $this->assertSame([3, 3, 2, 0, 0], $counts, 'one destination gets at most eight probes a minute, however many domains point at it');
+        $this->assertSame(8, EdgeTask::query()->where('type', 'origin_test')->count());
+        $this->assertSame('failed', $operation->status);
+
+        $this->travel(61)->seconds();
+        Edge::query()->update(['last_heartbeat_at' => now()]);
+        $this->assertSame(3, EdgeTask::query()->where('payload->operation_id', $dispatch($record)->id)->count(), 'the budget refills after a minute');
+
+        $limit = SystemSetting::query()->findOrFail('origin_monitoring');
+        $limit->update(['values' => [...$limit->values, 'domain_probes_per_minute' => 3]]);
+        app()->forgetInstance(PlatformSettings::class);
+        $this->assertSame(0, EdgeTask::query()->where('payload->operation_id', $dispatch($record)->id)->count(), 'the per-domain limit holds even when the destination has room');
+    }
+
+    public function test_a_second_manual_test_of_the_same_origin_within_thirty_seconds_is_refused(): void
+    {
+        Queue::fake();
+        $this->enableOriginMonitoring();
+        $user = User::factory()->create();
+        $record = $this->record();
+        $record->domain->users()->attach($user->id);
+        $this->actingAs($user)->withHeader('Idempotency-Key', (string) Str::uuid())
+            ->postJson("/api/domains/{$record->domain_id}/dns/records/{$record->id}/origin/test", [])->assertStatus(202);
+        $this->actingAs($user)->withHeader('Idempotency-Key', (string) Str::uuid())
+            ->postJson("/api/domains/{$record->domain_id}/dns/records/{$record->id}/origin/test", [])->assertStatus(429);
+        $this->travel(31)->seconds();
+        $this->actingAs($user)->withHeader('Idempotency-Key', (string) Str::uuid())
+            ->postJson("/api/domains/{$record->domain_id}/dns/records/{$record->id}/origin/test", [])->assertStatus(202);
+    }
 }
