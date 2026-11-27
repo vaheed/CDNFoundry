@@ -40,7 +40,8 @@ class MetricsController extends Controller
         abort_if($configured === '' || ! hash_equals($configured, (string) $request->bearerToken()), 404);
         $lines = ['# HELP cdnfoundry_component_health Component health (healthy=1).', '# TYPE cdnfoundry_component_health gauge'];
         $unhealthy = 0;
-        foreach ($health->components() as $name => $component) {
+        $components = $health->components();
+        foreach ($components as $name => $component) {
             $lines[] = sprintf('cdnfoundry_component_health{component="%s",status="%s"} %d', $name, $component['status'], $component['status'] === 'healthy' ? 1 : 0);
             $unhealthy += $component['status'] === 'healthy' ? 0 : 1;
         }
@@ -92,6 +93,16 @@ class MetricsController extends Controller
         $lines[] = '# HELP cdnfoundry_dns_deployments_customer_rejected Zones PowerDNS refused because of the customer\'s record content; customer health, not a platform fault.';
         $lines[] = '# TYPE cdnfoundry_dns_deployments_customer_rejected gauge';
         $lines[] = 'cdnfoundry_dns_deployments_customer_rejected '.DnsDeployment::query()->customerRejected()->count();
+        $lines[] = '# HELP cdnfoundry_dimension_health What a group of components answers: serving, management or observability (healthy=1, insufficient evidence is not healthy).';
+        $lines[] = '# TYPE cdnfoundry_dimension_health gauge';
+        foreach ($health->dimensions($components) as $dimension => $state) {
+            $lines[] = sprintf('cdnfoundry_dimension_health{dimension="%s",status="%s"} %d', $dimension, $state['status'], $state['status'] === 'healthy' ? 1 : 0);
+        }
+        $lines[] = '# HELP cdnfoundry_customer_conditions Conditions of customers\' own domains by kind; customer health, never a platform fault.';
+        $lines[] = '# TYPE cdnfoundry_customer_conditions gauge';
+        foreach ($health->customerHealth() as $kind => $count) {
+            $lines[] = sprintf('cdnfoundry_customer_conditions{kind="%s"} %d', $kind, $count);
+        }
         $lines[] = 'cdnfoundry_edges_stale '.Edge::query()->where('enabled', true)->where(fn ($query) => $query->whereNull('last_heartbeat_at')->orWhere('last_heartbeat_at', '<', now()->subSeconds(app(PlatformSettings::class)->integer('edge_runtime', 'heartbeat_fresh_seconds'))))->count();
         $enabledEdges = Edge::query()->where('enabled', true)->get(['capacity']);
         $lines[] = 'cdnfoundry_edge_gateways_unready '.$enabledEdges->filter(fn (Edge $edge): bool => ! ($edge->capacity['gateway']['ready'] ?? false))->count();

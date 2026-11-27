@@ -6,6 +6,7 @@ use App\Models\Backup;
 use App\Models\CachePurge;
 use App\Models\DnsCluster;
 use App\Models\DnsDeployment;
+use App\Models\Domain;
 use App\Models\DomainEdgePlacement;
 use App\Models\Edge;
 use App\Models\EdgeCell;
@@ -165,12 +166,13 @@ final class SystemHealth
         $components['dns_deployments'] = $this->state($dnsDrift > 0 ? 'degraded' : 'healthy', ['drifted' => $dnsDrift, 'customer_rejected' => $customerRejected]);
 
         $expiring = TlsCertificate::query()->where('status', 'active')->where('expires_at', '<=', now()->addDays((int) config('services.acme.expiry_alert_days')))->count();
-        $failedOrders = TlsOrder::query()->where('status', 'failed')->count();
-        $components['tls'] = $this->state(($expiring + $failedOrders) > 0 ? 'degraded' : 'healthy', ['expiring_certificates' => $expiring, 'failed_orders' => $failedOrders]);
+        $failedOrders = TlsOrder::query()->platformFailed()->count();
+        $components['tls'] = $this->state(($expiring + $failedOrders) > 0 ? 'degraded' : 'healthy', ['expiring_certificates' => $expiring, 'failed_orders' => $failedOrders, 'customer_failed_orders' => TlsOrder::query()->customerFailed()->count()]);
 
         $failedPurges = CachePurge::query()->where('status', 'failed')->count();
-        $failedTasks = EdgeTask::query()->where('status', 'failed')->count();
-        $components['runtime_tasks'] = $this->state(($failedPurges + $failedTasks) > 0 ? 'degraded' : 'healthy', ['failed_purges' => $failedPurges, 'failed_edge_tasks' => $failedTasks]);
+        // A failed origin test says the customer's origin did not answer; it says nothing about the edge that ran it.
+        $failedTasks = EdgeTask::query()->where('status', 'failed')->where('type', '!=', 'origin_test')->count();
+        $components['runtime_tasks'] = $this->state(($failedPurges + $failedTasks) > 0 ? 'degraded' : 'healthy', ['failed_purges' => $failedPurges, 'failed_edge_tasks' => $failedTasks, 'customer_failed_origin_tests' => $this->failedOriginTests()]);
         $pendingPurges = CachePurge::query()->whereIn('status', ['pending', 'running'])->count();
         $components['purges'] = $this->state($failedPurges > 0 ? 'degraded' : 'healthy', ['failed' => $failedPurges, 'pending' => $pendingPurges]);
 
@@ -184,6 +186,62 @@ final class SystemHealth
         $components['backups'] = $this->state($backupStale || $lastCheck === 'failed' ? 'degraded' : 'healthy', ['last_verified_at' => $lastBackup, 'last_integrity_check' => $lastCheck]);
 
         return $components;
+    }
+
+    /** Origin tests that failed in the last day; customer health, not a fault of the edges that ran them. */
+    private function failedOriginTests(): int
+    {
+        return EdgeTask::query()->where('status', 'failed')->where('type', 'origin_test')->where('finished_at', '>=', now()->subDay())->count();
+    }
+
+    /**
+     * Conditions of individual customers' domains, apart from the platform's own health. They are counted for
+     * administrators and shown to each domain's users, and they never change a platform status or the public page.
+     * A condition counted here that belongs to the platform is a classification bug, so the classes are defined by
+     * cause where each failure is recorded.
+     *
+     * @return array<string, int>
+     */
+    public function customerHealth(): array
+    {
+        return [
+            'domains_pending_delegation' => Domain::query()->whereNull('nameservers_verified_at')->whereNull('delegation_lost_at')->count(),
+            'domains_lost_delegation' => Domain::query()->whereNotNull('delegation_lost_at')->count(),
+            'dns_content_rejected' => DnsDeployment::query()->customerRejected()->count(),
+            'tls_orders_failed' => TlsOrder::query()->customerFailed()->count(),
+            'origin_tests_failed' => $this->failedOriginTests(),
+        ];
+    }
+
+    /**
+     * The one vocabulary for what a component answers: whether visitors are served, whether the platform can be
+     * managed, whether it can be observed, and whether a customer's own configuration is sound. An analytics
+     * outage is an observability fault and never reports serving as down. A component absent from the map is
+     * reported as `management` rather than guessed.
+     */
+    public const DIMENSIONS = [
+        'serving' => ['authoritative_dns', 'edges', 'edge_listeners', 'edge_cells', 'service_pools', 'edge_capacity', 'edge_placements', 'edge_configuration'],
+        'management' => ['control_database', 'queue_backend', 'queue_workers', 'scheduler', 'host_clock', 'control_ha', 'operations', 'fleet_rollouts', 'backups', 'edge_control', 'dns_deployments', 'tls', 'purges', 'runtime_tasks', 'emergency_modes', 'mmdb'],
+        'observability' => ['clickhouse', 'vector', 'prometheus', 'loki', 'alert_receiver', 'usage'],
+    ];
+
+    /**
+     * @param  array<string, array<string, mixed>>  $components  output of components()
+     * @return array<string, array{status: string, components: list<string>}>
+     */
+    public function dimensions(array $components): array
+    {
+        $result = [];
+        foreach (self::DIMENSIONS as $dimension => $names) {
+            $present = array_values(array_filter($names, fn (string $name): bool => isset($components[$name])));
+            $statuses = array_map(fn (string $name): string => (string) ($components[$name]['status'] ?? 'unknown'), $present);
+            $result[$dimension] = [
+                'status' => $present === [] ? 'insufficient_evidence' : (in_array('unavailable', $statuses, true) ? 'unavailable' : (in_array('degraded', $statuses, true) ? 'degraded' : (in_array('unknown', $statuses, true) ? 'insufficient_evidence' : 'healthy'))),
+                'components' => $present,
+            ];
+        }
+
+        return $result;
     }
 
     public function queues(): array
