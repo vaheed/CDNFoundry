@@ -9,6 +9,7 @@ single source of truth; `make version-check` enforces it.
 
 ### Added
 
+- A failed scheduled origin check is confirmed by one other edge before it counts. The result separates a worker failure (healthy), a regional failure and an unconfirmed failure (degraded), and a confirmed origin failure (unhealthy), and lists groups nobody could probe as not monitored.
 - Origin checks use one representative edge from each of a few reachability groups (an optional edge Probe group label, else the continent) instead of every edge: a scheduled check uses at most the configured number of groups, a manual test uses one edge, and a group with no usable edge is reported as not monitored.
 - A platform switch for active origin monitoring (`origin_monitoring`): off for new installations, on after an upgrade only where a scheduled check already existed. Off stops scheduling, cancels queued checks, refuses manual tests unless allowed, and shows each origin's active signal as disabled; passive detection and failover are unchanged. The group also holds the shortest interval, the representatives per origin and the probes per account per minute.
 - Diagnostic headers have a per-domain choice (Inherit, On, Off) and a platform force-off override. The effective decision travels in the signed snapshot, and a rollback restores the domain's choice. Diagnostics add `cdnf-diag-origin-status`; the origin role, transitions, errors and the security reason are no longer sent in any response header.

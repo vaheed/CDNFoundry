@@ -92,6 +92,19 @@ same whether the fleet has 3 edges or 400.
 - A group with no usable edge is reported as **not monitored**. It is never counted as healthy.
 - A manual test is one probe from one edge.
 
+One failed check never marks an origin down. A failure is first confirmed by one other edge, from the same group when
+it has another usable edge and from another group otherwise, inside the same probe budget. The result is then one of:
+
+| Result | What it means | State shown |
+| --- | --- | --- |
+| Reachable | Every probed group reached the origin | Healthy |
+| Worker failure | The first edge failed and the confirming edge succeeded, so the edge failed and the origin did not | Healthy (the failing edge is counted, not blamed on the origin) |
+| Regional failure | Some groups reach the origin and some do not | Degraded, with the groups that failed |
+| Unconfirmed failure | A probe failed and no other edge could confirm it | Degraded |
+| Confirmed origin failure | Every probed group failed, and the confirmation failed too | Unhealthy |
+
+A group with no usable edge is listed as **not monitored** and is never counted as healthy.
+
 A healthy result means the origin was reachable from that group at that time. It says nothing about the other edges
 of the group; the passive failure reports from traffic remain the evidence for an edge-specific problem. Egress
 address families (IPv4 and IPv6) are not modelled yet.
