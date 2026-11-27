@@ -632,7 +632,7 @@ class ViewDomain extends ViewRecord
                     Repeater::make('keys')->label(FilamentHelp::label('Public keys', 'Add the new key before retiring the old one. Set Valid until on the old key and the cell stops using it at that time. Up to '.JwtValidationData::MAXIMUM_KEYS.'.'))
                         ->minItems(1)->maxItems(JwtValidationData::MAXIMUM_KEYS)->addActionLabel('Add key')->itemLabel(fn (array $state): ?string => ($state['kid'] ?? '') !== '' ? $state['kid'] : null)->schema([
                             TextInput::make('kid')->label(FilamentHelp::label('Key ID', 'The kid in the token header. Leave empty to try this key for tokens with no kid.'))->maxLength(64)->placeholder('2026-11'),
-                            Select::make('alg')->label('Algorithm')->options(['RS256' => 'RS256', 'ES256' => 'ES256'])->default('RS256')->required(),
+                            Select::make('alg')->label(FilamentHelp::label('Algorithm', 'The signature algorithm the key verifies. RS256 for RSA keys, ES256 for P-256 elliptic-curve keys.'))->options(['RS256' => 'RS256', 'ES256' => 'ES256'])->default('RS256')->required(),
                             Textarea::make('pem')->label(FilamentHelp::label('Public key', 'A PEM public key that starts with BEGIN PUBLIC KEY. A private key is refused.'))->required()->rows(5)->placeholder("-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"),
                             TextInput::make('expires_at')->label(FilamentHelp::label('Valid until', 'Optional end time such as 2026-12-31 23:59. The cell stops using the key then, by its own clock.'))->placeholder('2026-12-31 23:59'),
                         ]),
