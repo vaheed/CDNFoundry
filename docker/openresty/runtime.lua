@@ -576,6 +576,10 @@ local function enforce_challenge(config, incident, client, trusted)
         local token = signing_id .. "." .. tostring(config.domain_id or 0) .. "." .. tostring(expires) .. "." .. binding .. "." .. hmac_sha256_hex("token|" .. signing_id .. "|" .. tostring(config.domain_id or 0) .. "|" .. tostring(expires) .. "|" .. binding, signing_secret)
         ngx.header["Set-Cookie"] = "cdnf_chal=" .. token .. "; Path=/; Max-Age=" .. tostring(expires - ngx.time()) .. "; HttpOnly; SameSite=Lax" .. (ngx.var.https == "on" and "; Secure" or "")
         ngx.header["Cache-Control"] = "no-store"
+        -- A solved challenge is rare (one per visitor per token lifetime), so its log line may carry the client key. It lets the
+        -- control plane see a client that was blocked and then proved to be a person; the request itself stays allowed.
+        ngx.var.cdn_security_reason = "challenge_solved"
+        REP.trace()
         ngx.status = 204
         return ngx.exit(ngx.HTTP_NO_CONTENT)
     end
