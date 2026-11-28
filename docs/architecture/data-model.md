@@ -58,13 +58,15 @@ amount of bounded history. Every table that grows with activity has a retention 
 
 | Table | What grows it | Bound |
 | --- | --- | --- |
-| `usage_rollups` | one row per domain and hour | hours sum into days after 35 days, days into months after a year; about 12 rows per domain and year afterwards |
+| `usage_rollups` | one row per domain and hour in which it had traffic | sparse: a domain with no traffic has no row, and `usage_coverage` records each hour as final or incomplete. Hours sum into days after 35 days, days into months after a year; about 12 rows per domain and year afterwards |
 | `security_events` | edge reports | one row per domain, edge, reason, and hour; deleted after 30 days |
 | `audit_logs`, `operations` | actions and jobs | deleted after 365 and 90 days |
 | `edge_tasks`, `cache_purges` | purges, tests, rollouts | finished rows deleted after 30 and 90 days |
 | `tls_orders`, `acme_challenges` | issuance and renewal | finished orders deleted after 180 days, newest per domain kept |
 | `failed_jobs`, `personal_access_tokens`, `idempotency_keys` | failures, tokens, retries | deleted after 90 days, expiry, and one day |
 | `edge_revisions` | proxy deploys | bounded history per domain |
+
+**Size of the usage table.** Measured on a disposable PostgreSQL 18 with the real migrations, with one row for every hour of 35 days, every day of 330 days and every month of a year for 1,000 domains (1,184,000 rows, the worst case where every domain has traffic every hour): 387 MB, which is 342 bytes a row (243 MB table, 143 MB indexes) and about 0.41 MB a domain. The table grows with the number of domains that have traffic, not with the request rate: a request count of 10 or 10 million is the same row. Expected size, by that measure: about 4 GB for 10,000 and 41 GB for 100,000 domains that all have traffic every hour; domains that have traffic in a tenth of the hours cost about a tenth of the hourly part. Reading one domain's 30 days of hourly rows takes about 20 ms, and the fleet-wide top 20 over the daily rows of 1,000 domains about 250 ms.
 
 Queues, sessions, and the cache are in Redis. Only desired state, certificates, domains, and these bounded tables remain,
 so PostgreSQL grows with the number of domains, not with traffic. All IDs of growing tables are `bigint` or UUID.
