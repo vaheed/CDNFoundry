@@ -164,7 +164,7 @@ permanent wildcards and broad ignore files are forbidden. Keep scanner version a
 
 ### Recorded exception: Tempo findings in Grafana
 
-`supply-chain/trivy-classifications.yaml` holds two owner-approved classifications for CVE-2026-21728 and CVE-2026-28377. The owner approved them on 2026-09-19 and renewed them on 2026-10-29. They expire on **2026-11-28**. After that date the scanner blocks these findings again.
+`supply-chain/trivy-classifications.yaml` holds two owner-approved classifications for CVE-2026-21728 and CVE-2026-28377. The owner approved them on 2026-09-19 and renewed them on 2026-10-29 and again on 2026-11-28 after checking that Grafana 12.4.16, the newest 12.4 release, still links the same Tempo commit. They expire on **2026-12-28**. After that date the scanner blocks these findings again.
 
 Each classification matches only the Grafana backend at `usr/share/grafana/bin/grafana` and exactly `github.com/grafana/tempo@v1.5.1-0.20260427112133-525d1bab07e0`. The scanner compares a Go pseudo-version with product 2.x versions, so it still reports both fixes as missing. Grafana links only the Tempo protobuf packages, not the affected server. The pinned source contains both fixes:
 
