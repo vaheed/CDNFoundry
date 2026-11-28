@@ -332,3 +332,65 @@ tests:
   - eval_time: 6m
     alertname: CDNFoundryDnsDeploymentsDrifted
     exp_alerts: []
+- interval: 1m
+  input_series:
+  - series: cdnfoundry_origin_monitoring_enabled
+    values: 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1
+  - series: cdnfoundry_origin_probe_oldest_pending_seconds
+    values: 0 0 0 700 760 820 880 940 1000 1060 1120 1180 1240 1300 1360 1420 1480 1540 1600 1660
+  - series: cdnfoundry_usage_incomplete_hours
+    values: 1+0x400
+  - series: cdnfoundry_usage_coverage_age_seconds
+    values: 11000+0x400
+  alert_rule_test:
+  # Monitoring on and a probe waiting more than ten minutes for five minutes.
+  - eval_time: 12m
+    alertname: OriginProbesBacklogged
+    exp_alerts:
+    - exp_labels:
+        severity: warning
+        team: platform
+        dashboard: cdnf-origin-health
+      exp_annotations:
+        summary: Origin probe tasks are waiting for an edge and active origin health is going stale
+        runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#origin-probes-backlogged
+        dashboard_url: /d/cdnf-origin-health
+  - eval_time: 3m
+    alertname: OriginProbesBacklogged
+    exp_alerts: []
+  - eval_time: 361m
+    alertname: UsageCoverageIncomplete
+    exp_alerts:
+    - exp_labels:
+        severity: warning
+        team: platform
+        dashboard: cdnf-telemetry-pipeline
+      exp_annotations:
+        summary: Usage for one or more hours is incomplete because telemetry did not arrive; it is not final and is not zero
+        runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#usage-coverage
+        dashboard_url: /d/cdnf-telemetry-pipeline
+  - eval_time: 300m
+    alertname: UsageCoverageIncomplete
+    exp_alerts: []
+  - eval_time: 40m
+    alertname: UsageFinalizationStale
+    exp_alerts:
+    - exp_labels:
+        severity: warning
+        team: platform
+        dashboard: cdnf-control-plane
+      exp_annotations:
+        summary: Usage finalization is behind by more than three hours
+        runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#usage-coverage
+        dashboard_url: /d/cdnf-control-plane
+- interval: 1m
+  # Monitoring off: a stale probe series is not an alert.
+  input_series:
+  - series: cdnfoundry_origin_monitoring_enabled
+    values: 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+  - series: cdnfoundry_origin_probe_oldest_pending_seconds
+    values: 5000+0x14
+  alert_rule_test:
+  - eval_time: 13m
+    alertname: OriginProbesBacklogged
+    exp_alerts: []

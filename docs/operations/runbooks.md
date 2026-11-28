@@ -246,6 +246,26 @@ Every alert links here. To find a runbook from an alert's name, look it up in th
 
 **First action:** Open the component in Control plane, read its reason, and follow the runbook for that component.
 
+## Origin probes backlogged {#origin-probes-backlogged}
+
+**Alert:** `OriginProbesBacklogged`. Active origin monitoring is on and an origin probe task has waited ten minutes for an edge.
+
+1. Open the Origin health dashboard and the PoP fleet dashboard. A stale heartbeat or an unready gateway on the edges in the affected group explains a task nobody takes.
+2. Check the edge agent logs in the Logs explorer (`edge agent` template) for `edge_task_started` lines with the `operation_id`. A worker that takes tasks but is over its probe-time budget is skipped for new probes and is expected to clear.
+3. If the whole fleet is affected, the control plane is not delivering tasks: follow [Queue backlog](#queue-backlog).
+4. To stop all probing while you work, turn off **Active origin monitoring** in Platform settings. Queued probes fail in the same transaction, passive failure detection and failover keep working, and origins read **Health check disabled**.
+
+**Expected result:** the oldest waiting probe is younger than a minute interval and the alert clears.
+
+## Usage coverage {#usage-coverage}
+
+**Alerts:** `UsageCoverageIncomplete`, `UsageFinalizationStale`.
+
+- **Incomplete hours.** An hour in which edges exist and no telemetry arrived for the whole fleet is stored as incomplete and is never counted as zero usage. Restore telemetry first ([ClickHouse or Vector outage](#clickhouse-or-vector-outage)). The finalizer retries incomplete hours for 24 hours and then keeps them marked incomplete; usage reports and the `meta.coverage` of the usage API say so.
+- **Finalizer behind.** `cdnf:usage:finalize` builds every hour without coverage, 48 per run. Check that the scheduler runs and that the `usage` queue is not backed up. A run after an outage catches up on its own.
+
+**Expected result:** the incomplete hours either turn final after telemetry returns or stay visibly incomplete; the newest built hour is less than three hours old.
+
 ## Control backup stale {#backup-stale}
 
 **Open:** Backups and recovery.

@@ -69,6 +69,34 @@ groups:
           summary: DNS deployments are failing for platform reasons, not because of a customer's records
           runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#component-unhealthy
           dashboard_url: /d/cdnf-control-plane
+      - alert: OriginProbesBacklogged
+        # Active origin monitoring is on and a probe task has waited for an edge for ten minutes: the workers are saturated, down or
+        # have lost the control plane. The scheduler stretches failing origins and sheds over-budget probes, so a backlog is unexpected.
+        expr: cdnfoundry_origin_monitoring_enabled == 1 and cdnfoundry_origin_probe_oldest_pending_seconds > 600
+        for: 5m
+        labels: { team: platform, severity: warning, dashboard: cdnf-origin-health }
+        annotations:
+          summary: Origin probe tasks are waiting for an edge and active origin health is going stale
+          runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#origin-probes-backlogged
+          dashboard_url: /d/cdnf-origin-health
+      - alert: UsageCoverageIncomplete
+        # An hour in which edges exist and no telemetry reached the control plane is stored as incomplete, never as zero usage.
+        expr: cdnfoundry_usage_incomplete_hours > 0
+        for: 6h
+        labels: { team: platform, severity: warning, dashboard: cdnf-telemetry-pipeline }
+        annotations:
+          summary: Usage for one or more hours is incomplete because telemetry did not arrive; it is not final and is not zero
+          runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#usage-coverage
+          dashboard_url: /d/cdnf-telemetry-pipeline
+      - alert: UsageFinalizationStale
+        # The finalizer builds every hour without coverage, hourly. A newest built hour older than three hours means it is not running.
+        expr: cdnfoundry_usage_coverage_age_seconds > 10800
+        for: 30m
+        labels: { team: platform, severity: warning, dashboard: cdnf-control-plane }
+        annotations:
+          summary: Usage finalization is behind by more than three hours
+          runbook_url: https://vaheed.github.io/CDNFoundry/operations/runbooks#usage-coverage
+          dashboard_url: /d/cdnf-control-plane
       - alert: ControlBackupStale
         # The backups component turns degraded when no verified backup is newer than operations.backup_stale_hours,
         # and when the weekly repository integrity check fails.

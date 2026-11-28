@@ -19,7 +19,7 @@ that exist.
 - **Dashboard** is the Grafana dashboard that shows the cause. See
   [Grafana by team](../operations/grafana-by-team.md).
 
-There are 81 alerts.
+There are 84 alerts.
 
 ## Team: noc
 
@@ -92,6 +92,7 @@ There are 81 alerts.
 | `OperationalLogCollectorUnavailable` | warning | 2m | Prometheus cannot scrape an operational-log collector | [Runbook](../operations/runbooks.md#loki-or-operational-log-collector-outage) | Telemetry pipeline |
 | `OperationalLogDeliveryFailures` | warning | 2m | An operational-log collector cannot deliver to Loki | [Runbook](../operations/runbooks.md#loki-or-operational-log-collector-outage) | Telemetry pipeline |
 | `OperationalLogsDropped` | warning | 1m | An operational-log collector dropped events after reaching a bound | [Runbook](../operations/runbooks.md#loki-or-operational-log-collector-outage) | Telemetry pipeline |
+| `OriginProbesBacklogged` | warning | 5m | Origin probe tasks are waiting for an edge and active origin health is going stale | [Runbook](../operations/runbooks.md#origin-probes-backlogged) | Origin health |
 | `PurgePropagationSlow` | warning | 2m | A cache purge has not been applied on every PoP for over a minute | [Runbook](../operations/runbooks.md#cache-purge-failure) | Config & purge propagation |
 | `SLOBurnConfigPropagationSlow` | warning | 15m | Config propagation (applied within 120 s) is burning its error budget 6 times too fast over 6h and 30m | [Runbook](../operations/runbooks.md#propagation-burn) | SLOs |
 | `SLOBurnPurgePropagationSlow` | warning | 15m | Purge propagation (applied within 30 s) is burning its error budget 6 times too fast over 6h and 30m | [Runbook](../operations/runbooks.md#propagation-burn) | SLOs |
@@ -100,6 +101,8 @@ There are 81 alerts.
 | `TelemetryCollectorUnavailable` | warning | 2m | Prometheus cannot scrape the Vector telemetry collector | [Runbook](../operations/runbooks.md#clickhouse-or-vector-outage) | Telemetry pipeline |
 | `TelemetryDeliveryFailures` | warning | 2m | Vector is failing to deliver telemetry | [Runbook](../operations/runbooks.md#clickhouse-or-vector-outage) | Telemetry pipeline |
 | `TelemetryEventsDropped` | warning | 1m | Vector dropped telemetry it was not told to drop (a bounded buffer, a limit, or a line it could not convert) | [Runbook](../operations/runbooks.md#clickhouse-or-vector-outage) | Telemetry pipeline |
+| `UsageCoverageIncomplete` | warning | 6h | Usage for one or more hours is incomplete because telemetry did not arrive; it is not final and is not zero | [Runbook](../operations/runbooks.md#usage-coverage) | Telemetry pipeline |
+| `UsageFinalizationStale` | warning | 30m | Usage finalization is behind by more than three hours | [Runbook](../operations/runbooks.md#usage-coverage) | Control plane |
 | `Watchdog` | none | Immediately | Alerting pipeline heartbeat; it must always be firing | [Runbook](../operations/runbooks.md#alerting-heartbeat) | Now |
 
 ## Team: soc

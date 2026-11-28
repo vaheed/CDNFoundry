@@ -10,6 +10,7 @@ use App\Models\EdgeArtifact;
 use App\Models\EdgeCell;
 use App\Models\EdgePool;
 use App\Models\EdgePoolEndpoint;
+use App\Models\EdgeTask;
 use App\Models\EmergencyMode;
 use App\Models\FleetRollout;
 use App\Models\Operation;
@@ -19,6 +20,7 @@ use App\Models\TlsOrder;
 use App\Support\ClientNetwork;
 use App\Support\ControlPlane;
 use App\Support\ControlPlaneMetrics;
+use App\Support\OriginMonitoring;
 use App\Support\PlatformSettings;
 use App\Support\RulesetPins;
 use App\Support\SystemHealth;
@@ -102,6 +104,29 @@ class MetricsController extends Controller
         $lines[] = '# TYPE cdnfoundry_customer_conditions gauge';
         foreach ($health->customerHealth() as $kind => $count) {
             $lines[] = sprintf('cdnfoundry_customer_conditions{kind="%s"} %d', $kind, $count);
+        }
+        // Active origin monitoring and durable usage: fixed-value labels only, never a domain, record, client or request.
+        $lines[] = '# HELP cdnfoundry_origin_monitoring_enabled 1 when the platform switch for active origin monitoring is on.';
+        $lines[] = '# TYPE cdnfoundry_origin_monitoring_enabled gauge';
+        $lines[] = 'cdnfoundry_origin_monitoring_enabled '.(OriginMonitoring::enabled() ? 1 : 0);
+        $lines[] = '# HELP cdnfoundry_origin_probe_tasks Origin probe tasks created in the last 10 minutes, by status.';
+        $lines[] = '# TYPE cdnfoundry_origin_probe_tasks gauge';
+        $probes = EdgeTask::query()->where('type', 'origin_test')->where('created_at', '>=', now()->subMinutes(10))->selectRaw('status, count(*) as total')->groupBy('status')->pluck('total', 'status');
+        foreach (['pending', 'succeeded', 'failed'] as $status) {
+            $lines[] = sprintf('cdnfoundry_origin_probe_tasks{status="%s"} %d', $status, (int) ($probes[$status] ?? 0));
+        }
+        $oldestProbe = EdgeTask::query()->where('type', 'origin_test')->where('status', 'pending')->min('created_at');
+        $lines[] = '# HELP cdnfoundry_origin_probe_oldest_pending_seconds Age of the oldest origin probe task no edge has answered; 0 when none is waiting.';
+        $lines[] = '# TYPE cdnfoundry_origin_probe_oldest_pending_seconds gauge';
+        $lines[] = 'cdnfoundry_origin_probe_oldest_pending_seconds '.($oldestProbe === null ? 0 : max(0, (int) CarbonImmutable::parse($oldestProbe)->diffInSeconds(now(), true)));
+        $lines[] = '# HELP cdnfoundry_usage_incomplete_hours Usage hours of the last 48 that were built without telemetry for the whole fleet and are not final.';
+        $lines[] = '# TYPE cdnfoundry_usage_incomplete_hours gauge';
+        $lines[] = 'cdnfoundry_usage_incomplete_hours '.DB::table('usage_coverage')->where('status', 'incomplete')->where('interval_start', '>=', now()->subHours(48))->count();
+        $newestCoverage = DB::table('usage_coverage')->max('interval_end');
+        if ($newestCoverage !== null) {
+            $lines[] = '# HELP cdnfoundry_usage_coverage_age_seconds Time since the end of the newest hour whose usage was built; the finalizer is behind when it grows.';
+            $lines[] = '# TYPE cdnfoundry_usage_coverage_age_seconds gauge';
+            $lines[] = 'cdnfoundry_usage_coverage_age_seconds '.max(0, (int) CarbonImmutable::parse($newestCoverage)->diffInSeconds(now(), true));
         }
         $lines[] = 'cdnfoundry_edges_stale '.Edge::query()->where('enabled', true)->where(fn ($query) => $query->whereNull('last_heartbeat_at')->orWhere('last_heartbeat_at', '<', now()->subSeconds(app(PlatformSettings::class)->integer('edge_runtime', 'heartbeat_fresh_seconds'))))->count();
         $enabledEdges = Edge::query()->where('enabled', true)->get(['capacity']);

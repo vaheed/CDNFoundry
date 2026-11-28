@@ -51,6 +51,24 @@ def drive(ip: str) -> dict:
     return {"requests": len(latencies), "p50_ms": round(1000 * latencies[len(latencies) // 2], 1), "p99_ms": round(1000 * latencies[int(len(latencies) * 0.99) - 1], 1), "max_ms": round(1000 * latencies[-1], 1)}
 
 
+def correlate(ip: str) -> dict:
+    """The reference a visitor receives is the request_id of the stored event: a blocked request, a served page and a refused method each join a ClickHouse row."""
+    found = {}
+    for label, path, method in (("served", "/", "GET"), ("blocked", "/blocked", "GET"), ("refused method", "/", "PUT")):
+        _, headers, _ = get(ip, path, method)
+        reference = headers["edge-ray"]
+        deadline = time.monotonic() + 60
+        while time.monotonic() < deadline:
+            count = run("docker", "exec", container("clickhouse"), "clickhouse-client", "-q", f"SELECT count() FROM cdnf.edge_events WHERE request_id = '{reference}'", check=False).stdout.strip()
+            if count == "1":
+                found[label] = reference
+                break
+            time.sleep(2)
+        else:
+            raise AssertionError(f"the {label} request's reference {reference} was never stored as a request_id (the count was {count!r})")
+    return {"joined": sorted(found)}
+
+
 def wait_running(service: str) -> None:
     deadline = time.monotonic() + 180
     while time.monotonic() < deadline:
@@ -92,7 +110,9 @@ def main() -> None:
         for source, target in mounts.items():
             arguments += ["-v", f"{root / source}:{target}:ro"]
         try:
-            run("docker", "run", "-d", "--name", CELL, "--network", NETWORK, "-e", "EDGE_RUNTIME_FILE=/var/lib/cdnfoundry/runtime/active.json", "-e", "EDGE_STATUS_TOKEN=e2e",
+            # The node secret the development Vector checks on every event (the telemetry proof), read from its container and never printed.
+            token = run("docker", "exec", container("vector"), "printenv", "EDGE_STATUS_TOKEN").stdout.strip()
+            run("docker", "run", "-d", "--name", CELL, "--network", NETWORK, "-e", "EDGE_RUNTIME_FILE=/var/lib/cdnfoundry/runtime/active.json", "-e", f"EDGE_STATUS_TOKEN={token}",
                 "-v", f"{runtime}:/var/lib/cdnfoundry/runtime/active.json:ro", "-v", f"{temporary / 'tls.crt'}:/run/edge/tls.crt:ro", "-v", f"{temporary / 'tls.key'}:/run/edge/tls.key:ro",
                 *arguments, "--tmpfs", "/var/cache/nginx:rw,noexec,nosuid,size=64m,mode=0777", IMAGE)
             ip = json.loads(run("docker", "inspect", CELL).stdout)[0]["NetworkSettings"]["Networks"][NETWORK]["IPAddress"]
@@ -106,6 +126,8 @@ def main() -> None:
             else:
                 raise AssertionError(run("docker", "logs", CELL, check=False).stderr)
             report["baseline"] = drive(ip)
+            if "clickhouse" in present:
+                report["correlation"] = correlate(ip)
             for service in [name for name in MATRIX if name in present]:
                 run("docker", "stop", "-t", "5", container(service))
                 stopped.append(service)
@@ -123,7 +145,7 @@ def main() -> None:
             run("docker", "rm", "-f", CELL, ORIGIN, check=False)
     for name, numbers in report.items():
         print(f"{name}: {numbers}")
-    print("e2e serving continuity matrix passed for:", ", ".join(name.removesuffix(" stopped") for name in report if name != "baseline"))
+    print("e2e serving continuity matrix passed for:", ", ".join(name.removesuffix(" stopped") for name in report if name.endswith(" stopped")))
 
 
 if __name__ == "__main__":

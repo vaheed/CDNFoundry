@@ -3,12 +3,16 @@
 namespace Tests\Feature;
 
 use App\Models\AuditLog;
+use App\Models\Edge;
+use App\Models\EdgeTask;
 use App\Models\EmergencyMode;
 use App\Models\Operation;
 use App\Models\User;
 use App\Support\ControlPlaneMetrics;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class ControlPlaneMetricsTest extends TestCase
@@ -115,5 +119,32 @@ class ControlPlaneMetricsTest extends TestCase
         $body = $this->scrape();
 
         $this->assertMatchesRegularExpression('/cdnfoundry_status_summary\{state="degraded",summary="Degraded: \d+ components? unhealthy[^"]*"\} 1/', $body);
+    }
+
+    public function test_origin_monitoring_and_usage_coverage_are_reported_with_fixed_labels_and_no_invented_zero(): void
+    {
+        $body = $this->scrape();
+        $this->assertStringContainsString("cdnfoundry_origin_monitoring_enabled 0\n", $body, 'a new installation has monitoring off');
+        $this->assertStringContainsString("cdnfoundry_origin_probe_oldest_pending_seconds 0\n", $body);
+        $this->assertStringContainsString("cdnfoundry_usage_incomplete_hours 0\n", $body);
+        $this->assertStringNotContainsString('cdnfoundry_usage_coverage_age_seconds', $body, 'with no built hour there is no age to report, and none is invented');
+
+        $this->enableOriginMonitoring();
+        $edge = Edge::query()->create(['name' => 'metrics-edge', 'country_code' => 'IR', 'continent_code' => 'AS', 'enabled' => true]);
+        $task = EdgeTask::query()->create(['id' => (string) Str::uuid(), 'edge_id' => $edge->id, 'type' => 'origin_test', 'status' => 'pending', 'payload' => ['domain_id' => 1, 'destination' => '1.1.1.1:80']]);
+        EdgeTask::query()->whereKey($task->id)->update(['created_at' => now()->subMinutes(7)]);
+        DB::table('usage_coverage')->insert(['interval_start' => now()->subHours(3)->startOfHour(), 'interval_end' => now()->subHours(2)->startOfHour(), 'status' => 'incomplete', 'reason' => 'no_telemetry', 'domains_with_traffic' => 0, 'built_at' => now()]);
+
+        $body = $this->scrape();
+        $this->assertStringContainsString("cdnfoundry_origin_monitoring_enabled 1\n", $body);
+        $this->assertStringContainsString('cdnfoundry_origin_probe_tasks{status="pending"} 1', $body);
+        preg_match('/cdnfoundry_origin_probe_oldest_pending_seconds (\d+)\n/', $body, $waiting);
+        $this->assertGreaterThanOrEqual(400, (int) $waiting[1], 'the oldest waiting probe was created seven minutes ago');
+        $this->assertLessThan(3600, (int) $waiting[1]);
+        $this->assertStringContainsString("cdnfoundry_usage_incomplete_hours 1\n", $body);
+        preg_match('/cdnfoundry_usage_coverage_age_seconds (\d+)\n/', $body, $age);
+        $this->assertGreaterThanOrEqual(7000, (int) $age[1], 'the newest built hour ended about two hours ago');
+        $this->assertLessThan(86400, (int) $age[1]);
+        $this->assertDoesNotMatchRegularExpression('/cdnfoundry_(origin|usage)_[a-z_]*\{[^}]*(domain|record|client|request)/', $body, 'no domain, record, client or request label');
     }
 }
