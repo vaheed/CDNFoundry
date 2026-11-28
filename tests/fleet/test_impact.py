@@ -91,7 +91,7 @@ def test_a_dashboard_edit_leaves_the_databases_and_the_application_alone(baselin
         rows = impact.plan_node("control-1", before["control-1"], impact.profile(fleet.out / "control-1"))
     finally:
         dashboard.write_bytes(original)
-    assert [(r.service, r.action) for r in rows] == [("grafana", "file")]
+    assert [(r.service, r.action) for r in rows] == [("grafana-bootstrap", "restart")]
 
 
 @needs_docker
@@ -105,6 +105,19 @@ def test_a_prometheus_rule_edit_is_a_reload(baseline) -> None:
     finally:
         rules.write_bytes(original)
     assert [(r.service, r.action) for r in rows] == [("prometheus", "reload")]
+
+
+@needs_docker
+def test_a_provisioned_dashboard_edit_is_a_file_update_for_grafana_only(baseline) -> None:
+    fleet, before = baseline
+    dashboard = next((fleet.out / "control-1" / "docker" / "grafana" / "dashboards").rglob("*.json"))
+    original = dashboard.read_bytes()
+    try:
+        dashboard.write_bytes(original + b"\n")
+        rows = impact.plan_node("control-1", before["control-1"], impact.profile(fleet.out / "control-1"))
+    finally:
+        dashboard.write_bytes(original)
+    assert [(r.service, r.action) for r in rows] == [("grafana", "file")]
 
 
 @needs_docker
@@ -158,37 +171,46 @@ def test_env_digests_keep_no_value() -> None:
     assert set(digests) == {"A", "B"} and "secret" not in str(digests)
 
 
-@needs_docker
-def test_a_management_network_change_today_recreates_the_application_workers(baseline) -> None:
-    """Recorded current behavior (H25): the shared environment reaches services that do not read the value."""
-    fleet, before = baseline
+def _change_management_networks(fleet: Fleet, before: dict[str, dict]) -> list[impact.Change]:
     state = fleet.store.load()
     original = list(state["global"].get("management_networks", []))
     state["global"]["management_networks"] = [*original, "198.51.100.0/24"]
     fleet.store._write(state)
     try:
-        rows = impact.plan_node("control-1", before["control-1"], fleet.render()["control-1"])
+        return impact.plan_node("control-1", before["control-1"], fleet.render()["control-1"])
     finally:
         state["global"]["management_networks"] = original
         fleet.store._write(state)
         fleet.render()
-    recreated = {r.service for r in rows if r.action == "recreate"}
-    assert "caddy" in recreated
-    assert {"core", "horizon"} <= recreated  # the root cause Stage E must remove
 
 
-@pytest.mark.xfail(strict=True, reason="Stage E target, not implemented: the environment is not yet narrowed per service")
 @needs_docker
-def test_a_management_network_change_should_reload_only_the_gateway(baseline) -> None:
+def test_a_management_network_change_recreates_no_container_and_reloads_only_the_gateway(baseline) -> None:
+    """The address lists are files that the gateways import and the control plane reads per request (Stage E root cause 2)."""
     fleet, before = baseline
-    state = fleet.store.load()
-    original = list(state["global"].get("management_networks", []))
-    state["global"]["management_networks"] = [*original, "198.51.100.0/24"]
-    fleet.store._write(state)
+    rows = _change_management_networks(fleet, before)
+    assert not [r for r in rows if r.action in {"recreate", "restart", "node"}], [r.line() for r in rows]
+    assert {(r.service, r.action) for r in rows} == {("caddy", "reload")}  # the telemetry gateway runs on a monitoring host, not beside the control services
+    assert all("198.51.100" not in str(r.row()) for r in rows)
+
+
+@needs_docker
+def test_an_edge_public_address_change_reloads_the_gateway_and_recreates_nothing_on_control(baseline) -> None:
+    fleet, before = baseline
+    state = fleet.store.update_node(fleet.store.load(), "pop-2", {"public_ipv4": "93.184.216.98"})
     try:
         rows = impact.plan_node("control-1", before["control-1"], fleet.render()["control-1"])
     finally:
-        state["global"]["management_networks"] = original
-        fleet.store._write(state)
+        fleet.store.update_node(fleet.store.load(), "pop-2", {"public_ipv4": "93.184.216.13"})
         fleet.render()
-    assert {r.service for r in rows if r.action == "recreate"} <= {"caddy"}
+    assert not [r for r in rows if r.action in {"recreate", "node"}], [r.line() for r in rows]
+    assert {"caddy", "prometheus"} <= {r.service for r in rows}
+
+
+def test_every_reload_the_map_names_has_a_command() -> None:
+    from cdnfoundry_fleet import actions
+
+    for rule in impact.RULES:
+        if rule[3] == "reload":
+            for service in rule[2]:
+                assert service in actions.RELOAD_COMMANDS, service

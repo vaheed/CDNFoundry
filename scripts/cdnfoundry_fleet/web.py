@@ -1101,12 +1101,12 @@ class FleetWeb:
             return self._sync(f"configure-{feature}", save_feature, "/config", f"{feature.capitalize()} settings saved. Deploy the changes to send them to the hosts.")
         if path == "/config/plan":
             plan, rows = self.read(lambda e: e.config_preview())
-            narrow = {"none": "swap the directory only", "firewall": "firewall step only"}
+            narrow = {"none": "update the files only", "firewall": "firewall step only", "live": "files updated in place, then only the named services reloaded, restarted or recreated"}
             steps = "<ol>" + "".join(f"<li>{esc(s.label())}</li>" for s in plan.steps) + "</ol>" if plan.steps else '<p class="empty">Every host already runs what Fleet would render. Nothing is touched.</p>'
             impact_table = table(["Host", "Service", "Change", "Action", "Availability", "Validation", "Rollback"],
                                  [[esc(r.host), esc(r.service), esc(r.change), esc(r.action), esc(r.availability), esc(r.validation), esc(r.rollback)] for r in rows],
                                  label="Service-level impact") if rows else ""
-            body = ("<h2>Plan</h2>" + steps + ("<h2>Service-level impact</h2><p class=\"hint\">The minimum safe action per service. A host whose change is only the firewall or only documentation and scripts "
+            body = ("<h2>Plan</h2>" + steps + ("<h2>Service-level impact</h2><p class=\"hint\">The minimum safe action per service. A host whose change is only the firewall, only documentation and scripts, or only files that named services read "
                     "is activated narrowly (" + esc(", ".join(narrow.values())) + "); every other host is still activated as a whole.</p>" + impact_table if rows else "")
                     + (self.action_form("/config/apply", "Deploy the changes", primary=True) if plan.steps else ""))
             raise _Render(self.layout("/config", "Config plan", body))

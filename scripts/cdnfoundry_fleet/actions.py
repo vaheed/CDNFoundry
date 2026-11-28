@@ -31,6 +31,90 @@ LONG_STEP_SECONDS = 1800
 PREREQUISITES = Path(__file__).with_name('host-bootstrap.sh').read_bytes()
 
 
+COMPOSE = "docker compose --env-file .env.prod --profile '*'"
+# Directories whose files other users must read (the same fix start.sh applies); the configuration of services that run as another user.
+RUNTIME_DIRS = ("docker", "generated")
+WAIT_ATTEMPTS = 15
+
+
+def sync_script(source: str, destination: str, *, keep_good_copy: bool) -> str:
+    """Shell that makes `destination` hold exactly the files of `source`, updating the directory in place.
+
+    The destination directory is never replaced and a file that exists is rewritten (same inode), because a container
+    bind mount follows the inode: a directory renamed away would leave every running container reading the old, soon
+    deleted, files. Files that `source` does not hold are removed. A destination that passed its health gate (it carries
+    `.cdnf-good`) is first copied to `<destination>.previous`, which is what a rollback restores. Safe to run twice.
+    """
+    backup = (f"if [ -e {destination}/.cdnf-good ]; then rm -rf {destination}.previous; cp -a {destination} {destination}.previous; fi; "
+              f"rm -f {destination}/.cdnf-good; ") if keep_good_copy else ""
+    fixes = "; ".join(f'if [ -e {destination}/{d} ]; then find {destination}/{d} -type d -exec chmod a+rx {{}} +; '
+                      f"find {destination}/{d} -type f ! -path '*/docker/pdns/pdns.conf' ! -path '*/docker/pdns/primary.conf' -exec chmod a+r {{}} +; fi" for d in RUNTIME_DIRS)
+    return (f"mkdir -p {destination}; {backup}"
+            f"(cd {destination} && find . -mindepth 1 \\( -type f -o -type l \\) ! -path ./.cdnf-good) | while IFS= read -r f; do "
+            f'[ -e "{source}/$f" ] || [ -L "{source}/$f" ] || rm -f "{destination}/$f"; done; '
+            f"cp -a {source}/. {destination}/; {fixes}")
+
+
+def _wait_for(check: str) -> str:
+    return f"ok=0; for i in $(seq 1 {WAIT_ATTEMPTS}); do if {check}; then ok=1; break; fi; sleep 1; done; [ $ok = 1 ]"
+
+
+def _reload_gateway(service: str) -> list[str]:
+    # The gateway runs with its admin endpoint off, so it reloads on SIGUSR1; an invalid file is refused and the old configuration keeps serving.
+    return [f"{COMPOSE} exec -T {service} caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile",
+            f'since=$(date -u +%Y-%m-%dT%H:%M:%SZ); {COMPOSE} kill -s USR1 {service}; '
+            + _wait_for(f'{COMPOSE} logs --since "$since" {service} 2>&1 | grep -q "successfully reloaded config"')]
+
+
+def _reload_prometheus_style(service: str, check: str, metric_url: str, metric: str) -> list[str]:
+    return [f"{COMPOSE} exec -T {service} {check}",
+            f"{COMPOSE} kill -s HUP {service}; sleep 1; "
+            + _wait_for(f"{COMPOSE} exec -T {service} wget -qO- {metric_url} | grep -q '^{metric} 1'")]
+
+
+# Commands that make one service read its changed files without recreating it: validate first, then reload, then read the result back.
+RELOAD_COMMANDS: dict[str, list[str]] = {
+    "caddy": _reload_gateway("caddy"),
+    "telemetry-gateway": _reload_gateway("telemetry-gateway"),
+    "prometheus": _reload_prometheus_style("prometheus", "promtool check config /etc/prometheus/prometheus.yml", "http://127.0.0.1:9090/metrics", "prometheus_config_last_reload_successful"),
+    "alertmanager": _reload_prometheus_style("alertmanager", "amtool check-config /etc/alertmanager/alertmanager.yml", "http://127.0.0.1:9093/metrics", "alertmanager_config_last_reload_successful"),
+}
+# Commands run before a restart so a broken file is refused while the old process still runs.
+RESTART_CHECKS: dict[str, str] = {
+    "vector": f"{COMPOSE} exec -T vector vector validate --no-environment /etc/vector/vector.yaml",
+    "log-collector": f"{COMPOSE} exec -T log-collector vector validate --no-environment /etc/vector/operational.yaml",
+}
+
+
+def live_commands(items: list[tuple[str, str]]) -> list[str]:
+    """The commands for a narrow activation, in the order: firewall, reloads, restarts, recreations (see the Fleet impact map)."""
+    commands: list[str] = []
+    if ("host", "firewall") in items:
+        commands.append("./firewall.sh")
+    for service, action in items:
+        if action == "reload":
+            if service not in RELOAD_COMMANDS:
+                raise ActionError(f"No reload is defined for {service}")
+            commands += RELOAD_COMMANDS[service]
+    for service, action in items:
+        if action == "restart":
+            if service in RESTART_CHECKS:
+                commands.append(RESTART_CHECKS[service])
+            commands.append(f"{COMPOSE} restart {service}")
+    recreated = [service for service, action in items if action == "recreate"]
+    if recreated:
+        commands.append(f"{COMPOSE} up -d --no-deps {' '.join(recreated)}")
+    return commands
+
+
+def encode_live(items: list[tuple[str, str]]) -> str:
+    return ",".join(f"{service}:{action}" for service, action in items)
+
+
+def decode_live(detail: str) -> list[tuple[str, str]]:
+    return [(a, b) for a, _, b in (part.partition(":") for part in detail.split(",") if part)]
+
+
 PARALLEL_KINDS = ("pin", "prereq", "prepull")  # per-host work that touches nothing a host serves, so all hosts do it at once
 HOST_WORKERS = 6
 IMAGE_WORKERS = 4
@@ -50,7 +134,7 @@ class Transport(Protocol):
 class Step:
     id: str
     node: str
-    kind: str  # pin | prereq | enroll | provision | prepull | upload | validate | activate | activate_firewall | activate_files | gate | rollback | switchover
+    kind: str  # pin | prereq | enroll | provision | prepull | upload | validate | activate | activate_firewall | activate_files | activate_live | gate | rollback | switchover
     detail: str = ""
 
     def label(self) -> str:
@@ -162,6 +246,7 @@ class Engine:
         self.mixed_versions_ok = mixed_versions_ok
         self._log: Callable[[str], None] = lambda _m: None
         self.prepared: set[str] = set()
+        self.live: dict[str, list[tuple[str, str]] | None] = {}  # the services a node's narrow activation touched, for its rollback
 
     def journal_key(self, plan: Plan) -> str:
         """A resumed run may skip a step only for the same plan over the same bundle bytes: a re-rendered bundle must be uploaded again."""
@@ -215,7 +300,7 @@ class Engine:
             log(f"{step.label()}: {'ok' if ok else 'FAILED'} {detail}".strip())
             if not ok:
                 # Before the swap the node still runs its old release; there is nothing to undo on it.
-                swapped = step.kind in {"activate", "activate_firewall", "activate_files", "gate"}
+                swapped = step.kind in {"activate", "activate_firewall", "activate_files", "activate_live", "gate"}
                 rolled = self._rollback([step.node] if swapped else [], upgraded if not self.mixed_versions_ok else [], log)
                 state["done"] = []
                 self.journal.save(state)
@@ -418,18 +503,22 @@ class Engine:
             if self.switchover:
                 self.switchover(step.node)
             return True, ""
-        if step.kind in {"activate", "activate_firewall", "activate_files"}:
-            # Safe to run twice: a retry after a dropped connection finds the swap already done and only runs what the change needs.
-            # Only a bundle that passed its health gate (it carries .cdnf-good) becomes the rollback target; a broken one is discarded.
+        if step.kind in {"activate", "activate_firewall", "activate_files", "activate_live"}:
+            # Safe to run twice: a retry after a dropped connection finds the files already in place and only runs what the change needs.
+            # The files are updated in place (see sync_script), so a running container keeps reading the right files and nothing
+            # is renamed away. Only a bundle that passed its health gate (it carries .cdnf-good) becomes the rollback target; a broken one is discarded.
             # A full activation starts the services. A firewall-only change re-runs the firewall step (its chains are swapped
-            # atomically) and a change to files no service reads only swaps the directory: no container, no migration.
-            then = {"activate": "./start.sh", "activate_firewall": "./firewall.sh", "activate_files": ":"}[step.kind]
-            command = (f"set -e; if [ -d {remote}.next ]; then rm -rf {remote}.previous; if [ -d {remote} ]; then if [ -e {remote}/.cdnf-good ]; then mv {remote} {remote}.previous; else rm -rf {remote}; fi; fi; mv {remote}.next {remote}; fi; "
-                       f"cd {remote} && {then}")
+            # atomically) and a change to files no service reads only updates the files. A live activation also reloads, restarts or
+            # recreates the named services and nothing else: no migration and no other container is touched.
+            items = decode_live(step.detail) if step.kind == "activate_live" else []
+            then = {"activate": ["./start.sh"], "activate_firewall": ["./firewall.sh"], "activate_files": [], "activate_live": live_commands(items)}[step.kind]
+            self.live[step.node] = items if step.kind == "activate_live" else None
+            command = (f"set -e; if [ -d {remote}.next ]; then {sync_script(remote + '.next', remote, keep_good_copy=True)}; rm -rf {remote}.next; fi; "
+                       f"cd {remote}" + "".join(f" && {{ {c}; }}" for c in then))
             r = self._remote(step.node, target, command)
             if r.ok:
                 return True, ""
-            detail = (r.stderr or r.stdout).strip()[-600:] or f"start.sh exited with {r.code} and printed nothing"
+            detail = (r.stderr or r.stdout).strip()[-600:] or f"the activation exited with {r.code} and printed nothing"
             return False, self._with_container_logs(step.node, target, remote, detail)
         if step.kind == "gate":
             ok, detail = self.gate(step.node)
@@ -444,10 +533,13 @@ class Engine:
             target = self.targets[node]
             remote = self.root(node)
             try:
+                items = self.live.get(node)
+                # Put the previous files back in place, then undo only what the activation did: a narrow activation reloads or restarts
+                # the same services again, a full one starts the previous release.
+                again = " && ".join(f"{{ {c}; }}" for c in (live_commands(items) if items else ["./start.sh"]))
                 r = self.t.run(
                     target,
-                    f"set -e; test -d {remote}.previous; rm -rf {remote}.failed; mv {remote} {remote}.failed; "
-                    f"mv {remote}.previous {remote}; cd {remote} && ./start.sh",
+                    f"set -e; test -d {remote}.previous; {sync_script(remote + '.previous', remote, keep_good_copy=False)}; cd {remote} && {again}",
                     timeout=LONG_STEP_SECONDS,
                 )
             except SshError as exc:
@@ -475,23 +567,31 @@ def plan_bootstrap(name: str, release: str, *, enroll: bool = False, prepull: bo
 
 
 NARROW_ACTIVATION = {"none": "activate_files", "firewall": "activate_firewall"}
+LIVE_ACTIONS = ("file", "reload", "restart", "recreate")
 
 
 def plan_config_change(nodes: dict[str, dict[str, Any]], changed: set[str], release: str, *, ha_standby: str | None = None,
-                       narrow: dict[str, str] | None = None) -> Plan:
+                       narrow: dict[str, str] | None = None, live: dict[str, list[tuple[str, str]]] | None = None) -> Plan:
     """Deploy re-rendered bundles to the nodes whose bundle changed; others are not touched.
 
-    `narrow` maps a node to the widest action its change needs (see the Fleet impact map). Only "none" and "firewall" have a
-    narrower activation than the full one; every other value, and a node that is not listed, gets the full activation.
+    `narrow` maps a node to the widest action its change needs (see the Fleet impact map). "none" and "firewall" have a
+    narrower activation than the full one, and so do "file", "reload", "restart" and "recreate" when `live` lists the
+    (service, action) pairs of that node: the files are updated in place and only those services are touched. Every other
+    value, and a node that is not listed, gets the full activation.
     """
-    narrow = narrow or {}
+    narrow, live = narrow or {}, live or {}
     plan = Plan("config", release)
     for name in order_nodes(nodes, ha_standby=ha_standby):
         if name not in changed:
             plan.skipped.append(name)
             continue
-        activation = NARROW_ACTIVATION.get(narrow.get(name, ""), "activate")
+        wide = narrow.get(name, "")
+        detail = ""
+        if wide in LIVE_ACTIONS and live.get(name):
+            activation, detail = "activate_live", encode_live(live[name])
+        else:
+            activation = NARROW_ACTIVATION.get(wide, "activate")
         kinds = (("provision",) if nodes[name]["role"] in {"edge", "dns-edge"} else ()) + ("upload", "validate", activation, "gate")
         for kind in kinds:
-            plan.steps.append(Step(f"{name}:{kind}", name, kind))
+            plan.steps.append(Step(f"{name}:{kind}", name, kind, detail if kind == activation else ""))
     return plan

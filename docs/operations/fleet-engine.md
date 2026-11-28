@@ -237,7 +237,7 @@ confirmation and then applies the plan. Nodes whose images and configs do not ch
    Then the bundle is checked by: the bundle's `validate.sh` and the
    service's own validator (`nginx -t`, `dnsdist --check-config`, `caddy validate`, `promtool check config`,
    `amtool check-config`, `vector validate`). A config that fails is never activated.
-4. Activation swaps the directories and runs `start.sh`. Only a bundle that passed its health gate becomes the rollback
+4. Activation updates the node's files in place and runs `start.sh`. Only a bundle that passed its health gate becomes the rollback
    target. The gate waits a bounded time and checks that every long-running service is running and healthy, DNS answers
    over UDP and TCP (any reply proves serving; a PoP without zones answers REFUSED), ports 80 and 443 accept connections,
    all on the node's bind addresses over IPv4 and IPv6, control answers `/api/health` on its own hostname, and the administrator panel answers its login page to the control host's own
@@ -327,38 +327,55 @@ reload, targeted restart, targeted recreation, and node-wide activation.
 | Changed input | Action named in the plan |
 | --- | --- |
 | `firewall.sh` (an address list) | `firewall`: the rules are rebuilt and swapped; no container is touched |
-| Gateway `Caddyfile` | `caddy`: validate, then reload |
-| Prometheus targets, rules, scrape settings | `prometheus`: reload |
+| Gateway `Caddyfile`, and the address lists under `generated/allowlists/` (management networks, edge, control and log sources) | `caddy` and `telemetry-gateway`: validate, reload on `SIGUSR1`, read the result back from the gateway log |
+| Prometheus targets, rules, scrape settings | `prometheus`: validate with `promtool`, reload, read `prometheus_config_last_reload_successful` |
 | Grafana dashboards and provisioning | `grafana`: file update, read by its provisioning watcher |
-| Alertmanager configuration | `alertmanager`: reload |
-| Vector pipeline, Loki, ClickHouse and PowerDNS files | one targeted restart of that service |
+| Grafana library panels and access settings | `grafana-bootstrap`: the idempotent one-shot runs again |
+| Alertmanager configuration | `alertmanager`: validate with `amtool`, reload, read `alertmanager_config_last_reload_successful` |
+| Vector pipeline, log collector pipeline | one targeted restart after `vector validate` |
+| Loki, ClickHouse, DNSdist and PowerDNS files, the blackbox exporter | one targeted restart of that service |
+| ClickHouse and PowerDNS migrations | the one-shot migration container runs again |
 | Database files | targeted recreation, never as a side effect |
-| A service whose Compose configuration hash changed | recreate that service only |
-| Documentation and operator scripts | none |
+| A service whose Compose configuration hash changed | recreate that service only (`up -d --no-deps`) |
+| Documentation, operator scripts, the geo routing record | none |
 | Certificates, TLS material, secrets, a file the map does not know, or a host with no recorded baseline | node-wide |
 
 Fleet records what each host last ran after a successful gate: the SHA-256 of every file, of every environment
 key, and Compose's own configuration hash of every service. It stores no value, and the plan prints key names only.
-The rows are computed by `scripts/cdnfoundry_fleet/impact.py`.
+The rows are computed by `scripts/cdnfoundry_fleet/impact.py`. A service the host does not run produces no row.
 
 ### What `apply-config` runs
 
-Two of the actions are executed narrowly. A host whose change is **only** the firewall rules uploads and
-validates the bundle, swaps the directory, runs `firewall.sh` (the chains are swapped atomically), and passes its
-health gate: no `start.sh`, no `docker compose up`, no migration, no container change. A host whose change is only
-documentation or operator scripts swaps the directory and starts nothing. A failed narrow step rolls that host
-back to its previous bundle and stops; the hosts after it are not touched.
+Every activation, narrow or full, **updates the files of the node's directory in place**: a file that exists is
+rewritten (it keeps its inode), new files are added, files the new bundle does not hold are removed, and the
+directory itself is never renamed. A container bind mount follows the inode, so a running container reads the
+new file at once; renaming the directory away would leave it reading deleted files. A directory that passed its
+health gate is first copied to `/opt/cdnfoundry.previous`, which is what a rollback restores, again in place.
 
-Every other action still activates the changed host as a whole, including a host with no recorded baseline, a
-file the map does not know, and a change Compose cannot name services for. The plan shows the narrower action for
-those rows as the minimum, and the activation does more than the plan says.
+- A host whose change is **only** the firewall rules runs `firewall.sh` (the chains are swapped atomically): no
+  `start.sh`, no `docker compose up`, no migration, no container change.
+- A host whose change is only documentation or operator scripts updates the files and starts nothing.
+- A host whose change is only files and settings that named services read is **activated live**: the firewall step
+  if it changed, then the reloads (validate first, then reload, then read the result back), then targeted restarts
+  (validated first where the service has a validator), then one `docker compose up -d --no-deps` for the services
+  whose configuration hash changed. No other container is touched and no migration runs.
+- A failed narrow step restores the previous files in place and repeats only the same service action (a reload, a
+  restart), then stops; the hosts after it are not touched.
 
-::: warning Not narrowed yet
-Reloads and targeted restarts of one service, the stable live configuration directory that makes a mounted file
-change visible to a running container, the gateway reload for an allowlist change, and per-service environment are
-not implemented. Until the environment is narrowed, a management-network change still recreates the application
-workers, and the plan shows that honestly. The local web page does not show the service rows yet.
-:::
+Every other action still activates the changed host as a whole (`start.sh`): a host with no recorded baseline, a
+file the map does not know, certificates and secrets, and a change Compose cannot name services for.
+
+The address lists are files and not container environment values. An environment value is fixed when a container is
+created, so changing it means recreating the container; a file in `generated/allowlists/` is read again when the
+gateway reloads, and the control plane reads its management list on every request. A list the gateway cannot parse is
+refused by `caddy validate` before the reload, and a failed reload leaves the running configuration serving. The
+gateway runs with its admin endpoint off, so it reloads on `SIGUSR1`.
+
+Known limits: a service that reads one file at start and has no reload takes a short restart (Vector, Loki, DNSdist,
+PowerDNS, ClickHouse); the file is rewritten in place and not atomically, so a service that polls a file may read a
+partly written one (the services above read only after their reload or restart, and Grafana's watcher retries on the
+next poll). Validation of a restart-class file runs against the file already in place, so a refused restart is followed
+by the in-place restore.
 
 ## Backup and restore
 

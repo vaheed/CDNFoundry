@@ -55,7 +55,7 @@ class FakeTransport:
         if "docker image inspect" in command:
             image = command.rsplit(" ", 1)[-1]
             return R(0, f"{image.split('@')[0]}@{self.pulled_digest.get(target.name, image.split('@')[1])}\n")
-        if "&& ./start.sh" in command and "failed" not in command and target.name in self.fail_activate:
+        if "{ ./start.sh; }" in command and ".next" in command and target.name in self.fail_activate:
             return R(1, "", "boom")
         return R()
 
@@ -91,7 +91,7 @@ def test_apply_runs_every_step_and_prepulls_before_activating(tmp_path: Path) ->
     out = engine(tmp_path, t).apply(plan, manifest("2.0.1", D2))
     assert out.ok
     pop1 = [c for n, c in t.calls if n == "pop-1"]
-    assert pop1.index(next(c for c in pop1 if "docker pull" in c)) < pop1.index(next(c for c in pop1 if "&& ./start.sh" in c))
+    assert pop1.index(next(c for c in pop1 if "docker pull" in c)) < pop1.index(next(c for c in pop1 if "{ ./start.sh; }" in c))
     assert not any(c.startswith("docker pull") for n, c in t.calls if n == "dns-1")
 
 
@@ -101,14 +101,14 @@ def test_digest_mismatch_after_pull_stops_before_anything_restarts(tmp_path: Pat
     new = manifest("2.0.1", D2)
     out = engine(tmp_path, t).apply(a.plan_upgrade(NODES, manifest("2.0.0", D1), new), new)
     assert not out.ok and "pins" in out.detail and out.rolled_back == []
-    assert not any("&& ./start.sh" in c for _, c in t.calls)
+    assert not any("{ ./start.sh; }" in c for _, c in t.calls)
 
 
 def test_dropped_connection_resumes_where_it_stopped(tmp_path: Path) -> None:
     new = manifest("2.0.1", D2)
     plan = a.plan_upgrade(NODES, manifest("2.0.0", D1), new)
     t = FakeTransport()
-    t.drop_on = "&& ./start.sh"
+    t.drop_on = "{ ./start.sh; }"
     first = engine(tmp_path, t).apply(plan, new)
     assert not first.ok and "run the action again" in first.detail
     uploads_before = sum(1 for _, c in t.calls if c.startswith("upload"))
@@ -163,14 +163,14 @@ def test_config_rejected_by_its_validator_is_never_activated(tmp_path: Path) -> 
     eng = engine(tmp_path, t, services={"pop-1": {"cell-01"}, "pop-2": {"cell-01"}})
     out = eng.apply(a.plan_upgrade(NODES, manifest("2.0.0", D1), new), new)
     assert out.failed == "pop-1:validate" and "openresty rejected" in out.detail
-    assert not any("&& ./start.sh" in c and "failed" not in c for _, c in t.calls)
+    assert not any("{ ./start.sh; }" in c and "failed" not in c for _, c in t.calls)
 
 
 def test_a_resumed_run_uploads_again_when_the_rendered_bundle_changed(tmp_path: Path) -> None:
     new = manifest("2.0.1", D2)
     plan = a.plan_upgrade(NODES, manifest("2.0.0", D1), new)
     t = FakeTransport()
-    t.drop_on = "&& ./start.sh"
+    t.drop_on = "{ ./start.sh; }"
     assert not engine(tmp_path, t).apply(plan, new).ok
     uploads = lambda: [n for n, c in t.calls if c.startswith("upload")]  # noqa: E731
     assert uploads() == ["pop-1"]
@@ -216,7 +216,7 @@ def test_every_host_pulls_its_images_at_the_same_time_before_any_host_changes(tm
     out = engine(tmp_path, t).apply(plan, new)
     assert out.ok, out.detail
     commands = [c for _n, c in t.calls]
-    assert max(i for i, c in enumerate(commands) if c.startswith("docker pull")) < min(i for i, c in enumerate(commands) if "&& ./start.sh" in c)
+    assert max(i for i, c in enumerate(commands) if c.startswith("docker pull")) < min(i for i, c in enumerate(commands) if "{ ./start.sh; }" in c)
 
 
 def test_one_failed_pull_changes_no_host_and_the_rerun_pulls_only_what_is_missing(tmp_path: Path) -> None:
@@ -225,7 +225,7 @@ def test_one_failed_pull_changes_no_host_and_the_rerun_pulls_only_what_is_missin
     plan, new = pull_plan()
     out = engine(tmp_path, t).apply(plan, new)
     assert not out.ok and out.failed == "pop-2:prepull" and "could not pull" in out.detail and "pull denied" in out.detail and out.rolled_back == []
-    assert not any("&& ./start.sh" in c or c.startswith("upload") for _n, c in t.calls)
+    assert not any("{ ./start.sh; }" in c or c.startswith("upload") for _n, c in t.calls)
     t.fail_pull, before = set(), len([1 for n, c in t.calls if n == "pop-1" and c.startswith("docker pull")])
     assert engine(tmp_path, t).apply(plan, new).ok
     assert len([1 for n, c in t.calls if n == "pop-1" and c.startswith("docker pull")]) == before  # pop-1 was already done
@@ -377,7 +377,7 @@ def test_a_firewall_only_change_swaps_the_bundle_and_runs_only_the_firewall_step
     out = engine(tmp_path, t).apply(plan, manifest("2.0.0", D1))
     assert out.ok
     commands = [c for n, c in t.calls if n == "dns-1"]
-    assert any(".next" in c and c.rstrip().endswith("&& ./firewall.sh") for c in commands)
+    assert any(".next" in c and c.rstrip().endswith("{ ./firewall.sh; }") for c in commands)
     assert not any("./start.sh" in c for c in commands), "no service is started, so no container and no migration is touched"
 
 
@@ -388,7 +388,7 @@ def test_a_change_to_files_no_service_reads_only_swaps_the_directory(tmp_path: P
     assert engine(tmp_path, t).apply(plan, manifest("2.0.0", D1)).ok
     commands = [c for n, c in t.calls if n == "pop-1"]
     assert not any("./start.sh" in c or "./firewall.sh" in c for c in commands)
-    assert any(c.rstrip().endswith("&& :") for c in commands)
+    assert any(".next" in c and c.rstrip().endswith("; fi; cd /opt/cdnfoundry") for c in commands)
 
 
 def test_every_wider_change_and_an_unlisted_node_keep_the_full_activation() -> None:
@@ -402,7 +402,7 @@ def test_every_wider_change_and_an_unlisted_node_keep_the_full_activation() -> N
 def test_a_failed_narrow_step_rolls_back_that_node_and_leaves_the_rest(tmp_path: Path) -> None:
     class Failing(FakeTransport):
         def run(self, target, command, **kw):
-            if "./firewall.sh" in command and "start.sh" not in command and target.name == "dns-1":
+            if "{ ./firewall.sh; }" in command and ".next" in command and target.name == "dns-1":
                 self.calls.append((target.name, command))
                 return R(1, "", "iptables failed")
             return super().run(target, command, **kw)
@@ -412,3 +412,46 @@ def test_a_failed_narrow_step_rolls_back_that_node_and_leaves_the_rest(tmp_path:
     out = engine(tmp_path, t).apply(plan, manifest("2.0.0", D1))
     assert not out.ok and out.failed == "dns-1:activate_firewall" and out.rolled_back == ["dns-1"]
     assert not any(n == "pop-1" and c.startswith("upload") for n, c in t.calls), "the next node is not touched after a failure"
+
+
+def test_a_reload_only_change_updates_the_files_in_place_and_reloads_only_the_named_service(tmp_path: Path) -> None:
+    t = FakeTransport()
+    plan = a.plan_config_change(NODES, {"control-1"}, "2.0.0", narrow={"control-1": "reload"}, live={"control-1": [("caddy", "reload")]})
+    assert [s.kind for s in plan.steps] == ["upload", "validate", "activate_live", "gate"]
+    assert plan.steps[2].detail == "caddy:reload"
+    assert engine(tmp_path, t).apply(plan, manifest("2.0.0", D1)).ok
+    command = next(c for n, c in t.calls if n == "control-1" and "USR1" in c)
+    assert "cp -a /opt/cdnfoundry.next/. /opt/cdnfoundry/" in command, "files are updated in place"
+    assert "mv /opt/cdnfoundry" not in command, "the directory is never renamed away from running containers"
+    for forbidden in ("start.sh", "up -d", "docker compose --env-file .env.prod --profile '*' restart", "migrate"):
+        assert forbidden not in command
+    assert command.index("caddy validate") < command.index("kill -s USR1 caddy")
+
+
+def test_a_live_activation_with_a_firewall_row_runs_the_firewall_step_too(tmp_path: Path) -> None:
+    t = FakeTransport()
+    plan = a.plan_config_change(NODES, {"control-1"}, "2.0.0", narrow={"control-1": "restart"}, live={"control-1": [("host", "firewall"), ("vector", "restart")]})
+    assert engine(tmp_path, t).apply(plan, manifest("2.0.0", D1)).ok
+    command = next(c for n, c in t.calls if n == "control-1" and "restart vector" in c)
+    assert command.index("./firewall.sh") < command.index("vector validate") < command.index("restart vector")
+
+
+def test_a_live_activation_without_a_service_list_keeps_the_full_activation() -> None:
+    plan = a.plan_config_change(NODES, {"control-1"}, "2.0.0", narrow={"control-1": "reload"}, live={})
+    assert [s.kind for s in plan.steps] == ["upload", "validate", "activate", "gate"]
+
+
+def test_a_failed_live_activation_restores_the_files_and_repeats_the_same_service_action_not_the_full_start(tmp_path: Path) -> None:
+    class Failing(FakeTransport):
+        def run(self, target, command, **kw):
+            if "kill -s USR1 caddy" in command and ".next" in command:
+                self.calls.append((target.name, command))
+                return R(1, "", "reload refused")
+            return super().run(target, command, **kw)
+
+    t = Failing()
+    plan = a.plan_config_change(NODES, {"control-1"}, "2.0.0", narrow={"control-1": "reload"}, live={"control-1": [("caddy", "reload")]})
+    out = engine(tmp_path, t).apply(plan, manifest("2.0.0", D1))
+    assert not out.ok and out.failed == "control-1:activate_live" and out.rolled_back == ["control-1"]
+    rollback = [c for n, c in t.calls if n == "control-1" and "/opt/cdnfoundry.previous" in c and ".next" not in c][-1]
+    assert "cp -a /opt/cdnfoundry.previous/. /opt/cdnfoundry/" in rollback and "kill -s USR1 caddy" in rollback and "start.sh" not in rollback

@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import re
 import shlex
 import socket
 import ssl
@@ -19,6 +20,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from . import ha
+from .actions import sync_script
 from .common import FleetError, ValidationError, atomic_write, utc_now, validate_ip, validate_node_name
 from .render import Renderer
 from .state import FleetState
@@ -52,14 +54,19 @@ class Runner:
         return result.stdout.decode("utf-8", "replace")
 
     def push(self, node: dict[str, Any], bundle: Path) -> None:
-        """Extract beside the deployed directory and swap, keeping the previous directory for rollback."""
+        """Extract beside the deployed directory and update it in place, keeping the last known-good copy for rollback.
+
+        The directory is never renamed away: a running container's bind mounts follow its files, not its name.
+        """
         buffer = io.BytesIO()
         with tarfile.open(fileobj=buffer, mode="w:gz") as archive:
             archive.add(bundle, arcname=".")
-        directory = shlex.quote(self.deploy_dir)
+        directory = self.deploy_dir
+        if not re.fullmatch(r"/[A-Za-z0-9_./-]+", directory):
+            raise FleetError(f"The deployment directory {directory!r} must be an absolute path of letters, digits and . _ / -")
         script = (
             f"set -e; rm -rf {directory}.new; install -d -m 0700 {directory}.new; tar -xzf - -C {directory}.new; "
-            f"if [ -d {directory} ]; then rm -rf {directory}.previous; mv {directory} {directory}.previous; fi; mv {directory}.new {directory}"
+            f"{sync_script(directory + '.new', directory, keep_good_copy=True)}; rm -rf {directory}.new"
         )
         result = self._ssh(node, script, input_bytes=buffer.getvalue())
         if result.returncode != 0:

@@ -505,14 +505,17 @@ class FleetEngine:
         deployed = self.deployed_digests()
         changed = {n for n, (old, new) in digests.items() if deployed.get(n, old) != new}
         ha_standby = (state.get("ha") or {}).get("standby")
-        # A node whose change needs no more than a firewall step, or no step at all, is activated narrowly. A node without a
-        # recorded profile, with unknown inputs, or where Compose cannot name the affected services keeps the full activation.
-        narrow = {}
+        # A node whose change needs no more than a firewall step, a file update, a reload, a restart or a recreation of named services
+        # is activated narrowly. A node without a recorded profile, with unknown inputs, or where Compose cannot name the affected
+        # services keeps the full activation.
+        narrow, live = {}, {}
         for node in changed:
-            widest = impact.widest(self.service_plan({node}))
+            rows = self.service_plan({node})
+            widest = impact.widest(rows)
             if widest in impact.NARROW:
                 narrow[node] = widest
-        return actions.plan_config_change(state["nodes"], changed, state["global"]["release"], ha_standby=ha_standby, narrow=narrow), digests
+                live[node] = impact.live_items(rows)
+        return actions.plan_config_change(state["nodes"], changed, state["global"]["release"], ha_standby=ha_standby, narrow=narrow, live=live), digests
 
     def config_preview(self) -> tuple[actions.Plan, list[impact.Change]]:
         """The node plan and the service-level rows of what `apply_config` would deploy now. It changes no host."""
