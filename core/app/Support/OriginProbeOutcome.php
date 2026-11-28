@@ -120,6 +120,7 @@ final class OriginProbeOutcome
             'failure_reason' => $result['failure_reason'] ?? null, 'resolved_address' => $result['resolved_address'] ?? null, 'tls_result' => $result['tls_result'] ?? null,
             'scope' => $scope, 'failed_groups' => implode(',', $failedGroups), 'not_monitored' => implode(',', $notMonitored),
             'worker_faults' => count($workerFaults), 'failure_streak' => $streak,
+            'fingerprint' => OriginMonitoring::fingerprint(OriginHealth::originFor($record, $role) ?? [], $operation->input['groups'] ?? []),
         ]);
     }
 }

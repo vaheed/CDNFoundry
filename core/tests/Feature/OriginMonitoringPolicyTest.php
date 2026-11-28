@@ -39,12 +39,14 @@ class OriginMonitoringPolicyTest extends TestCase
         $this->record(['enabled' => false, 'path' => '/', 'interval_seconds' => 60]);
         SystemSetting::query()->where('group', 'origin_monitoring')->delete();
         (require base_path('database/migrations/2026_12_01_000300_add_origin_monitoring_setting.php'))->up();
+        (require base_path('database/migrations/2026_12_01_000600_add_origin_monitoring_budgets.php'))->up();
         app()->forgetInstance(PlatformSettings::class);
         $this->assertFalse(OriginMonitoring::enabled(), 'no origin has a scheduled check');
 
         $this->record();
         SystemSetting::query()->where('group', 'origin_monitoring')->delete();
         (require base_path('database/migrations/2026_12_01_000300_add_origin_monitoring_setting.php'))->up();
+        (require base_path('database/migrations/2026_12_01_000600_add_origin_monitoring_budgets.php'))->up();
         app()->forgetInstance(PlatformSettings::class);
         $this->assertTrue(OriginMonitoring::enabled(), 'an installation that already schedules checks keeps them on');
     }

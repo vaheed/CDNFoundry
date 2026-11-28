@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"encoding/pem"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -380,5 +381,68 @@ func TestAnExpiredProbeTaskIsDroppedWithoutContactingTheOrigin(t *testing.T) {
 	result := runOriginTest(task)
 	if result["failure_reason"] != "task_expired" || result["status"] != "unhealthy" {
 		t.Fatalf("an expired task must be dropped: %v", result)
+	}
+}
+
+func TestAProbeTaskRunsOnceAndAReplayIsNotProbedAgain(t *testing.T) {
+	task := edgeTask{ID: "replay-test-task-1"}
+	task.Payload.ProbeExpiresAt = time.Now().Add(-time.Minute).Unix()
+	// The first delivery is judged on its own merits (here: expired); the id is remembered either way once past the expiry check.
+	task.Payload.ProbeExpiresAt = 0
+	task.Payload.Addresses = []string{"127.0.0.1"}
+	first := runOriginTest(task)
+	if first["failure_reason"] == "task_replayed" {
+		t.Fatalf("the first delivery must be run: %v", first)
+	}
+	second := runOriginTest(task)
+	if second["failure_reason"] != "task_replayed" || second["status"] != "unhealthy" {
+		t.Fatalf("a delivery of the same task id must be refused as replayed: %v", second)
+	}
+	other := edgeTask{ID: "replay-test-task-2"}
+	other.Payload.Addresses = []string{"127.0.0.1"}
+	if runOriginTest(other)["failure_reason"] == "task_replayed" {
+		t.Fatal("a different task id is not a replay")
+	}
+}
+
+func TestTheReplayListIsBoundedAndForgetsAnIdAfterItsTTL(t *testing.T) {
+	now := time.Now()
+	for i := 0; i < probeSeenLimit+50; i++ {
+		probeAlreadyRun(fmt.Sprintf("bound-%d", i), now)
+	}
+	probeSeen.Lock()
+	size := len(probeSeen.at)
+	probeSeen.Unlock()
+	if size > probeSeenLimit {
+		t.Fatalf("the list holds %d ids, limit %d", size, probeSeenLimit)
+	}
+	if !probeAlreadyRun("bound-"+fmt.Sprint(probeSeenLimit+49), now.Add(time.Minute)) {
+		t.Fatal("a recent id is remembered")
+	}
+	if probeAlreadyRun("bound-"+fmt.Sprint(probeSeenLimit+49), now.Add(probeSeenTTL+time.Minute)) {
+		t.Fatal("an id past its TTL is forgotten")
+	}
+}
+
+func TestTaskLogFieldsCarryOnlyTheDomainAndTheOperation(t *testing.T) {
+	task := edgeTask{ID: "t"}
+	if len(task.logFields()) != 0 {
+		t.Fatalf("a task without identifiers adds none: %v", task.logFields())
+	}
+	task.Payload.DomainID = 42
+	task.Payload.OperationID = "0198a1c0-0000-7000-8000-000000000001"
+	task.Payload.Origin.Host = "origin.example"
+	fields := task.logFields()
+	if len(fields) != 4 || fields[0] != "domain_id" || fields[1] != int64(42) || fields[2] != "operation_id" {
+		t.Fatalf("unexpected fields %v", fields)
+	}
+	for _, field := range fields {
+		if field == "origin.example" {
+			t.Fatal("an origin is never logged")
+		}
+	}
+	task.Payload.OperationID = strings.Repeat("a", 65)
+	if len(task.logFields()) != 2 {
+		t.Fatal("an over-long operation id is not logged")
 	}
 }

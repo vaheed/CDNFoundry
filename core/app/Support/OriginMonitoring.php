@@ -2,6 +2,9 @@
 
 namespace App\Support;
 
+use App\Models\DnsRecord;
+use App\Models\Domain;
+use App\Models\Edge;
 use App\Models\EdgeTask;
 use App\Models\Operation;
 use Illuminate\Support\Facades\DB;
@@ -35,8 +38,76 @@ final class OriginMonitoring
         $perDestination = (clone $recent)->where('payload->destination', $destination)->count();
         $perDomain = (clone $recent)->where('payload->domain_id', $domainId)->count();
         $domainLimit = app(PlatformSettings::class)->integer('origin_monitoring', 'domain_probes_per_minute');
+        // An account owns the domains its user is assigned to. Creating more domains adds no probe capacity for it.
+        $owners = Domain::query()->find($domainId)?->users()->pluck('users.id');
+        $ownerDomains = $owners === null || $owners->isEmpty() ? collect() : Domain::query()->whereHas('users', fn ($query) => $query->whereIn('users.id', $owners))->pluck('id');
+        $perAccount = $ownerDomains->isEmpty() ? 0 : (clone $recent)->whereIn('payload->domain_id', $ownerDomains->all())->count();
+        $accountLimit = app(PlatformSettings::class)->integer('origin_monitoring', 'account_probes_per_minute');
 
-        return max(0, min($wanted, self::DESTINATION_PROBES_PER_MINUTE - $perDestination, $domainLimit - $perDomain));
+        return max(0, min($wanted, self::DESTINATION_PROBES_PER_MINUTE - $perDestination, $domainLimit - $perDomain, $accountLimit - $perAccount));
+    }
+
+    /** What one probe is charged to a worker, in slot-seconds: a dead origin holds a slot for the whole timeout, a healthy one briefly. */
+    public const DEAD_PROBE_COST = 5.0;
+
+    public const HEALTHY_PROBE_COST = 0.5;
+
+    /**
+     * The slot-seconds a worker has been charged in the last minute, from the probes it was given. A probe is charged its measured
+     * duration once answered, and the dead-origin cost while it is still waiting or when it failed (the worst case).
+     */
+    public static function workerLoad(string $edgeId): float
+    {
+        $load = 0.0;
+        foreach (EdgeTask::query()->where('type', 'origin_test')->where('edge_id', $edgeId)->where('created_at', '>=', now()->subMinute())->get(['status', 'result']) as $task) {
+            $healthy = $task->status === 'succeeded' && ($task->result['status'] ?? null) === 'healthy';
+            $load += $healthy ? max(self::HEALTHY_PROBE_COST, min(self::DEAD_PROBE_COST, ((float) ($task->result['latency_ms'] ?? 0)) / 1000)) : self::DEAD_PROBE_COST;
+        }
+
+        return $load;
+    }
+
+    /** Whether a worker may take one more probe now: its charged load plus the worst case stays inside the per-minute worker budget. */
+    public static function workerHasCapacity(string $edgeId): bool
+    {
+        return self::workerLoad($edgeId) + self::DEAD_PROBE_COST <= app(PlatformSettings::class)->integer('origin_monitoring', 'worker_slot_seconds_per_minute');
+    }
+
+    /**
+     * Probes that would test the same thing are one probe: same address and port, host header, SNI, scheme, TLS policy and health
+     * path, from the same reachability groups. The fingerprint holds no domain, record or account.
+     *
+     * @param  array<string, mixed>  $origin
+     * @param  list<array{group: string, edge_id: ?string}>  $groups
+     */
+    public static function fingerprint(array $origin, array $groups): string
+    {
+        $names = collect($groups)->pluck('group')->sort()->values()->all();
+
+        return hash('sha256', json_encode([self::destination($origin), $origin['scheme'] ?? '', $origin['host_header'] ?? '', $origin['sni'] ?? '', (bool) ($origin['verify_tls'] ?? false),
+            $origin['health_check']['path'] ?? '', $names], JSON_THROW_ON_ERROR));
+    }
+
+    /**
+     * The newest active signal of another record that probed the same thing from the same groups inside the platform minimum interval,
+     * or null. Its facts (reachable or not, from where, how fast) are copied to each domain that asks; nothing else crosses.
+     *
+     * @return array<mixed, mixed>|null
+     */
+    public static function sharedSignal(string $fingerprint, int $recordId, string $role): ?array
+    {
+        $fresh = now()->subSeconds(app(PlatformSettings::class)->integer('origin_monitoring', 'minimum_interval_seconds'))->timestamp;
+
+        $peers = DnsRecord::query()->where('id', '!=', $recordId)->where('mode', 'proxied')->where("origin_signals->{$role}->active->fingerprint", $fingerprint)
+            ->orderByDesc('updated_at')->limit(5)->get();
+        foreach ($peers as $peer) {
+            $signal = data_get($peer->getAttribute('origin_signals'), "{$role}.active");
+            if (is_array($signal) && (int) strtotime((string) ($signal['at'] ?? '')) >= $fresh) {
+                return $signal;
+            }
+        }
+
+        return null;
     }
 
     /** A probe task is useless after this: a scheduled one after one minimum interval, a manual one after a minute. The agent drops it then. */

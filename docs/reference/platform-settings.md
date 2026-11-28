@@ -287,6 +287,8 @@ The `Server` header never shows a version, whatever the setting.
 | `max_representatives` | 3 | 1–5 |
 | `manual_tests_when_off` | false | boolean |
 | `domain_probes_per_minute` | 300 | 1–10,000 |
+| `account_probes_per_minute` | 300 | 1–100,000 |
+| `worker_slot_seconds_per_minute` | 240 | 10–3,600 |
 
 Active monitoring is the scheduled health check of a proxied origin. It is off for a new installation. An upgrade
 turns it on only when a proxied origin already had a scheduled check, so the upgrade changes no behavior; an
@@ -301,6 +303,8 @@ shown, and traffic still fails over.
 A manual origin test is refused while monitoring is off unless `manual_tests_when_off` is on. `minimum_interval_seconds`
 is a floor: an origin that asks for a shorter interval is checked at the floor. `max_representatives` and
 `domain_probes_per_minute` bound the checks of one origin and of one domain. Independently of the settings, one destination (an address and a port) receives at most 8 probes a minute, confirmations included, however many domains or records point at it, and a manual test of an origin is refused for 30 seconds after the last one.
+
+`account_probes_per_minute` bounds the probes of all the domains one account is assigned to, so adding domains adds no probe capacity. `worker_slot_seconds_per_minute` is the probe time one edge worker may be given in a minute: a probe is charged its measured time (at least half a second), and a failing or unanswered probe is charged the full 5-second timeout, so the default 240 allows 48 dead origins a minute. A worker over its budget is skipped and another worker of the same reachability group takes the probe. Probes that test the same thing (same address and port, host header, SNI, scheme, TLS policy and health path, from the same reachability groups) are one probe: a scheduled check that finds a result no older than the minimum interval copies its facts (reachable or not, from which groups, how fast) to its own record instead of probing again, and it does not copy which edge probed. A manual test is never merged. The agent runs a probe task once: a task id it already ran is answered as replayed, without contacting the origin.
 
 ## Public response headers
 

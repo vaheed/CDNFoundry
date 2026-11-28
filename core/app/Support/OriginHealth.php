@@ -24,7 +24,7 @@ final class OriginHealth
 
     public const PASSIVE_TTL_SECONDS = 900;
 
-    private const FIELDS = ['status', 'observer', 'at', 'checksum', 'latency_ms', 'http_status', 'failure_reason', 'resolved_address', 'tls_result', 'failure_count', 'scope', 'failed_groups', 'not_monitored', 'worker_faults', 'failure_streak'];
+    private const FIELDS = ['status', 'observer', 'at', 'checksum', 'latency_ms', 'http_status', 'failure_reason', 'resolved_address', 'tls_result', 'failure_count', 'scope', 'failed_groups', 'not_monitored', 'worker_faults', 'failure_streak', 'fingerprint', 'shared'];
 
     public static function checksum(array $origin): string
     {

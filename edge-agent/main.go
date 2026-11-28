@@ -32,6 +32,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -327,6 +328,7 @@ type edgeTask struct {
 		Versions           map[string]string `json:"versions"`
 		ProbeExpiresAt     int64             `json:"probe_expires_at"`
 		DomainID           int64             `json:"domain_id"`
+		OperationID        string            `json:"operation_id"`
 		OverlaySequence    uint64            `json:"overlay_sequence"`
 		OverlayState       string            `json:"state"`
 		OverlayLimits      map[string]int64  `json:"limits"`
@@ -356,7 +358,7 @@ func (c *client) processTasks() error {
 	}
 	for _, task := range response.Data {
 		startedAt := time.Now()
-		logger.Info("edge task started", "event", "edge_task_started", "task_id", task.ID, "task_type", task.Type, "edge_id", c.id.EdgeID)
+		logger.Info("edge task started", append([]any{"event", "edge_task_started", "task_id", task.ID, "task_type", task.Type, "edge_id", c.id.EdgeID}, task.logFields()...)...)
 		if task.Type == "runtime_upgrade" {
 			logger.Info("runtime upgrade intent received", "event", "runtime_upgrade_intent", "task_id", task.ID, "edge_id", c.id.EdgeID)
 			complete, result, status := c.runRuntimeUpgrade(task)
@@ -394,7 +396,7 @@ func (c *client) processTasks() error {
 		if err := c.request("POST", "/edge/v1/tasks/"+task.ID+"/result", map[string]any{"status": status, "result": result}, &map[string]any{}, true); err != nil {
 			return err
 		}
-		logger.Info("edge task completed", "event", "edge_task_result", "task_id", task.ID, "task_type", task.Type, "status", status, "edge_id", c.id.EdgeID, "duration_ms", time.Since(startedAt).Milliseconds())
+		logger.Info("edge task completed", append([]any{"event", "edge_task_result", "task_id", task.ID, "task_type", task.Type, "status", status, "edge_id", c.id.EdgeID, "duration_ms", time.Since(startedAt).Milliseconds()}, task.logFields()...)...)
 	}
 	return nil
 }
@@ -632,6 +634,61 @@ const (
 	probeTotalCeiling   = 5 * time.Second
 )
 
+// logFields are the identifiers a task carries that a log search joins on: the domain and the operation. A task without them adds none,
+// and nothing else of the payload (an origin, an address, a key) is ever logged.
+func (t edgeTask) logFields() []any {
+	fields := []any{}
+	if t.Payload.DomainID > 0 {
+		fields = append(fields, "domain_id", t.Payload.DomainID)
+	}
+	if id := t.Payload.OperationID; id != "" && len(id) <= 64 {
+		fields = append(fields, "operation_id", id)
+	}
+	return fields
+}
+
+// A probe task runs once. The ids of the tasks already run are remembered for a while, so a task the control plane delivers again
+// (a retry after a lost answer, or a replayed message) is answered as replayed without contacting the origin a second time.
+const (
+	probeSeenLimit = 4096
+	probeSeenTTL   = 15 * time.Minute
+)
+
+var probeSeen = struct {
+	sync.Mutex
+	at map[string]time.Time
+}{at: map[string]time.Time{}}
+
+// probeAlreadyRun records the task id and reports whether it had been run before. Old entries leave first when the list is full.
+func probeAlreadyRun(id string, now time.Time) bool {
+	if id == "" {
+		return false
+	}
+	probeSeen.Lock()
+	defer probeSeen.Unlock()
+	if seen, ok := probeSeen.at[id]; ok && now.Sub(seen) < probeSeenTTL {
+		return true
+	}
+	if len(probeSeen.at) >= probeSeenLimit {
+		for key, seen := range probeSeen.at {
+			if now.Sub(seen) >= probeSeenTTL {
+				delete(probeSeen.at, key)
+			}
+		}
+		for len(probeSeen.at) >= probeSeenLimit {
+			oldest, oldestAt := "", now
+			for key, seen := range probeSeen.at {
+				if oldest == "" || seen.Before(oldestAt) {
+					oldest, oldestAt = key, seen
+				}
+			}
+			delete(probeSeen.at, oldest)
+		}
+	}
+	probeSeen.at[id] = now
+	return false
+}
+
 func runOriginTest(task edgeTask) (result map[string]any) {
 	started := time.Now()
 	result = map[string]any{"status": "unhealthy"}
@@ -639,6 +696,10 @@ func runOriginTest(task edgeTask) (result map[string]any) {
 	// A task the control plane gave an expiry is dropped once it has passed, so a backlog after an outage is not probed late.
 	if task.Payload.ProbeExpiresAt > 0 && time.Now().Unix() > task.Payload.ProbeExpiresAt {
 		result["failure_reason"] = "task_expired"
+		return result
+	}
+	if probeAlreadyRun(task.ID, time.Now()) {
+		result["failure_reason"] = "task_replayed"
 		return result
 	}
 	if len(task.Payload.Addresses) == 0 || len(task.Payload.Addresses) > 64 {

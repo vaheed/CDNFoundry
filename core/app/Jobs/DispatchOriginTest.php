@@ -9,6 +9,7 @@ use App\Models\Edge;
 use App\Models\EdgeTask;
 use App\Models\Operation;
 use App\Support\ArtifactSigner;
+use App\Support\OriginHealth;
 use App\Support\OriginMonitoring;
 use App\Support\OriginProbePlanner;
 use App\Support\PlatformSettings;
@@ -83,9 +84,23 @@ class DispatchOriginTest implements ShouldQueue
                 // reachability groups, and a manual test uses the single best-ranked one, so the count does not grow with the edges.
                 $maximum = ($operation->input['scheduled'] ?? false) === true ? app(PlatformSettings::class)->integer('origin_monitoring', 'max_representatives') : 1;
                 $destination = strtolower($origin['host']).':'.((int) ($origin['port'] ?? 0));
-                $plan = OriginProbePlanner::plan($placement, $usable, $destination, $maximum);
+                // A worker that has used its probe-time budget for the minute is skipped, so another worker of its group takes the probe.
+                $capable = $usable->filter(fn (Edge $edge): bool => OriginMonitoring::workerHasCapacity($edge->id));
+                $plan = OriginProbePlanner::plan($placement, $capable, $destination, $maximum);
                 $edges = collect($plan['representatives']);
                 $operation->input = [...$operation->input, 'groups' => $plan['groups']];
+                if (($operation->input['scheduled'] ?? false) === true) {
+                    // Probes that test the same thing from the same groups are one probe: copy the newest result to this record.
+                    $fingerprint = OriginMonitoring::fingerprint($origin, $plan['groups']);
+                    $shared = OriginMonitoring::sharedSignal($fingerprint, (int) $record->id, $role);
+                    if ($shared !== null) {
+                        OriginHealth::record($record, $role, 'active', [...$shared, 'observer' => null, 'shared' => true, 'fingerprint' => $fingerprint]);
+                        $operation->update(['status' => 'succeeded', 'started_at' => now(), 'finished_at' => now(), 'input' => $operation->input,
+                            'result' => ['tasks' => 0, 'completed' => 0, 'edges' => [], 'shared' => true]]);
+
+                        return;
+                    }
+                }
             }
             if ($edges->isNotEmpty()) {
                 // The budgets are charged before a task exists: a destination receives at most a fixed number of probes a minute.
