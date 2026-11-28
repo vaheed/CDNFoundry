@@ -16,6 +16,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 IMAGE = os.environ.get("CDNF_CHALLENGE_IMAGE", "cdnfoundry/edge-runtime:challenge-browser")
 NETWORK = "cdnf-challenge-browser"
 ORIGIN = "cdnf-challenge-browser-origin"
+SLOW = "cdnf-challenge-browser-slow"  # accepts a connection and never answers: the origin that times out
 # name, loopback port, base difficulty, cap
 CELLS = [("cdnf-challenge-browser-base", 18090, 16, 16), ("cdnf-challenge-browser-max", 18091, 17, 17)]
 HOSTNAME = "localhost"
@@ -29,7 +30,7 @@ def run(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
 
 
 def teardown() -> None:
-    run("docker", "rm", "-f", ORIGIN, *[cell[0] for cell in CELLS], check=False)
+    run("docker", "rm", "-f", ORIGIN, SLOW, *[cell[0] for cell in CELLS], check=False)
     run("docker", "network", "rm", NETWORK, check=False)
 
 
@@ -45,6 +46,8 @@ def main() -> None:
         conf.write_text('server { listen 80; location / { default_type text/html; return 200 "<!doctype html><title>Origin</title><h1>Origin reached</h1>"; } }\n')
         conf.chmod(0o644)
         run("docker", "run", "-d", "--name", ORIGIN, "--network", NETWORK, "-v", f"{conf}:/etc/nginx/conf.d/default.conf:ro", "nginx:1.30.3-alpine")
+        run("docker", "run", "-d", "--name", SLOW, "--network", NETWORK, "--entrypoint", "nc", "nginx:1.30.3-alpine", "-lk", "-p", "80", "-e", "sleep", "30")
+        slow_ip = run("docker", "inspect", "-f", "{{(index .NetworkSettings.Networks \"" + NETWORK + "\").IPAddress}}", SLOW).stdout.strip()
         origin_ip = run("docker", "inspect", "-f", "{{(index .NetworkSettings.Networks \"" + NETWORK + "\").IPAddress}}", ORIGIN).stdout.strip()
         config = {
             "domain": HOSTNAME, "domain_id": 801, "revision": 1, "settings": {"enabled": True}, "cache": {"enabled": False, "epoch": 1},
@@ -60,8 +63,13 @@ def main() -> None:
                        "response_timeout_ms": 2000, "retry_count": 0, "websocket": False, "health_check": None,
                        "private_allowlist": ["172.16.0.0/12"], "blocked_networks": [], "blocked_addresses": []},
         }
+        # Two more sites for the pages the edge writes when the origin fails: one whose origin refuses the connection, one that never answers.
+        plain = {**config, "security": {**config["security"], "rules": []}}
+        refused = {**plain, "domain": "refused.localhost", "domain_id": 802, "origin": {**config["origin"], "port": 81}}
+        slow = {**plain, "domain": "slow.localhost", "domain_id": 803, "origin": {**config["origin"], "host": slow_ip, "response_timeout_ms": 1000}}
         runtime = temporary / "runtime.json"
-        runtime.write_text(json.dumps({"schema_version": 1, "sequence": 1, "generation_id": "challenge-browser-1", "certificates": {}, "hosts": {HOSTNAME: config}}))
+        runtime.write_text(json.dumps({"schema_version": 1, "sequence": 1, "generation_id": "challenge-browser-1", "certificates": {},
+                                       "hosts": {HOSTNAME: config, "refused.localhost": refused, "slow.localhost": slow}}))
         runtime.chmod(0o644)
         run("openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1", "-subj", f"/CN={HOSTNAME}", "-keyout", str(temporary / "tls.key"), "-out", str(temporary / "tls.crt"))
         for item in (temporary / "tls.key", temporary / "tls.crt"):

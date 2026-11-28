@@ -438,7 +438,40 @@ func (g *gateway) accept(address string, listener net.Listener) {
 	}
 }
 
-const misdirectedResponse = "HTTP/1.1 421 Misdirected Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+// The answer for a plain-HTTP host that is not routed here. It names no product and no software, carries no Server header, is never
+// cached, and follows the same negotiation as the pages the edge writes: HTML only for a client that asks for it, JSON otherwise,
+// no body for HEAD. The page needs no style sheet: the color-scheme hint lets the browser pick light or dark.
+const (
+	misdirectedHead = "HTTP/1.1 421 Misdirected Request\r\nCache-Control: no-store\r\nConnection: close\r\n"
+	misdirectedHTML = "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">" +
+		"<meta name=\"color-scheme\" content=\"light dark\"><title>Misdirected request</title></head><body style=\"font-family:system-ui,sans-serif;max-width:32rem;margin:15vh auto;padding:0 1rem\">" +
+		"<h1>Misdirected request</h1><p>This address does not serve the requested site.</p></body></html>"
+	misdirectedJSON = `{"status":421,"error":"misdirected_request","message":"This address does not serve the requested site."}`
+)
+
+// misdirectedAnswer builds the 421 from the first bytes of the request, which hold its method and headers.
+func misdirectedAnswer(request []byte) []byte {
+	head := request
+	if end := bytes.Index(head, []byte("\r\n\r\n")); end >= 0 {
+		head = head[:end]
+	}
+	lines := strings.Split(string(head), "\r\n")
+	wantsHTML := false
+	for _, line := range lines[1:] {
+		if name, value, ok := strings.Cut(line, ":"); ok && strings.EqualFold(strings.TrimSpace(name), "accept") && strings.Contains(strings.ToLower(value), "text/html") {
+			wantsHTML = true
+		}
+	}
+	body, kind := misdirectedJSON, "application/json"
+	if wantsHTML {
+		body, kind = misdirectedHTML, "text/html; charset=utf-8"
+	}
+	answer := misdirectedHead + "Content-Type: " + kind + "\r\nContent-Length: " + strconv.Itoa(len(body)) + "\r\n\r\n"
+	if !strings.HasPrefix(string(request), "HEAD ") {
+		answer += body
+	}
+	return []byte(answer)
+}
 
 func (g *gateway) handle(listener string, client net.Conn) error {
 	_ = client.SetDeadline(time.Now().Add(15 * time.Second))
@@ -470,7 +503,7 @@ func (g *gateway) handle(listener string, client net.Conn) error {
 		if protocol == "http" {
 			// Answer a plain-HTTP request for a host that is not routed here, so a health probe can tell a serving
 			// PoP from a dead one. The answer is a fixed 421; TLS clients still get a closed connection.
-			_, _ = client.Write([]byte(misdirectedResponse))
+			_, _ = client.Write(misdirectedAnswer(prefix))
 		}
 		return errors.New("unknown gateway route")
 	}

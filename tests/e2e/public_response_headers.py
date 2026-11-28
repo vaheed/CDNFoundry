@@ -74,7 +74,11 @@ def main() -> None:
             "off.headers.test": domain("off.headers.test", 813, origin_ip, {"enabled": False, "prefix": "cdnf-", "pop": "eu-west"}),
             "diag.headers.test": domain("diag.headers.test", 815, origin_ip, {"enabled": True, "prefix": "cdnf-", "pop": "", "diagnostics": True}),
             "old.headers.test": domain("old.headers.test", 814, origin_ip, None),
+            "legacy.headers.test": domain("legacy.headers.test", 816, origin_ip, None),
+            "legacyoff.headers.test": domain("legacyoff.headers.test", 817, origin_ip, None),
         }
+        hosts["legacy.headers.test"]["settings"]["diagnostic_headers"] = True  # a snapshot from before the field, with the old diagnostics switch on
+        hosts["legacyoff.headers.test"]["settings"]["diagnostic_headers"] = False  # and with it off
         runtime = temporary / "runtime.json"
         runtime.write_text(json.dumps({"schema_version": 1, "sequence": 9, "generation_id": "e2e-public-headers-1", "certificates": {}, "hosts": hosts}))
         runtime.chmod(0o644)
@@ -87,7 +91,7 @@ def main() -> None:
         (temporary / "nginx.conf").write_text(logged)
         (temporary / "nginx.conf").chmod(0o644)
         try:
-            run("docker", "run", "-d", "--name", CELL, "-v", f"{temporary / 'nginx.conf'}:/usr/local/openresty/nginx/conf/nginx.conf:ro", "--network", NETWORK,
+            run("docker", "run", "-d", "--name", CELL, "--sysctl", "net.ipv6.conf.all.disable_ipv6=0", "-v", f"{temporary / 'nginx.conf'}:/usr/local/openresty/nginx/conf/nginx.conf:ro", "--network", NETWORK,
                 "-e", "EDGE_RUNTIME_FILE=/var/lib/cdnfoundry/runtime/active.json", "-e", "EDGE_STATUS_TOKEN=e2e",
                 "-v", f"{runtime}:/var/lib/cdnfoundry/runtime/active.json:ro",
                 "-v", f"{pathlib.Path(__file__).resolve().parents[2] / 'docker/openresty/runtime.lua'}:/etc/cdnfoundry/runtime.lua:ro",
@@ -128,6 +132,18 @@ def main() -> None:
             assert not [name for name in off if name.startswith("cdnf-")], off
             _, old = get(ip, "old.headers.test", "/page")
             assert old.get("cdnf-ray") == FORGED, "a snapshot without the field keeps its previous behavior"
+
+            _, legacy = get(ip, "legacy.headers.test", "/page")
+            assert legacy.get("x-cdnf-cache") in ("MISS", "HIT", "BYPASS"), f"a snapshot that predates the field keeps the names it always had: {legacy}"
+            _, legacy_off = get(ip, "legacyoff.headers.test", "/page")
+            assert not [name for name in legacy_off if name.startswith("x-cdnf-")] and "server" not in legacy_off, f"and none when its own diagnostics switch is off: {legacy_off}"
+            assert old.get("x-cdnf-cache"), "a snapshot with no field at all also keeps showing them, as before"
+
+            # The same checks over IPv6, from inside the cell's network namespace, so the loopback address is the client's.
+            wire = run("docker", "run", "--rm", "--network", f"container:{CELL}", "curlimages/curl:8.11.1", "-sS", "-i", "-m", "10", "--resolve", "default.headers.test:8080:::1",
+                       "http://default.headers.test:8080/v6", check=False).stdout.replace("\r\n", "\n").partition("\n\n")[0].lower()
+            assert wire.startswith("http/1.1 200") and re.search(r"cdnf-ray: [0-9a-f]{32}", wire) and "cdnf-cache-status:" in wire, f"the public headers over IPv6: {wire}"
+            assert "::1" not in wire and not re.search(r"x-cdnf-", wire), wire
 
             refused_status, refused = get(ip, "default.headers.test", "/blocked")
             assert refused_status == 403 and ray.fullmatch(refused["cdnf-ray"]) and refused["cdnf-mitigated"] == "1" and "cdnf-cache-status" not in refused, (refused_status, refused)

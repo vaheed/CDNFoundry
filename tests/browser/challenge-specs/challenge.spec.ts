@@ -6,6 +6,12 @@ import { expectAccessible } from '../specs/helpers';
 const base = 'http://localhost:18090';
 const max = 'http://localhost:18091';
 
+/** The reference differs on every request and its letters have different widths, so a phone width wraps it differently each time.
+ * The snapshot shows the same reference every time, after the real one has been checked. */
+async function fixReference(page: Page): Promise<void> {
+    await page.locator('.ref').evaluate((element) => { element.textContent = `Reference: ${'0'.repeat(32)}`; });
+}
+
 /** Holds the answer to the challenge, so the page stays in the state the visitor sees while the work is being done. */
 async function holdAnswer(page: Page): Promise<void> {
     await page.route('**/.chk/verify', () => undefined);
@@ -133,8 +139,8 @@ test('a refused request gets the neutral page with a reference and no product na
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow).toBeLessThanOrEqual(0);
     await expectAccessible(page);
-    // The reference differs on every request, so it is masked.
-    await expect(page).toHaveScreenshot('refused-request.png', { mask: [page.getByText(/^Reference: /)] });
+    await fixReference(page);
+    await expect(page).toHaveScreenshot('refused-request.png');
 });
 
 test('a client that does not ask for HTML gets JSON with the same status and reference', async ({ request }) => {
@@ -145,3 +151,37 @@ test('a client that does not ask for HTML gets JSON with the same status and ref
     expect(body.reference).toMatch(/^[0-9a-f]{32}$/);
     expect(JSON.stringify(body)).not.toMatch(/cdnf|openresty|nginx/i);
 });
+
+// The pages the edge writes when the origin cannot answer: the same neutral template, a different status and wording for each class.
+for (const [site, status, heading, sentence] of [
+    ['refused.localhost', 502, 'Site unavailable', 'The site could not be reached. Try again shortly.'],
+    ['slow.localhost', 504, 'Site did not answer', 'The site took too long to answer. Try again shortly.'],
+] as const) {
+    test(`an origin failure (${status}) gets the neutral page, readable at every width`, async ({ page }) => {
+        const response = await page.goto(`http://${site}:18090/page`);
+        expect(response?.status()).toBe(status);
+        await expect(page.getByRole('heading', { name: heading })).toBeVisible();
+        await expect(page.getByText(sentence)).toBeVisible();
+        await expect(page.getByText(/^Reference: [0-9a-f]{32}$/)).toBeVisible();
+        expect(await page.content()).not.toMatch(/cdnf|cdnfoundry|openresty|nginx|foundry/i);
+        expect(response?.headers()['server']).toBeUndefined();
+        expect(response?.headers()['cache-control']).toContain('no-store');
+        const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+        expect(overflow).toBeLessThanOrEqual(0);
+        await expectAccessible(page);
+        await fixReference(page);
+        await expect(page).toHaveScreenshot(`origin-${status}.png`);
+    });
+
+    test(`an origin failure (${status}) is JSON for a client that does not ask for HTML, and HEAD has no body`, async ({ request }) => {
+        const json = await request.get('http://127.0.0.1:18090/page', { headers: { Host: site, Accept: 'application/json' } });
+        expect(json.status()).toBe(status);
+        const body = await json.json();
+        expect(body.status).toBe(status);
+        expect(body.reference).toMatch(/^[0-9a-f]{32}$/);
+        expect(JSON.stringify(body)).not.toMatch(/cdnf|openresty|nginx/i);
+        const head = await request.head('http://127.0.0.1:18090/page', { headers: { Host: site, Accept: 'text/html' } });
+        expect(head.status()).toBe(status);
+        expect((await head.body()).length).toBe(0);
+    });
+}

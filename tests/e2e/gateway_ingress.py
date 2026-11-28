@@ -92,11 +92,13 @@ def curl(address: str, hostname: str, tls: bool = False, expect_success: bool = 
         command[5:5] = ["-v", f"{tls_ca}:/tls/ca.pem:ro"]
         command.extend(["--cacert", "/tls/ca.pem"])
     result = run(*command, url, check=False)
-    if expect_success and (result.returncode or "server: openresty" not in result.stdout.lower()):
+    # A cell sends no Server header (the runtime names no software), so a request that reached one is an HTTP answer that is not the
+    # gateway's own 421. For a TLS route the handshake itself already proves the route.
+    if expect_success and (result.returncode or not result.stdout.startswith("HTTP/") or result.stdout.startswith("HTTP/1.1 421")):
         raise RuntimeError(f"route {address}/{hostname} did not reach OpenResty:\n{result.stdout}")
     if not expect_success:
         # An unrouted TLS name is dropped. An unrouted plain-HTTP host gets the gateway's own 421, never OpenResty.
-        misdirected = not tls and result.stdout.startswith("HTTP/1.1 421") and "server: openresty" not in result.stdout.lower()
+        misdirected = not tls and result.stdout.startswith("HTTP/1.1 421") and "server:" not in result.stdout.lower()
         if result.returncode == 0 and not misdirected:
             raise RuntimeError(f"unknown route {address}/{hostname} was accepted:\n{result.stdout}")
     return result.stdout

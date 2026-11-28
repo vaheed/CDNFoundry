@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"regexp"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -263,8 +266,8 @@ func TestGatewayAnswersAnUnroutedPlainHTTPHostWith421ButClosesAnUnroutedTLSName(
 		t.Fatal(err)
 	}
 	response, _ := io.ReadAll(connection)
-	if string(response) != misdirectedResponse {
-		t.Fatalf("an unrouted plain-HTTP host must get the fixed 421 answer, got %q", response)
+	if !strings.HasPrefix(string(response), "HTTP/1.1 421 ") || !strings.Contains(string(response), "application/json") {
+		t.Fatalf("an unrouted plain-HTTP host must get the 421 answer as JSON when HTML was not asked for, got %q", response)
 	}
 	waitFor(t, func() bool { return g.rejected.Load() == 1 }, func() string { return fmt.Sprintf("rejected=%d", g.rejected.Load()) })
 
@@ -328,5 +331,32 @@ func TestActiveConnectionsCountsAnOpenRoutedConnectionAndReleasesItWhenItCloses(
 	waitFor(t, func() bool { return g.active.Load() == 0 }, func() string { return fmt.Sprintf("active=%d", g.active.Load()) })
 	if g.accepted.Load() != 2 {
 		t.Fatalf("the lifetime counter keeps counting after the connections close: %d", g.accepted.Load())
+	}
+}
+
+func TestTheMisdirectedAnswerIsAnonymousNegotiatedAndNeverCached(t *testing.T) {
+	forbidden := regexp.MustCompile(`(?i)cdnf|foundry|openresty|nginx|powered|go-http|golang|caddy`)
+	html := string(misdirectedAnswer([]byte("GET / HTTP/1.1\r\nHost: x.test\r\nAccept: text/html,application/xhtml+xml\r\n\r\n")))
+	json := string(misdirectedAnswer([]byte("GET / HTTP/1.1\r\nHost: x.test\r\nAccept: application/json\r\n\r\n")))
+	none := string(misdirectedAnswer([]byte("GET / HTTP/1.1\r\nHost: x.test\r\n\r\n")))
+	head := string(misdirectedAnswer([]byte("HEAD / HTTP/1.1\r\nHost: x.test\r\nAccept: text/html\r\n\r\n")))
+	if !strings.Contains(html, "text/html") || !strings.Contains(html, "<h1>Misdirected request</h1>") {
+		t.Fatalf("an HTML client gets the page: %q", html)
+	}
+	for name, answer := range map[string]string{"html": html, "json": json, "none": none, "head": head} {
+		if !strings.HasPrefix(answer, "HTTP/1.1 421 ") || !strings.Contains(answer, "Cache-Control: no-store\r\n") || !strings.Contains(answer, "Connection: close\r\n") {
+			t.Fatalf("%s: status, no-store and close are required: %q", name, answer)
+		}
+		if strings.Contains(strings.ToLower(answer), "\r\nserver:") || forbidden.MatchString(answer) {
+			t.Fatalf("%s: the answer names the software: %q", name, answer)
+		}
+		declared, _ := strconv.Atoi(strings.TrimSpace(strings.SplitN(strings.SplitN(answer, "Content-Length: ", 2)[1], "\r\n", 2)[0]))
+		body := answer[strings.Index(answer, "\r\n\r\n")+4:]
+		if name == "head" && body != "" || name != "head" && len(body) != declared {
+			t.Fatalf("%s: the body must match its length (HEAD has none): declared %d, body %d", name, declared, len(body))
+		}
+	}
+	if !strings.Contains(json, `"status":421`) || !strings.Contains(none, "application/json") {
+		t.Fatalf("a client that does not ask for HTML gets JSON: %q %q", json, none)
 	}
 }
