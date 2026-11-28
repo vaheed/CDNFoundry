@@ -156,7 +156,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Requests per second across all PoPs.",
+      "description": "Requests per second across all PoPs. Follows the region, pop, edge filters; does not follow pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -169,7 +169,7 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No traffic"
                 }
               },
               "type": "special"
@@ -235,7 +235,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Bits per second sent to clients.",
+      "description": "Bits per second sent to clients. Follows the region, pop, edge filters; does not follow pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -248,7 +248,7 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No traffic"
                 }
               },
               "type": "special"
@@ -314,7 +314,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Share of responses that are server errors.",
+      "description": "Share of responses that are server errors. Follows the region, pop, edge filters; does not follow pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -327,13 +327,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "Not reporting"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "Not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -401,7 +401,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Share of requests served from cache.",
+      "description": "Share of requests served from cache. Follows the region, pop, edge filters; does not follow pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -414,13 +414,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "Not reporting"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "Not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -484,7 +484,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "95th percentile time to serve a request.",
+      "description": "95th percentile time to serve a request. Follows the region, pop, edge filters; does not follow pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -497,13 +497,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "Not reporting"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "Not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -583,13 +583,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "Not reporting"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "Not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -671,13 +671,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -812,7 +812,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "5xx ratio and edge p95 on one axis pair.",
+      "description": "5xx ratio and edge p95 on one axis pair. Follows the region, pop, edge filters; does not follow pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -838,13 +838,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "Not reporting"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "Not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [

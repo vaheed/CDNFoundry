@@ -80,7 +80,8 @@ def rows(result: dict) -> int:
 
 def run_target(item: tuple[str, str, dict, str, int]) -> tuple[str, str]:
     title, kind, target, range_name, seconds = item
-    query = {**target, "intervalMs": 60000, "maxDataPoints": 1000}
+    # Grafana picks the interval from the range and the number of points the panel can draw, so a seven day range steps in ten minutes, not one.
+    query = {**target, "intervalMs": max(60000, seconds * 1000 // 1000), "maxDataPoints": 1000}
     for key in ("rawSql", "expr"):
         if key in query:
             query[key] = interpolate(query[key], kind)

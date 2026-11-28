@@ -156,7 +156,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Requests the WAF inspected and matched.",
+      "description": "Requests the WAF inspected and matched. Follows the region, pop, edge, domain filters; does not follow pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -168,13 +168,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -230,7 +230,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Requests refused because their body exceeded the WAF inspection limit.",
+      "description": "Requests refused because their body exceeded the WAF inspection limit. Follows the region, pop, edge, domain filters; does not follow pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -242,13 +242,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -320,13 +320,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -395,13 +395,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -465,7 +465,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Requests per second by WAF action.",
+      "description": "Requests per second by WAF action. Follows the region, pop, edge, domain filters; does not follow pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -492,7 +492,7 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No traffic"
                 }
               },
               "type": "special"
@@ -578,13 +578,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [

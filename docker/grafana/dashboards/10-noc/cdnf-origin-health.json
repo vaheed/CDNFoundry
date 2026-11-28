@@ -156,7 +156,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "95th percentile origin response time.",
+      "description": "95th percentile origin response time. Follows the region, pop, edge filters; does not follow pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -169,13 +169,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "Not reporting"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "Not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -239,7 +239,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Origin failures per second.",
+      "description": "Origin failures per second. Follows the region, pop, edge filters; does not follow pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -252,7 +252,7 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No traffic"
                 }
               },
               "type": "special"
@@ -318,7 +318,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Share of origin requests that failed.",
+      "description": "Share of origin requests that failed. Follows the region, pop, edge filters; does not follow pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -331,13 +331,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "Not reporting"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "Not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -413,13 +413,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -479,7 +479,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Median, 95th, and 99th percentile origin response time.",
+      "description": "Median, 95th, and 99th percentile origin response time. Follows the region, pop, edge, domain filters; does not follow pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -505,13 +505,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -565,7 +565,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Origin failures per second by PoP.",
+      "description": "Origin failures per second by PoP. Follows the region, pop, edge filters; does not follow pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -591,7 +591,7 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No traffic"
                 }
               },
               "type": "special"
@@ -651,7 +651,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Hostnames with the slowest origin responses.",
+      "description": "Hostnames with the slowest origin responses. Follows the region, pop, edge, domain, hostname filters; does not follow pool.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -663,14 +663,14 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
           "min": 0,
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -733,7 +733,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Hostnames with the most origin failures.",
+      "description": "Hostnames with the most origin failures. Follows the region, pop, edge, domain, hostname filters; does not follow pool.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -745,14 +745,14 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
           "min": 0,
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -811,7 +811,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Response codes returned to clients.",
+      "description": "Response codes returned to clients. Follows the region, pop, edge, domain filters; does not follow pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -823,14 +823,14 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
           "min": 0,
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -911,13 +911,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [

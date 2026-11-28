@@ -4,7 +4,7 @@
       "type": "prometheus",
       "uid": "prometheus"
     },
-    "description": "Authoritative queries per second.",
+    "description": "Authoritative queries per second. Follows the region, pop filters; does not follow edge, pool, domain, hostname.",
     "fieldConfig": {
       "defaults": {
         "color": {
@@ -17,7 +17,7 @@
               "match": "null+nan",
               "result": {
                 "color": "text",
-                "text": "No data yet"
+                "text": "No traffic"
               }
             },
             "type": "special"

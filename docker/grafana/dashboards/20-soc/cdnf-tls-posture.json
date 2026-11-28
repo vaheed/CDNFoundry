@@ -168,13 +168,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -246,13 +246,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -339,13 +339,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "Not reporting"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "Not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -435,13 +435,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -523,13 +523,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -585,7 +585,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Requests by TLS version.",
+      "description": "Requests by TLS version. Follows the region, pop, edge, domain filters; does not follow pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -597,13 +597,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -666,7 +666,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Requests by negotiated cipher.",
+      "description": "Requests by negotiated cipher. Follows the region, pop, edge, domain filters; does not follow pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -678,13 +678,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [

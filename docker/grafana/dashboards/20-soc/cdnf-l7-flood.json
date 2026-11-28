@@ -156,7 +156,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Each domain's request rate in the last 10 minutes against its average over the previous day. A ratio above 4 is a flood candidate.",
+      "description": "Each domain's request rate in the last 10 minutes against its average over the previous day. A ratio above 4 is a flood candidate. Follows the region, pop, edge, domain filters; does not follow pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -302,14 +302,14 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
           "min": 0,
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -376,14 +376,14 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
           "min": 0,
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -465,14 +465,14 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
           "min": 0,
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -539,14 +539,14 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
           "min": 0,
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -601,7 +601,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Requests flagged as cache abuse, per second.",
+      "description": "Requests flagged as cache abuse, per second. Follows the region, pop, edge, domain filters; does not follow pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -627,7 +627,7 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No traffic"
                 }
               },
               "type": "special"
@@ -691,7 +691,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Request rate per PoP; a flood shows as one line leaving the others.",
+      "description": "Request rate per PoP; a flood shows as one line leaving the others. Follows the region, pop, edge filters; does not follow pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -717,7 +717,7 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No traffic"
                 }
               },
               "type": "special"

@@ -199,13 +199,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -274,7 +274,7 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No traffic"
                 }
               },
               "type": "special"
@@ -348,13 +348,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -422,13 +422,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -484,7 +484,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Bandwidth, 95th-percentile bandwidth, and requests per domain for the selected range.",
+      "description": "Bandwidth, 95th-percentile bandwidth, and requests per domain for the selected range. Follows the domain filter; does not follow region, pop, edge, pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -592,7 +592,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Bandwidth and requests per region for the selected range.",
+      "description": "Bandwidth and requests per region for the selected range. Follows the region filter; does not follow pop, edge, pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -684,7 +684,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Bits per second sent, per PoP, at 5-minute resolution.",
+      "description": "Bits per second sent, per PoP, at 5-minute resolution. Follows the pop filter; does not follow region, edge, pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -711,7 +711,7 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No traffic"
                 }
               },
               "type": "special"
@@ -771,7 +771,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Bytes sent per month, over the last year. Always the last 1y, whatever range the dashboard shows.",
+      "description": "Bytes sent per month, over the last year. Always the last 1y, whatever range the dashboard shows. Follows the region, pop, edge, domain filters; does not follow pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -797,13 +797,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -964,7 +964,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Bytes sent to clients, headers included, per edge host. SQL: SELECT edge_id, sum(bytes_sent) FROM cdnf.edge_volume_hourly WHERE interval_start >= toStartOfHour($__fromTime) GROUP BY edge_id",
+      "description": "Bytes sent to clients, headers included, per edge host. SQL: SELECT edge_id, sum(bytes_sent) FROM cdnf.edge_volume_hourly WHERE interval_start >= toStartOfHour($__fromTime) GROUP BY edge_id Follows the domain filter; does not follow region, pop, edge, pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -976,14 +976,14 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
           "min": 0,
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1038,7 +1038,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Bytes sent to clients per serving cell. SQL: SELECT cell, sum(bytes_sent) FROM cdnf.edge_volume_hourly WHERE interval_start >= toStartOfHour($__fromTime) GROUP BY cell",
+      "description": "Bytes sent to clients per serving cell. SQL: SELECT cell, sum(bytes_sent) FROM cdnf.edge_volume_hourly WHERE interval_start >= toStartOfHour($__fromTime) GROUP BY cell Follows the domain filter; does not follow region, pop, edge, pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1050,14 +1050,14 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
           "min": 0,
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1112,7 +1112,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Bytes sent to clients per domain.",
+      "description": "Bytes sent to clients per domain. Follows the domain filter; does not follow region, pop, edge, pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1124,14 +1124,14 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
           "min": 0,
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1186,7 +1186,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Bytes sent to clients per client country.",
+      "description": "Bytes sent to clients per client country. Follows the domain filter; does not follow region, pop, edge, pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1198,14 +1198,14 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
           "min": 0,
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1260,7 +1260,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Request bytes received from clients (the request length, headers included) per edge host.",
+      "description": "Request bytes received from clients (the request length, headers included) per edge host. Follows the domain filter; does not follow region, pop, edge, pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1272,14 +1272,14 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
           "min": 0,
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1334,7 +1334,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Request bytes received from clients per serving cell.",
+      "description": "Request bytes received from clients per serving cell. Follows the domain filter; does not follow region, pop, edge, pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1346,14 +1346,14 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
           "min": 0,
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1408,7 +1408,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Request bytes received from clients per domain.",
+      "description": "Request bytes received from clients per domain. Follows the domain filter; does not follow region, pop, edge, pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1420,14 +1420,14 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
           "min": 0,
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1482,7 +1482,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Request bytes received from clients per client country.",
+      "description": "Request bytes received from clients per client country. Follows the domain filter; does not follow region, pop, edge, pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1494,14 +1494,14 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
           "min": 0,
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1582,7 +1582,7 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No traffic"
                 }
               },
               "type": "special"

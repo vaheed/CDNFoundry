@@ -259,7 +259,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Gateways that are ready in the selected PoPs.",
+      "description": "Gateways that are ready in the selected PoPs. Follows the pop filter; does not follow region, edge, pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -271,13 +271,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "Not reporting"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "Not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -333,7 +333,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Connections the gateways hold now.",
+      "description": "Connections the gateways hold now. Follows the pop filter; does not follow region, edge, pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -345,13 +345,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "Not reporting"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "Not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -407,7 +407,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Connections the gateways refused, per second.",
+      "description": "Connections the gateways refused, per second. Follows the pop filter; does not follow region, edge, pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -420,7 +420,7 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No traffic"
                 }
               },
               "type": "special"
@@ -486,7 +486,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Routing maps the gateways refused in the last hour.",
+      "description": "Routing maps the gateways refused in the last hour. Follows the pop filter; does not follow region, edge, pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -498,13 +498,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "Not reporting"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "Not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -564,7 +564,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "How full each cell's cache, memory, and connection budget is.",
+      "description": "How full each cell's cache, memory, and connection budget is. Follows the pop filter; does not follow region, edge, pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -590,14 +590,14 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "Not reporting"
                 }
               },
               "type": "special"
             }
           ],
           "max": 1,
-          "noValue": "\u2013",
+          "noValue": "Not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -659,7 +659,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Active gateway connections per PoP.",
+      "description": "Active gateway connections per PoP. Follows the pop filter; does not follow region, edge, pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -685,13 +685,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "Not reporting"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "Not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -758,7 +758,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Host CPU used.",
+      "description": "Host CPU used. Follows the pop filter; does not follow region, edge, pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -784,14 +784,14 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "Not reporting"
                 }
               },
               "type": "special"
             }
           ],
           "max": 100,
-          "noValue": "\u2013",
+          "noValue": "Not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -845,7 +845,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Host memory used.",
+      "description": "Host memory used. Follows the pop filter; does not follow region, edge, pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -871,14 +871,14 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "Not reporting"
                 }
               },
               "type": "special"
             }
           ],
           "max": 100,
-          "noValue": "\u2013",
+          "noValue": "Not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -932,7 +932,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Host network traffic in bits per second.",
+      "description": "Host network traffic in bits per second. Follows the pop filter; does not follow region, edge, pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -958,7 +958,7 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No traffic"
                 }
               },
               "type": "special"
@@ -1031,7 +1031,7 @@
         "type": "loki",
         "uid": "loki"
       },
-      "description": "Operational logs from the selected PoPs.",
+      "description": "Operational logs from the selected PoPs. Follows the pop filter; does not follow region, edge, pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {

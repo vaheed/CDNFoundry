@@ -4,7 +4,7 @@
       "type": "prometheus",
       "uid": "prometheus"
     },
-    "description": "Share of requests served from cache.",
+    "description": "Share of requests served from cache. Follows the region, pop, edge filters; does not follow pool, domain, hostname.",
     "fieldConfig": {
       "defaults": {
         "color": {
@@ -23,13 +23,13 @@
               "match": "null+nan",
               "result": {
                 "color": "text",
-                "text": "No data yet"
+                "text": "Not reporting"
               }
             },
             "type": "special"
           }
         ],
-        "noValue": "\u2013",
+        "noValue": "Not reporting",
         "thresholds": {
           "mode": "absolute",
           "steps": [

@@ -4,7 +4,7 @@
       "type": "prometheus",
       "uid": "prometheus"
     },
-    "description": "Requests per second across the selected PoPs.",
+    "description": "Requests per second across the selected PoPs. Follows the region, pop, edge filters; does not follow pool, domain, hostname.",
     "fieldConfig": {
       "defaults": {
         "color": {
@@ -23,7 +23,7 @@
               "match": "null+nan",
               "result": {
                 "color": "text",
-                "text": "No data yet"
+                "text": "No traffic"
               }
             },
             "type": "special"

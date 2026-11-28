@@ -53,6 +53,13 @@ def security_overview() -> dict:
               [pg("SELECT extract(epoch FROM now() - last_reported_at) AS age FROM grafana_client_reputation_reports WHERE last_reported_at IS NOT NULL")], "s", w=6),
          stat("Reputation reporting edges", "Edges that reported clients inside the report retention window. Fleet-wide.",
               [pg("SELECT reporting_edges FROM grafana_client_reputation_reports")], "short", w=6)],
+        [text("Not measured yet", "Signals this dashboard cannot show because nothing records them. Each is listed here instead of being drawn from a stand-in.",
+              "**Unsupported signals.** Each of these has no source today, so no panel claims it:\n\n"
+              "- **Challenge key acknowledgement per edge:** the control plane records no acknowledgement of a key by an edge.\n"
+              "- **Shared and long-window rate-limit report age and keys over threshold:** no report table exists in the control plane.\n"
+              "- **JWT rejections, IP-list hits and incident-profile denials by cell and version:** the events carry a reason but not the list or profile version, and no per-cell counter exists.\n"
+              "- **Cell shared-memory and descriptor use:** cells do not report them.\n\n"
+              "When a source exists the signal moves into the rows above.", h=6)],
         [firing_alerts(24, 8, "Security alerts")],
     ]
     return dashboard("cdnf-security-overview", "Security overview", "cdnf-soc", "Blocks, WAF matches, emergency-mode domains, security events by reason, and the top attacked domains, all with trends.", rows, runbook="waf-block-spike", parent=("cdnf-now", "Now"))

@@ -157,13 +157,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "Not reporting"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "Not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -487,7 +487,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Each PoP with its traffic, 5xx ratio, and heartbeat age.",
+      "description": "Each PoP with its traffic, 5xx ratio, and heartbeat age. Follows the region, pop, edge filters; does not follow pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -708,7 +708,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Authoritative queries per second.",
+      "description": "Authoritative queries per second. Follows the region, pop filters; does not follow edge, pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -727,7 +727,7 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No traffic"
                 }
               },
               "type": "special"
@@ -804,7 +804,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Queries per second by response code.",
+      "description": "Queries per second by response code. Follows the region, pop filters; does not follow edge, pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -830,7 +830,7 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No traffic"
                 }
               },
               "type": "special"
@@ -921,13 +921,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "Not reporting"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "Not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -999,13 +999,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "Not reporting"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "Not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1091,13 +1091,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "Not reporting"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "Not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [

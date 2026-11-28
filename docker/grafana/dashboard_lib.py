@@ -153,13 +153,30 @@ def _source(targets: list[dict[str, Any]]) -> dict[str, Any]:
 TRAFFIC_UNITS = {"reqps", "Bps", "bps"}
 
 
-def _defaults(unit: str, threshold: str, decimals: int | None, min_value: float | None = None, max_value: float | None = None) -> dict[str, Any]:
+def empty_text(unit: str, targets: list[dict[str, Any]] | None) -> str:
+    """What a panel says when its query succeeded and returned nothing. A failed query is shown by Grafana as an error, never as this text.
+
+    A request, byte or bit rate means no traffic. A Prometheus series that is absent means the exporter is not reporting (an actual zero is
+    a value and is shown as 0). A table or time series of stored records means nothing matched. A log query means no line matched.
+    """
+    if unit in TRAFFIC_UNITS:
+        return "No traffic"
+    uids = {target["datasource"]["uid"] for target in targets or []}
+    if uids == {PROM["uid"]}:
+        return "Not reporting"
+    if uids == {LOKI["uid"]}:
+        return "No matching log lines"
+    return "No matching records"
+
+
+def _defaults(unit: str, threshold: str, decimals: int | None, min_value: float | None = None, max_value: float | None = None, targets: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    empty = empty_text(unit, targets)
     defaults: dict[str, Any] = {
         "unit": unit,
         "color": {"mode": "thresholds"},
         "thresholds": {"mode": "absolute", "steps": copy.deepcopy(THRESHOLDS[threshold])},
-        "noValue": "No traffic" if unit in TRAFFIC_UNITS else "–",
-        "mappings": [{"type": "special", "options": {"match": "null+nan", "result": {"text": "No data yet", "color": NEUTRAL}}}],
+        "noValue": empty,
+        "mappings": [{"type": "special", "options": {"match": "null+nan", "result": {"text": empty, "color": NEUTRAL}}}],
     }
     if decimals is not None:
         defaults["decimals"] = decimals
@@ -175,7 +192,7 @@ def stat(title: str, description: str, targets: list[dict[str, Any]], unit: str 
     panel = {
         "type": "stat", "title": title, "description": description, "datasource": _source(targets), "targets": refs(targets),
         "gridPos": {"w": w, "h": h, "x": 0, "y": 0},
-        "fieldConfig": {"defaults": _defaults(unit, threshold, decimals), "overrides": []},
+        "fieldConfig": {"defaults": _defaults(unit, threshold, decimals, targets=targets), "overrides": []},
         "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "center", "textMode": "value", "wideLayout": True,
                     "reduceOptions": {"calcs": ["lastNotNull"], "fields": "/^[^_]/" if text else "", "values": False}},
     }
@@ -188,7 +205,7 @@ def stat(title: str, description: str, targets: list[dict[str, Any]], unit: str 
 
 
 def timeseries(title: str, description: str, targets: list[dict[str, Any]], unit: str = "short", *, w: int = 12, h: int = 8, stack: bool = False, threshold: str = "neutral", decimals: int | None = None, fill: int = 12, min_value: float | None = None, max_value: float | None = None) -> dict[str, Any]:
-    defaults = _defaults(unit, threshold, decimals, min_value, max_value)
+    defaults = _defaults(unit, threshold, decimals, min_value, max_value, targets)
     labels = [target["_series"] for target in targets if "_series" in target]
     if len(targets) == 1 and labels:
         # A rollup split arrives as "<measure> <value>"; the value alone is the series name.
@@ -208,8 +225,8 @@ IDENTIFIER_COLUMNS = {"matcher": {"id": "byRegexp", "options": "^(.*_id|rule|dom
 
 
 def table(title: str, description: str, targets: list[dict[str, Any]], unit: str = "short", *, w: int = 12, h: int = 8, overrides: list[dict[str, Any]] | None = None, transformations: list[dict[str, Any]] | None = None, sort: str | None = None) -> dict[str, Any]:
-    defaults = _defaults(unit, "neutral", None)
-    defaults["noValue"] = "–"
+    defaults = _defaults(unit, "neutral", None, targets=targets)
+    defaults["noValue"] = "–"  # a cell the row does not have; the panel's own empty state is the "No data" message of the table
     # An empty cell is a value the row does not have (an alert without a PoP), not data still to come.
     defaults["mappings"] = []
     defaults["custom"] = {"align": "auto", "cellOptions": {"type": "auto"}, "inspect": False}
@@ -229,13 +246,13 @@ def bargauge(title: str, description: str, targets: list[dict[str, Any]], unit: 
     return {
         "type": "bargauge", "title": title, "description": description, "datasource": _source(targets), "targets": refs(targets),
         "gridPos": {"w": w, "h": h, "x": 0, "y": 0},
-        "fieldConfig": {"defaults": {**_defaults(unit, threshold, decimals, 0, max_value), "color": {"mode": "continuous-BlPu" if threshold == "neutral" else "thresholds"}}, "overrides": []},
+        "fieldConfig": {"defaults": {**_defaults(unit, threshold, decimals, 0, max_value, targets), "color": {"mode": "continuous-BlPu" if threshold == "neutral" else "thresholds"}}, "overrides": []},
         "options": {"displayMode": "gradient", "orientation": "horizontal", "showUnfilled": True, "namePlacement": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": True}},
     }
 
 
 def piechart(title: str, description: str, targets: list[dict[str, Any]], unit: str = "short", *, w: int = 8, h: int = 8) -> dict[str, Any]:
-    defaults = _defaults(unit, "neutral", None)
+    defaults = _defaults(unit, "neutral", None, targets=targets)
     defaults["color"] = {"mode": "palette-classic"}
     return {
         "type": "piechart", "title": title, "description": description, "datasource": _source(targets), "targets": refs(targets),
@@ -399,8 +416,14 @@ def state_scope(panel: dict[str, Any]) -> dict[str, Any]:
     if panel.get("type") in ("row", "text") or "fleet-wide" in panel.get("description", "").lower():
         return panel
     queries = " ".join(str(target.get("expr") or target.get("rawSql") or target.get("query") or "") for target in panel.get("targets", []))
-    if queries and not any(pattern.search(queries) for pattern in _FILTER_USED.values()):
+    if not queries:
+        return panel
+    followed = [name for name, pattern in _FILTER_USED.items() if pattern.search(queries)]
+    if not followed:
         panel["description"] = f"{panel.get('description', '').rstrip()} Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters.".strip()
+    elif len(followed) < len(_FILTERS) and "does not follow" not in panel.get("description", "").lower():
+        ignored = [name for name in _FILTERS if name not in followed]
+        panel["description"] = f"{panel.get('description', '').rstrip()} Follows the {', '.join(followed)} filter{'s' if len(followed) > 1 else ''}; does not follow {', '.join(ignored)}.".strip()
     return panel
 
 

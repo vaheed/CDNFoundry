@@ -156,7 +156,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Share of answers that are NXDOMAIN.",
+      "description": "Share of answers that are NXDOMAIN. Follows the region, pop filters; does not follow edge, pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -169,13 +169,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "Not reporting"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "Not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -239,7 +239,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Truncated answers per second sent to limit a client.",
+      "description": "Truncated answers per second sent to limit a client. Follows the region, pop filters; does not follow edge, pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -252,7 +252,7 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No traffic"
                 }
               },
               "type": "special"
@@ -333,7 +333,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Share of answers that are REFUSED.",
+      "description": "Share of answers that are REFUSED. Follows the region, pop filters; does not follow edge, pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -346,13 +346,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "Not reporting"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "Not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -416,7 +416,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "NXDOMAIN answers per second; a random-subdomain flood is a steep rise.",
+      "description": "NXDOMAIN answers per second; a random-subdomain flood is a steep rise. Follows the region, pop filters; does not follow edge, pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -442,7 +442,7 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No traffic"
                 }
               },
               "type": "special"
@@ -506,7 +506,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Truncated answers per second by PoP.",
+      "description": "Truncated answers per second by PoP. Follows the region, pop filters; does not follow edge, pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -532,7 +532,7 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No traffic"
                 }
               },
               "type": "special"
@@ -608,14 +608,14 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
           "min": 0,
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -682,14 +682,14 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
           "min": 0,
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -760,14 +760,14 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
           "min": 0,
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -834,14 +834,14 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
           "min": 0,
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -922,13 +922,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [

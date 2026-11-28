@@ -246,7 +246,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Requests per second by region.",
+      "description": "Requests per second by region. Follows the region, pop, edge filters; does not follow pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -272,7 +272,7 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No traffic"
                 }
               },
               "type": "special"
@@ -347,7 +347,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Bits per second sent to clients, per PoP.",
+      "description": "Bits per second sent to clients, per PoP. Follows the region, pop, edge filters; does not follow pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -373,7 +373,7 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No traffic"
                 }
               },
               "type": "special"
@@ -433,7 +433,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Requests per second by HTTP version.",
+      "description": "Requests per second by HTTP version. Follows the region, pop, edge, domain filters; does not follow pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -460,7 +460,7 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No traffic"
                 }
               },
               "type": "special"
@@ -520,7 +520,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Requests per second from IPv4 and IPv6 clients.",
+      "description": "Requests per second from IPv4 and IPv6 clients. Follows the region, pop, edge, domain filters; does not follow pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -547,7 +547,7 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No traffic"
                 }
               },
               "type": "special"
@@ -634,14 +634,14 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
           "min": 0,
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -696,7 +696,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Hostnames with the most requests.",
+      "description": "Hostnames with the most requests. Follows the region, pop, edge, domain, hostname filters; does not follow pool.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -708,14 +708,14 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
           "min": 0,
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -770,7 +770,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Hostnames that sent the most bytes.",
+      "description": "Hostnames that sent the most bytes. Follows the region, pop, edge, domain, hostname filters; does not follow pool.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -782,14 +782,14 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
           "min": 0,
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -844,7 +844,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Hostnames with the most 5xx responses.",
+      "description": "Hostnames with the most 5xx responses. Follows the region, pop, edge, domain, hostname filters; does not follow pool.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -856,14 +856,14 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
           "min": 0,
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [

@@ -156,7 +156,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "The selected hostnames with requests, errors, cache hit, bytes, and latency, for support to compare.",
+      "description": "The selected hostnames with requests, errors, cache hit, bytes, and latency, for support to compare. Follows the region, pop, edge, domain, hostname filters; does not follow pool.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -295,7 +295,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Requests per second for the selected hostnames. Always the last 24h, whatever range the dashboard shows.",
+      "description": "Requests per second for the selected hostnames. Always the last 24h, whatever range the dashboard shows. Follows the region, pop, edge, domain, hostname filters; does not follow pool.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -322,7 +322,7 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No traffic"
                 }
               },
               "type": "special"
@@ -384,7 +384,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Server errors per second for the selected hostnames. Always the last 24h, whatever range the dashboard shows.",
+      "description": "Server errors per second for the selected hostnames. Always the last 24h, whatever range the dashboard shows. Follows the region, pop, edge, domain, hostname filters; does not follow pool.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -411,7 +411,7 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No traffic"
                 }
               },
               "type": "special"
@@ -477,7 +477,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Share of requests served from cache. Always the last 24h, whatever range the dashboard shows.",
+      "description": "Share of requests served from cache. Always the last 24h, whatever range the dashboard shows. Follows the region, pop, edge, domain, hostname filters; does not follow pool.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -504,13 +504,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -570,7 +570,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "95th percentile edge time. Always the last 24h, whatever range the dashboard shows.",
+      "description": "95th percentile edge time. Always the last 24h, whatever range the dashboard shows. Follows the region, pop, edge, domain, hostname filters; does not follow pool.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -597,13 +597,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [

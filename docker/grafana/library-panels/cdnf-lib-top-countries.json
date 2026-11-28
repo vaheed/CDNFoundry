@@ -4,7 +4,7 @@
       "type": "grafana-clickhouse-datasource",
       "uid": "clickhouse"
     },
-    "description": "Countries sending the most requests.",
+    "description": "Countries sending the most requests. Follows the region, pop, edge, domain filters; does not follow pool, hostname.",
     "fieldConfig": {
       "defaults": {
         "color": {
@@ -16,14 +16,14 @@
               "match": "null+nan",
               "result": {
                 "color": "text",
-                "text": "No data yet"
+                "text": "No matching records"
               }
             },
             "type": "special"
           }
         ],
         "min": 0,
-        "noValue": "\u2013",
+        "noValue": "No matching records",
         "thresholds": {
           "mode": "absolute",
           "steps": [

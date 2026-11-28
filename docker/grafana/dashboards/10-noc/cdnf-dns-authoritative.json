@@ -198,13 +198,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "Not reporting"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "Not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -272,13 +272,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "Not reporting"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "Not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -342,7 +342,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Queries per second by response code.",
+      "description": "Queries per second by response code. Follows the region, pop filters; does not follow edge, pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -368,7 +368,7 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No traffic"
                 }
               },
               "type": "special"
@@ -428,7 +428,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Queries per second by PoP.",
+      "description": "Queries per second by PoP. Follows the region, pop filters; does not follow edge, pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -454,7 +454,7 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No traffic"
                 }
               },
               "type": "special"
@@ -540,13 +540,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "Not reporting"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "Not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -630,13 +630,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "Not reporting"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "Not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -727,13 +727,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "Not reporting"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "Not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -813,13 +813,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "Not reporting"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "Not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -873,7 +873,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Geo-DNS answers by region of the answering PoP.",
+      "description": "Geo-DNS answers by region of the answering PoP. Follows the region, pop filters; does not follow edge, pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -899,7 +899,7 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No traffic"
                 }
               },
               "type": "special"

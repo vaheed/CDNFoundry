@@ -156,7 +156,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "One row per PoP with health, heartbeat age, applied revision, traffic, errors, latency, host load, and cache fill.",
+      "description": "One row per PoP with health, heartbeat age, applied revision, traffic, errors, latency, host load, and cache fill. Follows the region, pop, edge filters; does not follow pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -503,13 +503,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "Not reporting"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "Not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -581,13 +581,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "Not reporting"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "Not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -674,13 +674,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "Not reporting"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "Not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -740,7 +740,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Seconds since each PoP last reported.",
+      "description": "Seconds since each PoP last reported. Follows the pop filter; does not follow region, edge, pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -766,13 +766,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "Not reporting"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "Not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -834,7 +834,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "The configuration revision each PoP serves.",
+      "description": "The configuration revision each PoP serves. Follows the pop filter; does not follow region, edge, pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -861,13 +861,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "Not reporting"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "Not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [

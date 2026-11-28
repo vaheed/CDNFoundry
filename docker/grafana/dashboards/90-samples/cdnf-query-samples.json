@@ -187,7 +187,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Which domains sent the most bytes? SQL: SELECT hostname, sum(bytes_sent) FROM cdnf.edge_traffic_hourly WHERE $__timeFilter(interval_start) GROUP BY hostname ORDER BY 2 DESC LIMIT 10",
+      "description": "Which domains sent the most bytes? SQL: SELECT hostname, sum(bytes_sent) FROM cdnf.edge_traffic_hourly WHERE $__timeFilter(interval_start) GROUP BY hostname ORDER BY 2 DESC LIMIT 10 Follows the region, pop, edge, domain, hostname filters; does not follow pool.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -199,14 +199,14 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
           "min": 0,
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -261,7 +261,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Which PoP has the highest 95th percentile edge time? PromQL: topk(5, 1000 * histogram_quantile(0.95, sum by (le, pop) (cdnf:edge_latency_bucket:rate5m)))",
+      "description": "Which PoP has the highest 95th percentile edge time? PromQL: topk(5, 1000 * histogram_quantile(0.95, sum by (le, pop) (cdnf:edge_latency_bucket:rate5m))) Follows the region, pop, edge filters; does not follow pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -273,14 +273,14 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "Not reporting"
                 }
               },
               "type": "special"
             }
           ],
           "min": 0,
-          "noValue": "\u2013",
+          "noValue": "Not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -355,14 +355,14 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
           "min": 0,
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -443,7 +443,7 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No traffic"
                 }
               },
               "type": "special"
@@ -503,7 +503,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Which hostnames have a slow origin? SQL: quantilesTDigestMerge over origin_latency_q by hostname. Always the last 24h, whatever range the dashboard shows.",
+      "description": "Which hostnames have a slow origin? SQL: quantilesTDigestMerge over origin_latency_q by hostname. Always the last 24h, whatever range the dashboard shows. Follows the region, pop, edge, domain, hostname filters; does not follow pool.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -530,13 +530,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [

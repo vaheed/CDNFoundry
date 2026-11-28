@@ -32,19 +32,19 @@ Refreshes every 10s.
 | DNS drift | DNS deployments that have not reached their desired revision. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Alerts | Alerts firing now, not counting the heartbeat. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Paused | Fleet rollouts paused on a safety threshold. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
-| Requests | Requests per second across the selected PoPs. |
-| Bandwidth | Bits per second sent to clients, headers included. |
-| 5xx ratio | Share of responses that are server errors. |
-| Cache hit | Share of requests served from cache. |
-| Edge p95 | 95th percentile time to serve a request. |
-| Origin p95 | 95th percentile time an origin takes to answer. |
-| Requests by status class | Requests per second across the selected PoPs, split by response class. |
-| Edge p95 by PoP | 95th percentile time to serve a request, per PoP. |
-| PoPs | Each PoP with its traffic, 5xx ratio, and heartbeat age. |
-| Requests by PoP | Requests per second for each PoP. |
-| DNS queries | Authoritative queries per second. |
-| SERVFAIL ratio | Share of DNS answers that are SERVFAIL. |
-| DNS answers by code | Queries per second by response code. |
+| Requests | Requests per second across the selected PoPs. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| Bandwidth | Bits per second sent to clients, headers included. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| 5xx ratio | Share of responses that are server errors. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| Cache hit | Share of requests served from cache. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| Edge p95 | 95th percentile time to serve a request. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| Origin p95 | 95th percentile time an origin takes to answer. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| Requests by status class | Requests per second across the selected PoPs, split by response class. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| Edge p95 by PoP | 95th percentile time to serve a request, per PoP. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| PoPs | Each PoP with its traffic, 5xx ratio, and heartbeat age. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| Requests by PoP | Requests per second for each PoP. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| DNS queries | Authoritative queries per second. Follows the region, pop filters; does not follow edge, pool, domain, hostname. |
+| SERVFAIL ratio | Share of DNS answers that are SERVFAIL. Follows the region, pop filters; does not follow edge, pool, domain, hostname. |
+| DNS answers by code | Queries per second by response code. Follows the region, pop filters; does not follow edge, pool, domain, hostname. |
 | Events dropped | Telemetry events Vector dropped in the last 5 minutes. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Delivery errors | Telemetry delivery errors in the last 5 minutes. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Events delivered | Events per second Vector delivered to ClickHouse. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
@@ -61,16 +61,16 @@ Refreshes every 30s.
 
 | Panel | What it shows |
 | --- | --- |
-| Hit ratio (requests) | Share of requests served from cache. |
-| Hit ratio (bytes) | Share of bytes served from cache. |
-| Egress saved | Bytes sent from cache instead of fetched from an origin. |
+| Hit ratio (requests) | Share of requests served from cache. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| Hit ratio (bytes) | Share of bytes served from cache. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
+| Egress saved | Bytes sent from cache instead of fetched from an origin. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
 | Purge pending age | Age of the oldest purge not yet applied on every PoP. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
-| Cache status mix | Requests per second by cache status. |
-| Hit ratio over time | Requests served from cache, as a share of all requests. |
-| Cache fill by PoP | How full the cache volume of each cell is. |
+| Cache status mix | Requests per second by cache status. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| Hit ratio over time | Requests served from cache, as a share of all requests. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| Cache fill by PoP | How full the cache volume of each cell is. Follows the pop filter; does not follow region, edge, pool, domain, hostname. |
 | Purge volume | Cache purge requests per hour over the last 7 days, whatever range the dashboard shows. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Purge propagation time | Longest time a purge took to apply on every PoP, over the last hour. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
-| Cache fill by cell | How full each cell's cache volume is. The cells do not count evictions, so a volume near full is the signal. |
+| Cache fill by cell | How full each cell's cache volume is. The cells do not count evictions, so a volume near full is the signal. Follows the pop filter; does not follow region, edge, pool, domain, hostname. |
 
 ### DNS authoritative
 
@@ -80,17 +80,17 @@ Refreshes every 30s.
 
 | Panel | What it shows |
 | --- | --- |
-| Queries | Authoritative queries per second. |
-| SERVFAIL ratio | Share of DNS answers that are SERVFAIL. |
+| Queries | Authoritative queries per second. Follows the region, pop filters; does not follow edge, pool, domain, hostname. |
+| SERVFAIL ratio | Share of DNS answers that are SERVFAIL. Follows the region, pop filters; does not follow edge, pool, domain, hostname. |
 | Backends up | DNSdist backends marked up. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Serial pending age | Age of the oldest DNS deployment that has not reached its desired serial. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
-| Queries by response code | Queries per second by response code. |
-| Queries by PoP | Queries per second by PoP. |
+| Queries by response code | Queries per second by response code. Follows the region, pop filters; does not follow edge, pool, domain, hostname. |
+| Queries by PoP | Queries per second by PoP. Follows the region, pop filters; does not follow edge, pool, domain, hostname. |
 | DNSdist backend health | 1 when DNSdist sends queries to the backend. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | DNSdist latency | Average backend response time reported by DNSdist. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Cache hits in DNSdist | Packet-cache hits. DNSdist runs without a packet cache by design, so this stays at zero. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | DNS deployments pending | Domains whose zone has not reached its desired revision on every DNS target. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
-| Answers by region | Geo-DNS answers by region of the answering PoP. |
+| Answers by region | Geo-DNS answers by region of the answering PoP. Follows the region, pop filters; does not follow edge, pool, domain, hostname. |
 
 ### Edge latency
 
@@ -100,14 +100,14 @@ Refreshes every 30s.
 
 | Panel | What it shows |
 | --- | --- |
-| Edge p50 | Median time to serve a request. |
-| Edge p95 | 95th percentile time to serve a request. |
-| Origin p95 vs edge p95 | The origin p95 divided by the edge p95. Above 1 means the origins are slower than the edge answers, which is expected when most requests are cache hits. |
-| TTFB p95 | 95th percentile time for an origin to send its first byte. |
-| Edge latency by PoP | 95th percentile edge time per PoP. |
-| Edge latency by protocol | 95th percentile edge time per HTTP version. |
-| Edge and origin time | 95th percentile edge time next to 95th percentile origin time. |
-| Slowest countries | Countries with the highest 95th percentile edge time. |
+| Edge p50 | Median time to serve a request. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| Edge p95 | 95th percentile time to serve a request. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| Origin p95 vs edge p95 | The origin p95 divided by the edge p95. Above 1 means the origins are slower than the edge answers, which is expected when most requests are cache hits. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| TTFB p95 | 95th percentile time for an origin to send its first byte. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
+| Edge latency by PoP | 95th percentile edge time per PoP. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
+| Edge latency by protocol | 95th percentile edge time per HTTP version. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
+| Edge and origin time | 95th percentile edge time next to 95th percentile origin time. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
+| Slowest countries | Countries with the highest 95th percentile edge time. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
 
 ### Global traffic
 
@@ -117,22 +117,22 @@ Refreshes every 30s.
 
 | Panel | What it shows |
 | --- | --- |
-| Requests | Requests per second across the selected PoPs. |
-| Bandwidth | Bits per second sent to clients, headers included. |
-| 5xx ratio | Share of responses that are server errors. |
-| Cache hit | Share of requests served from cache. |
-| Edge p95 | 95th percentile time to serve a request. |
-| Origin p95 | 95th percentile time an origin takes to answer. |
-| Requests by region | Requests per second by region. |
-| Requests by PoP | Requests per second for each PoP. |
-| Bandwidth by PoP | Bits per second sent to clients, per PoP. |
-| Requests by protocol | Requests per second by HTTP version. |
-| Requests by IP version | Requests per second from IPv4 and IPv6 clients. |
-| Top countries | Countries sending the most requests. |
+| Requests | Requests per second across the selected PoPs. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| Bandwidth | Bits per second sent to clients, headers included. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| 5xx ratio | Share of responses that are server errors. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| Cache hit | Share of requests served from cache. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| Edge p95 | 95th percentile time to serve a request. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| Origin p95 | 95th percentile time an origin takes to answer. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| Requests by region | Requests per second by region. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| Requests by PoP | Requests per second for each PoP. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| Bandwidth by PoP | Bits per second sent to clients, per PoP. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| Requests by protocol | Requests per second by HTTP version. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
+| Requests by IP version | Requests per second from IPv4 and IPv6 clients. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
+| Top countries | Countries sending the most requests. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
 | Top ASNs (last 7 days) | Client networks sending the most requests. ASNs are kept in raw events only, so this covers at most 7 days. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
-| Top domains by requests | Hostnames with the most requests. |
-| Top domains by bandwidth | Hostnames that sent the most bytes. |
-| Top domains by errors | Hostnames with the most 5xx responses. |
+| Top domains by requests | Hostnames with the most requests. Follows the region, pop, edge, domain, hostname filters; does not follow pool. |
+| Top domains by bandwidth | Hostnames that sent the most bytes. Follows the region, pop, edge, domain, hostname filters; does not follow pool. |
+| Top domains by errors | Hostnames with the most 5xx responses. Follows the region, pop, edge, domain, hostname filters; does not follow pool. |
 
 ### NOC wall
 
@@ -142,17 +142,17 @@ Refreshes every 10s.
 
 | Panel | What it shows |
 | --- | --- |
-| Requests | Requests per second across all PoPs. |
-| Bandwidth | Bits per second sent to clients. |
-| 5xx ratio | Share of responses that are server errors. |
-| Cache hit | Share of requests served from cache. |
-| Edge p95 | 95th percentile time to serve a request. |
+| Requests | Requests per second across all PoPs. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| Bandwidth | Bits per second sent to clients. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| 5xx ratio | Share of responses that are server errors. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| Cache hit | Share of requests served from cache. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| Edge p95 | 95th percentile time to serve a request. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
 | Alerts | Alerts firing now. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | PoPs by health | Every enabled PoP by country, green when its heartbeat is fresh and red when it is not. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Probe results | The latest result of every synthetic probe, per PoP and IP version. 1 is up, 0 is down. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Alerts | Every firing alert with how long it has been firing. The full table with team, severity, and dashboard is on Now. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
-| Requests by status class | Requests per second across the selected PoPs, split by response class. |
-| 5xx and p95 | 5xx ratio and edge p95 on one axis pair. |
+| Requests by status class | Requests per second across the selected PoPs, split by response class. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| 5xx and p95 | 5xx ratio and edge p95 on one axis pair. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
 
 ### Origin health
 
@@ -162,15 +162,15 @@ Refreshes every 30s.
 
 | Panel | What it shows |
 | --- | --- |
-| Origin p95 | 95th percentile origin response time. |
-| Origin failures | Origin failures per second. |
-| Failure ratio | Share of origin requests that failed. |
+| Origin p95 | 95th percentile origin response time. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| Origin failures | Origin failures per second. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| Failure ratio | Share of origin requests that failed. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
 | Failover events (1h) | Requests that moved to a backup origin in the last 1 hour (not the dashboard range). Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
-| Origin latency percentiles | Median, 95th, and 99th percentile origin response time. |
-| Origin failures | Origin failures per second by PoP. |
-| Slowest origins | Hostnames with the slowest origin responses. |
-| Failing origins | Hostnames with the most origin failures. |
-| Status codes at the edge | Response codes returned to clients. |
+| Origin latency percentiles | Median, 95th, and 99th percentile origin response time. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
+| Origin failures | Origin failures per second by PoP. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| Slowest origins | Hostnames with the slowest origin responses. Follows the region, pop, edge, domain, hostname filters; does not follow pool. |
+| Failing origins | Hostnames with the most origin failures. Follows the region, pop, edge, domain, hostname filters; does not follow pool. |
+| Status codes at the edge | Response codes returned to clients. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
 | Failover events | Requests per minute that moved between primary and backup origin. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 
 ### PoP detail
@@ -181,22 +181,22 @@ Refreshes every 30s.
 
 | Panel | What it shows |
 | --- | --- |
-| Requests | Requests per second across the selected PoPs. |
-| Bandwidth | Bits per second sent to clients, headers included. |
-| 5xx ratio | Share of responses that are server errors. |
-| Cache hit | Share of requests served from cache. |
-| Edge p95 | 95th percentile time to serve a request. |
-| Origin p95 | 95th percentile time an origin takes to answer. |
-| Ready gateways | Gateways that are ready in the selected PoPs. |
-| Active connections | Connections the gateways hold now. |
-| Rejected connections | Connections the gateways refused, per second. |
-| Candidate rejections | Routing maps the gateways refused in the last hour. |
-| Cell capacity | How full each cell's cache, memory, and connection budget is. |
-| Gateway connections | Active gateway connections per PoP. |
-| CPU | Host CPU used. |
-| Memory | Host memory used. |
-| Network | Host network traffic in bits per second. |
-| PoP logs | Operational logs from the selected PoPs. |
+| Requests | Requests per second across the selected PoPs. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| Bandwidth | Bits per second sent to clients, headers included. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| 5xx ratio | Share of responses that are server errors. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| Cache hit | Share of requests served from cache. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| Edge p95 | 95th percentile time to serve a request. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| Origin p95 | 95th percentile time an origin takes to answer. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| Ready gateways | Gateways that are ready in the selected PoPs. Follows the pop filter; does not follow region, edge, pool, domain, hostname. |
+| Active connections | Connections the gateways hold now. Follows the pop filter; does not follow region, edge, pool, domain, hostname. |
+| Rejected connections | Connections the gateways refused, per second. Follows the pop filter; does not follow region, edge, pool, domain, hostname. |
+| Candidate rejections | Routing maps the gateways refused in the last hour. Follows the pop filter; does not follow region, edge, pool, domain, hostname. |
+| Cell capacity | How full each cell's cache, memory, and connection budget is. Follows the pop filter; does not follow region, edge, pool, domain, hostname. |
+| Gateway connections | Active gateway connections per PoP. Follows the pop filter; does not follow region, edge, pool, domain, hostname. |
+| CPU | Host CPU used. Follows the pop filter; does not follow region, edge, pool, domain, hostname. |
+| Memory | Host memory used. Follows the pop filter; does not follow region, edge, pool, domain, hostname. |
+| Network | Host network traffic in bits per second. Follows the pop filter; does not follow region, edge, pool, domain, hostname. |
+| PoP logs | Operational logs from the selected PoPs. Follows the pop filter; does not follow region, edge, pool, domain, hostname. |
 
 ### PoP fleet
 
@@ -206,13 +206,13 @@ Refreshes every 30s.
 
 | Panel | What it shows |
 | --- | --- |
-| PoP fleet | One row per PoP with health, heartbeat age, applied revision, traffic, errors, latency, host load, and cache fill. |
+| PoP fleet | One row per PoP with health, heartbeat age, applied revision, traffic, errors, latency, host load, and cache fill. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
 | Edges behind | Enabled PoPs whose applied revision is older than the latest. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Version drift | PoPs running component versions that differ from the desired versions. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Paused | Fleet rollouts paused on a safety threshold. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Gateways unready | Enabled gateways that are not ready. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
-| Heartbeat age by PoP | Seconds since each PoP last reported. |
-| Applied revision by PoP | The configuration revision each PoP serves. |
+| Heartbeat age by PoP | Seconds since each PoP last reported. Follows the pop filter; does not follow region, edge, pool, domain, hostname. |
+| Applied revision by PoP | The configuration revision each PoP serves. Follows the pop filter; does not follow region, edge, pool, domain, hostname. |
 
 ### Config & purge propagation
 
@@ -276,12 +276,12 @@ Refreshes every 30s.
 
 | Panel | What it shows |
 | --- | --- |
-| NXDOMAIN share | Share of answers that are NXDOMAIN. |
-| Response-limit hits | Truncated answers per second sent to limit a client. |
-| Queries | Authoritative queries per second. |
-| REFUSED share | Share of answers that are REFUSED. |
-| NXDOMAIN rate | NXDOMAIN answers per second; a random-subdomain flood is a steep rise. |
-| Response-limit hits | Truncated answers per second by PoP. |
+| NXDOMAIN share | Share of answers that are NXDOMAIN. Follows the region, pop filters; does not follow edge, pool, domain, hostname. |
+| Response-limit hits | Truncated answers per second sent to limit a client. Follows the region, pop filters; does not follow edge, pool, domain, hostname. |
+| Queries | Authoritative queries per second. Follows the region, pop filters; does not follow edge, pool, domain, hostname. |
+| REFUSED share | Share of answers that are REFUSED. Follows the region, pop filters; does not follow edge, pool, domain, hostname. |
+| NXDOMAIN rate | NXDOMAIN answers per second; a random-subdomain flood is a steep rise. Follows the region, pop filters; does not follow edge, pool, domain, hostname. |
+| Response-limit hits | Truncated answers per second by PoP. Follows the region, pop filters; does not follow edge, pool, domain, hostname. |
 | Top queried zones | Zones that receive the most queries. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Zones with the most NXDOMAIN | Zones where random names are asked most often. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Query types | Query types by volume. ANY, TXT, and DNSKEY are the ones used to amplify. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
@@ -296,14 +296,14 @@ Refreshes every 30s.
 
 | Panel | What it shows |
 | --- | --- |
-| Request rate against baseline | Each domain's request rate in the last 10 minutes against its average over the previous day. A ratio above 4 is a flood candidate. |
+| Request rate against baseline | Each domain's request rate in the last 10 minutes against its average over the previous day. A ratio above 4 is a flood candidate. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
 | Top client networks | Client networks sending the most requests, shown as the /24 or /48 the privacy setting allows. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Top ASNs | Autonomous systems sending the most requests in the last 7 days. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
-| Top countries | Countries sending the most requests. |
+| Top countries | Countries sending the most requests. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
 | Top user agents | User agents seen most often in the last 7 days. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Top paths | Paths requested most often in the last 7 days. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
-| Cache abuse events | Requests flagged as cache abuse, per second. |
-| Requests by PoP | Request rate per PoP; a flood shows as one line leaving the others. |
+| Cache abuse events | Requests flagged as cache abuse, per second. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
+| Requests by PoP | Request rate per PoP; a flood shows as one line leaving the others. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
 
 ### Security overview
 
@@ -313,20 +313,20 @@ Refreshes every 30s.
 
 | Panel | What it shows |
 | --- | --- |
-| Blocked requests | Requests the edge refused in the selected range. |
-| WAF matches | Requests the WAF matched in the selected range. |
+| Blocked requests | Requests the edge refused in the selected range. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
+| WAF matches | Requests the WAF matched in the selected range. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
 | Emergency modes | Emergency modes switched on and not expired. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Under attack alerts | Security alerts firing now. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
-| Security events by reason | Security events by class: waf, block, cache abuse, emergency mode, and WAF body limit. |
-| Blocks per PoP | Blocked requests per second by PoP. |
-| Top attacked domains | Hostnames with the most blocked requests. |
-| Blocks over time | Blocked requests per second. |
-| Attack score bands | Requests scored as an attack per interval, by band, over the last 7 days at most. Band 1 is a weak signal (score under 20), band 5 a near-certain attack (80 and over). Requests scored zero are not drawn. |
-| Blocks and logs by reason | Why the edge acted on a request: rate limits, firewall rules, the WAF, and cache abuse protection. |
-| Client-side reports | Browser reports of blocked scripts and connections that reached the edge, per hour. |
-| Firewall rules that matched | Domain rules that matched most, by rule name, over the last 7 days. |
-| Challenge outcomes | Browser challenges by outcome over the last 7 days at most: shown (the visitor was asked), solved, refused as invalid, and stopped by the per-token request budget. Counted from stored request events of the selected domains, so it follows the domain filter and not the region or PoP filter. |
-| Challenges solved | Share of challenge prompts that were solved in the selected range, from stored events (7 days at most). A prompt can be solved after the range ends, so a short range reads low. Empty when no challenge was shown. |
+| Security events by reason | Security events by class: waf, block, cache abuse, emergency mode, and WAF body limit. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
+| Blocks per PoP | Blocked requests per second by PoP. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| Top attacked domains | Hostnames with the most blocked requests. Follows the region, pop, edge, domain, hostname filters; does not follow pool. |
+| Blocks over time | Blocked requests per second. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
+| Attack score bands | Requests scored as an attack per interval, by band, over the last 7 days at most. Band 1 is a weak signal (score under 20), band 5 a near-certain attack (80 and over). Requests scored zero are not drawn. Follows the domain filter; does not follow region, pop, edge, pool, hostname. |
+| Blocks and logs by reason | Why the edge acted on a request: rate limits, firewall rules, the WAF, and cache abuse protection. Follows the domain filter; does not follow region, pop, edge, pool, hostname. |
+| Client-side reports | Browser reports of blocked scripts and connections that reached the edge, per hour. Follows the domain filter; does not follow region, pop, edge, pool, hostname. |
+| Firewall rules that matched | Domain rules that matched most, by rule name, over the last 7 days. Follows the domain filter; does not follow region, pop, edge, pool, hostname. |
+| Challenge outcomes | Browser challenges by outcome over the last 7 days at most: shown (the visitor was asked), solved, refused as invalid, and stopped by the per-token request budget. Counted from stored request events of the selected domains, so it follows the domain filter and not the region or PoP filter. Follows the domain filter; does not follow region, pop, edge, pool, hostname. |
+| Challenges solved | Share of challenge prompts that were solved in the selected range, from stored events (7 days at most). A prompt can be solved after the range ends, so a short range reads low. Empty when no challenge was shown. Follows the domain filter; does not follow region, pop, edge, pool, hostname. |
 | Shadow rules | Firewall rules that are evaluated and recorded but never act. Counted from the control database, all domains: fleet-wide. Empty while the database source is unreachable. |
 | Expiring rules | Enabled firewall rules that end on their own within the next 7 days. Fleet-wide, from the control database. |
 | Challenge key age | Time since the active challenge key was activated. Fleet-wide. A key that stays active for a long time was not rotated; no value means no active key exists. How far each edge has acknowledged the key is not recorded yet, so no panel claims it. |
@@ -350,7 +350,7 @@ Refreshes every 30s.
 | Ingest delay | Seconds between now and the newest event stored in ClickHouse, looking back 1 day at most (not the dashboard range). Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Rejected and forged events | Events Vector refused, by component. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Dropped events and insert failures | Buffer drops and delivery errors per second. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
-| Events stored by PoP | Events per second ClickHouse stored, per PoP. A PoP that goes flat is not delivering. |
+| Events stored by PoP | Events per second ClickHouse stored, per PoP. A PoP that goes flat is not delivering. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
 
 ### TLS posture
 
@@ -366,8 +366,8 @@ Refreshes every 30s.
 | Slowest issuance | Longest managed certificate issuance in the last 24 hours. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Handshake failures by reason | Failed handshakes per hour by reason over the last 24 hours, whatever range the dashboard shows. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Handshake failures by protocol | Failed handshakes per hour by TLS version over the last 24 hours, whatever range the dashboard shows. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
-| Protocol mix | Requests by TLS version. |
-| Cipher mix | Requests by negotiated cipher. |
+| Protocol mix | Requests by TLS version. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
+| Cipher mix | Requests by negotiated cipher. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
 | Certificates by expiry | Active certificates, soonest to expire first. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Recent ACME failures | Managed certificate orders that failed, newest first. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 
@@ -379,11 +379,11 @@ Refreshes every 30s.
 
 | Panel | What it shows |
 | --- | --- |
-| WAF actions | Requests the WAF inspected and matched. |
-| Body-limit hits | Requests refused because their body exceeded the WAF inspection limit. |
+| WAF actions | Requests the WAF inspected and matched. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
+| Body-limit hits | Requests refused because their body exceeded the WAF inspection limit. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
 | Exclusions in use | WAF exclusions that have not expired. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Processing time p95 | 95th percentile WAF processing time per request. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
-| WAF actions | Requests per second by WAF action. |
+| WAF actions | Requests per second by WAF action. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
 | WAF processing time | Average and 95th percentile WAF processing time. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Top rules | The WAF rules matched most often in the last 7 days. Select a rule to list its requests below. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Top rules by domain | Which hostnames trigger each rule, over the last 7 days (not the dashboard range). Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
@@ -536,9 +536,9 @@ Refreshes every 30s.
 | --- | --- |
 | Firing alerts | Every firing alert with its team, severity, and start time. Open the dashboard column to see the cause at the time it started. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Alert state | Firing alerts over the selected range. Pick the range around the incident. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
-| Requests and errors | Requests and 5xx per second over the same range. |
-| Affected PoPs | 5xx per second by PoP, to see where it started. |
-| Affected domains | Hostnames with the most 5xx responses in the range. |
+| Requests and errors | Requests and 5xx per second over the same range. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| Affected PoPs | 5xx per second by PoP, to see where it started. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| Affected domains | Hostnames with the most 5xx responses in the range. Follows the region, pop, edge, domain, hostname filters; does not follow pool. |
 | Related error logs | Error and critical logs from every service in the same range. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 
 ### Logs explorer
@@ -550,22 +550,22 @@ Refreshes every 30s.
 | Panel | What it shows |
 | --- | --- |
 | Logs | Operational logs for the selected services and levels. Use the Live button for a live tail. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
-| All errors and critical events | Every error and critical line, from every service. Narrow it with the filters above; identifiers are read from the structured line, not from labels. |
-| Control plane | Application, gateway and web logs of the control plane. Narrow it with the filters above; identifiers are read from the structured line, not from labels. |
-| Jobs and scheduler | Queue workers, the scheduler, notifications and log push. Narrow it with the filters above; identifiers are read from the structured line, not from labels. |
-| Edge agent | The agent's tasks, enrollment, heartbeats and artifact delivery. Narrow it with the filters above; identifiers are read from the structured line, not from labels. |
-| Gateway and cells | The PoP gateway, its control listener and every cell. Narrow it with the filters above; identifiers are read from the structured line, not from labels. |
-| Origin connectivity and TLS | Origin connection, timeout, destination and TLS verification lines. Narrow it with the filters above; identifiers are read from the structured line, not from labels. |
-| DNS and zone synchronization | PowerDNS, DNSdist and zone reconciliation. Narrow it with the filters above; identifiers are read from the structured line, not from labels. |
-| Certificate issuance and renewal | ACME orders, DNS-01 validation and renewal. Narrow it with the filters above; identifiers are read from the structured line, not from labels. |
-| WAF runtime | ModSecurity and managed ruleset lines from the cells. Narrow it with the filters above; identifiers are read from the structured line, not from labels. |
-| Challenge failures | Browser challenge refusals and verification failures. Narrow it with the filters above; identifiers are read from the structured line, not from labels. |
-| Shared rate-limit and reputation | Rate reports, reputation bands and their aggregation. Narrow it with the filters above; identifiers are read from the structured line, not from labels. |
-| Configuration deployment and revision mismatch | Snapshots, artifacts, revisions and acknowledgements. Narrow it with the filters above; identifiers are read from the structured line, not from labels. |
-| Telemetry delivery | Vector, the log collector, Loki and ClickHouse delivery, buffers and drops. Narrow it with the filters above; identifiers are read from the structured line, not from labels. |
-| Database and queue | PostgreSQL, the cache, queues and connection errors. Narrow it with the filters above; identifiers are read from the structured line, not from labels. |
-| Backup, rollback and recovery | Backups, restores and rollbacks the control plane records. Fleet runs on the operator host and does not log to Loki. Narrow it with the filters above; identifiers are read from the structured line, not from labels. |
-| Request and operation correlation | Every service's lines for one request, operation or task. Fill an identifier above. Narrow it with the filters above; identifiers are read from the structured line, not from labels. |
+| All errors and critical events | Every error and critical line, from every service. Narrow it with the filters above; identifiers are read from the structured line, not from labels. Follows the edge, domain filters; does not follow region, pop, pool, hostname. |
+| Control plane | Application, gateway and web logs of the control plane. Narrow it with the filters above; identifiers are read from the structured line, not from labels. Follows the edge, domain filters; does not follow region, pop, pool, hostname. |
+| Jobs and scheduler | Queue workers, the scheduler, notifications and log push. Narrow it with the filters above; identifiers are read from the structured line, not from labels. Follows the edge, domain filters; does not follow region, pop, pool, hostname. |
+| Edge agent | The agent's tasks, enrollment, heartbeats and artifact delivery. Narrow it with the filters above; identifiers are read from the structured line, not from labels. Follows the edge, domain filters; does not follow region, pop, pool, hostname. |
+| Gateway and cells | The PoP gateway, its control listener and every cell. Narrow it with the filters above; identifiers are read from the structured line, not from labels. Follows the edge, domain filters; does not follow region, pop, pool, hostname. |
+| Origin connectivity and TLS | Origin connection, timeout, destination and TLS verification lines. Narrow it with the filters above; identifiers are read from the structured line, not from labels. Follows the edge, domain filters; does not follow region, pop, pool, hostname. |
+| DNS and zone synchronization | PowerDNS, DNSdist and zone reconciliation. Narrow it with the filters above; identifiers are read from the structured line, not from labels. Follows the edge, domain filters; does not follow region, pop, pool, hostname. |
+| Certificate issuance and renewal | ACME orders, DNS-01 validation and renewal. Narrow it with the filters above; identifiers are read from the structured line, not from labels. Follows the edge, domain filters; does not follow region, pop, pool, hostname. |
+| WAF runtime | ModSecurity and managed ruleset lines from the cells. Narrow it with the filters above; identifiers are read from the structured line, not from labels. Follows the edge, domain filters; does not follow region, pop, pool, hostname. |
+| Challenge failures | Browser challenge refusals and verification failures. Narrow it with the filters above; identifiers are read from the structured line, not from labels. Follows the edge, domain filters; does not follow region, pop, pool, hostname. |
+| Shared rate-limit and reputation | Rate reports, reputation bands and their aggregation. Narrow it with the filters above; identifiers are read from the structured line, not from labels. Follows the edge, domain filters; does not follow region, pop, pool, hostname. |
+| Configuration deployment and revision mismatch | Snapshots, artifacts, revisions and acknowledgements. Narrow it with the filters above; identifiers are read from the structured line, not from labels. Follows the edge, domain filters; does not follow region, pop, pool, hostname. |
+| Telemetry delivery | Vector, the log collector, Loki and ClickHouse delivery, buffers and drops. Narrow it with the filters above; identifiers are read from the structured line, not from labels. Follows the edge, domain filters; does not follow region, pop, pool, hostname. |
+| Database and queue | PostgreSQL, the cache, queues and connection errors. Narrow it with the filters above; identifiers are read from the structured line, not from labels. Follows the edge, domain filters; does not follow region, pop, pool, hostname. |
+| Backup, rollback and recovery | Backups, restores and rollbacks the control plane records. Fleet runs on the operator host and does not log to Loki. Narrow it with the filters above; identifiers are read from the structured line, not from labels. Follows the edge, domain filters; does not follow region, pop, pool, hostname. |
+| Request and operation correlation | Every service's lines for one request, operation or task. Fill an identifier above. Narrow it with the filters above; identifiers are read from the structured line, not from labels. Follows the edge, domain filters; does not follow region, pop, pool, hostname. |
 | Log volume by level | Lines per second by level. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Error lines by service | Error and critical lines per interval, by service. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 
@@ -609,11 +609,11 @@ Refreshes every 30s.
 
 | Panel | What it shows |
 | --- | --- |
-| Domains side by side | The selected hostnames with requests, errors, cache hit, bytes, and latency, for support to compare. |
-| Requests by domain | Requests per second for the selected hostnames. Always the last 24h, whatever range the dashboard shows. |
-| 5xx by domain | Server errors per second for the selected hostnames. Always the last 24h, whatever range the dashboard shows. |
-| Cache hit by domain | Share of requests served from cache. Always the last 24h, whatever range the dashboard shows. |
-| Latency by domain | 95th percentile edge time. Always the last 24h, whatever range the dashboard shows. |
+| Domains side by side | The selected hostnames with requests, errors, cache hit, bytes, and latency, for support to compare. Follows the region, pop, edge, domain, hostname filters; does not follow pool. |
+| Requests by domain | Requests per second for the selected hostnames. Always the last 24h, whatever range the dashboard shows. Follows the region, pop, edge, domain, hostname filters; does not follow pool. |
+| 5xx by domain | Server errors per second for the selected hostnames. Always the last 24h, whatever range the dashboard shows. Follows the region, pop, edge, domain, hostname filters; does not follow pool. |
+| Cache hit by domain | Share of requests served from cache. Always the last 24h, whatever range the dashboard shows. Follows the region, pop, edge, domain, hostname filters; does not follow pool. |
+| Latency by domain | 95th percentile edge time. Always the last 24h, whatever range the dashboard shows. Follows the region, pop, edge, domain, hostname filters; does not follow pool. |
 
 ### Domain overview
 
@@ -623,21 +623,21 @@ Refreshes every 30s.
 
 | Panel | What it shows |
 | --- | --- |
-| Requests | Requests per second for the selected domains. |
-| Bandwidth | Average bits per second sent to clients. |
-| 5xx ratio | Share of responses that are server errors. |
-| Cache hit | Share of requests served from cache. |
-| Edge p95 | 95th percentile time to serve a request. |
-| Origin p95 | 95th percentile origin response time. |
-| Requests | Requests per second by status class. |
-| Cache status | Requests per second by cache status. |
-| Origin latency | 95th percentile origin time and origin errors. |
-| Security events | Blocked and classified requests per second. |
-| TLS certificates | The domain's certificates and when they expire. |
-| DNS queries | DNS queries per hour for the domain's zone over the last 24 hours, whatever range the dashboard shows. Always the last 24h, whatever range the dashboard shows. |
-| Purge history | Recent cache purges for the domain. |
-| Configuration changes | Edge configuration published for the domain, newest first. |
-| Requests by status code | The status codes the domain returned in the range. |
+| Requests | Requests per second for the selected domains. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
+| Bandwidth | Average bits per second sent to clients. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
+| 5xx ratio | Share of responses that are server errors. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
+| Cache hit | Share of requests served from cache. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
+| Edge p95 | 95th percentile time to serve a request. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
+| Origin p95 | 95th percentile origin response time. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
+| Requests | Requests per second by status class. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
+| Cache status | Requests per second by cache status. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
+| Origin latency | 95th percentile origin time and origin errors. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
+| Security events | Blocked and classified requests per second. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
+| TLS certificates | The domain's certificates and when they expire. Follows the domain filter; does not follow region, pop, edge, pool, hostname. |
+| DNS queries | DNS queries per hour for the domain's zone over the last 24 hours, whatever range the dashboard shows. Always the last 24h, whatever range the dashboard shows. Follows the domain filter; does not follow region, pop, edge, pool, hostname. |
+| Purge history | Recent cache purges for the domain. Follows the domain filter; does not follow region, pop, edge, pool, hostname. |
+| Configuration changes | Edge configuration published for the domain, newest first. Follows the domain filter; does not follow region, pop, edge, pool, hostname. |
+| Requests by status code | The status codes the domain returned in the range. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
 
 ## Business and capacity
 
@@ -659,8 +659,8 @@ Refreshes every 30s.
 | Cache headroom per PoP | Free share of the cache volume, per PoP. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Connection headroom per PoP | Free share of the connection budget, per PoP. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Memory headroom per host | Free share of memory per host. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
-| Peak bandwidth per PoP | Largest 5-minute bandwidth each PoP carried. |
-| Forecast bandwidth | Linear forecast of total bandwidth for the next 30 days from the last 7 days. |
+| Peak bandwidth per PoP | Largest 5-minute bandwidth each PoP carried. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
+| Forecast bandwidth | Linear forecast of total bandwidth for the next 30 days from the last 7 days. Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
 
 ### Growth
 
@@ -672,12 +672,12 @@ Refreshes every 30s.
 | --- | --- |
 | Domains | Domains that are not deleted. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | New domains (30d) | Domains created in the last 30 days. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
-| Traffic growth (30d) | Requests in the last 30 days against the 30 days before. |
-| Bandwidth growth (30d) | Bytes sent in the last 30 days against the 30 days before. |
+| Traffic growth (30d) | Requests in the last 30 days against the 30 days before. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
+| Bandwidth growth (30d) | Bytes sent in the last 30 days against the 30 days before. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
 | Domains by month | Domains created per month, over the last year. Always the last 1y, whatever range the dashboard shows. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
-| Traffic by month | Requests per month, over the last year. Always the last 1y, whatever range the dashboard shows. |
-| Bandwidth by month | Bytes sent per month, over the last year. Always the last 1y, whatever range the dashboard shows. |
-| Top growing domains | Hostnames whose requests grew most against the previous 30 days. |
+| Traffic by month | Requests per month, over the last year. Always the last 1y, whatever range the dashboard shows. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
+| Bandwidth by month | Bytes sent per month, over the last year. Always the last 1y, whatever range the dashboard shows. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
+| Top growing domains | Hostnames whose requests grew most against the previous 30 days. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
 
 ### Usage and billing
 
@@ -691,19 +691,19 @@ Refreshes every 30s.
 | p95 bandwidth | Bits per second at the 95th percentile of 5-minute intervals this month, all domains together. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Requests this month | Requests served this month. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | DNS this month | Authoritative DNS queries this month. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
-| Usage by domain | Bandwidth, 95th-percentile bandwidth, and requests per domain for the selected range. |
-| Usage by region | Bandwidth and requests per region for the selected range. |
-| Bandwidth by PoP | Bits per second sent, per PoP, at 5-minute resolution. |
-| Monthly bandwidth | Bytes sent per month, over the last year. Always the last 1y, whatever range the dashboard shows. |
+| Usage by domain | Bandwidth, 95th-percentile bandwidth, and requests per domain for the selected range. Follows the domain filter; does not follow region, pop, edge, pool, hostname. |
+| Usage by region | Bandwidth and requests per region for the selected range. Follows the region filter; does not follow pop, edge, pool, domain, hostname. |
+| Bandwidth by PoP | Bits per second sent, per PoP, at 5-minute resolution. Follows the pop filter; does not follow region, edge, pool, domain, hostname. |
+| Monthly bandwidth | Bytes sent per month, over the last year. Always the last 1y, whatever range the dashboard shows. Follows the region, pop, edge, domain filters; does not follow pool, hostname. |
 | Billing rollups | Hourly usage rollups kept in the control database, which the monthly report uses. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
-| Download by edge | Bytes sent to clients, headers included, per edge host. SQL: SELECT edge_id, sum(bytes_sent) FROM cdnf.edge_volume_hourly WHERE interval_start >= toStartOfHour($__fromTime) GROUP BY edge_id |
-| Download by cell | Bytes sent to clients per serving cell. SQL: SELECT cell, sum(bytes_sent) FROM cdnf.edge_volume_hourly WHERE interval_start >= toStartOfHour($__fromTime) GROUP BY cell |
-| Download by domain | Bytes sent to clients per domain. |
-| Download by country | Bytes sent to clients per client country. |
-| Upload by edge | Request bytes received from clients (the request length, headers included) per edge host. |
-| Upload by cell | Request bytes received from clients per serving cell. |
-| Upload by domain | Request bytes received from clients per domain. |
-| Upload by country | Request bytes received from clients per client country. |
+| Download by edge | Bytes sent to clients, headers included, per edge host. SQL: SELECT edge_id, sum(bytes_sent) FROM cdnf.edge_volume_hourly WHERE interval_start >= toStartOfHour($__fromTime) GROUP BY edge_id Follows the domain filter; does not follow region, pop, edge, pool, hostname. |
+| Download by cell | Bytes sent to clients per serving cell. SQL: SELECT cell, sum(bytes_sent) FROM cdnf.edge_volume_hourly WHERE interval_start >= toStartOfHour($__fromTime) GROUP BY cell Follows the domain filter; does not follow region, pop, edge, pool, hostname. |
+| Download by domain | Bytes sent to clients per domain. Follows the domain filter; does not follow region, pop, edge, pool, hostname. |
+| Download by country | Bytes sent to clients per client country. Follows the domain filter; does not follow region, pop, edge, pool, hostname. |
+| Upload by edge | Request bytes received from clients (the request length, headers included) per edge host. Follows the domain filter; does not follow region, pop, edge, pool, hostname. |
+| Upload by cell | Request bytes received from clients per serving cell. Follows the domain filter; does not follow region, pop, edge, pool, hostname. |
+| Upload by domain | Request bytes received from clients per domain. Follows the domain filter; does not follow region, pop, edge, pool, hostname. |
+| Upload by country | Request bytes received from clients per client country. Follows the domain filter; does not follow region, pop, edge, pool, hostname. |
 | Bandwidth by edge | Bits per second each edge host sent (download) and received (upload), live from Prometheus. Origin-side traffic is not measured. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 
 ## Samples
@@ -718,9 +718,9 @@ Refreshes every 30s.
 
 | Panel | What it shows |
 | --- | --- |
-| Top domains by egress | Which domains sent the most bytes? SQL: SELECT hostname, sum(bytes_sent) FROM cdnf.edge_traffic_hourly WHERE $__timeFilter(interval_start) GROUP BY hostname ORDER BY 2 DESC LIMIT 10 |
-| Which PoP is slowest | Which PoP has the highest 95th percentile edge time? PromQL: topk(5, 1000 * histogram_quantile(0.95, sum by (le, pop) (cdnf:edge_latency_bucket:rate5m))) |
+| Top domains by egress | Which domains sent the most bytes? SQL: SELECT hostname, sum(bytes_sent) FROM cdnf.edge_traffic_hourly WHERE $__timeFilter(interval_start) GROUP BY hostname ORDER BY 2 DESC LIMIT 10 Follows the region, pop, edge, domain, hostname filters; does not follow pool. |
+| Which PoP is slowest | Which PoP has the highest 95th percentile edge time? PromQL: topk(5, 1000 * histogram_quantile(0.95, sum by (le, pop) (cdnf:edge_latency_bucket:rate5m))) Follows the region, pop, edge filters; does not follow pool, domain, hostname. |
 | Who triggered a WAF rule | Which client networks triggered the most WAF matches? SQL: group edge_events by masked client network where waf_rule_id != 0. Looks back 7 days, whatever the dashboard range. Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
 | Error rate by status | What is the rate of each 5xx status? PromQL: sum by (status_class) (cdnf:edge_requests:rate5m{status_class="5xx"}) Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |
-| Slowest origins over time | Which hostnames have a slow origin? SQL: quantilesTDigestMerge over origin_latency_q by hostname. Always the last 24h, whatever range the dashboard shows. |
+| Slowest origins over time | Which hostnames have a slow origin? SQL: quantilesTDigestMerge over origin_latency_q by hostname. Always the last 24h, whatever range the dashboard shows. Follows the region, pop, edge, domain, hostname filters; does not follow pool. |
 | Recent errors | What errors did services log? LogQL: {level=~"error\|critical"} Fleet-wide: it does not follow the region, PoP, edge, pool, domain or hostname filters. |

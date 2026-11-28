@@ -4,7 +4,7 @@
       "type": "prometheus",
       "uid": "prometheus"
     },
-    "description": "Share of DNS answers that are SERVFAIL.",
+    "description": "Share of DNS answers that are SERVFAIL. Follows the region, pop filters; does not follow edge, pool, domain, hostname.",
     "fieldConfig": {
       "defaults": {
         "color": {
@@ -17,13 +17,13 @@
               "match": "null+nan",
               "result": {
                 "color": "text",
-                "text": "No data yet"
+                "text": "Not reporting"
               }
             },
             "type": "special"
           }
         ],
-        "noValue": "\u2013",
+        "noValue": "Not reporting",
         "thresholds": {
           "mode": "absolute",
           "steps": [

@@ -237,7 +237,7 @@
         "type": "loki",
         "uid": "loki"
       },
-      "description": "Every error and critical line, from every service. Narrow it with the filters above; identifiers are read from the structured line, not from labels.",
+      "description": "Every error and critical line, from every service. Narrow it with the filters above; identifiers are read from the structured line, not from labels. Follows the edge, domain filters; does not follow region, pop, pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -287,7 +287,7 @@
         "type": "loki",
         "uid": "loki"
       },
-      "description": "Application, gateway and web logs of the control plane. Narrow it with the filters above; identifiers are read from the structured line, not from labels.",
+      "description": "Application, gateway and web logs of the control plane. Narrow it with the filters above; identifiers are read from the structured line, not from labels. Follows the edge, domain filters; does not follow region, pop, pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -337,7 +337,7 @@
         "type": "loki",
         "uid": "loki"
       },
-      "description": "Queue workers, the scheduler, notifications and log push. Narrow it with the filters above; identifiers are read from the structured line, not from labels.",
+      "description": "Queue workers, the scheduler, notifications and log push. Narrow it with the filters above; identifiers are read from the structured line, not from labels. Follows the edge, domain filters; does not follow region, pop, pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -387,7 +387,7 @@
         "type": "loki",
         "uid": "loki"
       },
-      "description": "The agent's tasks, enrollment, heartbeats and artifact delivery. Narrow it with the filters above; identifiers are read from the structured line, not from labels.",
+      "description": "The agent's tasks, enrollment, heartbeats and artifact delivery. Narrow it with the filters above; identifiers are read from the structured line, not from labels. Follows the edge, domain filters; does not follow region, pop, pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -437,7 +437,7 @@
         "type": "loki",
         "uid": "loki"
       },
-      "description": "The PoP gateway, its control listener and every cell. Narrow it with the filters above; identifiers are read from the structured line, not from labels.",
+      "description": "The PoP gateway, its control listener and every cell. Narrow it with the filters above; identifiers are read from the structured line, not from labels. Follows the edge, domain filters; does not follow region, pop, pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -487,7 +487,7 @@
         "type": "loki",
         "uid": "loki"
       },
-      "description": "Origin connection, timeout, destination and TLS verification lines. Narrow it with the filters above; identifiers are read from the structured line, not from labels.",
+      "description": "Origin connection, timeout, destination and TLS verification lines. Narrow it with the filters above; identifiers are read from the structured line, not from labels. Follows the edge, domain filters; does not follow region, pop, pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -537,7 +537,7 @@
         "type": "loki",
         "uid": "loki"
       },
-      "description": "PowerDNS, DNSdist and zone reconciliation. Narrow it with the filters above; identifiers are read from the structured line, not from labels.",
+      "description": "PowerDNS, DNSdist and zone reconciliation. Narrow it with the filters above; identifiers are read from the structured line, not from labels. Follows the edge, domain filters; does not follow region, pop, pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -587,7 +587,7 @@
         "type": "loki",
         "uid": "loki"
       },
-      "description": "ACME orders, DNS-01 validation and renewal. Narrow it with the filters above; identifiers are read from the structured line, not from labels.",
+      "description": "ACME orders, DNS-01 validation and renewal. Narrow it with the filters above; identifiers are read from the structured line, not from labels. Follows the edge, domain filters; does not follow region, pop, pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -637,7 +637,7 @@
         "type": "loki",
         "uid": "loki"
       },
-      "description": "ModSecurity and managed ruleset lines from the cells. Narrow it with the filters above; identifiers are read from the structured line, not from labels.",
+      "description": "ModSecurity and managed ruleset lines from the cells. Narrow it with the filters above; identifiers are read from the structured line, not from labels. Follows the edge, domain filters; does not follow region, pop, pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -687,7 +687,7 @@
         "type": "loki",
         "uid": "loki"
       },
-      "description": "Browser challenge refusals and verification failures. Narrow it with the filters above; identifiers are read from the structured line, not from labels.",
+      "description": "Browser challenge refusals and verification failures. Narrow it with the filters above; identifiers are read from the structured line, not from labels. Follows the edge, domain filters; does not follow region, pop, pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -737,7 +737,7 @@
         "type": "loki",
         "uid": "loki"
       },
-      "description": "Rate reports, reputation bands and their aggregation. Narrow it with the filters above; identifiers are read from the structured line, not from labels.",
+      "description": "Rate reports, reputation bands and their aggregation. Narrow it with the filters above; identifiers are read from the structured line, not from labels. Follows the edge, domain filters; does not follow region, pop, pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -787,7 +787,7 @@
         "type": "loki",
         "uid": "loki"
       },
-      "description": "Snapshots, artifacts, revisions and acknowledgements. Narrow it with the filters above; identifiers are read from the structured line, not from labels.",
+      "description": "Snapshots, artifacts, revisions and acknowledgements. Narrow it with the filters above; identifiers are read from the structured line, not from labels. Follows the edge, domain filters; does not follow region, pop, pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -837,7 +837,7 @@
         "type": "loki",
         "uid": "loki"
       },
-      "description": "Vector, the log collector, Loki and ClickHouse delivery, buffers and drops. Narrow it with the filters above; identifiers are read from the structured line, not from labels.",
+      "description": "Vector, the log collector, Loki and ClickHouse delivery, buffers and drops. Narrow it with the filters above; identifiers are read from the structured line, not from labels. Follows the edge, domain filters; does not follow region, pop, pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -887,7 +887,7 @@
         "type": "loki",
         "uid": "loki"
       },
-      "description": "PostgreSQL, the cache, queues and connection errors. Narrow it with the filters above; identifiers are read from the structured line, not from labels.",
+      "description": "PostgreSQL, the cache, queues and connection errors. Narrow it with the filters above; identifiers are read from the structured line, not from labels. Follows the edge, domain filters; does not follow region, pop, pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -937,7 +937,7 @@
         "type": "loki",
         "uid": "loki"
       },
-      "description": "Backups, restores and rollbacks the control plane records. Fleet runs on the operator host and does not log to Loki. Narrow it with the filters above; identifiers are read from the structured line, not from labels.",
+      "description": "Backups, restores and rollbacks the control plane records. Fleet runs on the operator host and does not log to Loki. Narrow it with the filters above; identifiers are read from the structured line, not from labels. Follows the edge, domain filters; does not follow region, pop, pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -987,7 +987,7 @@
         "type": "loki",
         "uid": "loki"
       },
-      "description": "Every service's lines for one request, operation or task. Fill an identifier above. Narrow it with the filters above; identifiers are read from the structured line, not from labels.",
+      "description": "Every service's lines for one request, operation or task. Fill an identifier above. Narrow it with the filters above; identifiers are read from the structured line, not from labels. Follows the edge, domain filters; does not follow region, pop, pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -1063,13 +1063,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching log lines"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "No matching log lines",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1148,13 +1148,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching log lines"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "No matching log lines",
           "thresholds": {
             "mode": "absolute",
             "steps": [

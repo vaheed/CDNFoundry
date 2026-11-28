@@ -156,7 +156,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Requests the edge refused in the selected range.",
+      "description": "Requests the edge refused in the selected range. Follows the region, pop, edge, domain filters; does not follow pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -168,13 +168,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -234,7 +234,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Requests the WAF matched in the selected range.",
+      "description": "Requests the WAF matched in the selected range. Follows the region, pop, edge, domain filters; does not follow pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -246,13 +246,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -330,13 +330,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "Not reporting"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "Not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -408,13 +408,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "Not reporting"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "Not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -474,7 +474,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Security events by class: waf, block, cache abuse, emergency mode, and WAF body limit.",
+      "description": "Security events by class: waf, block, cache abuse, emergency mode, and WAF body limit. Follows the region, pop, edge, domain filters; does not follow pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -501,7 +501,7 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No traffic"
                 }
               },
               "type": "special"
@@ -561,7 +561,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Blocked requests per second by PoP.",
+      "description": "Blocked requests per second by PoP. Follows the region, pop, edge filters; does not follow pool, domain, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -587,7 +587,7 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No traffic"
                 }
               },
               "type": "special"
@@ -647,7 +647,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Hostnames with the most blocked requests.",
+      "description": "Hostnames with the most blocked requests. Follows the region, pop, edge, domain, hostname filters; does not follow pool.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -659,14 +659,14 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
           "min": 0,
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -725,7 +725,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Blocked requests per second.",
+      "description": "Blocked requests per second. Follows the region, pop, edge, domain filters; does not follow pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -751,7 +751,7 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No traffic"
                 }
               },
               "type": "special"
@@ -828,7 +828,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Requests scored as an attack per interval, by band, over the last 7 days at most. Band 1 is a weak signal (score under 20), band 5 a near-certain attack (80 and over). Requests scored zero are not drawn.",
+      "description": "Requests scored as an attack per interval, by band, over the last 7 days at most. Band 1 is a weak signal (score under 20), band 5 a near-certain attack (80 and over). Requests scored zero are not drawn. Follows the domain filter; does not follow region, pop, edge, pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -854,13 +854,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -914,7 +914,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Why the edge acted on a request: rate limits, firewall rules, the WAF, and cache abuse protection.",
+      "description": "Why the edge acted on a request: rate limits, firewall rules, the WAF, and cache abuse protection. Follows the domain filter; does not follow region, pop, edge, pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -926,14 +926,14 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
           "min": 0,
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -992,7 +992,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Browser reports of blocked scripts and connections that reached the edge, per hour.",
+      "description": "Browser reports of blocked scripts and connections that reached the edge, per hour. Follows the domain filter; does not follow region, pop, edge, pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1018,13 +1018,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1082,7 +1082,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Domain rules that matched most, by rule name, over the last 7 days.",
+      "description": "Domain rules that matched most, by rule name, over the last 7 days. Follows the domain filter; does not follow region, pop, edge, pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1094,14 +1094,14 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
           "min": 0,
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1156,7 +1156,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Browser challenges by outcome over the last 7 days at most: shown (the visitor was asked), solved, refused as invalid, and stopped by the per-token request budget. Counted from stored request events of the selected domains, so it follows the domain filter and not the region or PoP filter.",
+      "description": "Browser challenges by outcome over the last 7 days at most: shown (the visitor was asked), solved, refused as invalid, and stopped by the per-token request budget. Counted from stored request events of the selected domains, so it follows the domain filter and not the region or PoP filter. Follows the domain filter; does not follow region, pop, edge, pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1182,13 +1182,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1242,7 +1242,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Share of challenge prompts that were solved in the selected range, from stored events (7 days at most). A prompt can be solved after the range ends, so a short range reads low. Empty when no challenge was shown.",
+      "description": "Share of challenge prompts that were solved in the selected range, from stored events (7 days at most). A prompt can be solved after the range ends, so a short range reads low. Empty when no challenge was shown. Follows the domain filter; does not follow region, pop, edge, pool, hostname.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1255,13 +1255,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1342,13 +1342,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1416,13 +1416,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1490,13 +1490,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1564,13 +1564,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1638,14 +1638,14 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
           "min": 0,
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1712,13 +1712,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1786,13 +1786,13 @@
                 "match": "null+nan",
                 "result": {
                   "color": "text",
-                  "text": "No data yet"
+                  "text": "No matching records"
                 }
               },
               "type": "special"
             }
           ],
-          "noValue": "\u2013",
+          "noValue": "No matching records",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1844,13 +1844,44 @@
       "type": "stat"
     },
     {
+      "description": "Signals this dashboard cannot show because nothing records them. Each is listed here instead of being drawn from a stand-in.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
       "gridPos": {
-        "h": 8,
+        "h": 6,
         "w": 24,
         "x": 0,
         "y": 58
       },
       "id": 24,
+      "options": {
+        "content": "**Unsupported signals.** Each of these has no source today, so no panel claims it:\n\n- **Challenge key acknowledgement per edge:** the control plane records no acknowledgement of a key by an edge.\n- **Shared and long-window rate-limit report age and keys over threshold:** no report table exists in the control plane.\n- **JWT rejections, IP-list hits and incident-profile denials by cell and version:** the events carry a reason but not the list or profile version, and no per-cell counter exists.\n- **Cell shared-memory and descriptor use:** cells do not report them.\n\nWhen a source exists the signal moves into the rows above.",
+        "mode": "markdown"
+      },
+      "title": "Not measured yet",
+      "type": "text"
+    },
+    {
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 64
+      },
+      "id": 25,
       "libraryPanel": {
         "name": "Firing alerts",
         "uid": "cdnf-lib-firing-alerts"

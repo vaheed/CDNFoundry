@@ -233,6 +233,39 @@ class GrafanaContractTest(unittest.TestCase):
                 if "No traffic" in texts:
                     self.assertIn(defaults.get("unit"), {"reqps", "Bps", "bps"}, f"{uid}/{panel['title']}: says No traffic but is not a request, byte or bit rate")
 
+    def test_every_panel_says_what_an_empty_result_means_for_its_own_source(self) -> None:
+        """A query that succeeded and returned nothing is never a bare dash or an unrelated phrase: it names the condition of its source."""
+        allowed = {"No traffic", "Not reporting", "No matching records", "No matching log lines"}
+        for uid, dashboard in self.by_uid.items():
+            for panel in resolved(dashboard, self.models):
+                if panel["type"] in {"row", "text", "logs"} or not targets(panel):
+                    continue
+                defaults = panel["fieldConfig"]["defaults"]
+                name = f"{uid}/{panel['title']}"
+                if panel["type"] == "table":
+                    continue  # a table shows Grafana's own "No data"; its cells say "–" for a value the row does not have
+                texts = {m["options"]["result"]["text"] for m in defaults.get("mappings", []) if m.get("type") == "special"}
+                idle = texts - allowed
+                self.assertIn(defaults.get("noValue"), allowed | idle, f"{name}: empty text {defaults.get('noValue')!r} names no condition")
+                self.assertNotIn(defaults.get("noValue"), {"–", "No data yet"}, name)
+                datasources = {t["datasource"]["uid"] for t in targets(panel)}
+                if defaults.get("unit") not in {"reqps", "Bps", "bps"} and datasources == {"prometheus"} and not idle:
+                    self.assertEqual("Not reporting", defaults["noValue"], name)
+                if datasources == {"loki"} and not idle:
+                    self.assertEqual("No matching log lines", defaults["noValue"], name)
+
+    def test_a_panel_that_follows_only_some_filters_names_the_ones_it_does_not_follow(self) -> None:
+        filters = ("region", "pop", "edge", "pool", "domain", "hostname")
+        for uid, dashboard in self.by_uid.items():
+            for panel in resolved(dashboard, self.models):
+                if panel["type"] in {"row", "text"} or not targets(panel):
+                    continue
+                queries = " ".join(query_text(t) for t in targets(panel))
+                followed = [name for name in filters if re.search(r"[\$\{]\{?" + name + r"\b", queries)]
+                if len(followed) < len(filters):
+                    description = panel.get("description", "").lower()
+                    self.assertTrue("does not follow" in description or "fleet-wide" in description, f"{uid}/{panel['title']}: follows {followed} and says nothing about the rest")
+
     def test_a_quantile_is_never_averaged_or_summed_with_other_quantiles(self) -> None:
         sources = [(f"{uid}/{panel['title']}", query_text(t)) for uid, d in self.by_uid.items() for panel in resolved(d, self.models) for t in targets(panel)]
         for path in (ROOT / "docker" / "prometheus").glob("*rules*.yml"):

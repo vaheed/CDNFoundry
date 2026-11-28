@@ -4,7 +4,7 @@
       "type": "prometheus",
       "uid": "prometheus"
     },
-    "description": "95th percentile time to serve a request, per PoP.",
+    "description": "95th percentile time to serve a request, per PoP. Follows the region, pop, edge filters; does not follow pool, domain, hostname.",
     "fieldConfig": {
       "defaults": {
         "color": {
@@ -31,14 +31,14 @@
               "match": "null+nan",
               "result": {
                 "color": "text",
-                "text": "No data yet"
+                "text": "Not reporting"
               }
             },
             "type": "special"
           }
         ],
         "min": 0,
-        "noValue": "\u2013",
+        "noValue": "Not reporting",
         "thresholds": {
           "mode": "absolute",
           "steps": [
