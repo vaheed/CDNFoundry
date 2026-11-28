@@ -320,6 +320,13 @@ edge egress addresses that may send telemetry. Set `LOG_SOURCE_IPV4_ALLOWLIST`
 and `LOG_SOURCE_IPV6_ALLOWLIST` to the exact node addresses that may push logs.
 An empty allowlist blocks that remote path.
 
+The gateways read these lists from files, not from container environment values, so changing a list never
+recreates a container. After editing any `*_ALLOWLIST` or `MANAGEMENT_NETWORKS` value, run
+`scripts/write-allowlists.sh .env.prod` (it writes `generated/allowlists/`, which Compose mounts into the gateways
+and the control plane), then reload the gateways with
+`docker compose --env-file .env.prod kill -s USR1 caddy telemetry-gateway`. A list the gateway cannot parse is
+refused and the running configuration keeps serving. Fleet does this itself.
+
 ### DNS and edge host
 
 Give each host its address settings, and give its agent the local DNS node's

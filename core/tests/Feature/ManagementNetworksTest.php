@@ -39,6 +39,32 @@ class ManagementNetworksTest extends TestCase
             ->assertForbidden()->assertJsonPath('code', 'network_not_allowed');
     }
 
+    public function test_the_list_is_read_from_the_file_on_every_request_so_an_update_needs_no_restart(): void
+    {
+        $file = tempnam(sys_get_temp_dir(), 'management-networks');
+        try {
+            config(['security.management_networks' => '', 'security.management_networks_file' => $file]);
+
+            file_put_contents($file, "198.51.100.0/24\n");
+            $this->call('GET', '/admin', [], [], [], $this->viaCaddy('203.0.113.9'))->assertForbidden();
+
+            file_put_contents($file, "203.0.113.0/24 198.51.100.0/24\n");
+            $this->assertNotSame(403, $this->call('GET', '/admin', [], [], [], $this->viaCaddy('203.0.113.9'))->getStatusCode());
+
+            file_put_contents($file, "\n");
+            $this->assertNotSame(403, $this->call('GET', '/admin', [], [], [], $this->viaCaddy('192.0.2.9'))->getStatusCode(), 'an empty file restricts nothing');
+        } finally {
+            @unlink($file);
+        }
+    }
+
+    public function test_an_unreadable_file_keeps_the_configured_list(): void
+    {
+        config(['security.management_networks' => '198.51.100.0/24', 'security.management_networks_file' => '/nonexistent/management-networks.txt']);
+
+        $this->call('GET', '/admin', [], [], [], $this->viaCaddy('203.0.113.9'))->assertForbidden();
+    }
+
     public function test_the_customer_panel_the_customer_api_the_status_page_and_probes_stay_open_to_everyone(): void
     {
         config(['security.management_networks' => '198.51.100.0/24']);

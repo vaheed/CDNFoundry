@@ -39,6 +39,17 @@ class RestrictToManagementNetworks
     /** @return list<string> */
     public static function networks(): array
     {
-        return array_values(array_filter(preg_split('/[\s,]+/', (string) config('security.management_networks', '')) ?: []));
+        $list = (string) config('security.management_networks', '');
+        $file = config('security.management_networks_file');
+        if (is_string($file) && $file !== '') {
+            // The file is read on every request, so an updated list applies at once. An unreadable file keeps the configured value
+            // (the gateway enforces the same list in front of this check).
+            $contents = is_readable($file) ? @file_get_contents($file) : false;
+            if ($contents !== false) {
+                $list = $contents;
+            }
+        }
+
+        return array_values(array_filter(preg_split('/[\s,]+/', $list) ?: []));
     }
 }

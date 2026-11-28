@@ -51,8 +51,14 @@ http://:8081 {
                 ('inside', '0.0.0.0/0 ::/0', {'/admin': '404', '/api/admin/edges': '404', '/app': '404'}),
             ):
                 docker('rm', '-f', proxy, check=False)
-                docker('run', '-d', '--rm', '--name', proxy, '--network', network, '-e', f'MANAGEMENT_NETWORKS={networks}',
-                       '-v', f'{caddyfile}:/etc/caddy/Caddyfile:ro', CADDY, 'caddy', 'run', '--config', '/etc/caddy/Caddyfile', '--adapter', 'caddyfile')
+                # The list is a file the gateway imports, the way Fleet and scripts/write-allowlists.sh deliver it.
+                lists = pathlib.Path(directory) / 'allowlists'
+                lists.mkdir(exist_ok=True)
+                lists.chmod(0o755)
+                (lists / 'management-networks.caddy').write_text(f'remote_ip {networks}\n')
+                (lists / 'management-networks.caddy').chmod(0o644)
+                docker('run', '-d', '--rm', '--name', proxy, '--network', network,
+                       '-v', f'{caddyfile}:/etc/caddy/Caddyfile:ro', '-v', f'{lists}:/etc/caddy/allowlists:ro', CADDY, 'caddy', 'run', '--config', '/etc/caddy/Caddyfile', '--adapter', 'caddyfile')
                 probe = lambda path, port='8080': docker('run', '--rm', '--network', network, 'curlimages/curl:8.11.1', '-s', '-i', '--retry', '10', '--retry-connrefused', '--retry-delay', '1', f'http://{proxy}:{port}{path}').stdout
                 for path, status in expected.items():
                     response = probe(path)

@@ -5,10 +5,12 @@
 
 https://{$TELEMETRY_HOSTNAME}:8444 {
 	import /etc/caddy/own-tls/telemetry-*.caddy
-	@clickhouse_sources remote_ip {$EDGE_PUBLIC_IPV4_ALLOWLIST} {$EDGE_PUBLIC_IPV6_ALLOWLIST} {$CONTROL_PUBLIC_IPV4_ALLOWLIST} {$CONTROL_PUBLIC_IPV6_ALLOWLIST}
+	@clickhouse_sources {
+		import /etc/caddy/allowlists/clickhouse-sources.caddy
+	}
 	@log_sources {
 		path /loki/api/v1/push
-		remote_ip {$EDGE_PUBLIC_IPV4_ALLOWLIST} {$EDGE_PUBLIC_IPV6_ALLOWLIST} {$LOG_SOURCE_IPV4_ALLOWLIST} {$LOG_SOURCE_IPV6_ALLOWLIST}
+		import /etc/caddy/allowlists/telemetry-log-sources.caddy
 		header Authorization "Bearer {$LOG_AUTH_TOKEN}"
 	}
 
@@ -24,9 +26,14 @@ https://{$TELEMETRY_HOSTNAME}:8444 {
 }
 
 # Grafana has no public path at all, not even its health and metrics endpoints. An empty
-# MANAGEMENT_NETWORKS renders as "0.0.0.0/0 ::/0" in Compose, which restricts nothing.
+# The address lists live in files under /etc/caddy/allowlists (Fleet writes them) and are read again on a reload
+# (SIGUSR1). An empty management list is "0.0.0.0/0 ::/0", which restricts nothing.
 (management_only_strict) {
-	@outside not remote_ip {$MANAGEMENT_NETWORKS}
+	@outside {
+		not {
+			import /etc/caddy/allowlists/management-networks.caddy
+		}
+	}
 	handle @outside {
 		header Cache-Control "no-store"
 		respond "Forbidden" 403

@@ -295,13 +295,6 @@ class Renderer:
             # The agent hands origin probes to the worker over this socket only where the worker runs; empty means it probes itself.
             "EDGE_PROBE_SOCKET": "/run/probe/probe.sock" if self._origin_probe_enabled(state, node) else "",
             "EDGE_DNS_API_KEY": self._optional_node_secret("pdns-api-key", node) if node["role"] == "dns-edge" else "",
-            "MANAGEMENT_NETWORKS": self._management_networks(state),
-            "CONTROL_PUBLIC_IPV4_ALLOWLIST": self._control_allowlist(state),
-            "EDGE_PUBLIC_IPV4_ALLOWLIST": self._edge_allowlist(state),
-            "LOG_SOURCE_IPV4_ALLOWLIST": self._all_public_ipv4(state),
-            "CONTROL_PUBLIC_IPV6_ALLOWLIST": self._control_allowlist(state, family=6),
-            "EDGE_PUBLIC_IPV6_ALLOWLIST": self._edge_allowlist(state, family=6),
-            "LOG_SOURCE_IPV6_ALLOWLIST": self._all_public_ipv6(state),
             "LOG_ROLE": node["role"],
             "LOG_HOST": node["name"],
             "LOG_COLLECTOR_ID": node["name"],
@@ -633,6 +626,8 @@ class Renderer:
             # the non-root PHP and Prometheus processes after start.sh restricts the
             # file to the PHP worker group and grants Prometheus that same group.
             atomic_write(secrets_dir / "metrics-token", self.store.read_secret("metrics-token") + "\n", 0o640)
+        if node["role"] == "control" or monitoring_host:
+            self._write_allowlists(state, destination / "generated" / "allowlists")
         if node["role"] == "control":
             atomic_write(secrets_dir / "valkey.conf", ha.valkey_config(state, node, self.store.read_secret("valkey-password")), 0o640)
             ha.write_files(self.store, self.repo_root, state, node, destination)
@@ -671,6 +666,29 @@ class Renderer:
             atomic_write(generated / "prometheus-probe-targets.yml", self._prometheus_probe_targets(state), 0o644)
             atomic_write(generated / "prometheus-log-targets.yml", self._prometheus_service_targets(state, "logs", node), 0o644)
             atomic_write(generated / "geo-routing-policy.json", json.dumps(self._geo_policy(state), indent=2) + "\n", 0o600)
+
+    def _write_allowlists(self, state: dict[str, Any], directory: Path) -> None:
+        """The address lists the gateways and the control plane read, one small file each in one directory that the services mount.
+
+        A list lives in a file and not in a container environment value, because an environment value is fixed when the
+        container is created: changing it means recreating the container, while a file in this directory is read again when
+        the gateway reloads its configuration (and by the control plane on the next request). Each `.caddy` file holds one
+        matcher line that the gateway configuration imports.
+        """
+        def matcher(*lists: str) -> str:
+            return "remote_ip " + " ".join(item for item in lists if item) + "\n"
+
+        management = self._management_networks(state)
+        edge4, edge6 = self._edge_allowlist(state), self._edge_allowlist(state, family=6)
+        control4, control6 = self._control_allowlist(state), self._control_allowlist(state, family=6)
+        log4, log6 = self._all_public_ipv4(state), self._all_public_ipv6(state)
+        # An empty management list restricts nothing in the gateway (it matches every address), and means "no restriction" for the control plane.
+        atomic_write(directory / "management-networks.caddy", matcher(management or "0.0.0.0/0 ::/0"), 0o644)
+        atomic_write(directory / "management-networks.txt", management + "\n", 0o644)
+        atomic_write(directory / "log-sources.caddy", matcher(log4, log6), 0o644)
+        atomic_write(directory / "telemetry-log-sources.caddy", matcher(edge4, edge6, log4, log6), 0o644)
+        atomic_write(directory / "clickhouse-sources.caddy", matcher(edge4, edge6, control4, control6), 0o644)
+        directory.chmod(0o755)  # atomic_write keeps a new directory private; the gateway and the web workers run as other users
 
     def _write_pdns_config(self, node: dict[str, Any], destination: Path) -> None:
         # The control host's primary has a database; a node has only an API key.
@@ -949,7 +967,7 @@ docker compose --env-file .env.prod logs --since 10m --no-color
 
 ## Upgrade and rollback
 
-Replace the bundle atomically, run `./validate.sh`, pull images, then use `./start.sh`. If validation or startup fails, restore the `.previous` bundle and rerun `./start.sh`. Never use `docker compose down -v` and never delete PostgreSQL, Valkey, ClickHouse, Loki, Prometheus, Grafana, edge-agent-state, cache, or MMDB volumes. The edge-runtime-memory volume is tmpfs; restore it from the encrypted snapshot with the external recovery key.
+Update the bundle files in place (never rename the directory away from running containers), run `./validate.sh`, pull images, then use `./start.sh`. If validation or startup fails, restore the `.previous` bundle and rerun `./start.sh`. Never use `docker compose down -v` and never delete PostgreSQL, Valkey, ClickHouse, Loki, Prometheus, Grafana, edge-agent-state, cache, or MMDB volumes. The edge-runtime-memory volume is tmpfs; restore it from the encrypted snapshot with the external recovery key.
 
 ## Cleanup
 

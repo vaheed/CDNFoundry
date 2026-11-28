@@ -40,23 +40,23 @@ def main() -> None:
         try:
             network = json.loads(run('docker', 'network', 'inspect', name).stdout)[0]
             subnet = network['IPAM']['Config'][0]['Subnet']
+            lists = target / 'allowlists'
+            lists.mkdir()
+            lists.chmod(0o755)
+            for file, sources in (('management-networks', '::1/128 ' + subnet), ('log-sources', subnet + ' ::1/128'), ('telemetry-log-sources', subnet + ' ::1/128'),
+                                  ('clickhouse-sources', subnet + ' ::1/128')):
+                (lists / (file + '.caddy')).write_text('remote_ip ' + sources + '\n')
             variables = {
                 'CONTROL_HOSTNAME': 'control.example.test',
                 'TELEMETRY_HOSTNAME': 'telemetry.example.test',
                 'GRAFANA_HOSTNAME': 'grafana.example.test',
                 'ACME_CONTACT_EMAIL': 'qualification@example.test',
-                'EDGE_PUBLIC_IPV4_ALLOWLIST': subnet,
-                'EDGE_PUBLIC_IPV6_ALLOWLIST': '::1/128',
-                'CONTROL_PUBLIC_IPV4_ALLOWLIST': subnet,
-                'CONTROL_PUBLIC_IPV6_ALLOWLIST': '::1/128',
-                'LOG_SOURCE_IPV4_ALLOWLIST': subnet,
-                'LOG_SOURCE_IPV6_ALLOWLIST': '::1/128',
                 'LOG_AUTH_TOKEN': 'isolated-qualification-token',
             }
             environment = [item for key, value in variables.items() for item in ('-e', key+'='+value)]
             for config in ('Caddyfile', 'Caddyfile.telemetry'):
                 adapted = run('docker', 'run', '--rm', '--network', 'none', *environment,
-                              '-v', f'{ROOT / "deploy/production"}:/configs:ro', image,
+                              '-v', f'{ROOT / "deploy/production"}:/configs:ro', '-v', f'{lists}:/etc/caddy/allowlists:ro', image,
                               'caddy', 'adapt', '--adapter', 'caddyfile', '--config', '/configs/'+config)
                 assert json.loads(adapted.stdout)['apps']['http']['servers'], config
 

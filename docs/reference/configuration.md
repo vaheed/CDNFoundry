@@ -33,17 +33,18 @@ Limits that the software enforces are listed in the [limits reference](limits.md
 | `SESSION_SECURE_COOKIE` | HTTPS control | Secure-cookie flag; production default `true` |
 | `CONTROL_BIND` | control | Host publication for web; default `127.0.0.1:8080` |
 | `CONTROL_HOSTNAME` | control | Public browser/API hostname in independent management DNS |
-| `MANAGEMENT_NETWORKS` | control | Space-separated CIDRs allowed to reach the administrator panel, the administrator API, Horizon, the metrics endpoint, and Grafana. Everyone else gets a bare `403`; `/app`, the customer API, and the status page stay open. Empty restricts nothing. Fleet writes it from `management_networks` plus the fleet's node addresses |
+| `MANAGEMENT_NETWORKS` | control | Space-separated CIDRs allowed to reach the administrator panel, the administrator API, Horizon, the metrics endpoint, and Grafana. Everyone else gets a bare `403`; `/app`, the customer API, and the status page stay open. Empty restricts nothing. Fleet writes it from `management_networks` plus the fleet's node addresses. Read from `generated/allowlists/`, written by Fleet or by `scripts/write-allowlists.sh`; see [Manual Compose](../deployment/manual-compose.md). |
+| `MANAGEMENT_NETWORKS_FILE` | control | Path of the file that holds the management networks inside the control containers (`/run/allowlists/management-networks.txt`). The control plane reads it on every request, so an updated list applies at once. Set by Compose; do not change it |
 | `CORS_ALLOWED_ORIGINS` | control | Space-separated browser origins allowed to call the API. Empty allows none; there is no wildcard |
 | `CONTENT_SECURITY_POLICY` | control | `enforce` (default), `report-only`, or `off` for the panels' and API's `Content-Security-Policy` |
 | `SECURITY_RATE_LIMIT_RULES` | control | Most rate-limit rules one domain may hold (default 20, hard ceiling 50) |
 | `SECURITY_RULE_LIST_VALUES` | control | Most values in one rule list (default 100, hard ceiling 100) |
 | `TELEMETRY_HOSTNAME` | control/telemetry | Public telemetry-ingest hostname in independent management DNS |
-| `CONTROL_PUBLIC_IPV4_ALLOWLIST` | gateways | Exact control/worker sources allowed through the control and telemetry gateways |
-| `CONTROL_PUBLIC_IPV6_ALLOWLIST` | gateways | Optional IPv6 control/worker sources for the same gateways |
-| `EDGE_PUBLIC_IPV6_ALLOWLIST` | telemetry gateway | Optional IPv6 edge sources allowed to submit telemetry |
-| `LOG_SOURCE_IPV6_ALLOWLIST` | telemetry gateway | Optional IPv6 node sources allowed to submit operational logs |
-| `EDGE_PUBLIC_IPV4_ALLOWLIST` | telemetry gateway | Exact edge/Vector ingestion sources |
+| `CONTROL_PUBLIC_IPV4_ALLOWLIST` | gateways | Exact control/worker sources allowed through the control and telemetry gateways. Read from `generated/allowlists/`, written by Fleet or by `scripts/write-allowlists.sh`; see [Manual Compose](../deployment/manual-compose.md). |
+| `CONTROL_PUBLIC_IPV6_ALLOWLIST` | gateways | Optional IPv6 control/worker sources for the same gateways. Read from `generated/allowlists/`, written by Fleet or by `scripts/write-allowlists.sh`; see [Manual Compose](../deployment/manual-compose.md). |
+| `EDGE_PUBLIC_IPV6_ALLOWLIST` | telemetry gateway | Optional IPv6 edge sources allowed to submit telemetry. Read from `generated/allowlists/`, written by Fleet or by `scripts/write-allowlists.sh`; see [Manual Compose](../deployment/manual-compose.md). |
+| `LOG_SOURCE_IPV6_ALLOWLIST` | telemetry gateway | Optional IPv6 node sources allowed to submit operational logs. Read from `generated/allowlists/`, written by Fleet or by `scripts/write-allowlists.sh`; see [Manual Compose](../deployment/manual-compose.md). |
+| `EDGE_PUBLIC_IPV4_ALLOWLIST` | telemetry gateway | Exact edge/Vector ingestion sources. Read from `generated/allowlists/`, written by Fleet or by `scripts/write-allowlists.sh`; see [Manual Compose](../deployment/manual-compose.md). |
 | `CONTROL_DB_PASSWORD` | local control DB | PostgreSQL password for database `cdnf` |
 | `REDIS_PASSWORD` | local Valkey | Required Valkey password |
 | `VALKEY_CONFIG_FILE` | local Valkey | Configuration file holding `requirepass`, mounted at `/run/secrets/valkey.conf`; the fleet generator writes it (and adds `masterauth` and `replicaof` on a standby) |
@@ -203,7 +204,7 @@ Grafana telemetry variables are:
 | `LOG_AUTH_TOKEN` | logs | Secret bearer credential used by the per-host Vector collector when pushing to the source-restricted Loki gateway |
 | `LOG_BUFFER_BYTES` | logs | Per-host disk-buffer bytes; production default `2147483648` |
 | `LOG_METRICS_BIND` | logs | Host metrics publication; generated bundles use `monitor_ipv4` or the local `bind_ipv4`, never an advertised NAT-only address |
-| `LOG_SOURCE_IPV4_ALLOWLIST` | telemetry gateway | Exact non-edge host sources allowed to push logs |
+| `LOG_SOURCE_IPV4_ALLOWLIST` | telemetry gateway | Exact non-edge host sources allowed to push logs. Read from `generated/allowlists/`, written by Fleet or by `scripts/write-allowlists.sh`; see [Manual Compose](../deployment/manual-compose.md). |
 
 Vector logs in as `cdnf_ingest` with `CLICKHOUSE_INGEST_PASSWORD`. A
 compromised edge or DNS node can therefore write events but cannot read or drop

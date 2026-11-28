@@ -3,6 +3,8 @@
 return [
     // Space- or comma-separated CIDRs allowed to reach the panels, the API, Horizon, and the status page. Empty means no restriction.
     'management_networks' => env('MANAGEMENT_NETWORKS', ''),
+    // A file that holds the same list. Fleet writes it and updates it in place, so a change needs no container restart.
+    'management_networks_file' => env('MANAGEMENT_NETWORKS_FILE'),
     // enforce, report-only, or off. The panels and the API send one Content-Security-Policy.
     'content_security_policy' => env('CONTENT_SECURITY_POLICY', 'enforce'),
     'waf' => [

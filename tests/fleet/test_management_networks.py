@@ -31,9 +31,11 @@ def test_control_bundle_carries_operator_networks_and_fleet_addresses(tmp_path: 
     state = store.init({**BASE, "management_networks": ["198.51.100.0/24"]})
     state = store.add_node(state, {"name": "control-1", "role": "control", "public_ipv4": "93.184.216.10"})
     Renderer(ROOT, store, tmp_path / "bundles").render(store.load())
-    env = (tmp_path / "bundles/control-1/.env.prod").read_text()
-    line = next(row for row in env.splitlines() if row.startswith("MANAGEMENT_NETWORKS="))
-    assert "198.51.100.0/24" in line and "93.184.216.10/32" in line
+    lists = tmp_path / "bundles/control-1/generated/allowlists"
+    assert "MANAGEMENT_NETWORKS" not in (tmp_path / "bundles/control-1/.env.prod").read_text(), "a list in an environment value would recreate containers"
+    gateway, plain = (lists / "management-networks.caddy").read_text(), (lists / "management-networks.txt").read_text()
+    assert gateway.startswith("remote_ip ") and "198.51.100.0/24" in gateway and "93.184.216.10/32" in gateway
+    assert "198.51.100.0/24" in plain and "93.184.216.10/32" in plain
 
 
 def test_unrestricted_fleet_renders_an_empty_value(tmp_path: Path) -> None:
@@ -41,5 +43,6 @@ def test_unrestricted_fleet_renders_an_empty_value(tmp_path: Path) -> None:
     state = store.init(BASE)
     store.add_node(state, {"name": "control-1", "role": "control", "public_ipv4": "93.184.216.10"})
     Renderer(ROOT, store, tmp_path / "bundles").render(store.load())
-    env = (tmp_path / "bundles/control-1/.env.prod").read_text()
-    assert any(row in ("MANAGEMENT_NETWORKS=", "MANAGEMENT_NETWORKS=''", 'MANAGEMENT_NETWORKS=""') for row in env.splitlines())
+    lists = tmp_path / "bundles/control-1/generated/allowlists"
+    assert (lists / "management-networks.caddy").read_text() == "remote_ip 0.0.0.0/0 ::/0\n"  # the gateway matches every address
+    assert (lists / "management-networks.txt").read_text().strip() == ""  # the control plane reads an empty list as no restriction

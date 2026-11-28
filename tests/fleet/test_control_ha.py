@@ -80,7 +80,7 @@ def repo(source_repo: Path) -> Path:  # noqa: F811
     compose_path = source_repo / "compose.prod.yml"
     compose = yaml.safe_load(compose_path.read_text(encoding="utf-8"))
     compose["services"]["caddy"] = {"image": "caddy:2", "profiles": ["control"], "volumes": ["./deploy/production/Caddyfile:/etc/caddy/Caddyfile:ro"],
-                                    "environment": {"CONTROL_PUBLIC_IPV4_ALLOWLIST": "${CONTROL_PUBLIC_IPV4_ALLOWLIST}", "CONTROL_HOSTNAME": "${CONTROL_HOSTNAME:?required}"}}
+                                    "environment": {"CONTROL_HOSTNAME": "${CONTROL_HOSTNAME:?required}"}}
     compose_path.write_text(yaml.safe_dump(compose, sort_keys=False), encoding="utf-8")
     compose["services"]["cache"] = {"image": "valkey:9", "profiles": ["control"], "volumes": ["${VALKEY_CONFIG_FILE:?required}:/run/secrets/valkey.conf:ro"]}
     compose["services"]["prometheus"]["volumes"] = ["./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro", "prometheus:/prometheus"]
@@ -177,8 +177,9 @@ def test_both_control_addresses_reach_every_allowlist_and_the_peer_configuration
     output = tmp_path / "bundles"
     active_env, standby_env = env_values(output / "control-1/.env.prod"), env_values(output / "control-2/.env.prod")
 
-    for env in (active_env, standby_env):
-        assert env["CONTROL_PUBLIC_IPV4_ALLOWLIST"].split() == ["192.0.2.10", "192.0.2.11"]
+    for node in ("control-1", "control-2"):
+        sources = (output / node / "generated/allowlists/clickhouse-sources.caddy").read_text(encoding="utf-8").split()
+        assert sources[0] == "remote_ip" and {"192.0.2.10", "192.0.2.11"} <= set(sources)
     assert (active_env["CONTROL_NODE_NAME"], active_env["CONTROL_PEER_ADDRESSES"]) == ("control-1", "192.0.2.11")
     assert (standby_env["CONTROL_NODE_NAME"], standby_env["CONTROL_PEER_ADDRESSES"]) == ("control-2", "192.0.2.10")
     assert standby_env["CONTROL_REPLICATION_BIND"] == "10.9.0.2"

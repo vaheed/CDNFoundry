@@ -71,7 +71,8 @@ class OperationalLoggingContractTest(unittest.TestCase):
         generator = (ROOT / "scripts/generate-production-env.sh").read_text()
         self.assertIn("path /loki/api/v1/push", caddy)
         self.assertIn("reverse_proxy loki:3100", caddy)
-        self.assertIn("LOG_SOURCE_IPV4_ALLOWLIST", overlay)
+        self.assertIn("/etc/caddy/allowlists/log-sources.caddy", caddy)
+        self.assertIn("./generated/allowlists:/etc/caddy/allowlists:ro", overlay)
         for variable in (
             "CLICKHOUSE_URL", "GRAFANA_ADMIN_PASSWORD", "GRAFANA_CLICKHOUSE_PASSWORD",
             "GRAFANA_POSTGRES_PASSWORD", "LOG_ROLE", "LOG_HOST", "LOG_COLLECTOR_ID",

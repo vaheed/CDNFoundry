@@ -260,7 +260,9 @@ awk -v app_key="$app_key" \
 mv "$tmp" "$output"
 trap - EXIT
 chmod 0600 "$output"
+"$script_dir/write-allowlists.sh" "$output" "$(dirname -- "$output")/generated/allowlists"
 printf '\nCreated %s (mode 0600) for role %s.\n' "$output" "$role"
+printf 'Address lists written to %s; edit the lists in %s and run scripts/write-allowlists.sh, then reload the gateway.\n' "$(dirname -- "$output")/generated/allowlists" "$output"
 printf 'Platform DNS identity: ns1.%s, ns2.%s; proxy.%s\n' "$platform_domain" "$platform_domain" "$platform_domain"
 if [[ -n $advertised_ipv6 ]]; then
     printf 'IPv6 is configured; include the matching compose.*-host-ipv6.yml override.\n'

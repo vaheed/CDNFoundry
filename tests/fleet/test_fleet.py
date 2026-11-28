@@ -1565,7 +1565,7 @@ def test_production_compose_uses_env_file_contract_and_control_has_mmdb_updater(
         compose_text += overlay.read_text(encoding="utf-8")
     assert "${" in compose_text
     # Only these optional settings may fall back to a documented default; everything else must come from the env file.
-    optional_defaults = ("${CORS_ALLOWED_ORIGINS:-}", "${CONTENT_SECURITY_POLICY:-enforce}", "${MANAGEMENT_NETWORKS:-0.0.0.0/0 ::/0}",
+    optional_defaults = ("${CORS_ALLOWED_ORIGINS:-}", "${CONTENT_SECURITY_POLICY:-enforce}",
                          "${EDGE_CELL_CPUS:-0.5}", "${EDGE_CELL_MEMORY:-512m}")
     unexplained = compose_text
     for allowed in optional_defaults:

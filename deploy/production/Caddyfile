@@ -6,11 +6,14 @@
 # Only the management networks reach the administrator panel, the administrator API, Horizon, the metrics
 # endpoint, and Grafana. Every other client gets a bare 403: no redirect, no login form, no cookie. The customer
 # panel (/app), the customer API, the status page, and the health probes stay open to everyone. An empty
-# MANAGEMENT_NETWORKS renders as "0.0.0.0/0 ::/0" in Compose, which restricts nothing.
+# The address lists live in files under /etc/caddy/allowlists (Fleet writes them) and are read again on a reload
+# (SIGUSR1), so changing a list does not recreate the gateway. An empty management list is "0.0.0.0/0 ::/0", which restricts nothing.
 (management_only) {
 	@outside {
 		path /admin /admin/* /api/admin /api/admin/* /horizon /horizon/* /metrics /control-state
-		not remote_ip {$MANAGEMENT_NETWORKS}
+		not {
+			import /etc/caddy/allowlists/management-networks.caddy
+		}
 	}
 	handle @outside {
 		header Cache-Control "no-store"
@@ -20,7 +23,11 @@
 
 # Grafana has no public path at all, not even its health and metrics endpoints.
 (management_only_strict) {
-	@outside not remote_ip {$MANAGEMENT_NETWORKS}
+	@outside {
+		not {
+			import /etc/caddy/allowlists/management-networks.caddy
+		}
+	}
 	handle @outside {
 		header Cache-Control "no-store"
 		respond "Forbidden" 403
@@ -58,7 +65,7 @@
 https://{$TELEMETRY_HOSTNAME}:8444 {
 	import /etc/caddy/own-tls/telemetry-*.caddy
 	@log_sources {
-		remote_ip {$LOG_SOURCE_IPV4_ALLOWLIST} {$LOG_SOURCE_IPV6_ALLOWLIST}
+		import /etc/caddy/allowlists/log-sources.caddy
 		path /loki/api/v1/push
 		header Authorization "Bearer {$LOG_AUTH_TOKEN}"
 	}
@@ -67,7 +74,9 @@ https://{$TELEMETRY_HOSTNAME}:8444 {
 		reverse_proxy loki:3100
 	}
 
-	@clickhouse_sources remote_ip {$EDGE_PUBLIC_IPV4_ALLOWLIST} {$EDGE_PUBLIC_IPV6_ALLOWLIST} {$CONTROL_PUBLIC_IPV4_ALLOWLIST} {$CONTROL_PUBLIC_IPV6_ALLOWLIST}
+	@clickhouse_sources {
+		import /etc/caddy/allowlists/clickhouse-sources.caddy
+	}
 
 	handle @clickhouse_sources {
 		reverse_proxy clickhouse:8123

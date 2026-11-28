@@ -83,7 +83,7 @@ x-core-env: &core-env
   REDIS_CACHE_PORT: ${REDIS_CACHE_PORT}
   REDIS_CACHE_URL: ${REDIS_CACHE_URL}
   # Optional two-node control plane. Empty on a single node.
-  MANAGEMENT_NETWORKS: ${MANAGEMENT_NETWORKS}
+  MANAGEMENT_NETWORKS_FILE: /run/allowlists/management-networks.txt
   CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
   CONTENT_SECURITY_POLICY: ${CONTENT_SECURITY_POLICY:-enforce}
   CONTROL_NODE_NAME: ${CONTROL_NODE_NAME}
@@ -153,6 +153,7 @@ x-core: &core
       volume:
         nocopy: true
     - mmdb:/mmdb:ro
+    - ./generated/allowlists:/run/allowlists:ro
     - ${EDGE_IDENTITY_CA_CERTIFICATE:?EDGE_IDENTITY_CA_CERTIFICATE is required}:/run/secrets/edge-identity-ca.crt:ro
     - ${EDGE_IDENTITY_CA_PRIVATE_KEY:?EDGE_IDENTITY_CA_PRIVATE_KEY is required}:/run/secrets/edge-identity-ca.key:ro
     - ${EDGE_PROXY_SECRET_FILE:?EDGE_PROXY_SECRET_FILE is required}:/run/secrets/edge-proxy-secret.conf:ro
@@ -173,17 +174,10 @@ services:
       CONTROL_HOSTNAME: ${CONTROL_HOSTNAME:?CONTROL_HOSTNAME is required}
       TELEMETRY_HOSTNAME: ${TELEMETRY_HOSTNAME:?TELEMETRY_HOSTNAME is required}
       GRAFANA_HOSTNAME: ${GRAFANA_HOSTNAME:?GRAFANA_HOSTNAME is required}
-      MANAGEMENT_NETWORKS: ${MANAGEMENT_NETWORKS:-0.0.0.0/0 ::/0}
       ACME_CONTACT_EMAIL: ${ACME_CONTACT_EMAIL:?ACME_CONTACT_EMAIL is required}
-      EDGE_PUBLIC_IPV4_ALLOWLIST: ${EDGE_PUBLIC_IPV4_ALLOWLIST}
-      EDGE_PUBLIC_IPV6_ALLOWLIST: ${EDGE_PUBLIC_IPV6_ALLOWLIST}
-      CONTROL_PUBLIC_IPV4_ALLOWLIST: ${CONTROL_PUBLIC_IPV4_ALLOWLIST}
-      CONTROL_PUBLIC_IPV6_ALLOWLIST: ${CONTROL_PUBLIC_IPV6_ALLOWLIST}
-      LOG_SOURCE_IPV4_ALLOWLIST: ${LOG_SOURCE_IPV4_ALLOWLIST}
-      LOG_SOURCE_IPV6_ALLOWLIST: ${LOG_SOURCE_IPV6_ALLOWLIST}
       LOG_AUTH_TOKEN: ${LOG_AUTH_TOKEN:?LOG_AUTH_TOKEN is required}
     ports: ["${HOST_BIND_IPV4}:80:80/tcp", "${HOST_BIND_IPV4}:443:443/tcp", "${HOST_BIND_IPV4}:443:443/udp", "${HOST_BIND_IPV4}:8444:8444/tcp"]
-    volumes: [./deploy/production/Caddyfile:/etc/caddy/Caddyfile:ro, caddy-data:/data, caddy-config:/config]
+    volumes: [./deploy/production/Caddyfile:/etc/caddy/Caddyfile:ro, ./generated/allowlists:/etc/caddy/allowlists:ro, caddy-data:/data, caddy-config:/config]
     depends_on: { web: { condition: service_healthy } }
     networks: [ingress, telemetry]
     restart: unless-stopped
@@ -203,17 +197,10 @@ services:
       XDG_DATA_HOME: /data
       TELEMETRY_HOSTNAME: ${TELEMETRY_HOSTNAME:?TELEMETRY_HOSTNAME is required}
       GRAFANA_HOSTNAME: ${GRAFANA_HOSTNAME:?GRAFANA_HOSTNAME is required}
-      MANAGEMENT_NETWORKS: ${MANAGEMENT_NETWORKS:-0.0.0.0/0 ::/0}
       ACME_CONTACT_EMAIL: ${ACME_CONTACT_EMAIL:?ACME_CONTACT_EMAIL is required}
-      EDGE_PUBLIC_IPV4_ALLOWLIST: ${EDGE_PUBLIC_IPV4_ALLOWLIST}
-      EDGE_PUBLIC_IPV6_ALLOWLIST: ${EDGE_PUBLIC_IPV6_ALLOWLIST}
-      CONTROL_PUBLIC_IPV4_ALLOWLIST: ${CONTROL_PUBLIC_IPV4_ALLOWLIST}
-      CONTROL_PUBLIC_IPV6_ALLOWLIST: ${CONTROL_PUBLIC_IPV6_ALLOWLIST}
-      LOG_SOURCE_IPV4_ALLOWLIST: ${LOG_SOURCE_IPV4_ALLOWLIST}
-      LOG_SOURCE_IPV6_ALLOWLIST: ${LOG_SOURCE_IPV6_ALLOWLIST}
       LOG_AUTH_TOKEN: ${LOG_AUTH_TOKEN:?LOG_AUTH_TOKEN is required}
     ports: ["${HOST_BIND_IPV4}:80:80/tcp", "${HOST_BIND_IPV4}:443:443/tcp", "${HOST_BIND_IPV4}:8444:8444/tcp"]
-    volumes: [./deploy/production/Caddyfile.telemetry:/etc/caddy/Caddyfile:ro, telemetry-caddy-data:/data, telemetry-caddy-config:/config]
+    volumes: [./deploy/production/Caddyfile.telemetry:/etc/caddy/Caddyfile:ro, ./generated/allowlists:/etc/caddy/allowlists:ro, telemetry-caddy-data:/data, telemetry-caddy-config:/config]
     depends_on: { clickhouse: { condition: service_healthy }, loki: { condition: service_started }, grafana: { condition: service_healthy } }
     # The gateway must be dual-homed: ingress receives public HTTPS and
     # telemetry keeps ClickHouse, Loki, and Grafana private.
